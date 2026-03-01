@@ -35,14 +35,27 @@
         <!-- Formulaire de connexion (visible par défaut) -->
         <div id="login-form" class="form-step">
           <h2 class="text-xl font-semibold text-center mb-4">Connexion</h2>
+          <form action="{% url 'compte:login' %}" method="post">
+            {% csrf_token %}
+            {% if form.errors %}
+              <div class="mb-4 p-3 bg-red-100 text-red-700 rounded-xl text-sm">
+                {% for field in form %}
+                  {% for error in field.errors %}
+                    <p>{{ error }}</p>
+                  {% endfor %}
+                {% endfor %}
+                {% for error in form.non_field_errors %}
+                  <p>{{ error }}</p>
+                {% endfor %}
+              </div>
+            {% endif %}
           <div class="space-y-4">
             <div>
-              <input type="text" id="login-identifier" placeholder="Email ou nom d'utilisateur" value="test@demo.com" 
-                class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#004e92]">
+              {{ form.username }}
+
             </div>
             <div>
-              <input type="password" id="login-password" placeholder="Mot de passe" value="password" 
-                class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#004e92]">
+              {{ form.password }}
             </div>
             <div class="flex items-center justify-between text-sm">
               <label class="flex items-center gap-2 cursor-pointer">
@@ -51,10 +64,11 @@
               </label>
               <a href="#" id="forgot-password-link" class="text-[#004e92] hover:underline">Mot de passe oublié ?</a>
             </div>
-            <button id="login-btn" class="w-full bg-[#004e92] hover:bg-[#003a6e] text-white font-semibold py-3 rounded-xl transition">
+            <button id="login-btn" type="submit" class="w-full bg-[#004e92] hover:bg-[#003a6e] text-white font-semibold py-3 rounded-xl transition">
               Se connecter
             </button>
           </div>
+          </form>
 
           <!-- Séparateur "ou" -->
           <div class="relative my-6">

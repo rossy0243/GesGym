@@ -1,1 +1,17 @@
-<h1>Bienvenue {{ user.username }} - Admin de {{ gym.name }}</h1>
+<div class="flex justify-between items-center mb-6">
+    <h1 class="text-xl font-bold">
+       <p> Dashboard - {{ request.user.get_role_display|title }} </p>
+       <p>username : {{ request.user.username }} </p>
+       <p> prénom : {{ request.user.first_name }} </p>
+       <p> nom : {{ request.user.last_name }} </p>
+       <p> Salle de sport : {{ request.user.gym }} </p> 
+    </h1>
+
+    <form method="post" action="{% url 'compte:logout' %}">
+        {% csrf_token %}
+        <button type="submit"
+            class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-xl">
+            <i class="fas fa-sign-out-alt mr-2"></i> Logout
+        </button>
+    </form>
+</div>
