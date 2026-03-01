@@ -1,0 +1,52 @@
+<h2 class="text-xl font-bold mb-4">Liste des membres</h2>
+
+<a href="{% url 'core:create_member' %}"
+   class="bg-blue-500 text-white px-4 py-2 rounded-xl mb-4 inline-block">
+   Ajouter un membre
+</a>
+
+<table class="w-full border mt-4">
+    <thead>
+        <tr class="bg-gray-100">
+            <th class="p-2">Nom</th>
+            <th class="p-2"> Username</th>
+            <th class="p-2">Téléphone</th>
+            <th class="p-2">Statut</th>
+            <th class="p-2">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for member in members %}
+        <tr class="border-t">
+            <td class="p-2">{{ member.first_name }} {{ member.last_name }}</td>
+            <td class="p-2">{{ member.user.username }}</td>
+            <td class="p-2">{{ member.phone }}</td>
+            <td class="p-2">
+                <span class="px-2 py-1 text-xs rounded-full
+                    {% if member.computed_status == 'active' %}
+                        bg-green-100 text-green-700
+                    {% elif member.computed_status == 'suspended' %}
+                        bg-yellow-100 text-yellow-700
+                    {% else %}
+                        bg-red-100 text-red-700
+                    {% endif %}">
+                    {{ member.computed_status }}
+                </span>
+            </td>
+            <td class="p-2 space-x-2">
+
+                <a href="{% url 'core:edit_member' member.id %}" class="text-blue-600">
+                    Modifier
+                </a>
+                {% if request.user.role == "admin" %}
+                    <a href="{% url 'core:delete_member' member.id %}"
+                    class="text-red-600">
+                    Supprimer
+                    </a>
+                {% endif %}
+
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>

@@ -1,7 +1,7 @@
 # core/models.py
 from django.conf import settings
 from django.db import models
-
+from django.utils import timezone
 
 class Gym(models.Model):
     name = models.CharField(max_length=150)
@@ -39,6 +39,23 @@ class Member(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="active")
     created_at = models.DateTimeField(auto_now_add=True)
 
+    @property
+    def computed_status(self):
+        if self.status == "suspended":
+            return "suspended"
+
+        today = timezone.now().date()
+
+        active_subscription = self.subscription_set.filter(
+            end_date__gte=today,
+            is_active=True
+        ).exists()
+
+        if active_subscription:
+            return "active"
+
+        return "expired"
+    
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
 
