@@ -36,7 +36,7 @@
 
       <!-- Boutons desktop (cachés sur mobile) -->
       <div class="hidden md:flex gap-3">
-        <a href="{% url 'compte:connexion' %}" id="loginBtn" class="px-5 py-2.5 text-sm font-semibold text-[#004e92] border-2 border-[#004e92] rounded-full hover:bg-[#004e92] hover:text-white transition-all">Connexion</a>
+        <a href="{% url 'compte:login' %}" id="loginBtn" class="px-5 py-2.5 text-sm font-semibold text-[#004e92] border-2 border-[#004e92] rounded-full hover:bg-[#004e92] hover:text-white transition-all">Connexion</a>
         <a href="#" id="registerBtn" class="px-5 py-2.5 text-sm font-semibold bg-gradient-to-r from-[#FF8C00] to-orange-600 text-white rounded-full shadow-lg shadow-orange-200 hover:shadow-xl transition">Inscription</a>
       </div>
 
@@ -56,7 +56,7 @@
         
         <!-- Boutons d'authentification dans le menu mobile - CORRIGÉ -->
         <div class="mobile-auth-buttons space-y-2">
-          <a href="{% url 'compte:connexion' %}" id="mobileLoginBtn" class="px-5 py-2.5 text-sm font-semibold text-[#004e92] border-2 border-[#004e92] rounded-full hover:bg-[#004e92] hover:text-white transition-all block text-center">Connexion</a>
+          <a href="{% url 'compte:login' %}" id="mobileLoginBtn" class="px-5 py-2.5 text-sm font-semibold text-[#004e92] border-2 border-[#004e92] rounded-full hover:bg-[#004e92] hover:text-white transition-all block text-center">Connexion</a>
           <a href="#" id="mobileRegisterBtn" class="px-5 py-2.5 text-sm font-semibold bg-gradient-to-r from-[#FF8C00] to-orange-600 text-white rounded-full shadow-lg shadow-orange-200 hover:shadow-xl transition block text-center">Inscription</a>
         </div>
       </nav>

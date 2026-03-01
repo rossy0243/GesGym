@@ -1,8 +1,11 @@
+# compte/urls.py
 from django.urls import path
-from . import views
+from .views import CustomLoginView
+from django.contrib.auth.views import LogoutView
 
-app_name = "compte"
+app_name = 'compte'
 
 urlpatterns = [
-    path("connexion/", views.connexion, name="connexion"),
+    path('login/', CustomLoginView.as_view(), name='login'),
+    path('logout/', LogoutView.as_view(next_page='login'), name='logout'),
 ]
