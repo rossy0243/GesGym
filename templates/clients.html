@@ -1,0 +1,611 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block page_titre %}Gestion des Membres{% endblock %}
+
+{% block content %}
+<!-- [ page-header ] start -->
+<div class="page-header mb-3">
+    <div class="page-header-left d-flex align-items-center">
+        <div class="page-header-title d-flex align-items-center gap-2">
+            <span class="material-icons text-primary" style="font-size:28px;">group</span>
+            <h5 class="m-b-10 mb-0" id="pageTitle">Gestion des Membres</h5>
+        </div>
+    </div>
+    <div class="page-header-right ms-auto">
+        <div class="page-header-right-items">
+            <div class="d-flex align-items-center gap-2">
+                <a href="javascript:void(0);" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addMemberModal">
+                    <span class="material-icons me-2" style="font-size:18px;">person_add</span>
+                    <span>Nouveau Membre</span>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- [ page-header ] end -->
+
+<!-- Vue principale : Liste des membres (contenu aligné sur une même largeur) -->
+<div id="membersListView" class="px-0 mx-2">
+    <!-- Statistiques -->
+    <div class="row g-3">
+        <div class="col-xxl-3 col-md-6">
+            <div class="card stretch stretch-full">
+                <div class="card-body">
+                    <div class="d-flex align-items-start justify-content-between mb-4">
+                        <div class="d-flex gap-4 align-items-center">
+                            <div class="stat-icon-box">
+                                <span class="material-icons" style="color:#3454d1; font-size:32px;">group</span>
+                            </div>
+                            <div>
+                                <div class="fs-4 fw-bold text-dark counter" id="totalMembers">0</div>
+                                <h3 class="fs-13 fw-semibold">Total Membres</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center justify-content-between">
+                        <span class="fs-12 text-muted">Actifs / Expirés</span>
+                        <span class="fs-12 text-dark fw-semibold" id="membersStats">0 / 0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xxl-3 col-md-6">
+            <div class="card stretch stretch-full">
+                <div class="card-body">
+                    <div class="d-flex align-items-start justify-content-between mb-4">
+                        <div class="d-flex gap-4 align-items-center">
+                            <div class="stat-icon-box">
+                                <span class="material-icons" style="color:#16a34a; font-size:32px;">payments</span>
+                            </div>
+                            <div>
+                                <div class="fs-4 fw-bold text-dark" id="monthlyRevenue">0 $</div>
+                                <h3 class="fs-13 fw-semibold">Revenu du mois</h3>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xxl-3 col-md-6">
+            <div class="card stretch stretch-full">
+                <div class="card-body">
+                    <div class="d-flex align-items-start justify-content-between mb-4">
+                        <div class="d-flex gap-4 align-items-center">
+                            <div class="stat-icon-box">
+                                <span class="material-icons" style="color:#f59e0b; font-size:32px;">schedule</span>
+                            </div>
+                            <div>
+                                <div class="fs-4 fw-bold text-dark" id="expiringSoon">0</div>
+                                <h3 class="fs-13 fw-semibold">Expirent bientôt</h3>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xxl-3 col-md-6">
+            <div class="card stretch stretch-full">
+                <div class="card-body">
+                    <div class="d-flex align-items-start justify-content-between mb-4">
+                        <div class="d-flex gap-4 align-items-center">
+                            <div class="stat-icon-box">
+                                <span class="material-icons" style="color:#ef4444; font-size:32px;">login</span>
+                            </div>
+                            <div>
+                                <div class="fs-4 fw-bold text-dark" id="todayCheckins">0</div>
+                                <h3 class="fs-13 fw-semibold">Entrées aujourd'hui</h3>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtres et recherche -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="d-flex align-items-center gap-2 mb-3">
+                <span class="material-icons text-muted" style="font-size:20px;">filter_list</span>
+                <span class="fw-semibold small text-muted">Filtres avancés</span>
+            </div>
+            <div class="row align-items-end g-3">
+                <div class="col-md-4">
+                    <label class="form-label small text-muted d-flex align-items-center gap-1 mb-1">
+                        <span class="material-icons" style="font-size:16px;">search</span>Recherche
+                    </label>
+                    <div class="input-group">
+                        <span class="input-group-text"><span class="material-icons" style="font-size:18px;">search</span></span>
+                        <input type="text" class="form-control" placeholder="Nom, téléphone, email..." id="searchMember" onkeyup="searchMembers()">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small text-muted d-flex align-items-center gap-1 mb-1">
+                        <span class="material-icons" style="font-size:16px;">label_important</span>Statut
+                    </label>
+                    <select class="form-select" id="statusFilter" onchange="filterMembers()">
+                        <option value="all">Tous les statuts</option>
+                        <option value="actif">Actifs</option>
+                        <option value="expire">Expirés</option>
+                        <option value="suspendu">Suspendus</option>
+                        <option value="proche">Proche expiration (7 jours)</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small text-muted d-flex align-items-center gap-1 mb-1">
+                        <span class="material-icons" style="font-size:16px;">event_available</span>Formule
+                    </label>
+                    <select class="form-select" id="subscriptionFilter" onchange="filterMembers()">
+                        <option value="all">Tous les abonnements</option>
+                        <option value="1mois">1 mois</option>
+                        <option value="3mois">3 mois</option>
+                        <option value="6mois">6 mois</option>
+                        <option value="12mois">12 mois</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-light-brand w-100" onclick="resetFilters()">
+                        <span class="material-icons me-2" style="font-size:18px;">refresh</span>Réinitialiser
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Liste des membres -->
+    <div class="card stretch stretch-full">
+        <div class="card-header">
+            <h5 class="card-title d-flex align-items-center gap-2 mb-0">
+                <span class="material-icons" style="font-size:22px;">format_list_bulleted</span>
+                Liste des membres
+            </h5>
+            <div class="card-header-action">
+                <div class="dropdown">
+                    <a href="javascript:void(0);" class="avatar-text avatar-sm" data-bs-toggle="dropdown">
+                        <span class="material-icons" style="font-size:20px;">more_vert</span>
+                    </a>
+                    <div class="dropdown-menu dropdown-menu-end">
+                        <a href="javascript:void(0);" class="dropdown-item" onclick="exportMembers()">
+                            <span class="material-icons me-2" style="font-size:18px;">download</span>Exporter
+                        </a>
+                        <a href="javascript:void(0);" class="dropdown-item" onclick="printMembers()">
+                            <span class="material-icons me-2" style="font-size:18px;">print</span>Imprimer
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="card-body custom-card-action p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr class="border-b">
+                            <th><span class="material-icons align-middle me-1" style="font-size:16px;">tag</span>ID</th>
+                            <th><span class="material-icons align-middle me-1" style="font-size:16px;">person</span>Membre</th>
+                            <th><span class="material-icons align-middle me-1" style="font-size:16px;">contact_phone</span>Contact</th>
+                            <th><span class="material-icons align-middle me-1" style="font-size:16px;">card_membership</span>Abonnement</th>
+                            <th><span class="material-icons align-middle me-1" style="font-size:16px;">event</span>Date expiration</th>
+                            <th><span class="material-icons align-middle me-1" style="font-size:16px;">circle</span>Statut</th>
+                            <th><span class="material-icons align-middle me-1" style="font-size:16px;">history</span>Dernier accès</th>
+                            <th class="text-end"><span class="material-icons align-middle me-1" style="font-size:16px;">settings</span>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="membersTableBody">
+                        <!-- Les membres seront chargés dynamiquement via JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card-footer">
+            <div class="d-flex justify-content-between align-items-center">
+                <p class="fs-12 text-muted mb-0 d-flex align-items-center gap-1" id="paginationInfo">
+                    <span class="material-icons" style="font-size:16px;">list_alt</span>Affichage 1-10 sur 0 membres
+                </p>
+                <ul class="pagination pagination-custom mb-0" id="paginationControls">
+                    <li class="page-item disabled"><a class="page-link" href="#"><span class="material-icons" style="font-size:16px;">chevron_left</span></a></li>
+                    <li class="page-item active"><a class="page-link" href="#">1</a></li>
+                    <li class="page-item"><a class="page-link" href="#">2</a></li>
+                    <li class="page-item"><a class="page-link" href="#">3</a></li>
+                    <li class="page-item"><a class="page-link" href="#"><span class="material-icons" style="font-size:16px;">chevron_right</span></a></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Vue accueil (pointage) -->
+<div id="checkInView" style="display: none;">
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title d-flex align-items-center gap-2 mb-0">
+                        <span class="material-icons" style="font-size:22px;">qr_code_scanner</span>
+                        Pointage d'accès
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="input-group mb-4">
+                        <span class="input-group-text"><span class="material-icons" style="font-size:18px;">search</span></span>
+                        <input type="text" class="form-control form-control-lg" placeholder="Rechercher par nom, téléphone..." id="checkinSearch" onkeyup="searchCheckin()">
+                    </div>
+                    
+                    <div class="text-center mb-3 d-flex align-items-center justify-content-center gap-2">
+                        <span class="material-icons text-muted" style="font-size:20px;">qr_code</span>
+                        <span class="fw-semibold">Ou scanner le QR code</span>
+                    </div>
+                    
+                    <div class="qr-code-container text-center mx-auto mb-4">
+                        <div id="qr-reader" style="width: 100%; max-width: 300px; margin: 0 auto; display: none;"></div>
+                        <button class="btn btn-primary" onclick="startQRScanner()">
+                            <span class="material-icons me-2" style="font-size:18px;">qr_code_scanner</span>
+                            Activer le scanner
+                        </button>
+                    </div>
+                    
+                    <div id="checkinResult" class="mt-4"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title d-flex align-items-center gap-2 mb-0">
+                        <span class="material-icons" style="font-size:22px;">person</span>
+                        Fiche compacte
+                    </h5>
+                    <small class="text-muted d-flex align-items-center gap-1 mt-1">
+                        <span class="material-icons" style="font-size:14px;">visibility</span>Vue rapide
+                    </small>
+                </div>
+                <div class="card-body" id="compactMemberView">
+                    <div class="text-center text-muted py-5">
+                        <span class="material-icons" style="font-size:48px;">person_search</span>
+                        <p class="mt-2">Recherchez un membre pour afficher sa fiche</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL AJOUTER UN MEMBRE -->
+<div class="modal fade" id="addMemberModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title d-flex align-items-center gap-2">
+                    <span class="material-icons" style="font-size:24px;">person_add</span>
+                    Nouveau membre
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addMemberForm">
+                    <div class="row">
+                        <div class="col-md-4 text-center mb-3">
+                            <div class="member-photo-placeholder mx-auto mb-2" id="photoPreview">
+                                <span class="material-icons" style="font-size:48px;">add_a_photo</span>
+                            </div>
+                            <input type="file" class="form-control form-control-sm" id="memberPhoto" accept="image/*" onchange="previewPhoto(this)">
+                        </div>
+                        <div class="col-md-8">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label d-flex align-items-center gap-1">
+                                        <span class="material-icons" style="font-size:18px;">badge</span>Nom <span class="text-danger">*</span>
+                                    </label>
+                                    <input type="text" class="form-control" id="memberLastName" required>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label d-flex align-items-center gap-1">
+                                        <span class="material-icons" style="font-size:18px;">person</span>Prénom
+                                    </label>
+                                    <input type="text" class="form-control" id="memberFirstName">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label d-flex align-items-center gap-1">
+                                <span class="material-icons" style="font-size:18px;">phone</span>Téléphone
+                            </label>
+                            <input type="tel" class="form-control" id="memberPhone" placeholder="+243 XXX XXX XXX">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label d-flex align-items-center gap-1">
+                                <span class="material-icons" style="font-size:18px;">email</span>Email
+                            </label>
+                            <input type="email" class="form-control" id="memberEmail">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label d-flex align-items-center gap-1">
+                            <span class="material-icons" style="font-size:18px;">location_on</span>Adresse
+                        </label>
+                        <textarea class="form-control" id="memberAddress" rows="2"></textarea>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label d-flex align-items-center gap-1">
+                                <span class="material-icons" style="font-size:18px;">location_city</span>Ville
+                            </label>
+                            <input type="text" class="form-control" id="memberCity">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label d-flex align-items-center gap-1">
+                                <span class="material-icons" style="font-size:18px;">pin</span>Code postal
+                            </label>
+                            <input type="text" class="form-control" id="memberZip">
+                        </div>
+                    </div>
+                    
+                    <h6 class="fw-semibold mb-3 d-flex align-items-center gap-2">
+                        <span class="material-icons" style="font-size:20px;">card_membership</span>
+                        Abonnement initial
+                    </h6>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label d-flex align-items-center gap-1">
+                                <span class="material-icons" style="font-size:18px;">event_available</span>Formule <span class="text-danger">*</span>
+                            </label>
+                            <select class="form-select" id="memberSubscription" required onchange="updateSubscriptionDetails()">
+                                <option value="">Sélectionner...</option>
+                                <option value="1mois">1 mois - 50 $</option>
+                                <option value="3mois">3 mois - 135 $ (Économie 15 $)</option>
+                                <option value="6mois">6 mois - 240 $ (Économie 60 $)</option>
+                                <option value="12mois">12 mois - 420 $ (Économie 180 $)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label d-flex align-items-center gap-1">
+                                <span class="material-icons" style="font-size:18px;">calendar_today</span>Date de début
+                            </label>
+                            <input type="date" class="form-control" id="memberStartDate" value="2024-06-17">
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label d-flex align-items-center gap-1">
+                                <span class="material-icons" style="font-size:18px;">payment</span>Mode de paiement
+                            </label>
+                            <select class="form-select" id="memberPaymentMethod">
+                                <option value="cash">Cash</option>
+                                <option value="card">Carte bancaire</option>
+                                <option value="mobile">Mobile Money</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label d-flex align-items-center gap-1">
+                                <span class="material-icons" style="font-size:18px;">attach_money</span>Montant payé
+                            </label>
+                            <input type="number" class="form-control" id="memberAmountPaid" value="0" step="0.01">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="memberSendWelcome">
+                            <label class="form-check-label d-flex align-items-center gap-2" for="memberSendWelcome">
+                                <span class="material-icons" style="font-size:18px;">send</span>
+                                Envoyer un email de bienvenue avec QR code
+                            </label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">
+                    <span class="material-icons me-2" style="font-size:18px;">close</span>Annuler
+                </button>
+                <button type="button" class="btn btn-primary" onclick="saveMember()">
+                    <span class="material-icons me-2" style="font-size:18px;">save</span>Enregistrer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL VOIR UN MEMBRE -->
+<div class="modal fade" id="viewMemberModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title d-flex align-items-center gap-2">
+                    <span class="material-icons" style="font-size:24px;">visibility</span>
+                    Détails du membre
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="member-compact-card mb-4">
+                    <div class="row">
+                        <div class="col-md-2">
+                            <div id="viewMemberPhoto" class="member-photo-placeholder">
+                                <span class="material-icons" style="font-size:48px;">person</span>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <p class="mb-1 fs-12 text-muted">
+                                <span class="material-icons" style="font-size:14px;">tag</span> 
+                                <span id="viewMemberId">SG-00001</span>
+                            </p>
+                            <h4 id="viewMemberName">Jean Dupont</h4>
+                            <p class="mb-1">
+                                <span class="material-icons" style="font-size:14px;">phone</span> 
+                                <span id="viewMemberPhone">+243 81 234 5678</span>
+                            </p>
+                            <p class="mb-0">
+                                <span class="material-icons" style="font-size:14px;">email</span> 
+                                <span id="viewMemberEmail">jean.d@email.com</span>
+                            </p>
+                        </div>
+                        <div class="col-md-4 text-end">
+                            <div class="badge-actif mb-2" id="viewMemberStatus">Actif</div>
+                            <div>
+                                <button class="btn btn-sm btn-light" onclick="printQRCode()">
+                                    <span class="material-icons" style="font-size:18px;">qr_code</span>
+                                </button>
+                                <button class="btn btn-sm btn-warning" onclick="editMemberFromView()">
+                                    <span class="material-icons" style="font-size:18px;">edit</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <ul class="nav nav-tabs" id="memberTabs" role="tablist">
+                    <li class="nav-item">
+                        <a class="nav-link active d-flex align-items-center gap-1" id="subscription-tab" data-bs-toggle="tab" href="#subscription">
+                            <span class="material-icons" style="font-size:18px;">card_membership</span>Abonnement
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link d-flex align-items-center gap-1" id="payments-tab" data-bs-toggle="tab" href="#payments">
+                            <span class="material-icons" style="font-size:18px;">payments</span>Paiements
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link d-flex align-items-center gap-1" id="access-tab" data-bs-toggle="tab" href="#access">
+                            <span class="material-icons" style="font-size:18px;">login</span>Accès
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link d-flex align-items-center gap-1" id="documents-tab" data-bs-toggle="tab" href="#documents">
+                            <span class="material-icons" style="font-size:18px;">folder</span>Documents
+                        </a>
+                    </li>
+                </ul>
+                
+                <div class="tab-content mt-3">
+                    <div class="tab-pane fade show active" id="subscription">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <table class="table table-borderless">
+                                    <tr><td class="fw-semibold">Formule :</td><td id="viewSubscriptionType">12 mois</td></tr>
+                                    <tr><td class="fw-semibold">Date d'inscription :</td><td id="viewStartDate">01/01/2024</td></tr>
+                                    <tr><td class="fw-semibold">Date d'expiration :</td><td id="viewExpiryDate">31/12/2024</td></tr>
+                                </table>
+                            </div>
+                            <div class="col-md-6">
+                                <table class="table table-borderless">
+                                    <tr><td class="fw-semibold">Prix :</td><td id="viewPrice">420 $</td></tr>
+                                    <tr><td class="fw-semibold">Payé :</td><td id="viewPaid">420 $</td></tr>
+                                    <tr><td class="fw-semibold">Reste :</td><td id="viewRemaining">0 $</td></tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="subscription-timeline mt-3">
+                            <h6 class="d-flex align-items-center gap-2">
+                                <span class="material-icons" style="font-size:18px;">history</span>
+                                Historique des abonnements
+                            </h6>
+                            <div id="subscriptionHistory"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-pane fade" id="payments">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Montant</th>
+                                        <th>Mode</th>
+                                        <th>Statut</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="paymentHistory"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-pane fade" id="access">
+                        <div class="mb-3">
+                            <canvas id="accessChart" style="height: 200px;"></canvas>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Heure</th>
+                                        <th>Mode d'accès</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="accessHistory"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-pane fade" id="documents">
+                        <div class="text-center mb-3">
+                            <div class="qr-code-container mx-auto mb-3">
+                                <div id="memberQRCode"></div>
+                            </div>
+                            <button class="btn btn-sm btn-primary" onclick="downloadQRCode()">
+                                <span class="material-icons" style="font-size:18px;">download</span> Télécharger QR Code
+                            </button>
+                        </div>
+                        <div class="mt-4">
+                            <h6 class="d-flex align-items-center gap-2">
+                                <span class="material-icons" style="font-size:18px;">description</span>
+                                Contrats et documents
+                            </h6>
+                            <div id="memberDocuments"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer d-flex align-items-center gap-2">
+                <button type="button" class="btn btn-light d-flex align-items-center gap-2" data-bs-dismiss="modal">
+                    <span class="material-icons" style="font-size:20px;">close</span>Fermer
+                </button>
+                <button type="button" class="btn btn-warning d-flex align-items-center gap-2" onclick="suspendMember()" id="suspendBtn">
+                    <span class="material-icons" style="font-size:20px;">pause_circle</span>Suspendre
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL DE CONFIRMATION DE SUSPENSION -->
+<div class="modal fade" id="suspendConfirmModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title d-flex align-items-center gap-2">
+                    <span class="material-icons text-warning" style="font-size:22px;">warning</span>
+                    Confirmation
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Êtes-vous sûr de vouloir suspendre ce membre ?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">
+                    <span class="material-icons me-2" style="font-size:18px;">close</span>Non
+                </button>
+                <button type="button" class="btn btn-warning" onclick="confirmSuspend()">
+                    <span class="material-icons me-2" style="font-size:18px;">check</span>Oui
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+<script src="{% static 'js/script_clients.js' %}?v=3"></script>
+{% endblock %}

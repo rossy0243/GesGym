@@ -1,0 +1,104 @@
+{% load static %}
+
+{% with breadcrumb_current=page_title|default:"Tableau de bord" notif_count=notifications_count|default:5 user_name=user_display_name|default:"Admin SmartClub Pro" user_email_addr=user_email|default:"admin@smartitsolution.cd" show_dark=show_dark_theme|default:True %}
+<header class="nxl-header">
+    <div class="header-wrapper">
+        <div class="header-left d-flex align-items-center gap-4">
+            <a href="javascript:void(0);" class="nxl-head-mobile-toggler" id="mobile-collapse">
+                <div class="hamburger hamburger--arrowturn">
+                    <div class="hamburger-box">
+                        <div class="hamburger-inner"></div>
+                    </div>
+                </div>
+            </a>
+            <div class="nxl-navigation-toggle">
+                <a href="javascript:void(0);" id="menu-mini-button" onclick="toggleNavigation()">
+                    <span class="material-icons">menu_open</span>
+                </a>
+                <a href="javascript:void(0);" id="menu-expend-button" style="display: none;" onclick="toggleNavigation()">
+                    <span class="material-icons">menu</span>
+                </a>
+            </div>
+            <div class="page-header">
+                <ul class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="#">Accueil</a></li>
+                    <li class="breadcrumb-item active">{{ breadcrumb_current }}</li>
+                </ul>
+            </div>
+        </div>
+        <div class="header-right ms-auto">
+            <div class="d-flex align-items-center">
+                {% if show_dark %}
+                <div class="nxl-h-item dark-light-theme">
+                    <a href="javascript:void(0);" class="nxl-head-link me-0 dark-button">
+                        <span class="material-icons">dark_mode</span>
+                    </a>
+                    <a href="javascript:void(0);" class="nxl-head-link me-0 light-button" style="display: none">
+                        <span class="material-icons">light_mode</span>
+                    </a>
+                </div>
+                {% endif %}
+
+                <div class="dropdown nxl-h-item">
+                    <a href="javascript:void(0);" class="nxl-head-link me-0" data-bs-toggle="dropdown">
+                        <span class="material-icons">notifications</span>
+                        <span class="badge bg-danger nxl-h-badge">{{ notif_count }}</span>
+                    </a>
+                    <div class="dropdown-menu dropdown-menu-end nxl-h-dropdown nxl-notifications-menu">
+                        {% if header_notifications %}
+                            {% for notif in header_notifications %}
+                            <div class="notifications-item p-3">
+                                <span class="fw-semibold text-dark">{{ notif.title }}</span> {{ notif.message }}
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="notifications-item p-3">
+                                <span class="fw-semibold text-dark">Expiration J-1</span> - 12 abonnements expirent demain
+                            </div>
+                            <div class="notifications-item p-3">
+                                <span class="fw-semibold text-dark">Paiement en ligne</span> - 3 transactions en attente
+                            </div>
+                            <div class="notifications-item p-3">
+                                <span class="fw-semibold text-dark">Tentative d'accès</span> - Badge invalide détecté
+                            </div>
+                            <div class="notifications-item p-3">
+                                <span class="fw-semibold text-dark">Rapport mensuel</span> - Prêt à être exporté
+                            </div>
+                            <div class="notifications-item p-3">
+                                <span class="fw-semibold text-dark">API Mobile Money</span> - Vérification requise
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="dropdown nxl-h-item">
+                    <a href="javascript:void(0);" data-bs-toggle="dropdown">
+                        <img src="{% static 'avatar/1.png' %}" alt="user" class="img-fluid user-avtar me-0" />
+                    </a>
+                    <div class="dropdown-menu dropdown-menu-end nxl-h-dropdown nxl-user-dropdown">
+                        <div class="dropdown-header">
+                            <div class="d-flex align-items-center">
+                                <img src="{% static 'avatar/1.png' %}" alt="user" class="img-fluid user-avtar" />
+                                <div>
+                                    <h6 class="text-dark mb-0">{{ user_name }}</h6>
+                                    <span class="fs-12 fw-medium text-muted">{{ user_email_addr }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <a href="#" class="dropdown-item d-flex align-items-center gap-2">
+                            <img src="{% static 'avatar/1.png' %}" alt="Photo de profil" class="img-fluid user-avtar" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;">
+                            <span class="material-icons">person</span>
+                            <span>Mon Profil</span>
+                        </a>
+                        <div class="dropdown-divider"></div>
+                        <a href="{% url 'compte:logout' %}" class="dropdown-item">
+                            <span class="material-icons">logout</span>
+                            <span>Déconnexion</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</header>
+{% endwith %}

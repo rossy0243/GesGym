@@ -1,0 +1,59 @@
+/* Layout global : footer toujours en bas de page */
+main.nxl-container {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.nxl-content {
+    flex: 1 0 auto;
+}
+
+footer.footer {
+    margin-top: auto;
+}
+
+/* Navigation - états actifs : parent vs sous-menu */
+/* Parent actif (ex: Finances) - fond plus marqué */
+.nxl-item.nxl-hasmenu.active > .nxl-link {
+    background-color: rgba(52, 84, 209, 0.12);
+    color: #3454d1;
+    font-weight: 600;
+    border-left: 3px solid #3454d1;
+}
+
+/* Sous-menu actif (ex: Rapports dans Finances) - style distinct, plus subtil */
+.nxl-submenu .nxl-item.active .nxl-link {
+    background-color: rgba(52, 84, 209, 0.08);
+    color: #3454d1;
+    font-weight: 500;
+    border-left: 2px solid #3454d1;
+    padding-left: calc(1rem - 2px);
+}
+
+/* Lien déconnexion dans la nav */
+.nav-logout-link .nxl-link {
+    color: #dc3545 !important;
+    border-top: 1px solid rgba(0,0,0,0.06);
+    margin-top: 0.5rem;
+    padding-top: 0.75rem;
+}
+.nav-logout-link .nxl-link:hover {
+    background-color: rgba(220, 53, 69, 0.08) !important;
+    color: #bb2d3b !important;
+}
+
+/* Profil dans la nav */
+.nav-profil-link .nxl-link {
+    color: #6c757d;
+}
+.nav-profil-link .nxl-link:hover {
+    background-color: rgba(52, 84, 209, 0.06);
+    color: #3454d1;
+}
+.nav-profil-link.active .nxl-link {
+    background-color: rgba(52, 84, 209, 0.08);
+    color: #3454d1;
+    font-weight: 500;
+    border-left: 2px solid #3454d1;
+}

@@ -1,0 +1,71 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="x-ua-compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="SmartClub Pro - Tableau de Bord Gestion de Salle de Sport" />
+    <meta name="author" content="Smart IT Solution" />
+    <title>SmartClub Pro || {% block page_titre %} {% endblock %}</title>
+    <!--! Preconnect pour chargement fiable des icônes Material -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!--! BEGIN: Favicon-->
+    <link rel="shortcut icon" type="image/x-icon" href="{% static 'images/favicon.ico' %}" />
+    <!--! END: Favicon-->
+    <!--! BEGIN: Bootstrap CSS-->
+    <link rel="stylesheet" type="text/css" href="{% static 'css/bootstrap.min.css' %}" />
+    <!--! END: Bootstrap CSS-->
+    <!--! BEGIN: Vendors CSS (Fonts, Icons, etc.)-->
+    <link rel="stylesheet" type="text/css" href="{% static 'css/vendors.min.css' %}" />
+    <!--! END: Vendors CSS-->
+    <!--! BEGIN: Google Font Icons (Material Icons - nav et pages) -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons" />
+    <!--! END: Google Font Icons -->
+    <!--! BEGIN: Custom CSS (Votre thème)-->
+    <link rel="stylesheet" type="text/css" href="{% static 'css/theme.min.css' %}" />
+    <link rel="stylesheet" type="text/css" href="{% static 'css/nav-common.css' %}" />
+    <link rel="stylesheet" type="text/css" href="{% static 'css/dark-mode-pages.css' %}" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" />
+    <link rel="stylesheet" type="text/css" href="{% static 'css/app-pages.css' %}" />
+    <!--! END: Custom CSS-->
+</head>
+<body>
+
+    <!--! ============================================ !-->
+    <!--! [Start] Navigation Menu (structure complète) !-->
+    <!--! ============================================ !-->
+    {% include 'include/navigation.html' %}
+    <!--! [End]  Navigation Menu !-->
+
+    <!--! ============================================ !-->
+    <!--! [Start] Header (structure complète) !-->
+    <!--! ============================================ !-->
+    {% include 'include/header.html' %}
+    <!--! [End] Header !-->
+
+    <!--! ============================================ !-->
+    <!--! [Start] Main Content (DASHBOARD) !-->
+    <!--! ============================================ !-->
+    <main class="nxl-container">
+        <div class="nxl-content">
+            {% block content %}{% endblock %}
+        </div>
+        <!-- [Footer] start -->
+        {% include 'include/footer.html' %}
+    </main>
+    <!--! [End] Main Content !-->
+
+    <!-- Scripts -->
+    <script src="{% static 'js/vendors.min.js' %}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="{% static 'js/alert-to-swal.js' %}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="{% static 'js/common-init.min.js' %}"></script>
+    <script src="{% static 'js/dark-mode-toggle.js' %}"></script>
+    <script src="{% static 'js/nav-toggle.js' %}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

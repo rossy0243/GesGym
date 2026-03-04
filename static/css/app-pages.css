@@ -1,0 +1,1457 @@
+/**
+ * =============================================================================
+ * SMARTCLUB PRO — Feuille de styles consolidée (pages applicatives)
+ * =============================================================================
+ *
+ * Ce fichier regroupe tous les styles personnalisés des pages à la racine
+ * (dashboard, clients, abonnements, paiements, acces, rapports, notifications,
+ * settings, profil). À inclure après theme.min.css, nav-common.css et
+ * dark-mode-pages.css.
+ *
+ * Organisation :
+ *   1. Modals et formulaires (base commune)
+ *   2. Badges de statut
+ *   3. Navigation latérale (mode mini, état actif)
+ *   4. Cartes et statistiques (général)
+ *   5. Pagination
+ *   6. Onglets (tabs) personnalisés
+ *   7. Paramètres (API, Finance, Utilisateurs, sous-onglets)
+ *   8. Clients / Membres (modals, avatars, timeline, pointage)
+ *   9. Paiements (caisse, moyens de paiement, webhooks)
+ *  10. Abonnements (formules, promotions)
+ *  11. Contrôle d’accès (scanner, carte membre, QR)
+ *  12. Rapports (cartes rapport)
+ *  13. Profil utilisateur
+ *  14. Notifications (templates, variables)
+ *  15. Alertes, barres de progression, footer
+ *
+ * @author   Smart IT Solution
+ * @version  1.0.0
+ * =============================================================================
+ */
+
+
+/* =============================================================================
+   1. MODALS ET FORMULAIRES (base commune à toutes les pages)
+   ============================================================================= */
+
+.modal-content {
+    border-radius: 12px;
+    border: none;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+}
+
+.modal-header {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    padding: 1.5rem;
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+.modal-footer {
+    border-top: 1px solid rgba(0, 0, 0, 0.05);
+    padding: 1.5rem;
+}
+
+.form-control,
+.form-select {
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+    border: 1px solid #e0e0e0;
+}
+
+.form-control:focus,
+.form-select:focus {
+    border-color: #3454d1;
+    box-shadow: 0 0 0 0.2rem rgba(52, 84, 209, 0.1);
+}
+
+
+/* =============================================================================
+   2. BADGES DE STATUT (cohérence visuelle sur l’ensemble de l’app)
+   ============================================================================= */
+
+/* — Statuts génériques (actif, expiré, suspendu, etc.) — */
+.badge-actif {
+    background-color: #e8f5e9;
+    color: #2e7d32;
+    padding: 0.35rem 0.8rem;
+    border-radius: 30px;
+    font-weight: 500;
+    font-size: 0.75rem;
+}
+
+.badge-expire,
+.badge-inactif,
+.badge-danger {
+    background-color: #ffebee;
+    color: #c62828;
+    padding: 0.35rem 0.8rem;
+    border-radius: 30px;
+    font-weight: 500;
+    font-size: 0.75rem;
+}
+
+.badge-suspendu,
+.badge-warning,
+.badge-impaye {
+    background-color: #fff3e0;
+    color: #ef6c00;
+    padding: 0.35rem 0.8rem;
+    border-radius: 30px;
+    font-weight: 500;
+    font-size: 0.75rem;
+}
+
+.badge-paye,
+.badge-production {
+    background-color: #e8f5e9;
+    color: #2e7d32;
+    padding: 0.35rem 0.8rem;
+    border-radius: 30px;
+    font-weight: 500;
+    font-size: 0.75rem;
+}
+
+.badge-proche-expiration {
+    background-color: #fff8e1;
+    color: #f57c00;
+    padding: 0.35rem 0.8rem;
+    border-radius: 30px;
+    font-weight: 500;
+    font-size: 0.75rem;
+}
+
+/* — Badges sémantiques (couleurs Bootstrap-like) — */
+.badge-info,
+.badge-primary,
+.badge-populaire,
+.badge-role {
+    background-color: #e3f2fd;
+    color: #1565c0;
+    padding: 0.35rem 0.8rem;
+    border-radius: 30px;
+    font-weight: 500;
+    font-size: 0.75rem;
+}
+
+.badge-primary {
+    background-color: #e8eaf6;
+    color: #3454d1;
+}
+
+/* — Paramètres : mode test / production — */
+.badge-test {
+    background-color: #fff3e0;
+    color: #ef6c00;
+    padding: 0.35rem 0.8rem;
+    border-radius: 30px;
+    font-weight: 500;
+    font-size: 0.75rem;
+}
+
+.badge-mode {
+    font-size: 0.7rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+}
+
+/* — Notifications : canal et statut d’envoi — */
+.badge-sms {
+    background-color: #e3f2fd;
+    color: #1565c0;
+    padding: 0.35rem 0.8rem;
+    border-radius: 30px;
+    font-weight: 500;
+    font-size: 0.75rem;
+}
+
+.badge-whatsapp,
+.badge-delivre {
+    background-color: #e8f5e9;
+    color: #2e7d32;
+    padding: 0.35rem 0.8rem;
+    border-radius: 30px;
+    font-weight: 500;
+    font-size: 0.75rem;
+}
+
+.badge-email,
+.badge-en-attente {
+    background-color: #fff3e0;
+    color: #ef6c00;
+    padding: 0.35rem 0.8rem;
+    border-radius: 30px;
+    font-weight: 500;
+    font-size: 0.75rem;
+}
+
+.badge-echoue {
+    background-color: #ffebee;
+    color: #c62828;
+    padding: 0.35rem 0.8rem;
+    border-radius: 30px;
+    font-weight: 500;
+    font-size: 0.75rem;
+}
+
+/* — Contrôle d’accès — */
+.badge-scan {
+    background-color: #e8eaf6;
+    color: #3454d1;
+    padding: 0.35rem 0.8rem;
+    border-radius: 30px;
+    font-weight: 500;
+    font-size: 0.75rem;
+}
+
+
+/* =============================================================================
+   3. NAVIGATION LATÉRALE (mode réduit « mini », état actif)
+   ============================================================================= */
+
+.nxl-navigation.mini-nav {
+    width: 80px;
+}
+
+.nxl-navigation.mini-nav .nxl-mtext,
+.nxl-navigation.mini-nav .nxl-arrow,
+.nxl-navigation.mini-nav .card {
+    display: none;
+}
+
+.nxl-navigation.mini-nav .nxl-micon {
+    margin-right: 0;
+}
+
+/* Logo complet (SmartClub Pro) : visible quand la nav est étendue */
+.nxl-navigation .b-brand .logo-lg {
+    display: block;
+}
+.nxl-navigation:not(.mini-nav) .b-brand .logo-sm {
+    display: none !important;
+}
+
+/* Logo réduit (S-C) : visible uniquement quand la nav est en mode mini */
+.nxl-navigation.mini-nav .b-brand .logo-lg {
+    display: none !important;
+}
+.nxl-navigation.mini-nav .b-brand .logo-sm {
+    display: block !important;
+}
+
+/* Contenu principal lorsque la nav est en mode mini */
+.main-content.expanded {
+    margin-left: 80px;
+}
+
+/* Item de menu actif (sous-module sélectionné) */
+.nxl-item.active .nxl-link {
+    background-color: rgba(52, 84, 209, 0.1);
+    color: #3454d1;
+}
+
+
+/* =============================================================================
+   4. CARTES STATIQUES UNIFIÉES (dashboard, rapports, abonnements, accès)
+   Même structure partout ; couleurs adaptées au thème (clair par défaut, sombre en mode sombre)
+   ============================================================================= */
+
+/* Mode clair (défaut) : fond clair, texte foncé */
+.stat-card {
+    transition: transform 0.2s, box-shadow 0.2s;
+    cursor: pointer;
+    border-radius: 12px;
+    background-color: #fff;
+    border: 1px solid #e2e8f0;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+}
+
+.stat-card .card-body {
+    background-color: transparent;
+}
+
+/* Boîte icône (mode clair) : fond gris clair, bordure discrète */
+.stat-icon-box,
+.report-icon-box {
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    background-color: #f1f5f9;
+    border: 1px solid #e2e8f0;
+}
+
+.stat-card .stat-icon-box .material-icons,
+.stat-card .report-icon-box .material-icons {
+    font-size: 28px;
+}
+
+/* Ancienne variante icône circulaire (conservée pour compatibilité) */
+.icon-circle {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Cartes d’alerte (dashboard) */
+.alert-card {
+    border-left: 4px solid #f59e0b;
+    background-color: #fffbeb;
+    padding: 1rem;
+    border-radius: 8px;
+}
+
+.alert-card-danger {
+    border-left: 4px solid #ef4444;
+    background-color: #fef2f2;
+    padding: 1rem;
+    border-radius: 8px;
+}
+
+/* Barres de progression colorées (dashboard) */
+.progress-bar-success {
+    background: linear-gradient(90deg, #10b981, #34d399);
+}
+
+.progress-bar-warning {
+    background: linear-gradient(90deg, #f59e0b, #fbbf24);
+}
+
+.progress-bar-danger {
+    background: linear-gradient(90deg, #ef4444, #f87171);
+}
+
+
+/* =============================================================================
+   5. PAGINATION PERSONNALISÉE
+   ============================================================================= */
+
+.pagination-custom {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 5px;
+    align-items: center;
+}
+
+.pagination-custom .page-item .page-link {
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    color: #555;
+    padding: 0.5rem 0.9rem;
+    font-size: 0.9rem;
+}
+
+.pagination-custom .page-item.active .page-link {
+    background-color: #3454d1;
+    border-color: #3454d1;
+    color: white;
+}
+
+.pagination-custom .btn {
+    min-width: 36px;
+}
+
+
+/* =============================================================================
+   6. ONGLETS PERSONNALISÉS (nav-tabs-custom, nav-tabs)
+   ============================================================================= */
+
+.nav-tabs-custom {
+    border-bottom: 2px solid #e0e0e0;
+    margin-bottom: 1.5rem;
+}
+
+.nav-tabs-custom .nav-link {
+    border: none;
+    color: #6c757d;
+    font-weight: 500;
+    padding: 0.75rem 1.5rem;
+    margin-bottom: -2px;
+}
+
+.nav-tabs-custom .nav-link.active {
+    color: #3454d1;
+    background-color: transparent;
+    border-bottom: 2px solid #3454d1;
+}
+
+/* Onglets Bootstrap (Paramètres) */
+.nav-tabs .nav-link {
+    border: none;
+    color: #6c757d;
+    font-weight: 500;
+    padding: 0.75rem 1.25rem;
+}
+
+.nav-tabs .nav-link.active {
+    color: #3454d1;
+    border-bottom: 2px solid #3454d1;
+    background-color: transparent;
+}
+
+.nav-tabs .nav-link i {
+    margin-right: 8px;
+}
+
+
+/* =============================================================================
+   7. PARAMÈTRES (Settings) — API, Finance, Utilisateurs, sous-onglets
+   ============================================================================= */
+
+/* Cartes API (clés, webhooks) */
+.api-card {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 0.85rem 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.api-card:last-child {
+    margin-bottom: 0;
+}
+
+.api-card .api-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 0.65rem;
+}
+
+.api-card .api-logo {
+    width: 36px;
+    height: 36px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+.api-card .form-label {
+    margin-bottom: 0.25rem;
+    font-size: 0.85rem;
+}
+
+.api-card .row {
+    --bs-gutter-y: 0.5rem;
+}
+
+.api-card .btn {
+    margin-bottom: 0;
+}
+
+.api-card .api-key {
+    font-family: monospace;
+    background-color: #f5f5f5;
+    padding: 0.3rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+
+#api .card {
+    margin-bottom: 0.75rem;
+}
+
+#api .card:last-child {
+    margin-bottom: 0;
+}
+
+#api .card.stretch.stretch-full {
+    height: auto !important;
+    min-height: 0 !important;
+}
+
+#api .card .card-body {
+    padding: 0.85rem 1rem !important;
+    min-height: 0 !important;
+}
+
+/* Section Finance : cartes compactes sans hauteur forcée */
+#finance .card {
+    margin-bottom: 0.75rem;
+    height: auto !important;
+    min-height: 0 !important;
+}
+
+#finance .card:last-child {
+    margin-bottom: 0;
+}
+
+#finance .card.stretch.stretch-full {
+    height: auto !important;
+    min-height: 0 !important;
+}
+
+#finance .card .card-body {
+    min-height: 0 !important;
+}
+
+/* Sous-onglets (ex. Utilisateurs / Rôles) */
+.sub-tabs {
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    padding: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.sub-tabs .btn {
+    border-radius: 6px;
+    padding: 0.4rem 1rem;
+    font-size: 0.9rem;
+}
+
+.sub-tabs .btn.active {
+    background-color: #3454d1;
+    color: #ffffff;
+}
+
+/* Mode sombre : sous-onglets */
+html.app-skin-dark .sub-tabs {
+    background-color: #020617;
+    border-radius: 8px;
+    padding: 0.5rem;
+    margin-bottom: 1.5rem;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+html.app-skin-dark .sub-tabs .btn {
+    color: #e5e7eb;
+}
+
+html.app-skin-dark .sub-tabs .btn.active {
+    background-color: #3454d1;
+    color: #ffffff;
+}
+
+/* Avatar utilisateur (liste des utilisateurs) */
+.user-avatar-sm {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background-color: #3454d1;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.user-avatar-initials {
+    text-transform: uppercase;
+}
+
+
+/* =============================================================================
+   8. CLIENTS / MEMBRES (modals, avatars, timeline, pointage, stats)
+   ============================================================================= */
+
+/* Carte membre compacte (accueil / pointage) */
+.member-compact-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 15px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+}
+
+.member-photo {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    border: 3px solid white;
+    object-fit: cover;
+}
+
+.member-photo-placeholder {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    font-weight: bold;
+    border: 3px solid white;
+}
+
+.member-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.member-avatar-table {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.avatar-text.avatar-sm .member-avatar-table,
+.avatar-text.avatar-sm img.member-avatar-table {
+    width: 56px;
+    height: 56px;
+}
+
+.member-avatar-lg {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid white;
+}
+
+/* Timeline abonnements (fiche membre) */
+.subscription-timeline {
+    position: relative;
+    padding-left: 2rem;
+}
+
+.timeline-item {
+    position: relative;
+    padding-bottom: 1.5rem;
+}
+
+.timeline-item::before {
+    content: '';
+    position: absolute;
+    left: -1.5rem;
+    top: 0;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #3454d1;
+}
+
+.timeline-item::after {
+    content: '';
+    position: absolute;
+    left: -1.1rem;
+    top: 12px;
+    width: 2px;
+    height: calc(100% - 12px);
+    background: #e0e0e0;
+}
+
+.timeline-item:last-child::after {
+    display: none;
+}
+
+/* Bloc QR code (prévisualisation) */
+.qr-code-container {
+    background: white;
+    padding: 1rem;
+    border-radius: 10px;
+    display: inline-block;
+}
+
+/* Carte stats dégradée (clients) */
+.stats-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 15px;
+    padding: 1.5rem;
+}
+
+
+/* =============================================================================
+   9. PAIEMENTS (caisse, moyens de paiement, webhooks, HMAC)
+   ============================================================================= */
+
+.cash-card {
+    border-radius: 12px;
+    border: 1px solid #e0e0e0;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.cash-card:hover {
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+.cash-card .card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #e0e0e0;
+    padding: 1rem;
+    border-radius: 12px 12px 0 0;
+}
+
+.cash-balance {
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: #3454d1;
+}
+
+.payment-method-card {
+    border: 2px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 1rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.payment-method-card:hover {
+    border-color: #3454d1;
+    background-color: #f0f4ff;
+}
+
+.payment-method-card.selected {
+    border-color: #3454d1;
+    background-color: #e8ecff;
+}
+
+.webhook-item {
+    background-color: #f8f9fa;
+    border-left: 3px solid #3454d1;
+    padding: 1rem;
+    border-radius: 0 8px 8px 0;
+    margin-bottom: 0.5rem;
+}
+
+.hmac-signature {
+    background-color: #2d2d2d;
+    color: #00ff00;
+    font-family: monospace;
+    padding: 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+}
+
+.api-docs-badge {
+    background-color: #f0f4ff;
+    color: #3454d1;
+    padding: 0.25rem 0.75rem;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.75rem;
+    border: 1px solid #d0d9ff;
+}
+
+
+/* =============================================================================
+  10. ABONNEMENTS (formules, promotions, cartes)
+   ============================================================================= */
+
+.card-formule {
+    transition: transform 0.2s, box-shadow 0.2s;
+    cursor: pointer;
+    border-radius: 16px;
+    overflow: hidden;
+}
+
+.card-formule-wrap {
+    padding: 0.75rem;
+}
+
+.card-formule:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.card-formule.populaire {
+    border: 2px solid #3454d1;
+    position: relative;
+}
+
+.card-formule.populaire::before {
+    content: "POPULAIRE";
+    position: absolute;
+    top: 12px;
+    right: -30px;
+    background: #3454d1;
+    color: white;
+    padding: 4px 30px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    transform: rotate(45deg);
+}
+
+.card-promo {
+    border-left: 4px solid #f59e0b;
+    background-color: #fffbeb;
+    padding: 1rem;
+    border-radius: 8px;
+}
+
+
+/* =============================================================================
+  11. CONTRÔLE D’ACCÈS (scanner, résultat scan, carte membre recto/verso)
+   ============================================================================= */
+
+.scanner-container {
+    background-color: #1a1a1a;
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    border: 2px dashed #3454d1;
+    margin-bottom: 20px;
+}
+
+.scanner-placeholder {
+    width: 100%;
+    max-width: 300px;
+    height: 300px;
+    margin: 0 auto;
+    background: linear-gradient(45deg, #2d2d2d 25%, #3d3d3d 50%, #2d2d2d 75%);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 3px solid #3454d1;
+    position: relative;
+    overflow: hidden;
+}
+
+.scanner-placeholder::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 4px;
+    background: linear-gradient(90deg, transparent, #00ff00, transparent);
+    animation: scan 2s linear infinite;
+}
+
+@keyframes scan {
+    0% { top: 0; }
+    100% { top: 100%; }
+}
+
+.scanner-icon {
+    font-size: 64px;
+    color: #ffffff;
+    opacity: 0.5;
+}
+
+/* Résultat du scan (succès / danger / warning / en attente) */
+.scan-result {
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 20px;
+    border-left: 4px solid;
+}
+
+.scan-result.success {
+    background-color: #e8f5e9;
+    border-left-color: #2e7d32;
+}
+
+.scan-result.danger {
+    background-color: #ffebee;
+    border-left-color: #c62828;
+}
+
+.scan-result.warning {
+    background-color: #fff3e0;
+    border-left-color: #ef6c00;
+}
+
+.scan-result.pending {
+    background-color: #e3f2fd;
+    border-left-color: #1565c0;
+}
+
+.client-card {
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 16px;
+    transition: all 0.3s ease;
+}
+
+.client-card:hover {
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+.client-photo {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid #3454d1;
+}
+
+/* Timeline historique des entrées */
+.timeline {
+    position: relative;
+    padding-left: 30px;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #3454d1;
+    opacity: 0.2;
+}
+
+.timeline .timeline-item {
+    position: relative;
+    padding-bottom: 20px;
+}
+
+.timeline .timeline-item::before {
+    content: '';
+    position: absolute;
+    left: -34px;
+    top: 0;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #3454d1;
+    border: 2px solid #fff;
+}
+
+.timeline .timeline-item.success::before {
+    background: #2e7d32;
+}
+
+.timeline .timeline-item.danger::before {
+    background: #c62828;
+}
+
+.timeline .timeline-item.warning::before {
+    background: #ef6c00;
+}
+
+.stat-icon {
+    width: 48px;
+    height: 48px;
+    background: rgba(52, 84, 209, 0.1);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #3454d1;
+    font-size: 24px;
+}
+
+.qrcode-preview {
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    text-align: center;
+    border: 1px solid #e0e0e0;
+}
+
+.qrcode-preview canvas {
+    max-width: 200px;
+    margin: 0 auto;
+    display: block;
+}
+
+/* — Carte membre recto / verso (prévisualisation, thèmes) — */
+#cardPreviewContainer {
+    --primary-bg: linear-gradient(135deg, #0A4D9B 0%, #062852 100%);
+    --accent: #F7931E;
+    --chip-gold: linear-gradient(135deg, #F2D16B 0%, #B8860B 100%);
+    --card-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+}
+
+#cardPreviewContainer.theme2 {
+    --primary-bg: linear-gradient(135deg, #11998e 0%, #062852 100%);
+    --accent: #38ef7d;
+}
+
+#cardPreviewContainer.theme3 {
+    --primary-bg: linear-gradient(135deg, #f12711 0%, #062852 100%);
+    --accent: #f5af19;
+}
+
+#cardPreviewContainer.theme4 {
+    --primary-bg: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+    --accent: #ffffff;
+}
+
+.cards-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 30px;
+    padding: 20px 0;
+}
+
+.card-membre-sc {
+    width: 420px;
+    height: 260px;
+    border-radius: 16px;
+    position: relative;
+    box-shadow: var(--card-shadow);
+    overflow: hidden;
+    flex-shrink: 0;
+    padding: 8px 12px;
+}
+
+.card-membre-sc.card-front-sc {
+    background: var(--primary-bg);
+    color: white;
+    position: relative;
+    z-index: 1;
+}
+
+.card-membre-sc.card-front-sc::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 100%;
+    height: 100%;
+    background-image: url('../avatar/logo_smartclub.png');
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 450px auto;
+    opacity: 0.25;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.card-membre-sc.card-front-sc > * {
+    position: relative;
+    z-index: 2;
+}
+
+.card-membre-sc .header-sc {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 15px 25px;
+    background: rgba(0, 0, 0, 0.1);
+    text-align: center;
+}
+
+.card-membre-sc .card-header-title-sc {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    text-transform: lowercase;
+}
+
+.card-membre-sc .title-smartclub-sc {
+    color: #7EB8F0;
+}
+
+.card-membre-sc .title-pro-sc {
+    color: var(--accent);
+}
+
+.card-membre-sc .main-content-sc {
+    display: flex;
+    padding: 15px 25px;
+    gap: 20px;
+}
+
+.card-membre-sc .member-photo-sc {
+    width: 85px;
+    height: 85px;
+    border-radius: 12px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    object-fit: cover;
+    background-color: #fff;
+    flex-shrink: 0;
+}
+
+.card-membre-sc .member-info-sc h2 {
+    margin: 0;
+    font-size: 20px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.card-membre-sc .status-label-sc {
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 800;
+    margin: 5px 0 12px 0;
+}
+
+.card-membre-sc .details-sc {
+    font-size: 10px;
+    line-height: 1.6;
+}
+
+.card-membre-sc .details-sc b {
+    color: var(--accent);
+    margin-right: 5px;
+}
+
+.card-membre-sc .chip-sc {
+    position: absolute;
+    right: 35px;
+    top: 85px;
+    width: 50px;
+    height: 35px;
+    background: var(--chip-gold, linear-gradient(135deg, #F2D16B 0%, #B8860B 100%));
+    border-radius: 5px;
+}
+
+.card-membre-sc .badge-valide-sc {
+    position: absolute;
+    right: 25px;
+    bottom: 25px;
+    color: #00FF66;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.card-membre-sc.card-back-sc {
+    background: #ffffff;
+    color: #333;
+}
+
+.card-membre-sc .mag-stripe-sc {
+    width: 100%;
+    height: 45px;
+    background: #1A1A1A;
+    margin-top: 25px;
+}
+
+.card-membre-sc .back-content-sc {
+    display: flex;
+    padding: 20px 25px;
+    gap: 20px;
+    align-items: flex-start;
+}
+
+.card-membre-sc .qr-code-sc {
+    width: 90px;
+    height: 90px;
+    border: 1px solid #eee;
+    padding: 5px;
+    border-radius: 4px;
+    background: white;
+    flex-shrink: 0;
+}
+
+.card-membre-sc .qr-code-sc canvas {
+    width: 80px !important;
+    height: 80px !important;
+    display: block;
+    margin: 0 auto;
+}
+
+.card-membre-sc .signature-box-sc {
+    width: 100%;
+    height: 30px;
+    background: #f8f9fa;
+    border: 1px solid #e0e0e0;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    padding-left: 10px;
+    font-style: italic;
+    color: #adb5bd;
+    font-size: 10px;
+}
+
+.card-membre-sc .contact-info-sc {
+    font-size: 9px;
+    color: #555;
+    line-height: 1.4;
+    margin-top: 10px;
+    border-top: 1px solid #eee;
+    padding-top: 8px;
+}
+
+.card-membre-sc .contact-item-sc {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 2px;
+}
+
+/* Bouton d’action rapide (flottant) */
+.quick-action {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    z-index: 1000;
+}
+
+.quick-action .btn {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    box-shadow: 0 5px 20px rgba(52, 84, 209, 0.3);
+}
+
+
+/* =============================================================================
+  12. RAPPORTS (cartes rapport, icône)
+   ============================================================================= */
+
+.report-card {
+    transition: transform 0.2s, box-shadow 0.2s;
+    cursor: pointer;
+    border: 1px solid #edf2f9;
+    border-radius: 12px;
+}
+
+.report-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+    border-color: #3454d1;
+}
+
+/* .report-icon-box : voir section 4 (stat-card) pour style unifié avec .stat-icon-box */
+
+
+/* =============================================================================
+  13. PROFIL UTILISATEUR
+   ============================================================================= */
+
+.profile-avatar {
+    width: 100px;
+    height: 100px;
+    object-fit: cover;
+    border-radius: 50%;
+    border: 4px solid #fff;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.info-label {
+    font-size: 0.75rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.25rem;
+}
+
+.info-value {
+    font-weight: 600;
+    font-size: 1rem;
+    color: #212529;
+}
+
+.border-bottom-dashed {
+    border-bottom: 1px dashed #dee2e6;
+    padding-bottom: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.timeline-item {
+    position: relative;
+    padding-left: 25px;
+    margin-bottom: 1rem;
+}
+
+.timeline-dot {
+    position: absolute;
+    left: 0;
+    top: 0.25rem;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: #3454d1;
+    border: 2px solid rgba(52, 84, 209, 0.2);
+}
+
+.timeline-dot-success {
+    background-color: #10b981;
+    border-color: rgba(16, 185, 129, 0.2);
+}
+
+.timeline-dot-warning {
+    background-color: #f59e0b;
+    border-color: rgba(245, 158, 11, 0.2);
+}
+
+.timeline-date {
+    font-size: 0.7rem;
+    color: #6c757d;
+    margin-bottom: 0.2rem;
+}
+
+.compact-info {
+    background-color: #f8f9fa;
+    border-radius: 0.75rem;
+    padding: 1rem;
+}
+
+
+/* =============================================================================
+  14. NOTIFICATIONS (cartes template, variables dynamiques)
+   ============================================================================= */
+
+.template-card {
+    border-radius: 10px;
+    border: 1px solid #e0e0e0;
+    padding: 1rem;
+    transition: all 0.2s;
+    cursor: pointer;
+}
+
+.template-card:hover {
+    border-color: #3454d1;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+}
+
+.template-card .template-preview {
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    padding: 0.75rem;
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    color: #555;
+}
+
+.variable-badge {
+    background-color: #e3f2fd;
+    color: #1565c0;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    cursor: pointer;
+    display: inline-block;
+    margin-right: 0.3rem;
+    margin-bottom: 0.3rem;
+}
+
+.variable-badge:hover {
+    background-color: #1565c0;
+    color: white;
+}
+
+
+/* =============================================================================
+  15. FOOTER, BRAND, DIVERS
+   ============================================================================= */
+
+.footer {
+    border-top: 1px solid #e0e0e0;
+    padding: 1rem 0;
+    margin-top: 2rem;
+}
+
+.brand-logo {
+    background: #3454d1;
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-weight: 700;
+}
+
+.brand-logo span {
+    color: #ffd700;
+}
+
+/* Style des icônes Material dans la navigation */
+.nxl-navbar .material-icons {
+    font-size: 20px;
+    vertical-align: middle;
+}
+
+/* Pour les flèches des sous-menus */
+.nxl-arrow .material-icons {
+    font-size: 18px;
+    transition: transform 0.2s;
+}
+
+/* Animation de la flèche quand le menu est ouvert */
+.nxl-hasmenu.active .nxl-arrow .material-icons {
+    transform: rotate(90deg);
+}
+
+/* Icônes dans les sous-menus (optionnel) */
+.nxl-submenu .material-icons {
+    font-size: 18px;
+    margin-right: 10px;
+}
+
+/* Ajustement pour le logo compact */
+.logo-sm .material-icons {
+    font-size: 24px;
+}
+
+/* Base Material Icons : police explicite pour éviter affichage "é" / caractères incorrects */
+.material-icons {
+    font-family: 'Material Icons' !important;
+    font-weight: normal;
+    font-style: normal;
+    font-size: 24px;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    display: inline-block;
+    white-space: nowrap;
+    word-wrap: normal;
+    -webkit-font-smoothing: antialiased;
+    vertical-align: middle;
+}
+/* S'assurer que la nav et les conteneurs d'icônes n'héritent pas d'une autre police d'icônes */
+.nxl-micon .material-icons,
+.nxl-navbar .material-icons {
+    font-family: 'Material Icons' !important;
+}
+
+/* Pour les icônes dans les boutons */
+.btn .material-icons {
+    font-size: 18px;
+    margin-right: 4px;
+}
+
+/* Pour les icônes dans les alertes */
+.alert-card .material-icons {
+    font-size: 20px;
+}
+
+/* Pour les icônes dans les lignes d'activité récente */
+#recentActivitiesList .material-icons {
+    font-size: 16px;
+    margin-right: 4px;
+}
+
+/* Pour les icônes dans les cartes de statistiques */
+.stat-card .material-icons {
+    font-size: 32px;
+}
+
+/* ===========================
+   Effet modale (voile + flou contrôlé)
+   =========================== */
+.modal-backdrop,
+.modal-backdrop.show {
+    background-color: rgba(15, 23, 42, 0.35) !important; /* léger assombrissement */
+    opacity: 1 !important;
+    backdrop-filter: blur(3px);                          /* flou sur le fond uniquement */
+    z-index: 1040 !important;                            /* derrière la modale */
+}
+
+.modal {
+    z-index: 1050 !important;                            /* au-dessus du backdrop */
+}
+
+/* Empêcher tout filter: blur() appliqué directement sur le body ou les sections
+   (le flou doit uniquement venir du backdrop ci-dessus) */
+body.modal-open {
+    filter: none !important;
+    -webkit-filter: none !important;
+}
+
+body.modal-open *:not(.modal-backdrop) {
+    filter: none !important;
+    -webkit-filter: none !important;
+}

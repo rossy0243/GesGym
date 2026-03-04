@@ -1,0 +1,147 @@
+
+<!-- Navigation -->
+<nav class="nxl-navigation" id="mainNav">
+    <div class="navbar-wrapper">
+        <div class="m-header">
+            <a href="#" class="b-brand">
+                <h1 class="h3 mb-0 fw-bold logo-lg">
+                    <span style="color: #FF8C00;">SmartClub</span>
+                    <span style="color: #004e92;">Pro</span>
+                </h1>
+                <h6 class="mb-0 fw-bold logo-sm" style="display: none;">
+                    <span style="color: #FF8C00;">S</span>
+                    <span class="text-secondary">-</span>
+                    <span style="color: #004e92;">C</span>
+                </h6>
+            </a>
+        </div>
+        <div class="navbar-content">
+            <ul class="nxl-navbar">
+                <li class="nxl-item nxl-caption"><label>Navigation</label></li>
+
+                <!-- Tableau de bord -->
+                <li class="nxl-item nxl-hasmenu {% if nav_active == 'dashboard' %}active{% endif %}">
+                    <a href="javascript:void(0);" class="nxl-link">
+                        <span class="nxl-micon"><span class="material-icons">dashboard</span></span>
+                        <span class="nxl-mtext">Tableau de bord</span>
+                        <span class="nxl-arrow"><span class="material-icons">chevron_right</span></span>
+                    </a>
+                    <ul class="nxl-submenu">
+                        <li class="nxl-item" id="nav-dashboard-global"><a class="nxl-link" href="#">Vue d'ensemble</a></li>
+                        <li class="nxl-item" id="nav-dashboard-analytics"><a class="nxl-link" href="#">Analytique</a></li>
+                    </ul>
+                </li>
+
+                <!-- Clients -->
+                <li class="nxl-item nxl-hasmenu {% if nav_active == 'clients' %}active{% endif %}">
+                    <a href="javascript:void(0);" class="nxl-link">
+                        <span class="nxl-micon"><span class="material-icons">group</span></span>
+                        <span class="nxl-mtext">Clients</span>
+                        <span class="nxl-arrow"><span class="material-icons">chevron_right</span></span>
+                    </a>
+                    <ul class="nxl-submenu">
+                        <li class="nxl-item" id="nav-clients-tous"><a class="nxl-link" href="{% url 'core:member_list' %}">Tous les clients</a></li>
+                        <li class="nxl-item" id="nav-clients-expire"><a class="nxl-link" href="{% url 'core:member_list' %}?filter=expire">Abonnements expirés</a></li>
+                    </ul>
+                </li>
+
+                <!-- Abonnements -->
+                <li class="nxl-item nxl-hasmenu {% if nav_active == 'abonnements' %}active{% endif %}">
+                    <a href="javascript:void(0);" class="nxl-link">
+                        <span class="nxl-micon"><span class="material-icons">event_available</span></span>
+                        <span class="nxl-mtext">Abonnements</span>
+                        <span class="nxl-arrow"><span class="material-icons">chevron_right</span></span>
+                    </a>
+                    <ul class="nxl-submenu">
+                        <li class="nxl-item" id="nav-abonnements-formules"><a class="nxl-link" href="#">Formules</a></li>
+                        <li class="nxl-item" id="nav-abonnements-promos"><a class="nxl-link" href="#">Promotions</a></li>
+                        <li class="nxl-item" id="nav-abonnements-renouvellements"><a class="nxl-link" href="#">Renouvellements</a></li>
+                    </ul>
+                </li>
+
+                <!-- Paiements -->
+                <li class="nxl-item nxl-hasmenu {% if nav_active == 'paiements' %}active{% endif %}">
+                    <a href="javascript:void(0);" class="nxl-link">
+                        <span class="nxl-micon"><span class="material-icons">payments</span></span>
+                        <span class="nxl-mtext">Paiements</span>
+                        <span class="nxl-arrow"><span class="material-icons">chevron_right</span></span>
+                    </a>
+                    <ul class="nxl-submenu">
+                        <li class="nxl-item" id="nav-paiements-caisse"><a class="nxl-link" href="#">Point de vente</a></li>
+                        <li class="nxl-item" id="nav-paiements-journal"><a class="nxl-link" href="#">Journal des transactions</a></li>
+                        <li class="nxl-item" id="nav-paiements-online"><a class="nxl-link" href="#">Paiements en ligne</a></li>
+                    </ul>
+                </li>
+
+                <!-- Contrôle d'accès -->
+                <li class="nxl-item nxl-hasmenu {% if nav_active == 'acces' %}active{% endif %}">
+                    <a href="javascript:void(0);" class="nxl-link">
+                        <span class="nxl-micon"><span class="material-icons">fingerprint</span></span>
+                        <span class="nxl-mtext">Contrôle d'accès</span>
+                        <span class="nxl-arrow"><span class="material-icons">chevron_right</span></span>
+                    </a>
+                    <ul class="nxl-submenu">
+                        <li class="nxl-item" id="nav-acces-manuel"><a class="nxl-link" href="#">Pointage manuel</a></li>
+                        <li class="nxl-item" id="nav-acces-auto"><a class="nxl-link" href="#">Accès automatisé</a></li>
+                        <li class="nxl-item" id="nav-acces-historique"><a class="nxl-link" href="#">Historique des entrées</a></li>
+                        <li class="nxl-item" id="nav-acces-qrcode"><a class="nxl-link" href="#">Générer QR code</a></li>
+                    </ul>
+                </li>
+
+                <!-- Rapports -->
+                <li class="nxl-item nxl-hasmenu {% if nav_active == 'rapports' %}active{% endif %}">
+                    <a href="javascript:void(0);" class="nxl-link">
+                        <span class="nxl-micon"><span class="material-icons">insights</span></span>
+                        <span class="nxl-mtext">Rapports</span>
+                        <span class="nxl-arrow"><span class="material-icons">chevron_right</span></span>
+                    </a>
+                    <ul class="nxl-submenu">
+                        <li class="nxl-item" id="nav-rapports-journalier"><a class="nxl-link" href="#">Journalier</a></li>
+                        <li class="nxl-item" id="nav-rapports-mensuel"><a class="nxl-link" href="#">Mensuel</a></li>
+                        <li class="nxl-item" id="nav-rapports-personnalise"><a class="nxl-link" href="#">Personnalisé</a></li>
+                    </ul>
+                </li>
+
+                <!-- Notifications -->
+                <li class="nxl-item nxl-hasmenu {% if nav_active == 'notifications' %}active{% endif %}">
+                    <a href="javascript:void(0);" class="nxl-link">
+                        <span class="nxl-micon"><span class="material-icons">notifications</span></span>
+                        <span class="nxl-mtext">Notifications</span>
+                        <span class="nxl-arrow"><span class="material-icons">chevron_right</span></span>
+                    </a>
+                    <ul class="nxl-submenu">
+                        <li class="nxl-item" id="nav-notifications-dashboard"><a class="nxl-link" href="#">Tableau de bord</a></li>
+                        <li class="nxl-item" id="nav-notifications-modeles"><a class="nxl-link" href="#">Modèles SMS/WhatsApp</a></li>
+                        <li class="nxl-item" id="nav-notifications-planif"><a class="nxl-link" href="#">Planification</a></li>
+                        <li class="nxl-item" id="nav-notifications-historique"><a class="nxl-link" href="#">Historique des envois</a></li>
+                        <li class="nxl-item" id="nav-notifications-config"><a class="nxl-link" href="#">Configuration</a></li>
+                    </ul>
+                </li>
+
+                <!-- Paramètres -->
+                <li class="nxl-item nxl-hasmenu {% if nav_active == 'parametres' %}active{% endif %}">
+                    <a href="javascript:void(0);" class="nxl-link">
+                        <span class="nxl-micon"><span class="material-icons">settings</span></span>
+                        <span class="nxl-mtext">Paramètres</span>
+                        <span class="nxl-arrow"><span class="material-icons">chevron_right</span></span>
+                    </a>
+                    <ul class="nxl-submenu">
+                        <li class="nxl-item {% if nav_sub == 'general' %}active{% endif %}" id="nav-settings-general"><a class="nxl-link" href="#">Général</a></li>
+                        <li class="nxl-item {% if nav_sub == 'finance' %}active{% endif %}" id="nav-settings-finance"><a class="nxl-link" href="#">Finances</a></li>
+                        <li class="nxl-item {% if nav_sub == 'api' %}active{% endif %}" id="nav-settings-api"><a class="nxl-link" href="#">API Paiements</a></li>
+                        <li class="nxl-item {% if nav_sub == 'users' %}active{% endif %}" id="nav-settings-users"><a class="nxl-link" href="#">Utilisateurs & rôles</a></li>
+                        <li class="nxl-item {% if nav_sub == 'notifications' %}active{% endif %}" id="nav-settings-notifications"><a class="nxl-link" href="#">Notifications</a></li>
+                        <li class="nxl-item {% if nav_sub == 'backup' %}active{% endif %}" id="nav-settings-backup"><a class="nxl-link" href="#">Sauvegarde</a></li>
+                    </ul>
+                </li>
+
+                <li class="nxl-item nav-logout-link">
+                    <a class="nxl-link" href="{% url 'compte:logout' %}">
+                        <span class="nxl-micon"><span class="material-icons">logout</span></span>
+                        <span class="nxl-mtext">Déconnexion</span>
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>

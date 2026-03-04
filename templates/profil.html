@@ -1,0 +1,445 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block page_titre %}Profil{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="page-header-left d-flex align-items-center">
+        <div class="page-header-title">
+            <h5 class="m-b-10">Profil du personnel</h5>
+            <small class="text-muted">Fiche collaborateur / droits d'accès</small>
+        </div>
+    </div>
+    <div class="page-header-right ms-auto">
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-light-brand" onclick="window.profilEdit()">
+                <span class="material-icons me-2" style="font-size:18px;">edit</span>Modifier
+            </button>
+            <button type="button" class="btn btn-sm btn-primary" onclick="window.profilChangePassword()">
+                <span class="material-icons me-2" style="font-size:18px;">key</span>Changer mot de passe
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="main-content">
+    <div class="row">
+        <div class="col-xxl-4">
+            <div class="card stretch stretch-full">
+                <div class="card-body text-center">
+                    <img src="{% static 'avatar/1.png' %}" alt="photo personnel" class="rounded-circle mb-3" id="profileAvatar" style="width:120px;height:120px;object-fit:cover;" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ccircle cx=%2250%22 cy=%2250%22 r=%2245%22 fill=%22%233454d1%22/%3E%3Ctext x=%2250%22 y=%2265%22 text-anchor=%22middle%22 fill=%22white%22 font-size=%2236%22 font-weight=%22bold%22%3EJD%3C/text%3E%3C/svg%3E';">
+                    <h4 class="mb-1" id="profileName">{{ user_display_name|default:"Utilisateur" }}</h4>
+                    <p class="text-muted mb-2">{{ user_role|default:"Personnel" }}</p>
+                    <span class="badge bg-success mb-2 d-inline-block">Actif · Présent aujourd'hui</span>
+                    <div class="d-flex justify-content-center gap-2 mt-2">
+                        <button type="button" class="btn btn-sm btn-outline-success" onclick="window.profilMarquerPresence()"><span class="material-icons me-1" style="font-size:16px;">schedule</span>Pointage</button>
+                        <a href="{% url 'paiements' %}?tab=caisse" class="btn btn-sm btn-outline-primary"><span class="material-icons me-1" style="font-size:16px;">point_of_sale</span>Caisse</a>
+                    </div>
+                    <hr>
+                    <div class="text-start mt-3">
+                        <div class="d-flex justify-content-between mb-2"><span class="text-muted">Code personnel</span><span class="fw-medium">SPF-242</span></div>
+                        <div class="d-flex justify-content-between mb-2"><span class="text-muted">Site d'affectation</span><span class="fw-medium">Centre ville</span></div>
+                        <div class="d-flex justify-content-between mb-2"><span class="text-muted">Date d'embauche</span><span class="fw-medium">12 mars 2024</span></div>
+                        <div class="d-flex justify-content-between"><span class="text-muted">Superviseur</span><span class="fw-medium">M. Kabasele</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xxl-8">
+            <div class="card stretch stretch-full">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">Informations détaillées</h5>
+                    <span class="badge bg-primary">Rôle : {{ user_role|default:"Personnel" }}</span>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-4">
+                            <div class="text-muted small">Nom complet</div>
+                            <div class="fw-medium" id="infoNom">{{ user_display_name|default:"—" }}</div>
+                        </div>
+                        <div class="col-md-6 mb-4">
+                            <div class="text-muted small">Email</div>
+                            <div class="fw-medium" id="infoEmail">{{ user_email|default:"—" }}</div>
+                        </div>
+                        <div class="col-md-6 mb-4">
+                            <div class="text-muted small">Téléphone</div>
+                            <div class="fw-medium" id="infoPhone">+243 82 555 1212</div>
+                        </div>
+                        <div class="col-md-6 mb-4">
+                            <div class="text-muted small">Adresse</div>
+                            <div class="fw-medium" id="infoAdresse">Av. de la Libération, Q. Gombe</div>
+                        </div>
+                        <div class="col-md-6 mb-4">
+                            <div class="text-muted small">Niveau d'accès</div>
+                            <div class="fw-medium"><span class="badge bg-success">Lecture/Écriture sur clients & ventes</span></div>
+                        </div>
+                        <div class="col-md-6 mb-4">
+                            <div class="text-muted small">Dernier accès système</div>
+                            <div class="fw-medium">22 fév 2026, 08:15 (IP: 197.149.32.190)</div>
+                        </div>
+                    </div>
+                    <div class="border-top pt-3 mt-2">
+                        <span class="text-muted small">Notes internes (équipe admin)</span>
+                        <p class="mb-0 text-muted fst-italic" id="infoNotes">"Maîtrise parfaitement le module caisse. Formé au contrôle d'accès biométrique. Proposer pour évolution superviseur."</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-xxl-6">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Permissions granulaires</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-6">
+                            <ul class="list-unstyled mb-0">
+                                <li class="mb-2"><span class="material-icons text-success me-2" style="font-size:18px;">check_circle</span>Création fiche client</li>
+                                <li class="mb-2"><span class="material-icons text-success me-2" style="font-size:18px;">check_circle</span>Modification abonnement</li>
+                                <li class="mb-2"><span class="material-icons text-success me-2" style="font-size:18px;">check_circle</span>Encaissement (cash/carte)</li>
+                                <li class="mb-2"><span class="material-icons text-success me-2" style="font-size:18px;">check_circle</span>Clôture de caisse</li>
+                                <li class="mb-2"><span class="material-icons text-success me-2" style="font-size:18px;">check_circle</span>Scan accès / contrôle</li>
+                            </ul>
+                        </div>
+                        <div class="col-6">
+                            <ul class="list-unstyled mb-0">
+                                <li class="mb-2"><span class="material-icons text-danger me-2" style="font-size:18px;">cancel</span>Supprimer un client</li>
+                                <li class="mb-2"><span class="material-icons text-danger me-2" style="font-size:18px;">cancel</span>Modifier les tarifs</li>
+                                <li class="mb-2"><span class="material-icons text-danger me-2" style="font-size:18px;">cancel</span>Accès rapports financiers</li>
+                                <li class="mb-2"><span class="material-icons text-success me-2" style="font-size:18px;">check_circle</span>Voir historique paiements</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xxl-6">
+            <div class="card stretch stretch-full">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">Journal des actions récentes</h5>
+                    <button type="button" class="btn btn-sm btn-light-brand" onclick="window.profilVoirAudit()">Audit complet</button>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex gap-2 mb-3">
+                        <div class="rounded-circle bg-success" style="width:10px;height:10px;margin-top:6px;"></div>
+                        <div><div class="small text-muted">Aujourd'hui 09:32</div><div class="fw-semibold">Nouveau client enregistré</div><div class="fs-12 text-muted">Kanku M. - Abonnement 6 mois</div></div>
+                    </div>
+                    <div class="d-flex gap-2 mb-3">
+                        <div class="rounded-circle bg-secondary" style="width:10px;height:10px;margin-top:6px;"></div>
+                        <div><div class="small text-muted">22 fév 17:45</div><div class="fw-semibold">Paiement en caisse #2345</div><div class="fs-12 text-muted">120$ par carte (renouvellement)</div></div>
+                    </div>
+                    <div class="d-flex gap-2 mb-3">
+                        <div class="rounded-circle bg-secondary" style="width:10px;height:10px;margin-top:6px;"></div>
+                        <div><div class="small text-muted">21 fév 11:10</div><div class="fw-semibold">Contrôle accès : scan refusé</div><div class="fs-12 text-muted">Badge expiré - client redirigé</div></div>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <div class="rounded-circle bg-warning" style="width:10px;height:10px;margin-top:6px;"></div>
+                        <div><div class="small text-muted">20 fév 08:00</div><div class="fw-semibold">Ouverture caisse</div><div class="fs-12 text-muted">Fond 250 USD, opérateur Julien</div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-xxl-12">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Statistiques d'activité (7 derniers jours)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <div class="p-3 border rounded">
+                                <div class="text-muted small">Clients accueillis</div>
+                                <div class="fs-3 fw-bold">147</div>
+                                <span class="badge bg-success">+12%</span>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="p-3 border rounded">
+                                <div class="text-muted small">Encaissements</div>
+                                <div class="fs-3 fw-bold">3 450 $</div>
+                                <span class="badge bg-primary">24 transactions</span>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="p-3 border rounded">
+                                <div class="text-muted small">Abonnements vendus</div>
+                                <div class="fs-3 fw-bold">18</div>
+                                <span class="badge bg-info text-dark">dont 2 premium</span>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="p-3 border rounded">
+                                <div class="text-muted small">Scans d'accès</div>
+                                <div class="fs-3 fw-bold">302</div>
+                                <span class="badge bg-secondary">3 refus</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-xxl-6">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Préférences de communication</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                        <span class="fw-semibold">Recevoir les alertes expiration</span>
+                        <span class="badge bg-success">SMS / WhatsApp</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                        <span class="fw-semibold">Rapport quotidien par email</span>
+                        <span>Oui (07h00) <span class="material-icons text-success" style="font-size:18px;">check_circle</span></span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                        <span class="fw-semibold">Notifications rappels de caisse</span>
+                        <div><span class="badge bg-primary">Activé</span> <a href="javascript:void(0);" class="ms-2" onclick="window.profilModifierPreferences()">modifier</a></div>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center py-2">
+                        <span class="fw-semibold">Modèles SMS préférés</span>
+                        <div>Expiration J-7 / Paiement confirmé</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xxl-6">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Sécurité & 2FA</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                        <div><span class="fw-semibold">Authentification à deux facteurs</span><br><small class="text-muted">Recommandé pour personnel caisse</small></div>
+                        <div id="twoFAContainer"><span class="badge bg-secondary" id="badge2FA">Désactivé</span> <a href="javascript:void(0);" class="ms-3" id="link2FA" onclick="window.profilActiver2FA()">Activer</a></div>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                        <span class="fw-semibold">Dernière rotation MDP</span>
+                        <div>15 jan 2026</div>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center py-2">
+                        <span class="fw-semibold">Appareils de confiance</span>
+                        <div>2 sessions (Windows, Android) <a href="javascript:void(0);" class="text-danger" onclick="window.profilRevoquerAppareils()">Révoquer</a></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Modifier le profil -->
+<div class="modal fade" id="editProfileModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Modifier mon profil</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editProfileForm">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Nom complet</label>
+                            <input type="text" class="form-control" id="editNom" value="Julien Dubois">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Email</label>
+                            <input type="email" class="form-control" id="editEmail" value="j.dubois@smartclub.cd">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Téléphone</label>
+                            <input type="text" class="form-control" id="editPhone" value="+243 82 555 1212">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Adresse</label>
+                            <input type="text" class="form-control" id="editAdresse" value="Av. de la Libération, Q. Gombe">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Notes internes (admin)</label>
+                        <textarea class="form-control" id="editNotes" rows="2">"Maîtrise parfaitement le module caisse. Formé au contrôle d'accès biométrique. Proposer pour évolution superviseur."</textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" id="btnSaveProfile"><span class="material-icons me-2" style="font-size:18px;">save</span>Enregistrer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Changer le mot de passe -->
+<div class="modal fade" id="changePasswordModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Changer le mot de passe</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="changePasswordForm">
+                    <div class="mb-3">
+                        <label class="form-label">Mot de passe actuel</label>
+                        <input type="password" class="form-control" id="currentPassword" placeholder="••••••••">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Nouveau mot de passe</label>
+                        <input type="password" class="form-control" id="newPassword" placeholder="••••••••">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Confirmer le nouveau mot de passe</label>
+                        <input type="password" class="form-control" id="confirmPassword" placeholder="••••••••">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" id="btnChangePassword"><span class="material-icons me-2" style="font-size:18px;">lock</span>Mettre à jour</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Journal d'audit complet -->
+<div class="modal fade" id="auditModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Journal d'audit complet</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm">
+                        <thead><tr><th>Date</th><th>Action</th><th>Détail</th></tr></thead>
+                        <tbody>
+                            <tr><td>Aujourd'hui 09:32</td><td>Nouveau client</td><td>Kanku M. - Abonnement 6 mois</td></tr>
+                            <tr><td>22 fév 17:45</td><td>Paiement caisse</td><td>#2345 - 120$ par carte</td></tr>
+                            <tr><td>21 fév 11:10</td><td>Contrôle accès</td><td>Scan refusé - Badge expiré</td></tr>
+                            <tr><td>20 fév 08:00</td><td>Ouverture caisse</td><td>Fond 250 USD</td></tr>
+                            <tr><td>19 fév 18:30</td><td>Clôture caisse</td><td>Solde: 1 845$</td></tr>
+                            <tr><td>18 fév 14:22</td><td>Paiement caisse</td><td>#2344 - 80$ cash</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Activer 2FA -->
+<div class="modal fade" id="activate2FAModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Activer l'authentification à deux facteurs</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted">Choisissez votre méthode :</p>
+                <div class="form-check mb-2"><input class="form-check-input" type="radio" name="mode2FA" id="mode2FA_email" value="email" checked><label class="form-check-label" for="mode2FA_email">Code par email</label></div>
+                <div class="form-check mb-2"><input class="form-check-input" type="radio" name="mode2FA" id="mode2FA_app" value="app"><label class="form-check-label" for="mode2FA_app">Application (Google Authenticator, etc.)</label></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" id="btnActivate2FA"><span class="material-icons me-2" style="font-size:18px;">security</span>Activer 2FA</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    window.profilEdit = function() {
+        var nameEl = document.getElementById('profileName');
+        var infoNom = document.getElementById('infoNom');
+        var infoEmail = document.getElementById('infoEmail');
+        var infoPhone = document.getElementById('infoPhone');
+        var infoAdresse = document.getElementById('infoAdresse');
+        var infoNotes = document.getElementById('infoNotes');
+        document.getElementById('editNom').value = (nameEl && nameEl.textContent) || 'Julien Dubois';
+        document.getElementById('editEmail').value = (infoEmail && infoEmail.textContent) || 'j.dubois@smartclub.cd';
+        document.getElementById('editPhone').value = (infoPhone && infoPhone.textContent) || '';
+        document.getElementById('editAdresse').value = (infoAdresse && infoAdresse.textContent) || '';
+        document.getElementById('editNotes').value = (infoNotes && infoNotes.textContent) || '';
+        new bootstrap.Modal(document.getElementById('editProfileModal')).show();
+    };
+    window.profilChangePassword = function() {
+        document.getElementById('changePasswordForm').reset();
+        new bootstrap.Modal(document.getElementById('changePasswordModal')).show();
+    };
+    window.profilMarquerPresence = function() {
+        if (typeof Swal !== 'undefined') Swal.fire({ icon: 'success', title: 'Pointage enregistré', text: 'Présence marquée à ' + new Date().toLocaleTimeString('fr-FR'), timer: 2000, showConfirmButton: false });
+        else alert('Pointage enregistré.');
+    };
+    window.profilVoirAudit = function() {
+        new bootstrap.Modal(document.getElementById('auditModal')).show();
+    };
+    window.profilActiver2FA = function() {
+        new bootstrap.Modal(document.getElementById('activate2FAModal')).show();
+    };
+    window.profilModifierPreferences = function() {
+        if (typeof Swal !== 'undefined') Swal.fire({ icon: 'info', title: 'Modifier les préférences', text: 'Configurer les notifications (rappels caisse, modèles SMS).', confirmButtonColor: '#3454d1' });
+        else alert('Modifier les préférences : page à venir.');
+    };
+    window.profilRevoquerAppareils = function() {
+        if (typeof Swal !== 'undefined') Swal.fire({ title: 'Révoquer les appareils ?', text: 'Toutes les sessions seront déconnectées. Vous devrez vous reconnecter.', icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', cancelButtonColor: '#3085d6', confirmButtonText: 'Oui, révoquer' }).then(function(r) { if (r.isConfirmed) Swal.fire({ icon: 'success', title: 'Appareils révoqués', text: 'Sessions terminées.' }); });
+        else if (confirm('Révoquer toutes les sessions ?')) alert('Appareils révoqués.');
+    };
+
+    document.addEventListener('DOMContentLoaded', function() {
+        document.getElementById('btnSaveProfile') && document.getElementById('btnSaveProfile').addEventListener('click', function() {
+            var nom = document.getElementById('editNom').value.trim();
+            var email = document.getElementById('editEmail').value.trim();
+            var phone = document.getElementById('editPhone').value;
+            var adresse = document.getElementById('editAdresse').value;
+            var notes = document.getElementById('editNotes').value;
+            if (!nom || !email) { (typeof Swal !== 'undefined' ? Swal.fire({ icon: 'warning', title: 'Champs requis', text: 'Nom et email sont obligatoires.' }) : alert('Nom et email obligatoires.')); return; }
+            var nameEl = document.getElementById('profileName');
+            if (nameEl) nameEl.textContent = nom;
+            if (document.getElementById('infoNom')) document.getElementById('infoNom').textContent = nom;
+            if (document.getElementById('infoEmail')) document.getElementById('infoEmail').textContent = email;
+            if (document.getElementById('infoPhone')) document.getElementById('infoPhone').textContent = phone;
+            if (document.getElementById('infoAdresse')) document.getElementById('infoAdresse').textContent = adresse;
+            if (document.getElementById('infoNotes')) document.getElementById('infoNotes').textContent = notes;
+            bootstrap.Modal.getInstance(document.getElementById('editProfileModal')).hide();
+            if (typeof Swal !== 'undefined') Swal.fire({ icon: 'success', title: 'Profil mis à jour', text: 'Les modifications ont été enregistrées.', confirmButtonColor: '#3454d1' });
+        });
+        document.getElementById('btnChangePassword') && document.getElementById('btnChangePassword').addEventListener('click', function() {
+            var cur = document.getElementById('currentPassword').value;
+            var pwd = document.getElementById('newPassword').value;
+            var conf = document.getElementById('confirmPassword').value;
+            if (!cur || !pwd || !conf) { (typeof Swal !== 'undefined' ? Swal.fire({ icon: 'warning', title: 'Champs requis', text: 'Remplissez tous les champs.' }) : alert('Remplissez tous les champs.')); return; }
+            if (pwd !== conf) { (typeof Swal !== 'undefined' ? Swal.fire({ icon: 'error', title: 'Erreur', text: 'Les mots de passe ne correspondent pas.' }) : alert('Mots de passe différents.')); return; }
+            bootstrap.Modal.getInstance(document.getElementById('changePasswordModal')).hide();
+            document.getElementById('changePasswordForm').reset();
+            if (typeof Swal !== 'undefined') Swal.fire({ icon: 'success', title: 'Mot de passe modifié', text: 'Votre mot de passe a été mis à jour.', confirmButtonColor: '#3454d1' });
+        });
+        document.getElementById('btnActivate2FA') && document.getElementById('btnActivate2FA').addEventListener('click', function() {
+            var mode = (document.querySelector('input[name="mode2FA"]:checked') && document.querySelector('input[name="mode2FA"]:checked').value) || 'email';
+            bootstrap.Modal.getInstance(document.getElementById('activate2FAModal')).hide();
+            var badgeEl = document.getElementById('badge2FA');
+            var linkEl = document.getElementById('link2FA');
+            if (badgeEl) { badgeEl.className = 'badge bg-success'; badgeEl.textContent = 'Activé'; badgeEl.id = 'badge2FA'; }
+            if (linkEl) { linkEl.outerHTML = '<span class="text-success ms-3"><span class="material-icons align-middle" style="font-size:18px;">check_circle</span> Activé</span>'; }
+            if (typeof Swal !== 'undefined') Swal.fire({ icon: 'success', title: '2FA activé', text: 'Authentification à deux facteurs par ' + (mode === 'email' ? 'email' : 'application') + ' activée.', confirmButtonColor: '#3454d1' });
+        });
+    });
+})();
+</script>
+{% endblock %}

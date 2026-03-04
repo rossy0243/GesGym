@@ -1,0 +1,825 @@
+/**
+ * Mode sombre - SmartClub Pro (toutes les pages)
+ *
+ * LOGIQUE :
+ * 1. Activation : dark-mode-toggle.js ajoute/retire la classe "app-skin-dark" sur <html>
+ *    au clic sur le bouton lune/soleil du header, et enregistre la préférence (localStorage).
+ * 2. Application : Toutes les pages qui étendent base.html chargent ce fichier ;
+ *    les règles ci-dessous (sélecteur html.app-skin-dark ...) s'appliquent donc
+ *    de façon identique sur Dashboard, Clients, Abonnements, Paiements, Accès,
+ *    Rapports, Notifications, Paramètres, Profil.
+ * 3. Palette (thème plus sombre) : fond #020617, cartes #0f172a, surfaces #1e293b,
+ *    surfaces élevées #334155, texte #e2e8f0 / #94a3b8, accent #3454d1, bordures rgba(148,163,184,0.2).
+ * 4. Aucune page ne doit redéfinir le mode sombre : ce fichier est la source unique.
+ */
+
+/* ========== Fond global (thème très sombre) ========== */
+html.app-skin-dark body {
+    background-color: #020617;
+    color: #e2e8f0;
+}
+
+html.app-skin-dark .nxl-container,
+html.app-skin-dark .nxl-content {
+    background-color: #020617;
+    color: #e2e8f0;
+}
+
+/* ========== Header / Breadcrumb ========== */
+html.app-skin-dark .nxl-header {
+    background-color: #0f172a;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+html.app-skin-dark .breadcrumb-item a,
+html.app-skin-dark .breadcrumb-item.active {
+    color: #94a3b8;
+}
+
+html.app-skin-dark .breadcrumb-item a:hover {
+    color: #f1f5f9;
+}
+
+/* ========== Cartes ========== */
+html.app-skin-dark .card {
+    background-color: #0f172a;
+    border-color: rgba(148, 163, 184, 0.2);
+    color: #e2e8f0;
+}
+
+html.app-skin-dark .card-header {
+    background-color: rgba(15, 23, 42, 0.95);
+    border-bottom-color: rgba(148, 163, 184, 0.2);
+    color: #f1f5f9;
+}
+
+html.app-skin-dark .card-body {
+    background-color: #0f172a;
+    color: #e2e8f0;
+}
+
+html.app-skin-dark .card-title {
+    color: #f1f5f9;
+}
+
+/* ========== Tableaux ========== */
+html.app-skin-dark .table {
+    color: #e2e8f0;
+    border-color: rgba(148, 163, 184, 0.2);
+}
+
+html.app-skin-dark .table thead th {
+    background-color: #1e293b;
+    color: #f1f5f9;
+    border-color: rgba(148, 163, 184, 0.2);
+}
+
+html.app-skin-dark .table tbody tr {
+    background-color: #0f172a;
+}
+
+html.app-skin-dark .table tbody tr:hover {
+    background-color: #1e293b;
+}
+
+html.app-skin-dark .table td,
+html.app-skin-dark .table th {
+    border-color: rgba(148, 163, 184, 0.15);
+    color: #e2e8f0;
+}
+
+/* ========== Formulaires ========== */
+html.app-skin-dark .form-control,
+html.app-skin-dark .form-select {
+    background-color: #1e293b;
+    border-color: rgba(148, 163, 184, 0.3);
+    color: #f1f5f9;
+}
+
+/* Options des select : fond sombre + texte clair (liste déroulante) */
+html.app-skin-dark .form-select option,
+html.app-skin-dark select option {
+    background-color: #0f172a;
+    color: #f1f5f9;
+}
+
+html.app-skin-dark .form-control::placeholder {
+    color: #94a3b8;
+}
+
+html.app-skin-dark .form-control:focus,
+html.app-skin-dark .form-select:focus {
+    background-color: #1e293b;
+    border-color: #3454d1;
+    color: #f1f5f9;
+}
+
+/* Champs en lecture seule ou .bg-light ne pas forcer le blanc */
+html.app-skin-dark .form-control.bg-light,
+html.app-skin-dark .form-control[readonly] {
+    background-color: #334155 !important;
+    border-color: rgba(148, 163, 184, 0.3);
+    color: #e2e8f0 !important;
+}
+
+html.app-skin-dark textarea.form-control {
+    background-color: #1e293b;
+    border-color: rgba(148, 163, 184, 0.3);
+    color: #f1f5f9;
+}
+
+html.app-skin-dark textarea.form-control::placeholder {
+    color: #94a3b8;
+}
+
+/* Checkbox / radio */
+html.app-skin-dark .form-check-input {
+    background-color: #1e293b;
+    border-color: rgba(148, 163, 184, 0.5);
+}
+
+html.app-skin-dark .form-check-input:checked {
+    background-color: #3454d1;
+    border-color: #3454d1;
+}
+
+html.app-skin-dark .form-check-label {
+    color: #e2e8f0;
+}
+
+html.app-skin-dark .form-label,
+html.app-skin-dark label {
+    color: #cbd5e1;
+}
+
+html.app-skin-dark .input-group-text {
+    background-color: #1e293b;
+    border-color: rgba(148, 163, 184, 0.3);
+    color: #94a3b8;
+}
+
+/* Ne pas laisser les zones de recherche en blanc */
+html.app-skin-dark .input-group-text.bg-white {
+    background-color: #1e293b !important;
+    color: #94a3b8;
+}
+
+/* Bloc récap / alert light dans les modales */
+html.app-skin-dark .alert-light,
+html.app-skin-dark .bg-light {
+    background-color: #1e293b !important;
+    border-color: rgba(148, 163, 184, 0.25) !important;
+    color: #e2e8f0 !important;
+}
+
+html.app-skin-dark .alert-light .text-muted,
+html.app-skin-dark .bg-light .text-muted {
+    color: #94a3b8 !important;
+}
+
+html.app-skin-dark .alert-light strong,
+html.app-skin-dark .bg-light strong {
+    color: #f1f5f9;
+}
+
+/* ========== Modals ========== */
+/* Backdrop plus sombre + flou conservé (effet professionnel) */
+html.app-skin-dark .modal-backdrop,
+html.app-skin-dark .modal-backdrop.show {
+    background-color: rgba(2, 6, 23, 0.75) !important;
+    backdrop-filter: blur(4px);
+}
+
+html.app-skin-dark .modal-content {
+    background-color: #0f172a;
+    border-color: rgba(148, 163, 184, 0.2);
+}
+
+html.app-skin-dark .modal-header {
+    background-color: #1e293b;
+    border-bottom-color: rgba(148, 163, 184, 0.2);
+    color: #f1f5f9;
+}
+
+html.app-skin-dark .modal-body {
+    background-color: #0f172a;
+    color: #e2e8f0;
+}
+
+html.app-skin-dark .modal-footer {
+    background-color: #0f172a;
+    border-top-color: rgba(148, 163, 184, 0.2);
+}
+
+html.app-skin-dark .modal-title {
+    color: #f1f5f9;
+}
+
+/* Tableaux dans les modales (récap, détails) */
+html.app-skin-dark .modal-body .table-borderless td,
+html.app-skin-dark .modal-body .table.table-borderless th {
+    color: #e2e8f0 !important;
+}
+
+html.app-skin-dark .modal-body .table-borderless .fw-semibold {
+    color: #94a3b8;
+}
+
+html.app-skin-dark .modal-body .table-borderless strong,
+html.app-skin-dark .modal-body .table-borderless .fw-bold {
+    color: #f1f5f9;
+}
+
+/* Zone de résultats de recherche (liste clients, etc.) */
+html.app-skin-dark .border.rounded .client-result-item,
+html.app-skin-dark [id^="searchResults"] {
+    background-color: #0f172a;
+    color: #e2e8f0;
+    border-color: rgba(148, 163, 184, 0.2) !important;
+}
+
+html.app-skin-dark .border.rounded .client-result-item:hover {
+    background-color: #1e293b;
+}
+
+html.app-skin-dark .border.rounded .text-muted {
+    color: #94a3b8 !important;
+}
+
+/* Code / zone HMAC dans modale */
+html.app-skin-dark .modal-body .bg-light code,
+html.app-skin-dark .modal-body .p-2.bg-light {
+    background-color: #1e293b !important;
+    color: #e2e8f0 !important;
+}
+
+/* ========== Dropdowns ========== */
+html.app-skin-dark .dropdown-menu {
+    background-color: #0f172a;
+    border-color: rgba(148, 163, 184, 0.2);
+}
+
+html.app-skin-dark .dropdown-item {
+    color: #e2e8f0;
+}
+
+html.app-skin-dark .dropdown-item:hover {
+    background-color: #1e293b;
+    color: #f1f5f9;
+}
+
+html.app-skin-dark .dropdown-header,
+html.app-skin-dark .dropdown-divider {
+    border-color: rgba(148, 163, 184, 0.2);
+    color: #94a3b8;
+}
+
+/* ========== Onglets (nav-tabs) ========== */
+html.app-skin-dark .nav-tabs,
+html.app-skin-dark .nav-tabs-custom {
+    border-color: rgba(148, 163, 184, 0.2);
+    background-color: transparent;
+}
+
+html.app-skin-dark .nav-tabs .nav-link,
+html.app-skin-dark .nav-tabs-custom .nav-link {
+    color: #94a3b8;
+    background-color: transparent;
+    border-color: transparent;
+}
+
+html.app-skin-dark .nav-tabs .nav-link:hover,
+html.app-skin-dark .nav-tabs-custom .nav-link:hover {
+    color: #e2e8f0;
+}
+
+html.app-skin-dark .nav-tabs .nav-link.active,
+html.app-skin-dark .nav-tabs-custom .nav-link.active {
+    background-color: #3454d1;
+    color: #ffffff;
+    border-color: #3454d1;
+}
+
+/* ========== Sous-onglets (sub-tabs) ========== */
+html.app-skin-dark .sub-tabs {
+    background-color: #0f172a;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 8px;
+    padding: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+
+html.app-skin-dark .sub-tabs .btn {
+    color: #cbd5e1;
+}
+
+html.app-skin-dark .sub-tabs .btn:hover {
+    color: #f1f5f9;
+    background-color: #1e293b;
+}
+
+html.app-skin-dark .sub-tabs .btn.active {
+    background-color: #3454d1;
+    color: #ffffff;
+}
+
+/* ========== Page header / titres ========== */
+html.app-skin-dark .page-header .page-header-title h5,
+html.app-skin-dark .page-header-title h5,
+html.app-skin-dark h5.card-title,
+html.app-skin-dark .card-title {
+    color: #f1f5f9;
+}
+
+html.app-skin-dark .text-muted {
+    color: #94a3b8 !important;
+}
+
+html.app-skin-dark .text-dark {
+    color: #f1f5f9 !important;
+}
+
+/* ========== Badges (conserver lisibilité) ========== */
+html.app-skin-dark .badge-actif {
+    background-color: rgba(34, 197, 94, 0.25);
+    color: #86efac;
+}
+
+html.app-skin-dark .badge-expire,
+html.app-skin-dark .badge-inactif {
+    background-color: rgba(239, 68, 68, 0.25);
+    color: #fca5a5;
+}
+
+html.app-skin-dark .badge-suspendu {
+    background-color: rgba(245, 158, 11, 0.25);
+    color: #fcd34d;
+}
+
+html.app-skin-dark .badge-proche-expiration {
+    background-color: rgba(245, 158, 11, 0.2);
+    color: #fde047;
+}
+
+/* Badges Bootstrap (success, warning, danger, secondary) restent lisibles */
+html.app-skin-dark .badge.bg-success {
+    background-color: rgba(34, 197, 94, 0.35) !important;
+    color: #86efac;
+}
+
+html.app-skin-dark .badge.bg-warning {
+    background-color: rgba(245, 158, 11, 0.35) !important;
+    color: #fef3c7;
+}
+
+html.app-skin-dark .badge.bg-danger {
+    background-color: rgba(239, 68, 68, 0.35) !important;
+    color: #fca5a5;
+}
+
+html.app-skin-dark .badge.bg-secondary {
+    background-color: #334155 !important;
+    color: #e2e8f0;
+}
+
+/* ========== Boutons ========== */
+html.app-skin-dark .btn-light,
+html.app-skin-dark .btn-outline-secondary {
+    background-color: #1e293b;
+    border-color: rgba(148, 163, 184, 0.3);
+    color: #e2e8f0;
+}
+
+html.app-skin-dark .btn-light:hover,
+html.app-skin-dark .btn-outline-secondary:hover {
+    background-color: #334155;
+    border-color: #64748b;
+    color: #f1f5f9;
+}
+
+html.app-skin-dark .btn-light-brand {
+    background-color: rgba(52, 84, 209, 0.2);
+    border-color: #3454d1;
+    color: #93c5fd;
+}
+
+html.app-skin-dark .btn-light-brand:hover {
+    background-color: rgba(52, 84, 209, 0.35);
+    color: #bfdbfe;
+}
+
+/* ========== Stat cards / alertes ========== */
+html.app-skin-dark .stat-card {
+    background-color: #0f172a !important;
+    border-color: rgba(148, 163, 184, 0.2);
+}
+
+html.app-skin-dark .stat-card:hover {
+    background-color: #1e293b !important;
+}
+
+html.app-skin-dark .stat-card .card-body {
+    color: #e2e8f0;
+}
+
+html.app-skin-dark .stat-card .card-body .fs-12.fw-medium.text-muted,
+html.app-skin-dark .stat-card .card-body .text-muted {
+    color: rgba(226, 232, 240, 0.85) !important;
+}
+
+html.app-skin-dark .stat-card .card-body .fs-12.text-muted {
+    color: #94a3b8 !important;
+}
+
+html.app-skin-dark .alert-info {
+    background-color: rgba(59, 130, 246, 0.15);
+    border-color: rgba(59, 130, 246, 0.4);
+    color: #93c5fd;
+}
+
+html.app-skin-dark .alert-warning {
+    background-color: rgba(245, 158, 11, 0.15);
+    border-color: rgba(245, 158, 11, 0.4);
+    color: #fde047;
+}
+
+html.app-skin-dark .alert-danger {
+    background-color: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.4);
+    color: #fca5a5;
+}
+
+/* ========== Cartes d'alerte (Alertes & Actions requises) ========== */
+html.app-skin-dark .alert-card {
+    background-color: rgba(180, 83, 9, 0.25) !important;
+    border-left: 4px solid #f59e0b !important;
+    color: #fef3c7;
+}
+
+html.app-skin-dark .alert-card .fw-semibold,
+html.app-skin-dark .alert-card span:not(.text-muted) {
+    color: #fde68a;
+}
+
+html.app-skin-dark .alert-card .text-muted,
+html.app-skin-dark .alert-card .fs-12 {
+    color: #d4d4d8 !important;
+}
+
+html.app-skin-dark .alert-card .text-warning,
+html.app-skin-dark .alert-card .feather-alert-triangle {
+    color: #fbbf24 !important;
+}
+
+html.app-skin-dark .alert-card-danger {
+    background-color: rgba(185, 28, 28, 0.25) !important;
+    border-left: 4px solid #ef4444 !important;
+    color: #fecaca;
+}
+
+html.app-skin-dark .alert-card-danger .fw-semibold,
+html.app-skin-dark .alert-card-danger span:not(.text-muted) {
+    color: #fca5a5;
+}
+
+html.app-skin-dark .alert-card-danger .text-muted,
+html.app-skin-dark .alert-card-danger .fs-12 {
+    color: #e2e8f0 !important;
+}
+
+html.app-skin-dark .alert-card-danger .text-danger,
+html.app-skin-dark .alert-card-danger .feather-clock {
+    color: #f87171 !important;
+}
+
+/* Bloc "Paiements en ligne en attente" (bordure en pointillés) */
+html.app-skin-dark .card-body .border.rounded-2,
+html.app-skin-dark .card-body .border-dashed.rounded-2 {
+    background-color: #1e293b !important;
+    border-color: rgba(148, 163, 184, 0.3) !important;
+    color: #e2e8f0;
+}
+
+html.app-skin-dark .card-body .border-dashed.rounded-2 .fw-semibold,
+html.app-skin-dark .card-body .border.rounded-2 .fw-semibold {
+    color: #f1f5f9;
+}
+
+html.app-skin-dark .card-body .border-dashed.rounded-2 .text-muted,
+html.app-skin-dark .card-body .border-dashed.rounded-2 .fs-12 {
+    color: #94a3b8 !important;
+}
+
+html.app-skin-dark .card-body .border-dashed.rounded-2 .text-primary {
+    color: #93c5fd !important;
+}
+
+/* ========== Carte infos (profil: code personnel, site, etc.) ========== */
+html.app-skin-dark .info-label {
+    color: #94a3b8 !important;
+}
+
+html.app-skin-dark .info-value {
+    color: #f1f5f9 !important;
+}
+
+html.app-skin-dark .compact-info .info-label {
+    color: #94a3b8 !important;
+}
+
+html.app-skin-dark .compact-info .info-value {
+    color: #f1f5f9 !important;
+}
+
+/* Cartes avec fond forcé blanc par le thème */
+html.app-skin-dark .card.bg-white,
+html.app-skin-dark .card-body.bg-white {
+    background-color: #0f172a !important;
+}
+
+/* ========== Footer ========== */
+html.app-skin-dark .footer {
+    background-color: #020617;
+    border-top: 1px solid rgba(148, 163, 184, 0.2);
+    color: #94a3b8;
+}
+
+/* ========== Notifications / dropdown items ========== */
+html.app-skin-dark .notifications-item,
+html.app-skin-dark .nxl-notifications-menu .notifications-item {
+    background-color: transparent;
+    color: #e2e8f0;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+/* ========== Pagination ========== */
+html.app-skin-dark .pagination .page-link {
+    background-color: #1e293b;
+    border-color: rgba(148, 163, 184, 0.2);
+    color: #e2e8f0;
+}
+
+html.app-skin-dark .pagination .page-link:hover {
+    background-color: #334155;
+    color: #f1f5f9;
+}
+
+html.app-skin-dark .pagination .page-item.active .page-link {
+    background-color: #3454d1;
+    border-color: #3454d1;
+    color: #fff;
+}
+
+/* ========== Pagination personnalisée (Rapports, etc.) ========== */
+html.app-skin-dark .pagination-custom .page-item .page-link {
+    background-color: #1e293b;
+    border-color: rgba(148, 163, 184, 0.3);
+    color: #cbd5e1;
+}
+
+html.app-skin-dark .pagination-custom .page-item .page-link:hover {
+    background-color: #334155;
+    color: #e2e8f0;
+}
+
+html.app-skin-dark .pagination-custom .page-item.active .page-link {
+    background-color: #3454d1;
+    border-color: #3454d1;
+    color: #e2e8f0;
+}
+
+/* ========== Card footer ========== */
+html.app-skin-dark .card-footer {
+    background-color: rgba(15, 23, 42, 0.95);
+    border-top: 1px solid rgba(148, 163, 184, 0.2);
+    color: #94a3b8;
+}
+
+/* ========== Rapports : KPI cards, icônes, badges ========== */
+html.app-skin-dark .report-icon-box,
+html.app-skin-dark .stat-icon-box {
+    background-color: rgba(30, 41, 59, 0.95);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+html.app-skin-dark .stat-card .card-body h3,
+html.app-skin-dark .stat-card .card-body .fw-bold {
+    color: #e2e8f0;
+}
+
+html.app-skin-dark .badge-paye,
+html.app-skin-dark .badge-production {
+    background-color: rgba(34, 197, 94, 0.25);
+    color: #86efac;
+}
+
+html.app-skin-dark .badge-impaye,
+html.app-skin-dark .badge-warning.badge-suspendu {
+    background-color: rgba(245, 158, 11, 0.25);
+    color: #fcd34d;
+}
+
+html.app-skin-dark .badge-proche-expiration {
+    background-color: rgba(245, 158, 11, 0.2);
+    color: #fde047;
+}
+
+html.app-skin-dark .bg-soft-success {
+    background-color: rgba(34, 197, 94, 0.15) !important;
+}
+
+html.app-skin-dark .bg-soft-success.text-success,
+html.app-skin-dark .text-success {
+    color: #86efac !important;
+}
+
+html.app-skin-dark .bg-soft-primary {
+    background-color: rgba(52, 84, 209, 0.2) !important;
+}
+
+html.app-skin-dark .bg-soft-primary.text-primary,
+html.app-skin-dark .text-primary {
+    color: #93c5fd !important;
+}
+
+html.app-skin-dark .bg-soft-warning {
+    background-color: rgba(245, 158, 11, 0.2) !important;
+}
+
+html.app-skin-dark .bg-soft-warning.text-warning,
+html.app-skin-dark .text-warning {
+    color: #fcd34d !important;
+}
+
+html.app-skin-dark .text-danger {
+    color: #fca5a5 !important;
+}
+
+html.app-skin-dark .custom-card-action {
+    background-color: #0f172a;
+}
+
+html.app-skin-dark .card-header-action .avatar-text,
+html.app-skin-dark .card-header-action .avatar-sm {
+    color: #94a3b8;
+}
+
+html.app-skin-dark .card-header-action .avatar-text:hover,
+html.app-skin-dark .card-header-action .avatar-sm:hover {
+    color: #e2e8f0;
+}
+
+html.app-skin-dark .table .border-b {
+    border-color: rgba(148, 163, 184, 0.25) !important;
+}
+
+/* Texte principal en gris clair (éviter blanc pur) */
+html.app-skin-dark .card-body .fw-semibold {
+    color: #e2e8f0;
+}
+
+/* ========== Divers ========== */
+html.app-skin-dark hr {
+    border-color: rgba(148, 163, 184, 0.2);
+}
+
+html.app-skin-dark .border,
+html.app-skin-dark .border-top,
+html.app-skin-dark .border-bottom {
+    border-color: rgba(148, 163, 184, 0.2) !important;
+}
+
+html.app-skin-dark small,
+html.app-skin-dark .fs-11,
+html.app-skin-dark .fs-12 {
+    color: #94a3b8;
+}
+
+/* Séparateur vertical (header, rapports) */
+html.app-skin-dark .vr {
+    background-color: rgba(148, 163, 184, 0.3);
+}
+
+/* ========== Card footer (rapports, clients, settings, notifications) ========== */
+html.app-skin-dark .card-footer {
+    background-color: rgba(15, 23, 42, 0.95);
+    border-top-color: rgba(148, 163, 184, 0.2);
+    color: #94a3b8;
+}
+
+/* ========== Boutons outline (primary, success, danger) ========== */
+html.app-skin-dark .btn-outline-primary {
+    border-color: #3454d1;
+    color: #93c5fd;
+}
+html.app-skin-dark .btn-outline-primary:hover {
+    background-color: rgba(52, 84, 209, 0.25);
+    border-color: #3454d1;
+    color: #bfdbfe;
+}
+html.app-skin-dark .btn-outline-success {
+    border-color: rgba(34, 197, 94, 0.6);
+    color: #86efac;
+}
+html.app-skin-dark .btn-outline-success:hover {
+    background-color: rgba(34, 197, 94, 0.2);
+    color: #bbf7d0;
+}
+html.app-skin-dark .btn-outline-danger {
+    border-color: rgba(239, 68, 68, 0.6);
+    color: #fca5a5;
+}
+html.app-skin-dark .btn-outline-danger:hover {
+    background-color: rgba(239, 68, 68, 0.2);
+    color: #fecaca;
+}
+
+/* ========== Profil : bordures en pointillés / séparateurs ========== */
+html.app-skin-dark .border-bottom-dashed,
+html.app-skin-dark .d-flex.border-bottom-dashed {
+    border-bottom-color: rgba(148, 163, 184, 0.2) !important;
+}
+
+/* ========== Profil : journal (timeline) ========== */
+html.app-skin-dark .timeline-item .fw-semibold,
+html.app-skin-dark .d-flex.gap-2 .fw-semibold {
+    color: #f1f5f9;
+}
+html.app-skin-dark .timeline-dot-success { background-color: #22c55e; }
+html.app-skin-dark .timeline-dot-warning { background-color: #eab308; }
+
+/* ========== Profil / Settings : blocs stats (p-3 border rounded) ========== */
+html.app-skin-dark .p-3.border.rounded .info-label,
+html.app-skin-dark .p-3.border.rounded .text-muted {
+    color: #94a3b8 !important;
+}
+html.app-skin-dark .p-3.border.rounded .info-value,
+html.app-skin-dark .p-3.border.rounded .fw-bold {
+    color: #f1f5f9 !important;
+}
+html.app-skin-dark .p-3.border.rounded {
+    background-color: #0f172a !important;
+    border-color: rgba(148, 163, 184, 0.2) !important;
+}
+
+/* ========== Settings : cartes API (api-card) ========== */
+html.app-skin-dark .api-card {
+    background-color: #1e293b !important;
+    border-color: rgba(148, 163, 184, 0.25);
+    color: #e2e8f0;
+}
+html.app-skin-dark .api-card .api-key,
+html.app-skin-dark .api-card .form-control.bg-light {
+    background-color: #0f172a !important;
+    color: #94a3b8;
+    border-color: rgba(148, 163, 184, 0.2);
+}
+
+/* ========== Icônes Material en mode sombre ========== */
+html.app-skin-dark .material-icons {
+    color: inherit;
+}
+html.app-skin-dark .btn .material-icons,
+html.app-skin-dark .dropdown-item .material-icons {
+    color: #94a3b8;
+}
+html.app-skin-dark .btn:hover .material-icons,
+html.app-skin-dark .dropdown-item:hover .material-icons {
+    color: #f1f5f9;
+}
+html.app-skin-dark .btn-primary .material-icons,
+html.app-skin-dark .btn-primary:hover .material-icons {
+    color: #fff;
+}
+
+/* ========== Header dropdown (user, notifications) ========== */
+html.app-skin-dark .nxl-h-dropdown {
+    background-color: #0f172a;
+    border-color: rgba(148, 163, 184, 0.2);
+}
+html.app-skin-dark .nxl-h-dropdown .dropdown-header {
+    border-bottom-color: rgba(148, 163, 184, 0.2);
+}
+html.app-skin-dark .nxl-h-dropdown .dropdown-header .text-dark {
+    color: #f1f5f9 !important;
+}
+html.app-skin-dark .nxl-h-dropdown .dropdown-header .text-muted {
+    color: #94a3b8 !important;
+}
+
+/* ========== Badge info / role (profil, stats) ========== */
+html.app-skin-dark .badge.bg-info {
+    background-color: rgba(59, 130, 246, 0.35) !important;
+    color: #93c5fd;
+}
+
+/* ========== Liens dans le contenu ========== */
+html.app-skin-dark .card-body a:not(.btn) {
+    color: #93c5fd;
+}
+html.app-skin-dark .card-body a:not(.btn):hover {
+    color: #bfdbfe;
+}
+html.app-skin-dark .text-danger:hover {
+    color: #f87171 !important;
+}

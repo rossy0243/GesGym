@@ -1,0 +1,809 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block page_titre %}Paramètres{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="page-header-left d-flex align-items-center">
+        <div class="page-header-title">
+            <h5 class="m-b-10">Paramètres de l'application</h5>
+        </div>
+    </div>
+    <div class="page-header-right ms-auto">
+        <div class="page-header-right-items">
+            <button type="button" class="btn btn-primary" onclick="window.settingsSaveAll()">
+                <span class="material-icons me-2" style="font-size:18px;">save</span>
+                <span>Enregistrer les modifications</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="main-content">
+    <div class="tab-content" id="settingsTabContent">
+        <!-- ONGLET GÉNÉRAL -->
+        <div class="tab-pane fade" id="general" role="tabpanel">
+            <div class="row">
+                <div class="col-xxl-8 col-lg-10">
+                    <div class="card stretch stretch-full">
+                        <div class="card-header">
+                            <h5 class="card-title">Informations de la salle de sport</h5>
+                        </div>
+                        <div class="card-body">
+                            <form id="generalSettingsForm">
+                                <div class="mb-4">
+                                    <label class="form-label fw-semibold">Nom de la salle</label>
+                                    <input type="text" class="form-control" value="SmartClub Pro - Centre Ville" placeholder="Ex: SmartClub Gombe">
+                                    <small class="text-muted">Ce nom apparaîtra sur les rapports, reçus et communications.</small>
+                                </div>
+                                <div class="row mb-4">
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-semibold">Téléphone</label>
+                                        <input type="text" class="form-control" value="+243 97 97 10 633">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-semibold">Email de contact</label>
+                                        <input type="email" class="form-control" value="contact@smartclub.cd">
+                                    </div>
+                                </div>
+                                <div class="mb-4">
+                                    <label class="form-label fw-semibold">Adresse</label>
+                                    <input type="text" class="form-control" value="01 bis, route de Matadi, commune de Ngaliema">
+                                </div>
+                                <div class="mb-4">
+                                    <label class="form-label fw-semibold">Logo de la salle</label>
+                                    <div class="d-flex align-items-center gap-3">
+                                        <div style="width:80px;height:80px;background:#3454d1;border-radius:8px;display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;font-size:24px;">SC</div>
+                                        <div>
+                                            <button type="button" class="btn btn-sm btn-light-brand"><span class="material-icons me-2" style="font-size:16px;">upload</span>Changer le logo</button>
+                                            <p class="fs-12 text-muted mt-2">PNG, JPG. Max 2 Mo</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <hr>
+                                <h6 class="fw-semibold mb-3">Configuration multi-sites</h6>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Nombre de centres</label>
+                                    <select class="form-select">
+                                        <option value="1" selected>1 centre</option>
+                                        <option value="2">2 centres</option>
+                                        <option value="3">3 centres</option>
+                                        <option value="5">5 centres</option>
+                                        <option value="multi">Plus de 5</option>
+                                    </select>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ONGLET FINANCES -->
+        <div class="tab-pane fade" id="finance" role="tabpanel">
+            <div class="row">
+                <div class="col-xxl-8 col-lg-10">
+                    <div class="card">
+                        <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                            <h5 class="card-title mb-0">Configuration des devises</h5>
+                            <button type="button" class="btn btn-sm btn-light-brand" data-bs-toggle="modal" data-bs-target="#addCurrencyModal">
+                                <span class="material-icons me-2" style="font-size:16px;">add</span>Ajouter une devise
+                            </button>
+                        </div>
+                        <div class="card-body p-2 p-md-3">
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Devise</th>
+                                            <th>Code</th>
+                                            <th>Symbole</th>
+                                            <th>Taux (vs USD)</th>
+                                            <th>Statut</th>
+                                            <th class="text-end">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr id="currency-row-1" data-id="1">
+                                            <td>Dollar Américain</td>
+                                            <td>USD</td>
+                                            <td>$</td>
+                                            <td>1.00</td>
+                                            <td><span class="badge bg-success">Principale</span></td>
+                                            <td class="text-end">
+                                                <button type="button" class="btn btn-sm btn-light" onclick="window.settingsOpenEditCurrency(1,'Dollar Américain','USD','$',1,'Principale')"><span class="material-icons" style="font-size:18px;">edit</span></button>
+                                            </td>
+                                        </tr>
+                                        <tr id="currency-row-2" data-id="2">
+                                            <td>Franc Congolais</td>
+                                            <td>CDF</td>
+                                            <td>FC</td>
+                                            <td>2 850.00</td>
+                                            <td><span class="badge bg-success">Actif</span></td>
+                                            <td class="text-end">
+                                                <button type="button" class="btn btn-sm btn-light" onclick="window.settingsOpenEditRate(2,'Franc Congolais',2850)"><span class="material-icons" style="font-size:18px;">edit</span></button>
+                                            </td>
+                                        </tr>
+                                        <tr id="currency-row-3" data-id="3">
+                                            <td>Euro</td>
+                                            <td>EUR</td>
+                                            <td>€</td>
+                                            <td>0.92</td>
+                                            <td><span class="badge bg-secondary">Inactif</span></td>
+                                            <td class="text-end">
+                                                <button type="button" class="btn btn-sm btn-success" onclick="window.settingsActivateCurrency(3)"><span class="material-icons me-1" style="font-size:16px;">check_circle</span>Activer</button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card mt-3">
+                        <div class="card-header py-2">
+                            <h5 class="card-title mb-0">Règles de prorata</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">Méthode de calcul du prorata</label>
+                                <select class="form-select">
+                                    <option value="daily" selected>Calcul journalier</option>
+                                    <option value="monthly">Calcul mensuel</option>
+                                    <option value="percentage">Pourcentage</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">Politique de remboursement</label>
+                                <select class="form-select">
+                                    <option value="non-remboursable" selected>Non remboursable</option>
+                                    <option value="remboursable-pro rata">Remboursable au prorata</option>
+                                </select>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="autoRenewalOptIn" checked>
+                                <label class="form-check-label" for="autoRenewalOptIn">Renouvellement automatique (opt-in)</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ONGLET API PAIEMENTS -->
+        <div class="tab-pane fade" id="api" role="tabpanel">
+            <div class="row">
+                <div class="col-xxl-8 col-lg-10">
+                    <div class="card stretch stretch-full">
+                        <div class="card-header py-2">
+                            <h5 class="card-title mb-0">Environnement de paiement</h5>
+                        </div>
+                        <div class="card-body py-2">
+                            <div class="d-flex gap-4">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="envMode" id="envTest" value="test" checked>
+                                    <label class="form-check-label" for="envTest"><span class="badge bg-warning text-dark">Mode TEST</span></label>
+                                    <small class="d-block text-muted">Transactions simulées</small>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="envMode" id="envProd" value="production">
+                                    <label class="form-check-label" for="envProd"><span class="badge bg-success">Mode PRODUCTION</span></label>
+                                    <small class="d-block text-muted">Transactions réelles</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card mt-3">
+                        <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                            <h5 class="card-title mb-0">CinetPay (Cartes bancaires)</h5>
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="window.settingsApiOpenConfig('cinetpay')">
+                                <span class="material-icons me-1" style="font-size:16px;">settings</span>Configurer
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div class="row mb-2">
+                                <div class="col-md-6">
+                                    <label class="form-label">API Key</label>
+                                    <div class="form-control bg-light" id="apiCinetpayKeyDisplay">••••••••••••1234</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Site ID</label>
+                                    <div class="form-control bg-light" id="apiCinetpaySiteDisplay">654321</div>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-light-brand" onclick="window.settingsApiTestCinetPay()">
+                                <span class="material-icons me-2" style="font-size:16px;">link</span>Tester la connexion
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card mt-3">
+                        <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                            <h5 class="card-title mb-0">Mobile Money (M-Pesa, Orange, Airtel)</h5>
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="window.settingsApiOpenConfig('mobile')">
+                                <span class="material-icons me-1" style="font-size:16px;">settings</span>Configurer
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted small mb-0">Configuration des clés API pour M-Pesa, Orange Money et Airtel Money. Les identifiants sont gérés de manière sécurisée.</p>
+                            <p class="small mb-0 mt-2"><span class="badge bg-success me-1">M-Pesa</span> <span class="badge bg-warning text-dark me-1">Orange Money</span> <span class="badge bg-danger">Airtel Money</span> — Cliquez sur Configurer pour modifier.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ONGLET UTILISATEURS & RÔLES -->
+        <div class="tab-pane fade" id="users" role="tabpanel">
+            <div class="row">
+                <div class="col-xxl-12">
+                    <div class="sub-tabs d-flex gap-2 mb-4">
+                        <button class="btn btn-outline-primary active" id="subtab-users-btn" onclick="window.settingsShowSubTab('users')">
+                            <span class="material-icons me-2" style="font-size:18px;">people</span>Utilisateurs
+                        </button>
+                        <button class="btn btn-outline-primary" id="subtab-roles-btn" onclick="window.settingsShowSubTab('roles')">
+                            <span class="material-icons me-2" style="font-size:18px;">admin_panel_settings</span>Rôles & Permissions
+                        </button>
+                    </div>
+                    <div id="subtab-users" style="display:block;">
+                        <div class="card stretch stretch-full">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="card-title mb-0">Liste des utilisateurs</h5>
+                                <button type="button" class="btn btn-sm btn-primary" onclick="window.settingsOpenAddUser()">
+                                    <span class="material-icons me-2" style="font-size:18px;">add</span>Nouvel utilisateur
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <div class="row g-2 mb-3">
+                                    <div class="col-md-4">
+                                        <div class="input-group">
+                                            <span class="input-group-text"><span class="material-icons" style="font-size:18px;">search</span></span>
+                                            <input type="text" class="form-control" id="searchUser" placeholder="Nom, email, rôle..." oninput="window.settingsFilterUsers()">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <select class="form-select" id="filterRole" onchange="window.settingsFilterUsers()">
+                                            <option value="">Tous les rôles</option>
+                                            <option value="Administrateur">Administrateur</option>
+                                            <option value="Manager">Manager</option>
+                                            <option value="Caissier">Caissier</option>
+                                            <option value="Agent d'accueil">Agent d'accueil</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <select class="form-select" id="filterStatus" onchange="window.settingsFilterUsers()">
+                                            <option value="">Tous les statuts</option>
+                                            <option value="Actif">Actif</option>
+                                            <option value="Suspendu">Suspendu</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <button type="button" class="btn btn-light w-100" onclick="document.getElementById('searchUser').value='';document.getElementById('filterRole').value='';document.getElementById('filterStatus').value='';window.settingsFilterUsers();"><span class="material-icons me-1" style="font-size:18px;">clear</span>Réinitialiser</button>
+                                    </div>
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="table table-hover mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th>Utilisateur</th>
+                                                <th>Email</th>
+                                                <th>Rôle</th>
+                                                <th>Centre</th>
+                                                <th>Statut</th>
+                                                <th>Dernière connexion</th>
+                                                <th>2FA</th>
+                                                <th class="text-end">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="users-table-body"></tbody>
+                                    </table>
+                                </div>
+                                <div class="card-footer">
+                                    <span class="text-muted" id="usersCountLabel">0 utilisateur(s)</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="subtab-roles" style="display:none;">
+                        <div class="card stretch stretch-full">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="card-title mb-0">Rôles et permissions</h5>
+                                <button type="button" class="btn btn-sm btn-light-brand" data-bs-toggle="modal" data-bs-target="#addRoleModal">
+                                    <span class="material-icons me-2" style="font-size:18px;">add</span>Nouveau rôle
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <div class="input-group mb-3" style="max-width:400px;">
+                                    <span class="input-group-text"><span class="material-icons" style="font-size:18px;">search</span></span>
+                                    <input type="text" class="form-control" id="searchRole" placeholder="Rechercher un rôle..." oninput="window.settingsFilterRoles()">
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="table table-hover mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th>Rôle</th>
+                                                <th>Description</th>
+                                                <th>Utilisateurs</th>
+                                                <th class="text-end">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="roles-table-body"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card mt-4">
+                            <div class="card-header">
+                                <h5 class="card-title">Journalisation (Audit)</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label class="form-label">Conservation des logs</label>
+                                    <select class="form-select w-auto">
+                                        <option value="30">30 jours</option>
+                                        <option value="90" selected>90 jours</option>
+                                        <option value="365">1 an</option>
+                                    </select>
+                                </div>
+                                <div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="logModifications" checked><label class="form-check-label" for="logModifications">Modifications fiches clients</label></div>
+                                <div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="logPayments" checked><label class="form-check-label" for="logPayments">Actions de paiement</label></div>
+                                <div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="logAccess" checked><label class="form-check-label" for="logAccess">Tentatives d'accès</label></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ONGLET NOTIFICATIONS -->
+        <div class="tab-pane fade" id="notifications" role="tabpanel">
+            <div class="row">
+                <div class="col-xxl-8 col-lg-10">
+                    <div class="card stretch stretch-full">
+                        <div class="card-header">
+                            <h5 class="card-title">Configuration des notifications</h5>
+                        </div>
+                        <div class="card-body">
+                            <h6 class="fw-semibold mb-3">Fournisseurs SMS/WhatsApp</h6>
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Fournisseur SMS</label>
+                                    <select class="form-select">
+                                        <option value="twilio" selected>Twilio</option>
+                                        <option value="africastalking">Africa's Talking</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Fournisseur WhatsApp</label>
+                                    <select class="form-select">
+                                        <option value="twilio" selected>Twilio for WhatsApp</option>
+                                        <option value="360dialog">360Dialog</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <p class="text-muted small">Configuration détaillée disponible dans <a href="{% url 'notifications' %}?tab=config">Notifications &gt; Configuration</a>.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ONGLET SAUVEGARDE -->
+        <div class="tab-pane fade" id="backup" role="tabpanel">
+            <div class="row">
+                <div class="col-xxl-8 col-lg-10">
+                    <div class="card stretch stretch-full">
+                        <div class="card-header">
+                            <h5 class="card-title">Sauvegarde et restauration</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="alert alert-info">
+                                <span class="material-icons me-2">info</span>
+                                Dernière sauvegarde automatique : 26/05/2024 à 03:00 (UTC)
+                            </div>
+                            <div class="mb-4">
+                                <h6 class="fw-semibold mb-3">Sauvegarde automatique</h6>
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label">Fréquence</label>
+                                        <select class="form-select">
+                                            <option value="daily" selected>Quotidienne</option>
+                                            <option value="weekly">Hebdomadaire</option>
+                                            <option value="monthly">Mensuelle</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Heure (UTC)</label>
+                                        <input type="time" class="form-control" value="03:00">
+                                    </div>
+                                </div>
+                                <label class="form-label">Conservation</label>
+                                <select class="form-select w-auto">
+                                    <option value="7">7 jours</option>
+                                    <option value="30" selected>30 jours</option>
+                                    <option value="90">90 jours</option>
+                                </select>
+                            </div>
+                            <hr>
+                            <div class="mb-4">
+                                <h6 class="fw-semibold mb-3">Sauvegarde manuelle</h6>
+                                <button type="button" class="btn btn-primary"><span class="material-icons me-2">cloud_upload</span>Lancer une sauvegarde maintenant</button>
+                            </div>
+                            <hr>
+                            <div>
+                                <h6 class="fw-semibold mb-3 text-danger">Restauration</h6>
+                                <button type="button" class="btn btn-outline-danger" onclick="window.settingsConfirmRestore()">
+                                    <span class="material-icons me-2">restore</span>Restaurer à partir d'une sauvegarde
+                                </button>
+                                <p class="fs-12 text-muted mt-2">La restauration remplacera toutes les données actuelles.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card mt-3">
+                        <div class="card-header">
+                            <h5 class="card-title">Migration des données</h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="mb-3">Importer des données depuis un fichier CSV/Excel.</p>
+                            <button type="button" class="btn btn-light-brand"><span class="material-icons me-2">upload</span>Lancer la migration</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODALS -->
+<div class="modal fade" id="addCurrencyModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Ajouter une devise</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addCurrencyForm">
+                    <div class="mb-3">
+                        <label class="form-label">Nom <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="newCurrencyName" placeholder="Ex: Franc Congolais">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Code (ISO) <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="newCurrencyCode" placeholder="Ex: CDF" maxlength="3">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Symbole</label>
+                        <input type="text" class="form-control" id="newCurrencySymbol" placeholder="Ex: FC">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Taux (vs USD)</label>
+                        <input type="number" step="0.01" class="form-control" id="newCurrencyRate" placeholder="2850">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" id="btnAddCurrency">Ajouter</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="editCurrencyModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Modifier la devise</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editCurrencyId">
+                <div class="mb-3">
+                    <label class="form-label">Nom</label>
+                    <input type="text" class="form-control" id="editCurrencyName">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Code</label>
+                    <input type="text" class="form-control" id="editCurrencyCode" maxlength="3">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Symbole</label>
+                    <input type="text" class="form-control" id="editCurrencySymbol">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Taux (vs USD)</label>
+                    <input type="number" step="0.01" class="form-control" id="editCurrencyRate">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" id="btnSaveCurrency">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="editRateModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Modifier le taux</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editRateCurrencyId">
+                <p class="text-muted mb-3" id="editRateCurrencyLabel"></p>
+                <div class="mb-3">
+                    <label class="form-label">Nouveau taux (vs USD)</label>
+                    <input type="number" step="0.01" class="form-control" id="editRateValue">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" id="btnSaveRate">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="userModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="userModalTitle">Ajouter un utilisateur</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="userForm">
+                    <input type="hidden" id="userId">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">Nom complet <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="userName" placeholder="Ex: Jean Dupont">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">Login <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="userLogin" placeholder="Ex: j.dupont">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">Email <span class="text-danger">*</span></label>
+                            <input type="email" class="form-control" id="userEmail" placeholder="j.dupont@smartclub.cd">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">Téléphone</label>
+                            <input type="text" class="form-control" id="userPhone" placeholder="+243 97 97 10 633">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">Rôle <span class="text-danger">*</span></label>
+                            <select class="form-select" id="userRole">
+                                <option value="">Sélectionner</option>
+                                <option value="Administrateur">Administrateur</option>
+                                <option value="Manager">Manager</option>
+                                <option value="Caissier">Caissier</option>
+                                <option value="Agent d'accueil">Agent d'accueil</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">Centre</label>
+                            <select class="form-select" id="userCenter">
+                                <option value="Tous les centres">Tous les centres</option>
+                                <option value="Centre Ville">Centre Ville</option>
+                                <option value="Ngaliema">Ngaliema</option>
+                                <option value="Gombe">Gombe</option>
+                                <option value="Matete">Matete</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row" id="passwordFields">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">Mot de passe <span class="text-danger">*</span></label>
+                            <input type="password" class="form-control" id="userPassword" placeholder="********">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">Confirmer <span class="text-danger">*</span></label>
+                            <input type="password" class="form-control" id="userConfirmPassword" placeholder="********">
+                        </div>
+                    </div>
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="user2FA" checked>
+                        <label class="form-check-label" for="user2FA">Authentification 2FA</label>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="userActive" checked>
+                        <label class="form-check-label" for="userActive">Compte actif</label>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" onclick="window.settingsSaveUser()"><span class="material-icons me-2" style="font-size:18px;">save</span>Enregistrer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="viewUserModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Détails de l'utilisateur</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="text-center mb-4">
+                    <div class="rounded-circle bg-primary text-white d-inline-flex align-items-center justify-content-center" style="width:64px;height:64px;font-size:24px;font-weight:bold;" id="viewUserInitials">JD</div>
+                </div>
+                <table class="table table-borderless mb-0">
+                    <tr><td class="fw-semibold" style="width:140px;">Nom</td><td id="viewUserName">-</td></tr>
+                    <tr><td class="fw-semibold">Login</td><td id="viewUserLogin">-</td></tr>
+                    <tr><td class="fw-semibold">Email</td><td id="viewUserEmail">-</td></tr>
+                    <tr><td class="fw-semibold">Rôle</td><td id="viewUserRole">-</td></tr>
+                    <tr><td class="fw-semibold">Centre</td><td id="viewUserCenter">-</td></tr>
+                    <tr><td class="fw-semibold">Statut</td><td id="viewUserStatus">-</td></tr>
+                    <tr><td class="fw-semibold">Dernière connexion</td><td id="viewUserLastLogin">-</td></tr>
+                </table>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Fermer</button>
+                <button type="button" class="btn btn-primary" id="viewUserEditBtn"><span class="material-icons me-2" style="font-size:18px;">edit</span>Modifier</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="addRoleModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Nouveau rôle</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Nom du rôle <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" placeholder="Ex: Superviseur">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Description</label>
+                    <textarea class="form-control" rows="2" placeholder="Responsabilités..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary">Créer le rôle</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="viewRoleModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Détails du rôle</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <table class="table table-borderless mb-0">
+                    <tr><td class="fw-semibold" style="width:140px;">Nom</td><td id="viewRoleName">-</td></tr>
+                    <tr><td class="fw-semibold">Description</td><td id="viewRoleDescription">-</td></tr>
+                    <tr><td class="fw-semibold">Utilisateurs</td><td id="viewRoleUsers">-</td></tr>
+                </table>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Fermer</button>
+                <button type="button" class="btn btn-primary" id="viewRoleEditBtn"><span class="material-icons me-2" style="font-size:18px;">edit</span>Modifier</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="editRoleModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Modifier le rôle</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editRoleId">
+                <div class="mb-3">
+                    <label class="form-label">Nom <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="editRoleNameInput">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Description</label>
+                    <textarea class="form-control" rows="2" id="editRoleDescriptionInput"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" onclick="window.settingsSaveRole()"><span class="material-icons me-2" style="font-size:18px;">save</span>Enregistrer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Configuration API Paiements -->
+<div class="modal fade" id="apiConfigModal" tabindex="-1" aria-labelledby="apiConfigModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="apiConfigModalLabel">
+                    Configuration API Paiements
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+            </div>
+            <div class="modal-body">
+                <ul class="nav nav-tabs mb-3" id="apiConfigTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="api-tab-cinetpay" data-bs-toggle="tab" data-bs-target="#api-pane-cinetpay" type="button" role="tab" aria-selected="true">CinetPay</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="api-tab-mobile" data-bs-toggle="tab" data-bs-target="#api-pane-mobile" type="button" role="tab" aria-selected="false">Mobile Money</button>
+                    </li>
+                </ul>
+                <div class="tab-content" id="apiConfigTabContent">
+                    <div class="tab-pane fade show active" id="api-pane-cinetpay" role="tabpanel">
+                        <div class="mb-3">
+                            <label class="form-label">API Key <span class="text-danger">*</span></label>
+                            <input type="password" class="form-control" id="apiCinetpayKey" placeholder="Clé API CinetPay" value="">
+                            <small class="text-muted">Saisissez la clé pour la mettre à jour (laisser vide pour conserver)</small>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Site ID</label>
+                            <input type="text" class="form-control" id="apiCinetpaySiteId" placeholder="Ex: 654321" value="654321">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Webhook URL (callback)</label>
+                            <input type="text" class="form-control" id="apiCinetpayWebhook" readonly value="https://api.smartclub.cd/payments/cinetpay/callback">
+                        </div>
+                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.settingsApiTestCinetPay()">
+                            <span class="material-icons me-1" style="font-size:16px;">link</span>Tester la connexion
+                        </button>
+                    </div>
+                    <div class="tab-pane fade" id="api-pane-mobile" role="tabpanel" aria-labelledby="api-tab-mobile">
+                        <div class="mb-3">
+                            <label class="form-label">Opérateur</label>
+                            <select class="form-select" id="apiMobileProvider" onchange="window.settingsApiSwitchMobileProvider(this.value)">
+                                <option value="mpesa">M-Pesa</option>
+                                <option value="orange">Orange Money</option>
+                                <option value="airtel">Airtel Money</option>
+                            </select>
+                        </div>
+                        <div id="apiMobileMpesaFields">
+                            <div class="mb-2"><label class="form-label">Consumer Key</label><input type="password" class="form-control form-control-sm" id="apiMpesaConsumerKey" placeholder="••••••••"></div>
+                            <div class="mb-2"><label class="form-label">Consumer Secret</label><input type="password" class="form-control form-control-sm" id="apiMpesaConsumerSecret" placeholder="••••••••"></div>
+                            <div class="mb-2"><label class="form-label">Shortcode (Paybill/Till)</label><input type="text" class="form-control form-control-sm" id="apiMpesaShortcode" placeholder="123456"></div>
+                        </div>
+                        <div id="apiMobileOrangeFields" style="display:none;">
+                            <div class="mb-2"><label class="form-label">Client ID</label><input type="password" class="form-control form-control-sm" id="apiOrangeClientId" placeholder="••••••••"></div>
+                            <div class="mb-2"><label class="form-label">Client Secret</label><input type="password" class="form-control form-control-sm" id="apiOrangeClientSecret" placeholder="••••••••"></div>
+                            <div class="mb-2"><label class="form-label">Numéro marchand</label><input type="text" class="form-control form-control-sm" id="apiOrangeMerchant" placeholder="+243970000000"></div>
+                        </div>
+                        <div id="apiMobileAirtelFields" style="display:none;">
+                            <div class="mb-2"><label class="form-label">API Username</label><input type="text" class="form-control form-control-sm" id="apiAirtelUsername" placeholder="smartclub_prod"></div>
+                            <div class="mb-2"><label class="form-label">API Password</label><input type="password" class="form-control form-control-sm" id="apiAirtelPassword" placeholder="••••••••"></div>
+                            <div class="mb-2"><label class="form-label">Country Code</label><input type="text" class="form-control form-control-sm" id="apiAirtelCountry" value="CD"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" id="apiConfigBtnSave" onclick="window.settingsApiSaveConfig()">
+                    <span class="material-icons me-2" style="font-size:18px;">save</span>Enregistrer la configuration
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/script_setting.js' %}"></script>
+{% endblock %}
