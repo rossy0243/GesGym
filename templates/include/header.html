@@ -80,8 +80,8 @@
                             <div class="d-flex align-items-center">
                                 <img src="{% static 'avatar/1.png' %}" alt="user" class="img-fluid user-avtar" />
                                 <div>
-                                    <h6 class="text-dark mb-0">{{ user_name }}</h6>
-                                    <span class="fs-12 fw-medium text-muted">{{ user_email_addr }}</span>
+                                    <h6 class="text-dark mb-0">{{ user.first_name }} {{ user.last_name }}</h6>
+                                    <span class="fs-12 fw-medium text-muted">{{ user.email }}</span>
                                 </div>
                             </div>
                         </div>

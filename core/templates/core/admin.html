@@ -1,69 +1,594 @@
+
 {% extends 'base.html' %}
 {% load static %}
 
+{% block page_titre %}Tableau de bord{% endblock %}
+
 {% block content %}
-{% if messages %}
-  {% for message in messages %}
-    <div class="mb-4 p-3 bg-green-100 text-green-700 rounded-xl">
-        {{ message }}
+<!-- [page-header] start (avec filtres) -->
+<div class="page-header">
+    <div class="page-header-left d-flex align-items-center">
+        <div class="page-header-title">
+            <h5 class="m-b-10">Tableau de bord - Vue d'ensemble</h5>
+        </div>
     </div>
-  {% endfor %}
-{% endif %}
+    <div class="page-header-right ms-auto">
+        <div class="page-header-right-items">
+            <div class="d-flex align-items-center gap-2">
+                <select class="form-select form-select-sm w-auto" id="siteFilter" onchange="updateDashboard()">
+                    <option value="all">Tous les centres</option>
+                    <option value="Centre Ville">Centre Ville</option>
+                    <option value="Ngaliema">Ngaliema</option>
+                    <option value="Gombe">Gombe</option>
+                    <option value="Matete">Matete</option>
+                </select>
+                <select class="form-select form-select-sm w-auto" id="periodFilter" onchange="updateDashboard()">
+                    <option value="today">Aujourd'hui</option>
+                    <option value="week" selected>Cette semaine</option>
+                    <option value="month">Ce mois</option>
+                    <option value="year">Cette année</option>
+                </select>
+                <button class="btn btn-sm btn-primary" onclick="refreshDashboard()">
+                    <span class="material-icons me-2" style="font-size: 18px;">refresh</span>Actualiser
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+    <div>
+        {% if messages %}
+            {% for message in messages %}
+                <div class="mb-4 p-3 bg-green-100 text-green-700 rounded-xl">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+    </div>
+<!-- [Main Content] start -->
+<div class="main-content" id="globalDashboardSection">
+    <div class="row">
 
-<div class="flex justify-between items-center mb-6">
-    <h1 class="text-xl font-bold">
-       <p> Dashboard - {{ request.user.get_role_display|title }} </p>
-       <p>username : {{ request.user.username }} </p>
-       <p> prénom : {{ request.user.first_name }} </p>
-       <p> nom : {{ request.user.last_name }} </p>
-       <p> Salle de sport : {{ request.user.gym }} </p> 
-    </h1>
+    </div>
 
-    <form method="post" action="{% url 'compte:logout' %}">
-        {% csrf_token %}
-        <button type="submit"
-            class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-xl">
-            <i class="fas fa-sign-out-alt mr-2"></i> Logout
-        </button>
-    </form>
+    <!-- Ligne 1: Statistiques clés (KPI) -->
+    <div class="row mb-3">
+        <div class="col-xxl-3 col-md-6">
+            <div class="card stretch stretch-full stat-card" onclick="window.location.href='{% url 'core:member_list' %}?filter=actif'">
+                <div class="card-body">
+                        <div class="d-flex align-items-start justify-content-between mb-2">
+                        <div>
+                            <span class="fs-12 fw-medium text-muted">Clients actifs</span>
+                            <h3 class="mb-0 fw-bold" id="kpiActiveMembers">1.2K</h3>
+                        </div>
+                        <div class="stat-icon-box">
+                            <span class="material-icons" style="color: #3454d1;">group</span>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <span class="badge bg-soft-success text-success me-2" id="kpiActiveTrend">+12%</span>
+                        <span class="fs-12 text-muted">vs. mois dernier</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xxl-3 col-md-6">
+            <div class="card stretch stretch-full stat-card" onclick="window.location.href='{% url 'core:member_list' %}?filter=expire'">
+                <div class="card-body">
+                        <div class="d-flex align-items-start justify-content-between mb-2">
+                        <div>
+                            <span class="fs-12 fw-medium text-muted">Abonnements expirés</span>
+                            <h3 class="mb-0 fw-bold" id="kpiExpiredMembers">48</h3>
+                        </div>
+                        <div class="stat-icon-box">
+                            <span class="material-icons" style="color: #ef4444;">schedule</span>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <span class="badge bg-soft-danger text-danger me-2" id="kpiExpiredTrend">+5%</span>
+                        <span class="fs-12 text-muted">à relancer</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xxl-3 col-md-6">
+            <div class="card stretch stretch-full stat-card" onclick="window.location.href='#?tab=caisse'">
+                <div class="card-body">
+                        <div class="d-flex align-items-start justify-content-between mb-2">
+                        <div>
+                            <span class="fs-12 fw-medium text-muted">Recettes du jour</span>
+                            <h3 class="mb-0 fw-bold" id="kpiDailyRevenue">2.4K $</h3>
+                        </div>
+                        <div class="stat-icon-box">
+                            <span class="material-icons" style="color: #10b981;">payments</span>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <span class="badge bg-soft-success text-success me-2" id="kpiDailyRevenueTrend">+8%</span>
+                        <span class="fs-12 text-muted">vs. hier</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xxl-3 col-md-6">
+            <div class="card stretch stretch-full stat-card" onclick="window.location.href='{% url 'core:member_list' %}?filter=nouveau'">
+                <div class="card-body">
+                        <div class="d-flex align-items-start justify-content-between mb-2">
+                        <div>
+                            <span class="fs-12 fw-medium text-muted">Nouveaux clients</span>
+                            <h3 class="mb-0 fw-bold" id="kpiNewMembers">56</h3>
+                        </div>
+                        <div class="stat-icon-box">
+                            <span class="material-icons" style="color: #f59e0b;">person_add</span>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <span class="badge bg-soft-warning text-warning me-2" id="kpiNewTrend">+18%</span>
+                        <span class="fs-12 text-muted">ce mois</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-    
+        <!-- Statistiques -->
+    <div class="row g-3">
+        <div class="col-xxl-3 col-md-6">
+            <div class="card stretch stretch-full">
+                <div class="card-body">
+                    <div class="d-flex align-items-start justify-content-between mb-4">
+                        <div class="d-flex gap-4 align-items-center">
+                            <div class="stat-icon-box">
+                                <span class="material-icons" style="color:#3454d1; font-size:32px;">group</span>
+                            </div>
+                            <div>
+                                <div class="fs-4 fw-bold text-dark counter" id="totalMembers">0</div>
+                                <h3 class="fs-13 fw-semibold">Total Membres</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center justify-content-between">
+                        <span class="fs-12 text-muted">Actifs / Expirés</span>
+                        <span class="fs-12 text-dark fw-semibold" id="membersStats">0 / 0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xxl-3 col-md-6">
+            <div class="card stretch stretch-full">
+                <div class="card-body">
+                    <div class="d-flex align-items-start justify-content-between mb-4">
+                        <div class="d-flex gap-4 align-items-center">
+                            <div class="stat-icon-box">
+                                <span class="material-icons" style="color:#16a34a; font-size:32px;">payments</span>
+                            </div>
+                            <div>
+                                <div class="fs-4 fw-bold text-dark" id="monthlyRevenue">0 $</div>
+                                <h3 class="fs-13 fw-semibold">Revenu du mois</h3>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xxl-3 col-md-6">
+            <div class="card stretch stretch-full">
+                <div class="card-body">
+                    <div class="d-flex align-items-start justify-content-between mb-4">
+                        <div class="d-flex gap-4 align-items-center">
+                            <div class="stat-icon-box">
+                                <span class="material-icons" style="color:#f59e0b; font-size:32px;">schedule</span>
+                            </div>
+                            <div>
+                                <div class="fs-4 fw-bold text-dark" id="expiringSoon">0</div>
+                                <h3 class="fs-13 fw-semibold">Expirent bientôt</h3>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xxl-3 col-md-6">
+            <div class="card stretch stretch-full">
+                <div class="card-body">
+                    <div class="d-flex align-items-start justify-content-between mb-4">
+                        <div class="d-flex gap-4 align-items-center">
+                            <div class="stat-icon-box">
+                                <span class="material-icons" style="color:#ef4444; font-size:32px;">login</span>
+                            </div>
+                            <div>
+                                <div class="fs-4 fw-bold text-dark" id="todayCheckins">0</div>
+                                <h3 class="fs-13 fw-semibold">Entrées aujourd'hui</h3>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+
+    <!-- Ligne 3: Formules, Fréquentation, Paiements récents -->
+    <div class="row">
+        <div class="col-xxl-4">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title">Répartition des abonnements</h5>
+                    <div class="card-header-action">
+                        <a href="#" class="btn btn-sm btn-light-brand">Gérer</a>
+                    </div>
+                </div>
+                <div class="card-body custom-card-action p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr class="border-b">
+                                    <th>Formule</th>
+                                    <th>Nombre</th>
+                                    <th>%</th>
+                                </tr>
+                            </thead>
+                            <tbody id="subscriptionTypesTableBody">
+                                <tr><td>1 mois</td><td>320</td><td>27%</td></tr>
+                                <tr><td>3 mois</td><td>450</td><td>38%</td></tr>
+                                <tr><td>6 mois</td><td>210</td><td>17%</td></tr>
+                                <tr><td>12 mois (1 an)</td><td>180</td><td>15%</td></tr>
+                                <tr><td>Personnalisé</td><td>40</td><td>3%</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xxl-4">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title">Fréquentation - Cette semaine</h5>
+                    <div class="card-header-action">
+                        <a href="#?tab=historique" class="btn btn-sm btn-light-brand">Détail</a>
+                    </div>
+                </div>
+                <div class="card-body custom-card-action p-3">
+                    <div class="vstack gap-3" id="attendanceStats">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span>Lundi</span>
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="progress" style="width: 150px; height: 8px;">
+                                    <div class="progress-bar progress-bar-success" style="width: 85%"></div>
+                                </div>
+                                <span class="fw-semibold">187 entrées</span>
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span>Mardi</span>
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="progress" style="width: 150px; height: 8px;">
+                                    <div class="progress-bar progress-bar-success" style="width: 92%"></div>
+                                </div>
+                                <span class="fw-semibold">203 entrées</span>
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span>Mercredi</span>
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="progress" style="width: 150px; height: 8px;">
+                                    <div class="progress-bar progress-bar-success" style="width: 78%"></div>
+                                </div>
+                                <span class="fw-semibold">172 entrées</span>
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span>Jeudi</span>
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="progress" style="width: 150px; height: 8px;">
+                                    <div class="progress-bar progress-bar-success" style="width: 88%"></div>
+                                </div>
+                                <span class="fw-semibold">194 entrées</span>
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span>Vendredi</span>
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="progress" style="width: 150px; height: 8px;">
+                                    <div class="progress-bar progress-bar-warning" style="width: 65%"></div>
+                                </div>
+                                <span class="fw-semibold">143 entrées</span>
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span>Samedi</span>
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="progress" style="width: 150px; height: 8px;">
+                                    <div class="progress-bar progress-bar-success" style="width: 95%"></div>
+                                </div>
+                                <span class="fw-semibold">210 entrées</span>
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span>Dimanche</span>
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="progress" style="width: 150px; height: 8px;">
+                                    <div class="progress-bar progress-bar-danger" style="width: 45%"></div>
+                                </div>
+                                <span class="fw-semibold">98 entrées</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xxl-4">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title">Derniers paiements enregistrés</h5>
+                    <div class="card-header-action">
+                        <a href="#" class="btn btn-sm btn-light-brand">Voir tout</a>
+                    </div>
+                </div>
+                <div class="card-body custom-card-action p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr class="border-b">
+                                    <th>Client</th>
+                                    <th>Montant</th>
+                                    <th>Méthode</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recentPaymentsTableBody">
+                                <tr><td>Jean Kazadi</td><td>45 $</td><td>Carte</td></tr>
+                                <tr><td>Marie Lukusa</td><td>120 $</td><td>M-Pesa</td></tr>
+                                <tr><td>Paul Mbuyi</td><td>85 $</td><td>Cash</td></tr>
+                                <tr><td>Sophie Kabeya</td><td>250 $</td><td>Orange Money</td></tr>
+                                <tr><td>Pierre Luntala</td><td>65 $</td><td>Airtel Money</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ligne 4: Récapitulatif mensuel -->
+    <div class="row mt-3">
+        <div class="col-xxl-12">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title">Récapitulatif du mois</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3 text-center">
+                            <h2 class="fw-bold text-primary" id="monthlyRevenue">45K $</h2>
+                            <span class="text-muted">Recettes du mois</span>
+                            <div><span class="badge bg-soft-success text-success">+15% vs mois préc.</span></div>
+                        </div>
+                        <div class="col-md-3 text-center">
+                            <h2 class="fw-bold text-success" id="monthlyNewClients">56</h2>
+                            <span class="text-muted">Nouveaux inscrits</span>
+                            <div><span class="badge bg-soft-success text-success">+8%</span></div>
+                        </div>
+                        <div class="col-md-3 text-center">
+                            <h2 class="fw-bold text-warning" id="monthlyRenewals">128</h2>
+                            <span class="text-muted">Renouvellements</span>
+                            <div><span class="badge bg-soft-warning text-warning">Taux 78%</span></div>
+                        </div>
+                        <div class="col-md-3 text-center">
+                            <h2 class="fw-bold text-info" id="totalVisits">4.2K</h2>
+                            <span class="text-muted">Visites totales</span>
+                            <div><span class="badge bg-soft-info text-info">Moy. 140/jour</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
-<h2 class="text-xl font-bold mb-4">Liste des agents</h2>
+<!-- SECTION ANALYTIQUE (vue avancée) -->
+<div id="analyticsSection" style="display: none;" class="p-3">
+    <div class="row">
+        <div class="col-xxl-3 col-md-6">
+            <div class="card stretch stretch-full stat-card">
+                <div class="card-body">
+                    <div class="d-flex align-items-start justify-content-between mb-2">
+                        <div>
+                            <span class="fs-12 fw-medium text-muted">Clients actifs (tous centres)</span>
+                            <h3 class="mb-0 fw-bold" id="analyticsActiveMembers">0</h3>
+                        </div>
+                        <div class="stat-icon-box">
+                            <span class="material-icons" style="color: #3454d1;">group</span>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <span class="badge bg-soft-success text-success me-2" id="analyticsActiveTrend">+0%</span>
+                        <span class="fs-12 text-muted">vs. période précédente</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xxl-3 col-md-6">
+            <div class="card stretch stretch-full stat-card">
+                <div class="card-body">
+                    <div class="d-flex align-items-start justify-content-between mb-2">
+                        <div>
+                            <span class="fs-12 fw-medium text-muted">Taux de churn estimé</span>
+                            <h3 class="mb-0 fw-bold" id="analyticsChurnRate">0%</h3>
+                        </div>
+                        <div class="stat-icon-box">
+                            <span class="material-icons" style="color: #ef4444;">trending_down</span>
+                        </div>
+                    </div>
+                    <div class="fs-12 text-muted">% de clients perdus sur la période sélectionnée.</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xxl-3 col-md-6">
+            <div class="card stretch stretch-full stat-card">
+                <div class="card-body">
+                    <div class="d-flex align-items-start justify-content-between mb-2">
+                        <div>
+                            <span class="fs-12 fw-medium text-muted">Revenu moyen / client (ARPU)</span>
+                            <h3 class="mb-0 fw-bold" id="analyticsARPU">0 $</h3>
+                        </div>
+                        <div class="stat-icon-box">
+                            <span class="material-icons" style="color: #10b981;">payments</span>
+                        </div>
+                    </div>
+                    <div class="fs-12 text-muted">Calculé sur les recettes de la période.</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xxl-3 col-md-6">
+            <div class="card stretch stretch-full stat-card">
+                <div class="card-body">
+                    <div class="d-flex align-items-start justify-content-between mb-2">
+                        <div>
+                            <span class="fs-12 fw-medium text-muted">Durée moyenne d'abonnement</span>
+                            <h3 class="mb-0 fw-bold" id="analyticsAvgDuration">0 mois</h3>
+                        </div>
+                        <div class="stat-icon-box">
+                            <span class="material-icons" style="color: #f59e0b;">calendar_month</span>
+                        </div>
+                    </div>
+                    <div class="fs-12 text-muted">Basée sur l'historique des formules actives.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-xxl-8">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title">Revenus par centre (mois en cours)</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="analyticsRevenueByCenterChart" style="width:100%; max-height: 280px;"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-xxl-4">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title">Fréquentation par centre</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="analyticsVisitsByCenterChart" style="width:100%; max-height: 280px;"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="row mt-3">
+        <div class="col-xxl-6">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title">Top formules par revenu</h5>
+                </div>
+                <div class="card-body custom-card-action p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr class="border-b">
+                                    <th>Formule</th>
+                                    <th>Revenu</th>
+                                    <th>Part</th>
+                                </tr>
+                            </thead>
+                            <tbody id="analyticsTopPlansBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xxl-6">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title">Segments clients clés</h5>
+                </div>
+                <div class="card-body custom-card-action p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr class="border-b">
+                                    <th>Segment</th>
+                                    <th>Clients</th>
+                                    <th>Revenu</th>
+                                </tr>
+                            </thead>
+                            <tbody id="analyticsSegmentsBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
-<a href="{% url 'compte:create_agent' %}"
-   class="bg-blue-500 text-white px-4 py-2 rounded-xl mb-4 inline-block">
-   Ajouter un agent
-</a>
+    <!-- Ligne 2: Alertes -->
+    <div class="row">
+        <div class="col-xxl-12">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title">Alertes & Actions requises</h5>
+                </div>
+                <div class="card-body">
+                    <div class="vstack gap-3">
+                        <div class="alert-card d-flex align-items-center gap-3" onclick="window.location.href='{% url 'core:member_list' %}?filter=expire-j7'">
+                            <span class="material-icons text-warning">warning</span>
+                            <div class="flex-grow-1">
+                                <span class="fw-semibold">Expiration J-7</span>
+                                <br><span class="fs-12 text-muted" id="expiry7days">24 abonnements expirent dans 7 jours</span>
+                            </div>
+                        </div>
+                        <div class="alert-card d-flex align-items-center gap-3" onclick="window.location.href='{% url 'core:member_list' %}?filter=expire-j3'">
+                            <span class="material-icons text-warning">warning</span>
+                            <div class="flex-grow-1">
+                                <span class="fw-semibold">Expiration J-3</span>
+                                <br><span class="fs-12 text-muted" id="expiry3days">15 abonnements expirent dans 3 jours</span>
+                            </div>
+                        </div>
+                        <div class="alert-card-danger d-flex align-items-center gap-3" onclick="window.location.href='{% url 'core:member_list' %}?filter=expire-j1'">
+                            <span class="material-icons text-danger">schedule</span>
+                            <div class="flex-grow-1">
+                                <span class="fw-semibold">Expiration J-1</span>
+                                <br><span class="fs-12 text-muted" id="expiry1day">12 abonnements expirent demain</span>
+                            </div>
+                        </div>
+                        <div class="p-3 border border-dashed rounded-2 d-flex align-items-center gap-3" onclick="window.location.href='#?filter=echoues'">
+                            <span class="material-icons text-primary">credit_card</span>
+                            <div class="flex-grow-1">
+                                <span class="fw-semibold">Paiements en ligne en attente</span>
+                                <br><span class="fs-12 text-muted" id="pendingPayments">3 transactions (450 $) en attente</span>
+                            </div>
+                        </div>
+                        <hr>
+                        <div><span class="fs-12 fw-semibold">Derniers accès</span></div>
+                        <div class="vstack gap-2 fs-12" id="recentActivitiesList">
+                            <div class="d-flex justify-content-between">
+                                <span><span class="material-icons text-success me-1" style="font-size: 16px;">check_circle</span> Jean K. - Accès autorisé</span>
+                                <span class="text-muted">Il y a 5 min</span>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span><span class="material-icons text-success me-1" style="font-size: 16px;">check_circle</span> Marie M. - Accès autorisé</span>
+                                <span class="text-muted">Il y a 12 min</span>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span><span class="material-icons text-danger me-1" style="font-size: 16px;">cancel</span> Tentative - Badge expiré</span>
+                                <span class="text-muted">Il y a 25 min</span>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span><span class="material-icons text-success me-1" style="font-size: 16px;">check_circle</span> Paul L. - Accès autorisé</span>
+                                <span class="text-muted">Il y a 1h</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+<!-- [Main Content] end -->
+{% endblock %}
 
-<a href="{% url 'compte:agent_list' %}"
-   class="bg-blue-500 text-white px-4 py-2 rounded-xl mb-4 inline-block">
-   Liste des agents
-</a>
-
-<table class="w-full border mt-4">
-    <thead>
-        <tr class="bg-gray-100">
-            <th class="p-2">Nom</th>
-            <th class="p-2">Username</th>
-            <th class="p-2">Rôle</th>
-            <th class="p-2">Actions</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for agent in agents %}
-        <tr class="border-t">
-            <td class="p-2">{{ agent.first_name }} {{ agent.last_name }}</td>
-            <td class="p-2">{{ agent.username }}</td>
-            <td class="p-2">{{ agent.role }}</td>
-            <td class="p-2 space-x-2">
-                <a href="{% url 'compte:edit_agent' agent.id %}" class="text-blue-600">Modifier</a>
-                <a href="{% url 'compte:delete_agent' agent.id %}" class="text-red-600">Supprimer</a>
-            </td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
-
+{% block extra_js %}
+<script src="{% static 'js/script_dashboard.js' %}"></script>
 {% endblock %}

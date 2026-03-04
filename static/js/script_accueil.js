@@ -111,14 +111,14 @@
     if (loginBtn) {
     loginBtn.addEventListener('click', (e) => {
         e.preventDefault();
-        window.location.href = "{% url 'connexion' %}";
+        window.location.href = "{% url 'compte:login' %}";
     });
     }
     
     if (mobileLoginBtn) {
     mobileLoginBtn.addEventListener('click', (e) => {
         e.preventDefault();
-        window.location.href = "{% url 'connexion' %}";
+        window.location.href = "{% url 'compte:login' %}";
     });
     }
 

@@ -1,0 +1,69 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+{% if messages %}
+  {% for message in messages %}
+    <div class="mb-4 p-3 bg-green-100 text-green-700 rounded-xl">
+        {{ message }}
+    </div>
+  {% endfor %}
+{% endif %}
+
+<div class="flex justify-between items-center mb-6">
+    <h1 class="text-xl font-bold">
+       <p> Dashboard - {{ request.user.get_role_display|title }} </p>
+       <p>username : {{ request.user.username }} </p>
+       <p> prénom : {{ request.user.first_name }} </p>
+       <p> nom : {{ request.user.last_name }} </p>
+       <p> Salle de sport : {{ request.user.gym }} </p> 
+    </h1>
+
+    <form method="post" action="{% url 'compte:logout' %}">
+        {% csrf_token %}
+        <button type="submit"
+            class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-xl">
+            <i class="fas fa-sign-out-alt mr-2"></i> Logout
+        </button>
+    </form>
+
+    
+</div>
+
+<h2 class="text-xl font-bold mb-4">Liste des agents</h2>
+
+<a href="{% url 'compte:create_agent' %}"
+   class="bg-blue-500 text-white px-4 py-2 rounded-xl mb-4 inline-block">
+   Ajouter un agent
+</a>
+
+<a href="{% url 'compte:agent_list' %}"
+   class="bg-blue-500 text-white px-4 py-2 rounded-xl mb-4 inline-block">
+   Liste des agents
+</a>
+
+<table class="w-full border mt-4">
+    <thead>
+        <tr class="bg-gray-100">
+            <th class="p-2">Nom</th>
+            <th class="p-2">Username</th>
+            <th class="p-2">Rôle</th>
+            <th class="p-2">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for agent in agents %}
+        <tr class="border-t">
+            <td class="p-2">{{ agent.first_name }} {{ agent.last_name }}</td>
+            <td class="p-2">{{ agent.username }}</td>
+            <td class="p-2">{{ agent.role }}</td>
+            <td class="p-2 space-x-2">
+                <a href="{% url 'compte:edit_agent' agent.id %}" class="text-blue-600">Modifier</a>
+                <a href="{% url 'compte:delete_agent' agent.id %}" class="text-red-600">Supprimer</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% endblock %}

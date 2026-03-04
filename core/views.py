@@ -51,9 +51,12 @@ def member_dashboard(request):
 @role_required(["admin", "reception"])
 def create_member(request):
 
-    if request.user.role not in ["admin", "reception"]:
-        raise PermissionDenied("Accès refusé.")
-
+    allowed_roles = ["admin", "reception"]
+    
+    if not request.user.is_authenticated or request.user.role not in allowed_roles:
+        raise PermissionDenied("Accès refusé – rôle non autorisé.")
+    
+    
     if request.method == "POST":
         form = MemberCreationForm(request.POST, request.FILES)
         if form.is_valid():
@@ -66,7 +69,9 @@ def create_member(request):
                 f"Membre créé avec succès | Mot de passe par défaut : 12345"
             )
 
-            return redirect("core:reception_dashboard")
+            
+            return redirect("core:member_list")
+            
     else:
         form = MemberCreationForm()
 
@@ -81,7 +86,9 @@ def member_list(request):
 
     members = Member.objects.filter(gym=request.user.gym).select_related("user").prefetch_related("subscription_set")
 
-    return render(request, "core/member_list.html", {"members": members})
+    form = MemberCreationForm()
+    
+    return render(request, "core/member_list.html", {"members": members, "form": form})
 
 
 @login_required

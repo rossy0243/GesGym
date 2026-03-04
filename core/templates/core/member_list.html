@@ -1,52 +1,564 @@
-<h2 class="text-xl font-bold mb-4">Liste des membres</h2>
+{% extends 'base.html' %}
+{% load static %}
 
-<a href="{% url 'core:create_member' %}"
-   class="bg-blue-500 text-white px-4 py-2 rounded-xl mb-4 inline-block">
-   Ajouter un membre
-</a>
+{% block page_titre %}Gestion des Membres{% endblock %}
 
-<table class="w-full border mt-4">
-    <thead>
-        <tr class="bg-gray-100">
-            <th class="p-2">Nom</th>
-            <th class="p-2"> Username</th>
-            <th class="p-2">Téléphone</th>
-            <th class="p-2">Statut</th>
-            <th class="p-2">Actions</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for member in members %}
-        <tr class="border-t">
-            <td class="p-2">{{ member.first_name }} {{ member.last_name }}</td>
-            <td class="p-2">{{ member.user.username }}</td>
-            <td class="p-2">{{ member.phone }}</td>
-            <td class="p-2">
-                <span class="px-2 py-1 text-xs rounded-full
-                    {% if member.computed_status == 'active' %}
-                        bg-green-100 text-green-700
-                    {% elif member.computed_status == 'suspended' %}
-                        bg-yellow-100 text-yellow-700
-                    {% else %}
-                        bg-red-100 text-red-700
-                    {% endif %}">
-                    {{ member.computed_status }}
-                </span>
-            </td>
-            <td class="p-2 space-x-2">
-
-                <a href="{% url 'core:edit_member' member.id %}" class="text-blue-600">
-                    Modifier
+{% block content %}
+<!-- [ page-header ] start -->
+<div class="page-header mb-3">
+    <div class="page-header-left d-flex align-items-center">
+        <div class="page-header-title d-flex align-items-center gap-2">
+            <span class="material-icons text-primary" style="font-size:28px;">group</span>
+            <h5 class="m-b-10 mb-0" id="pageTitle">Gestion des Membres</h5>
+        </div>
+    </div>
+    <div class="page-header-right ms-auto">
+        <div class="page-header-right-items">
+            <div class="d-flex align-items-center gap-2">
+                <a href="javascript:void(0);" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addMemberModal">
+                    <span class="material-icons me-2" style="font-size:18px;">person_add</span>
+                    <span>Nouveau Membre</span>
                 </a>
-                {% if request.user.role == "admin" %}
-                    <a href="{% url 'core:delete_member' member.id %}"
-                    class="text-red-600">
-                    Supprimer
-                    </a>
-                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+<!-- [ page-header ] end -->
 
-            </td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+<!-- Vue principale : Liste des membres (contenu aligné sur une même largeur) -->
+<div id="membersListView" class="px-0 mx-2">
+
+    <!-- Filtres et recherche -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="d-flex align-items-center gap-2 mb-3">
+                <span class="material-icons text-muted" style="font-size:20px;">filter_list</span>
+                <span class="fw-semibold small text-muted">Filtres avancés</span>
+            </div>
+            <div class="row align-items-end g-3">
+                <div class="col-md-4">
+                    <label class="form-label small text-muted d-flex align-items-center gap-1 mb-1">
+                        <span class="material-icons" style="font-size:16px;">search</span>Recherche
+                    </label>
+                    <div class="input-group">
+                        <span class="input-group-text"><span class="material-icons" style="font-size:18px;">search</span></span>
+                        <input type="text" class="form-control" placeholder="Nom, téléphone, email..." id="searchMember" onkeyup="searchMembers()">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small text-muted d-flex align-items-center gap-1 mb-1">
+                        <span class="material-icons" style="font-size:16px;">label_important</span>Statut
+                    </label>
+                    <select class="form-select" id="statusFilter" onchange="filterMembers()">
+                        <option value="all">Tous les statuts</option>
+                        <option value="actif">Actifs</option>
+                        <option value="expire">Expirés</option>
+                        <option value="suspendu">Suspendus</option>
+                        <option value="proche">Proche expiration (7 jours)</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small text-muted d-flex align-items-center gap-1 mb-1">
+                        <span class="material-icons" style="font-size:16px;">event_available</span>Formule
+                    </label>
+                    <select class="form-select" id="subscriptionFilter" onchange="filterMembers()">
+                        <option value="all">Tous les abonnements</option>
+                        <option value="1mois">1 mois</option>
+                        <option value="3mois">3 mois</option>
+                        <option value="6mois">6 mois</option>
+                        <option value="12mois">12 mois</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-light-brand w-100" onclick="resetFilters()">
+                        <span class="material-icons me-2" style="font-size:18px;">refresh</span>Réinitialiser
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Liste des membres -->
+    <div class="card stretch stretch-full">
+        <div class="card-header">
+            <h5 class="card-title d-flex align-items-center gap-2 mb-0">
+                <span class="material-icons" style="font-size:22px;">format_list_bulleted</span>
+                Liste des membres
+            </h5>
+            <div class="card-header-action">
+                <div class="dropdown">
+                    <a href="javascript:void(0);" class="avatar-text avatar-sm" data-bs-toggle="dropdown">
+                        <span class="material-icons" style="font-size:20px;">more_vert</span>
+                    </a>
+                    <div class="dropdown-menu dropdown-menu-end">
+                        <a href="javascript:void(0);" class="dropdown-item" onclick="exportMembers()">
+                            <span class="material-icons me-2" style="font-size:18px;">download</span>Exporter
+                        </a>
+                        <a href="javascript:void(0);" class="dropdown-item" onclick="printMembers()">
+                            <span class="material-icons me-2" style="font-size:18px;">print</span>Imprimer
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="card-body custom-card-action p-0">
+            <div class="table-responsive position-relative">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr class="border-b">
+                            <th><span class="material-icons align-middle me-1" style="font-size:16px;">tag</span>ID</th>
+                            <th><span class="material-icons align-middle me-1" style="font-size:16px;">person</span>Membre</th>
+                            <th><span class="material-icons align-middle me-1" style="font-size:16px;">contact_phone</span>Contact</th>
+                            <th><span class="material-icons align-middle me-1" style="font-size:16px;">card_membership</span>Abonnement</th>
+                            <th><span class="material-icons align-middle me-1" style="font-size:16px;">event</span>Date expiration</th>
+                            <th><span class="material-icons align-middle me-1" style="font-size:16px;">circle</span>Statut</th>
+                            <th><span class="material-icons align-middle me-1" style="font-size:16px;">history</span>Dernier accès</th>
+                            <th class="text-end"><span class="material-icons align-middle me-1" style="font-size:16px;">settings</span>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="membersTableBody">
+                        {% for member in members %}
+                        <tr class="border-t">
+
+                            <td class="p-2">{{ member.id }}</td>
+
+                            <td class="p-2">
+                                {{ member.first_name }} {{ member.last_name }}
+                            </td>
+
+                            <td class="p-2">{{ member.phone }}</td>
+
+                            <td class="p-2">{{ member.subscription_type }}</td>
+
+                            <td class="p-2">{{ member.expiration_date }}</td>
+
+                            <td class="p-2">
+                                <span class="px-2 py-1 text-xs rounded-full
+                                    {% if member.computed_status == 'active' %}
+                                        bg-green-100 text-green-700
+                                    {% elif member.computed_status == 'suspended' %}
+                                        bg-yellow-100 text-yellow-700
+                                    {% else %}
+                                        bg-red-100 text-red-700
+                                    {% endif %}">
+                                    {{ member.computed_status }}
+                                </span>
+                            </td>
+
+                            <td class="p-2">
+                                {{ member.last_access|default:"Jamais" }}
+                            </td>
+
+                            <td class="text-end">
+                                <div class="card-header-action">
+                                    <div class="dropup">
+                                        <a href="#"
+                                        class="avatar-text avatar-sm"
+                                        data-bs-toggle="dropdown"
+                                        data-bs-boundary="viewport">
+                                            <span class="material-icons" style="font-size:20px;">
+                                                more_vert
+                                            </span>
+                                        </a>
+
+                                        <div class="dropdown-menu dropdown-menu-end shadow">
+
+                                            <!-- Voir -->
+                                            <a href="{% url 'core:member_dashboard' %}?member={{ member.id }}"
+                                            class="dropdown-item d-flex align-items-center">
+                                                <span class="material-icons me-2" style="font-size:18px;">
+                                                    visibility
+                                                </span>
+                                                Voir
+                                            </a>
+
+                                            <!-- Modifier -->
+                                            <a href="{% url 'core:edit_member' member.id %}"
+                                            class="dropdown-item d-flex align-items-center">
+                                                <span class="material-icons me-2" style="font-size:18px;">
+                                                    edit
+                                                </span>
+                                                Modifier
+                                            </a>
+
+                                            {% if request.user.role == "admin" %}
+                                            <div class="dropdown-divider"></div>
+
+                                            <a href="#"
+                                            onclick="if(confirm('Voulez-vous vraiment supprimer ce membre ? Cette action est irréversible.')) {
+                                                document.getElementById('delete-form-{{ member.id }}').submit();
+                                            }"
+                                            class="dropdown-item d-flex align-items-center text-danger">
+                                                <span class="material-icons me-2" style="font-size:18px;">delete</span>
+                                                Supprimer
+                                            </a>
+
+                                            <!-- Le formulaire caché -->
+                                            <form id="delete-form-{{ member.id }}"
+                                                method="POST"
+                                                action="{% url 'core:delete_member' member.id %}"
+                                                style="display: none;">
+                                                {% csrf_token %}
+                                            </form>
+                                        {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="text-center p-4 text-gray-500">
+                                Aucun membre enregistré.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card-footer">
+            <div class="d-flex justify-content-between align-items-center">
+                <p class="fs-12 text-muted mb-0 d-flex align-items-center gap-1" id="paginationInfo">
+                    <span class="material-icons" style="font-size:16px;">list_alt</span>Affichage 1-10 sur 0 membres
+                </p>
+                <ul class="pagination pagination-custom mb-0" id="paginationControls">
+                    <li class="page-item disabled"><a class="page-link" href="#"><span class="material-icons" style="font-size:16px;">chevron_left</span></a></li>
+                    <li class="page-item active"><a class="page-link" href="#">1</a></li>
+                    <li class="page-item"><a class="page-link" href="#">2</a></li>
+                    <li class="page-item"><a class="page-link" href="#">3</a></li>
+                    <li class="page-item"><a class="page-link" href="#"><span class="material-icons" style="font-size:16px;">chevron_right</span></a></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Vue accueil (pointage) -->
+<div id="checkInView" style="display: none;">
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title d-flex align-items-center gap-2 mb-0">
+                        <span class="material-icons" style="font-size:22px;">qr_code_scanner</span>
+                        Pointage d'accès
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="input-group mb-4">
+                        <span class="input-group-text"><span class="material-icons" style="font-size:18px;">search</span></span>
+                        <input type="text" class="form-control form-control-lg" placeholder="Rechercher par nom, téléphone..." id="checkinSearch" onkeyup="searchCheckin()">
+                    </div>
+                    
+                    <div class="text-center mb-3 d-flex align-items-center justify-content-center gap-2">
+                        <span class="material-icons text-muted" style="font-size:20px;">qr_code</span>
+                        <span class="fw-semibold">Ou scanner le QR code</span>
+                    </div>
+                    
+                    <div class="qr-code-container text-center mx-auto mb-4">
+                        <div id="qr-reader" style="width: 100%; max-width: 300px; margin: 0 auto; display: none;"></div>
+                        <button class="btn btn-primary" onclick="startQRScanner()">
+                            <span class="material-icons me-2" style="font-size:18px;">qr_code_scanner</span>
+                            Activer le scanner
+                        </button>
+                    </div>
+                    
+                    <div id="checkinResult" class="mt-4"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title d-flex align-items-center gap-2 mb-0">
+                        <span class="material-icons" style="font-size:22px;">person</span>
+                        Fiche compacte
+                    </h5>
+                    <small class="text-muted d-flex align-items-center gap-1 mt-1">
+                        <span class="material-icons" style="font-size:14px;">visibility</span>Vue rapide
+                    </small>
+                </div>
+                <div class="card-body" id="compactMemberView">
+                    <div class="text-center text-muted py-5">
+                        <span class="material-icons" style="font-size:48px;">person_search</span>
+                        <p class="mt-2">Recherchez un membre pour afficher sa fiche</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL AJOUTER UN MEMBRE -->
+<div class="modal fade" id="addMemberModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title d-flex align-items-center gap-2">
+                    <span class="material-icons" style="font-size:24px;">person_add</span>
+                    Nouveau membre
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST"
+                    action="{% url 'core:create_member' %}"
+                    enctype="multipart/form-data" id="addMemberForm">
+                    {% csrf_token %}
+                    <div class="row">
+                        <div class="col-md-4 text-center mb-3">
+                            <div class="member-photo-placeholder mx-auto mb-2" id="photoPreview">
+                                <span class="material-icons" style="font-size:48px;">add_a_photo</span>
+                            </div>
+                            {{ form.photo }}
+                        </div>
+                        <div class="col-md-8">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label d-flex align-items-center gap-1">
+                                        <span class="material-icons" style="font-size:18px;">badge</span>Nom <span class="text-danger">*</span>
+                                    </label>
+                                    {{ form.last_name }}
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label d-flex align-items-center gap-1">
+                                        <span class="material-icons" style="font-size:18px;">person</span>Prénom
+                                    </label>
+                                    {{ form.first_name }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label d-flex align-items-center gap-1">
+                                <span class="material-icons" style="font-size:18px;">phone</span>Téléphone
+                            </label>
+                            {{ form.phone }}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label d-flex align-items-center gap-1">
+                                <span class="material-icons" style="font-size:18px;">email</span>Email
+                            </label>
+                            {{ form.email }}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label d-flex align-items-center gap-1">
+                                <span class="material-icons" style="font-size:18px;">warning</span>Statut d'abonnement
+                            </label>
+                            {{ form.status }}
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">
+                    <span class="material-icons me-2" style="font-size:18px;">close</span>Annuler
+                </button>
+                <button type="submit" class="btn btn-primary" form="addMemberForm">
+                    <span class="material-icons me-2" style="font-size:18px;">save</span>Enregistrer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL VOIR UN MEMBRE -->
+<div class="modal fade" id="viewMemberModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title d-flex align-items-center gap-2">
+                    <span class="material-icons" style="font-size:24px;">visibility</span>
+                    Détails du membre
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="member-compact-card mb-4">
+                    <div class="row">
+                        <div class="col-md-2">
+                            <div id="viewMemberPhoto" class="member-photo-placeholder">
+                                <span class="material-icons" style="font-size:48px;">person</span>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <p class="mb-1 fs-12 text-muted">
+                                <span class="material-icons" style="font-size:14px;">tag</span> 
+                                <span id="viewMemberId">SG-00001</span>
+                            </p>
+                            <h4 id="viewMemberName">Jean Dupont</h4>
+                            <p class="mb-1">
+                                <span class="material-icons" style="font-size:14px;">phone</span> 
+                                <span id="viewMemberPhone">+243 81 234 5678</span>
+                            </p>
+                            <p class="mb-0">
+                                <span class="material-icons" style="font-size:14px;">email</span> 
+                                <span id="viewMemberEmail">jean.d@email.com</span>
+                            </p>
+                        </div>
+                        <div class="col-md-4 text-end">
+                            <div class="badge-actif mb-2" id="viewMemberStatus">Actif</div>
+                            <div>
+                                <button class="btn btn-sm btn-light" onclick="printQRCode()">
+                                    <span class="material-icons" style="font-size:18px;">qr_code</span>
+                                </button>
+                                <button class="btn btn-sm btn-warning" onclick="editMemberFromView()">
+                                    <span class="material-icons" style="font-size:18px;">edit</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <ul class="nav nav-tabs" id="memberTabs" role="tablist">
+                    <li class="nav-item">
+                        <a class="nav-link active d-flex align-items-center gap-1" id="subscription-tab" data-bs-toggle="tab" href="#subscription">
+                            <span class="material-icons" style="font-size:18px;">card_membership</span>Abonnement
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link d-flex align-items-center gap-1" id="payments-tab" data-bs-toggle="tab" href="#payments">
+                            <span class="material-icons" style="font-size:18px;">payments</span>Paiements
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link d-flex align-items-center gap-1" id="access-tab" data-bs-toggle="tab" href="#access">
+                            <span class="material-icons" style="font-size:18px;">login</span>Accès
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link d-flex align-items-center gap-1" id="documents-tab" data-bs-toggle="tab" href="#documents">
+                            <span class="material-icons" style="font-size:18px;">folder</span>Documents
+                        </a>
+                    </li>
+                </ul>
+                
+                <div class="tab-content mt-3">
+                    <div class="tab-pane fade show active" id="subscription">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <table class="table table-borderless">
+                                    <tr><td class="fw-semibold">Formule :</td><td id="viewSubscriptionType">12 mois</td></tr>
+                                    <tr><td class="fw-semibold">Date d'inscription :</td><td id="viewStartDate">01/01/2024</td></tr>
+                                    <tr><td class="fw-semibold">Date d'expiration :</td><td id="viewExpiryDate">31/12/2024</td></tr>
+                                </table>
+                            </div>
+                            <div class="col-md-6">
+                                <table class="table table-borderless">
+                                    <tr><td class="fw-semibold">Prix :</td><td id="viewPrice">420 $</td></tr>
+                                    <tr><td class="fw-semibold">Payé :</td><td id="viewPaid">420 $</td></tr>
+                                    <tr><td class="fw-semibold">Reste :</td><td id="viewRemaining">0 $</td></tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="subscription-timeline mt-3">
+                            <h6 class="d-flex align-items-center gap-2">
+                                <span class="material-icons" style="font-size:18px;">history</span>
+                                Historique des abonnements
+                            </h6>
+                            <div id="subscriptionHistory"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-pane fade" id="payments">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Montant</th>
+                                        <th>Mode</th>
+                                        <th>Statut</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="paymentHistory"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-pane fade" id="access">
+                        <div class="mb-3">
+                            <canvas id="accessChart" style="height: 200px;"></canvas>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Heure</th>
+                                        <th>Mode d'accès</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="accessHistory"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-pane fade" id="documents">
+                        <div class="text-center mb-3">
+                            <div class="qr-code-container mx-auto mb-3">
+                                <div id="memberQRCode"></div>
+                            </div>
+                            <button class="btn btn-sm btn-primary" onclick="downloadQRCode()">
+                                <span class="material-icons" style="font-size:18px;">download</span> Télécharger QR Code
+                            </button>
+                        </div>
+                        <div class="mt-4">
+                            <h6 class="d-flex align-items-center gap-2">
+                                <span class="material-icons" style="font-size:18px;">description</span>
+                                Contrats et documents
+                            </h6>
+                            <div id="memberDocuments"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer d-flex align-items-center gap-2">
+                <button type="button" class="btn btn-light d-flex align-items-center gap-2" data-bs-dismiss="modal">
+                    <span class="material-icons" style="font-size:20px;">close</span>Fermer
+                </button>
+                <button type="button" class="btn btn-warning d-flex align-items-center gap-2" onclick="suspendMember()" id="suspendBtn">
+                    <span class="material-icons" style="font-size:20px;">pause_circle</span>Suspendre
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL DE CONFIRMATION DE SUSPENSION -->
+<div class="modal fade" id="suspendConfirmModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title d-flex align-items-center gap-2">
+                    <span class="material-icons text-warning" style="font-size:22px;">warning</span>
+                    Confirmation
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Êtes-vous sûr de vouloir suspendre ce membre ?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">
+                    <span class="material-icons me-2" style="font-size:18px;">close</span>Non
+                </button>
+                <button type="button" class="btn btn-warning" onclick="confirmSuspend()">
+                    <span class="material-icons me-2" style="font-size:18px;">check</span>Oui
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+
+{% endblock %}
