@@ -18,4 +18,9 @@ urlpatterns = [
     path('members/delete/<int:member_id>/', views.delete_member, name='delete_member'),
     path('members/toggle/<int:member_id>/', views.toggle_member_status, name='toggle_member_status'),
     
+    path('subscription-plans/', views.plan_list, name='subscription_plan_list'),
+    path('subscription-plans/create/', views.create_plan, name='create_subscription_plan'),
+    path('subscription-plans/edit/<int:plan_id>/', views.edit_plan, name='edit_subscription_plan'),
+    path('subscription-plans/delete/<int:plan_id>/', views.delete_plan, name='delete_subscription_plan'),
+    
 ]

@@ -1,0 +1,658 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block page_titre %}Abonnements{% endblock %}
+
+{% block content %}
+<!-- Page Header Abonnements -->
+<div class="page-header mb-4">
+    <div class="page-header-left d-flex align-items-center">
+        <div class="page-header-title">
+            <h5 class="m-b-10" id="pageAbonnementsTitle">Gestion des Abonnements</h5>
+        </div>
+    </div>
+    <div class="page-header-right ms-auto">
+        <div class="page-header-right-items">
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-primary" onclick="showAide()">
+                    <span class="material-icons me-2" style="font-size: 18px;">help</span>Aide
+                </button>
+                <button class="btn btn-sm btn-primary" type="button" href="javascript:void(0)" data-bs-toggle="modal" data-bs-target="#addFormuleModal" >
+                    <span class="material-icons me-2" style="font-size: 18px;">add</span>Nouvelle formule
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Navigation des onglets -->
+<ul class="nav nav-tabs mb-4 mx-2" id="subscriptionTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="formules-tab" data-bs-toggle="tab" data-bs-target="#formules" type="button" role="tab" onclick="showAbonnementsTab('formules')">
+            <span class="material-icons me-2">list_alt</span>Formules
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="promos-tab" data-bs-toggle="tab" data-bs-target="#promos" type="button" role="tab" onclick="showAbonnementsTab('promos')">
+            <span class="material-icons me-2">local_offer</span>Promotions
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="renouvellements-tab" data-bs-toggle="tab" data-bs-target="#renouvellements" type="button" role="tab" onclick="showAbonnementsTab('renouvellements')">
+            <span class="material-icons me-2">autorenew</span>Renouvellements
+        </button>
+    </li>
+</ul>
+
+<!-- Contenu des onglets -->
+<div class="tab-content" id="subscriptionTabsContent">
+    <!-- Onglet FORMULES -->
+    <div class="tab-pane fade show active" id="formules" role="tabpanel">
+        <!-- Statistiques des abonnements -->
+        <div class="row mb-4 mx-2">
+            <div class="col-md-3">
+                <div class="card stat-card" onclick="window.location.href='?filter=tous'">
+                    <div class="card-body">
+                        <div class="d-flex align-items-start justify-content-between mb-2">
+                            <div>
+                                <span class="fs-12 fw-medium text-muted">Total abonnements</span>
+                                <h3 class="mb-0 fw-bold">1,247</h3>
+                            </div>
+                            <div class="stat-icon-box">
+                                <span class="material-icons" style="color: #3454d1;">calendar_month</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card" onclick="window.location.href='?filter=actifs'">
+                    <div class="card-body">
+                        <div class="d-flex align-items-start justify-content-between mb-2">
+                            <div>
+                                <span class="fs-12 fw-medium text-muted">Actifs</span>
+                                <h3 class="mb-0 fw-bold">1,024</h3>
+                            </div>
+                            <div class="stat-icon-box">
+                                <span class="material-icons" style="color: #10b981;">check_circle</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card" onclick="window.location.href='?filter=expires'">
+                    <div class="card-body">
+                        <div class="d-flex align-items-start justify-content-between mb-2">
+                            <div>
+                                <span class="fs-12 fw-medium text-muted">Expirés</span>
+                                <h3 class="mb-0 fw-bold">148</h3>
+                            </div>
+                            <div class="stat-icon-box">
+                                <span class="material-icons" style="color: #ef4444;">schedule</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card" onclick="window.location.href='?filter=suspendus'">
+                    <div class="card-body">
+                        <div class="d-flex align-items-start justify-content-between mb-2">
+                            <div>
+                                <span class="fs-12 fw-medium text-muted">Suspendus</span>
+                                <h3 class="mb-0 fw-bold">75</h3>
+                            </div>
+                            <div class="stat-icon-box">
+                                <span class="material-icons" style="color: #f59e0b;">pause_circle</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Grille des formules d'abonnement -->
+        <div class="row mx-2">
+            
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title">Formules d'abonnement</h5>
+                        <div class="card-header-action">
+                            <div class="dropdown">
+                                <a href="javascript:void(0);" class="avatar-text avatar-sm" data-bs-toggle="dropdown">
+                                    <span class="material-icons">more_vert</span>
+                                </a>
+                                <div class="dropdown-menu dropdown-menu-end">
+                                    <a href="javascript:void(0);" class="dropdown-item" onclick="exporterFormules()">
+                                        <span class="material-icons me-2">download</span>Exporter
+                                    </a>
+                                    <a href="javascript:void(0);" class="dropdown-item" onclick="dupliquerFormule()">
+                                        <span class="material-icons me-2">content_copy</span>Dupliquer
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-4">
+
+                            {% for plan in plans %}
+
+                            <div class="col-md-4 card-formule-wrap">
+
+                            <div class="card card-formule h-100">
+
+                            <div class="card-body">
+
+                            <div class="d-flex justify-content-between align-items-start mb-3">
+
+                            <div>
+                            <span class="badge bg-light-primary text-primary mb-2">
+                            Plan
+                            </span>
+
+                            <h4>{{ plan.name }}</h4>
+
+                            </div>
+
+                            <div class="icon-circle" style="background: #f0f4ff;">
+                            <span class="material-icons"
+                            style="font-size: 28px; color: #3454d1;">
+                            card_membership
+                            </span>
+                            </div>
+
+                            </div>
+
+
+                            <h2 class="fw-bold mb-3">
+                            {{ plan.price }} CDF
+                            <small class="fs-6 fw-normal text-muted">
+                            / {{ plan.duration_days }} jours
+                            </small>
+                            </h2>
+
+
+                            {% if plan.description %}
+                            <ul class="list-unstyled mb-4">
+
+                            <li class="mb-2">
+                            <span class="material-icons text-success me-2"
+                            style="font-size:16px;">
+                            check
+                            </span>
+
+                            {{ plan.description }}
+
+                            </li>
+
+                            </ul>
+                            {% endif %}
+
+
+                            <div class="d-flex justify-content-between align-items-center">
+
+                            {% if plan.is_active %}
+                            <span class="badge-actif">
+                            Actif
+                            </span>
+                            {% else %}
+                            <span class="badge-expire">
+                            Désactivé
+                            </span>
+                            {% endif %}
+
+
+                            <div class="d-flex gap-2">
+
+                            <a href="{% url 'core:edit_subscription_plan' plan.id %}"
+                            class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addFormuleModal" >
+
+                            <span class="material-icons me-1"
+                            style="font-size:16px;">
+                            edit
+                            </span>
+
+                            Éditer
+
+                            </a>
+
+
+                            <form method="POST"
+                            action="{% url 'core:delete_subscription_plan' plan.id %}"
+                            onsubmit="return confirm('Supprimer cette formule ?');">
+
+                            {% csrf_token %}
+
+                            <button type="submit"
+                            class="btn btn-sm btn-outline-danger">
+
+                            <span class="material-icons me-1"
+                            style="font-size:16px;">
+                            delete
+                            </span>
+
+                            Supprimer
+
+                            </button>
+
+                            </form>
+
+                            </div>
+
+                            </div>
+
+                            </div>
+
+                            </div>
+
+                            </div>
+
+                            {% empty %}
+
+                            <div class="col-12 text-center p-4">
+
+                            Aucune formule disponible
+
+                            </div>
+
+                            {% endfor %}
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Onglet PROMOTIONS -->
+    <div class="tab-pane fade" id="promos" role="tabpanel">
+        <div class="row mx-2">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title">Promotions actives</h5>
+                        <div class="card-header-action">
+                            <button class="btn btn-sm btn-primary" onclick="creerPromo()">
+                                <span class="material-icons me-2" style="font-size: 18px;">add</span>Nouvelle promo
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Code promo</th>
+                                        <th>Réduction</th>
+                                        <th>Formules concernées</th>
+                                        <th>Validité</th>
+                                        <th>Utilisations</th>
+                                        <th>Statut</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><span class="fw-semibold">FETE25</span></td>
+                                        <td>25%</td>
+                                        <td>1 mois, 3 mois</td>
+                                        <td>01-31 Mars 2026</td>
+                                        <td>45/100</td>
+                                        <td><span class="badge-actif">Actif</span></td>
+                                        <td>
+                                            <span class="material-icons text-primary me-2" style="cursor: pointer;" onclick="editerPromo(1)">edit</span>
+                                            <span class="material-icons text-danger" style="cursor: pointer;" onclick="supprimerPromo(1)">delete</span>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="fw-semibold">WELCOME</span></td>
+                                        <td>15%</td>
+                                        <td>Toutes</td>
+                                        <td>Permanent</td>
+                                        <td>∞</td>
+                                        <td><span class="badge-actif">Actif</span></td>
+                                        <td>
+                                            <span class="material-icons text-primary me-2" style="cursor: pointer;" onclick="editerPromo(2)">edit</span>
+                                            <span class="material-icons text-danger" style="cursor: pointer;" onclick="supprimerPromo(2)">delete</span>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="fw-semibold">COUPLE</span></td>
+                                        <td>20%</td>
+                                        <td>6 mois, 12 mois</td>
+                                        <td>Février 2026</td>
+                                        <td>12/50</td>
+                                        <td><span class="badge-expire">Expiré</span></td>
+                                        <td>
+                                            <span class="material-icons text-primary me-2" style="cursor: pointer;" onclick="editerPromo(3)">edit</span>
+                                            <span class="material-icons text-danger" style="cursor: pointer;" onclick="supprimerPromo(3)">delete</span>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="fw-semibold">ETUDIANT</span></td>
+                                        <td>30%</td>
+                                        <td>6 mois, 12 mois</td>
+                                        <td>Année académique</td>
+                                        <td>67/200</td>
+                                        <td><span class="badge-actif">Actif</span></td>
+                                        <td>
+                                            <span class="material-icons text-primary me-2" style="cursor: pointer;" onclick="editerPromo(4)">edit</span>
+                                            <span class="material-icons text-danger" style="cursor: pointer;" onclick="supprimerPromo(4)">delete</span>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="fw-semibold">FAMILLE</span></td>
+                                        <td>25%</td>
+                                        <td>Toutes</td>
+                                        <td>Juin-Août 2026</td>
+                                        <td>23/100</td>
+                                        <td><span class="badge-actif">Actif</span></td>
+                                        <td>
+                                            <span class="material-icons text-primary me-2" style="cursor: pointer;" onclick="editerPromo(5)">edit</span>
+                                            <span class="material-icons text-danger" style="cursor: pointer;" onclick="supprimerPromo(5)">delete</span>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Onglet RENOUVELLEMENTS -->
+    <div class="tab-pane fade" id="renouvellements" role="tabpanel">
+        <div class="row mx-2">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title">Renouvellements automatiques</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-4">
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>Abonnés avec renouvellement auto</span>
+                                <span class="fw-bold">847 (68%)</span>
+                            </div>
+                            <div class="progress" style="height: 8px;">
+                                <div class="progress-bar bg-success" style="width: 68%"></div>
+                            </div>
+                        </div>
+                        <div class="alert-card p-3 d-flex align-items-center">
+                            <span class="material-icons text-primary me-2">info</span>
+                            124 renouvellements prévus ce mois-ci
+                        </div>
+                        <div class="mt-4">
+                            <h6 class="fw-semibold mb-3">Paramètres de renouvellement</h6>
+                            <div class="d-flex gap-4">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="renouvOption" id="renouvAuto" checked>
+                                    <label class="form-check-label" for="renouvAuto">Automatique par défaut</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="renouvOption" id="renouvManuel">
+                                    <label class="form-check-label" for="renouvManuel">Manuel par défaut</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title">Échéances à venir</h5>
+                    </div>
+                    <div class="card-body">
+                        <ul class="list-group">
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span><span class="material-icons text-warning me-2" style="font-size: 18px;">today</span>Cette semaine</span>
+                                <span class="badge bg-warning rounded-pill">32 abonnements</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span><span class="material-icons text-info me-2" style="font-size: 18px;">date_range</span>Semaine prochaine</span>
+                                <span class="badge bg-info rounded-pill">48 abonnements</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span><span class="material-icons text-primary me-2" style="font-size: 18px;">calendar_month</span>Ce mois-ci</span>
+                                <span class="badge bg-primary rounded-pill">124 abonnements</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span><span class="material-icons text-success me-2" style="font-size: 18px;">next_week</span>Mois prochain</span>
+                                <span class="badge bg-success rounded-pill">187 abonnements</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Prochains renouvellements -->
+        <div class="row mx-2 mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title">Prochains renouvellements</h5>
+                        <div class="card-header-action">
+                            <button class="btn btn-sm btn-outline-primary" onclick="exporterRenouvellements()">
+                                <span class="material-icons me-2" style="font-size: 16px;">download</span>Exporter
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Client</th>
+                                        <th>Formule actuelle</th>
+                                        <th>Date échéance</th>
+                                        <th>Montant</th>
+                                        <th>Mode</th>
+                                        <th>Statut</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>Jean Dupont</td>
+                                        <td>12 mois Premium</td>
+                                        <td>15/04/2026</td>
+                                        <td>399 $</td>
+                                        <td><span class="material-icons me-1" style="font-size: 14px;">credit_card</span>Carte</td>
+                                        <td><span class="badge bg-soft-success text-success">Auto</span></td>
+                                        <td>
+                                            <span class="material-icons text-primary me-2" style="cursor: pointer;" onclick="voirRenouvellement(this)">visibility</span>
+                                            <span class="material-icons text-success" style="cursor: pointer;">autorenew</span>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td>Marie Lukusa</td>
+                                        <td>6 mois</td>
+                                        <td>18/04/2026</td>
+                                        <td>210 $</td>
+                                        <td><span class="material-icons me-1" style="font-size: 14px;">phone_android</span>Mobile Money</td>
+                                        <td><span class="badge bg-soft-warning text-warning">Manuel</span></td>
+                                        <td>
+                                            <span class="material-icons text-primary me-2" style="cursor: pointer;" onclick="voirRenouvellement(this)">visibility</span>
+                                            <span class="material-icons text-success" style="cursor: pointer;">autorenew</span>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td>Paul Mbuyi</td>
+                                        <td>3 mois</td>
+                                        <td>22/04/2026</td>
+                                        <td>120 $</td>
+                                        <td><span class="material-icons me-1" style="font-size: 14px;">payments</span>Cash</td>
+                                        <td><span class="badge bg-soft-success text-success">Auto</span></td>
+                                        <td>
+                                            <span class="material-icons text-primary me-2" style="cursor: pointer;" onclick="voirRenouvellement(this)">visibility</span>
+                                            <span class="material-icons text-success" style="cursor: pointer;">autorenew</span>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td>Sophie Kabeya</td>
+                                        <td>1 mois</td>
+                                        <td>25/04/2026</td>
+                                        <td>45 $</td>
+                                        <td><span class="material-icons me-1" style="font-size: 14px;">credit_card</span>Carte</td>
+                                        <td><span class="badge bg-soft-danger text-danger">Expiré</span></td>
+                                        <td>
+                                            <span class="material-icons text-primary me-2" style="cursor: pointer;" onclick="voirRenouvellement(this)">visibility</span>
+                                            <span class="material-icons text-success" style="cursor: pointer;">autorenew</span>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL Nouvelle / Modifier formule -->
+<div class="modal fade" id="addFormuleModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addFormuleModalTitle">Créer une nouvelle formule</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="newFormuleForm" method="post" action="{% url 'core:create_subscription_plan' %}">
+                    {% csrf_token %}
+                    <input type="hidden" id="formuleId" value="">
+                    <div class="mb-3">
+                        <label class="form-label">Nom de la formule</label>
+                        {{form.name}}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Durée (jours)</label>
+                        {{form.duration_days}}
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Prix (CDF)</label>
+                            {{form.price}}
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check mb-2">
+                            {{form.is_active}}
+                            <label class="form-check-label" for="is_active">Activer la formule</label>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        {{form.description}}
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
+                <button type="submit" class="btn btn-primary" id="addFormuleBtn" form="newFormuleForm" >Créer la formule</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL Créer / Modifier promotion -->
+<div class="modal fade" id="promoModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="promoModalTitle">Créer une promotion</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="promoForm">
+                    <input type="hidden" id="promoId" value="">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Code promo <span class="text-danger">*</span></label>
+                            <input type="text" id="promoCode" class="form-control" placeholder="Ex: FETE25, WELCOME" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Réduction (%) <span class="text-danger">*</span></label>
+                            <input type="number" id="promoReduction" class="form-control" min="1" max="100" placeholder="Ex: 25" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Formules concernées</label>
+                        <div class="d-flex flex-wrap gap-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="promoFormule1" value="1 mois">
+                                <label class="form-check-label" for="promoFormule1">1 mois (Standard)</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="promoFormule3" value="3 mois">
+                                <label class="form-check-label" for="promoFormule3">3 mois (Populaire)</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="promoFormule6" value="6 mois">
+                                <label class="form-check-label" for="promoFormule6">6 mois (Recommandé)</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="promoFormule12" value="12 mois">
+                                <label class="form-check-label" for="promoFormule12">12 mois (Premium)</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="promoToutes" onchange="togglePromoToutes()">
+                                <label class="form-check-label" for="promoToutes">Toutes les formules</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" id="promoPermanent" onchange="togglePromoDates()">
+                            <label class="form-check-label" for="promoPermanent">Permanent (sans date d'expiration)</label>
+                        </div>
+                        <div id="promoDatesWrap" class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Date début</label>
+                                <input type="date" id="promoDateDebut" class="form-control">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Date fin</label>
+                                <input type="date" id="promoDateFin" class="form-control">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Nombre max d'utilisations</label>
+                            <input type="number" id="promoMaxUtil" class="form-control" min="1" placeholder="Illimité si vide">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Statut</label>
+                            <select id="promoStatut" class="form-select">
+                                <option value="actif">Actif</option>
+                                <option value="inactif">Inactif</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description (optionnel)</label>
+                        <textarea id="promoDesc" class="form-control" rows="2" placeholder="Ex: Promotion Fête du travail"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" id="promoSaveBtn" onclick="sauvegarderPromo()">Créer la promotion</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/script_abonnements.js' %}"></script>
+
+{% endblock %}

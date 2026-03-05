@@ -34,6 +34,7 @@ class Member(models.Model):
     first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
     photo = models.ImageField(upload_to="members/", blank=True, null=True)
+    address = models.TextField(blank=True, null=True)
     phone = models.CharField(max_length=20)
     email = models.EmailField(blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="active")
@@ -66,6 +67,7 @@ class SubscriptionPlan(models.Model):
     price = models.DecimalField(max_digits=10, decimal_places=2)
     description = models.TextField(blank=True, null=True)
     is_active = models.BooleanField(default=True)
+    
 
     def __str__(self):
         return self.name
@@ -78,6 +80,11 @@ class Subscription(models.Model):
     end_date = models.DateField()
     is_active = models.BooleanField(default=True)
     auto_renew = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    @property
+    def active_subscription(self):
+        return self.subscription_set.filter(is_active=True).first()
 
     def __str__(self):
         return f"{self.member} - {self.plan}"

@@ -1,10 +1,12 @@
 #core/views.py
+from datetime import timedelta
+from django.utils import timezone
 from django.contrib import messages
 from core.decorators import role_required
 from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
-from .forms import MemberCreationForm
-from .models import Member
+from .forms import MemberCreationForm, SubscriptionForm, SubscriptionPlanForm
+from .models import Member, Subscription, SubscriptionPlan
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import redirect
 
@@ -172,3 +174,147 @@ def toggle_member_status(request, member_id):
     member.save()
 
     return redirect("member_list")
+
+
+
+def create_subscription(member, plan):
+
+    start_date = timezone.now().date()
+
+    end_date = start_date + timedelta(days=plan.duration_days)
+
+    # désactiver anciennes subscriptions
+    Subscription.objects.filter(
+        member=member,
+        is_active=True
+    ).update(is_active=False)
+
+    subscription = Subscription.objects.create(
+        member=member,
+        plan=plan,
+        start_date=start_date,
+        end_date=end_date,
+        is_active=True
+    )
+
+    return subscription
+
+
+@login_required
+@role_required(["admin","manager"])
+def plan_list(request):
+
+    plans = SubscriptionPlan.objects.filter(gym=request.user.gym)
+    form = SubscriptionPlanForm()
+    return render(
+        request,
+        "core/subscription_plan_list.html",
+        {"plans": plans, "form": form}
+    )
+
+@login_required
+@role_required(["admin","manager"])
+def create_plan(request):
+
+    if request.method == "POST":
+
+        form = SubscriptionPlanForm(request.POST)
+
+        if form.is_valid():
+
+            plan = form.save(commit=False)
+            plan.gym = request.user.gym
+            plan.save()
+
+            messages.success(request,"Plan créé avec succès")
+
+            return redirect("core:subscription_plan_list")
+
+    else:
+        form = SubscriptionPlanForm()
+
+    return render(request,"core/create_plan.html",{"form":form})
+
+
+@login_required
+@role_required(["admin","manager"])
+def edit_plan(request, plan_id):
+
+    plan = get_object_or_404(
+        SubscriptionPlan,
+        id=plan_id,
+        gym=request.user.gym
+    )
+
+    form = SubscriptionPlanForm(
+        request.POST or None,
+        instance=plan
+    )
+
+    if form.is_valid():
+        form.save()
+        messages.success(request,"Plan modifié")
+        return redirect("core:subscription_plan_list")
+
+    return render(request,"core/edit_plan.html",{"form":form})
+
+@login_required
+@role_required(["admin","manager"])
+def delete_plan(request, plan_id):
+
+    plan = get_object_or_404(
+        SubscriptionPlan,
+        id=plan_id,
+        gym=request.user.gym
+    )
+
+    if request.method == "POST":
+        plan.delete()
+        messages.success(request,"Plan supprimé")
+        return redirect("core:subscription_plan_list")
+
+    return render(request,"core/delete_plan.html",{"plan":plan})
+
+
+@login_required
+@role_required(["admin","manager","reception"])
+def create_subscription(request):
+
+    if request.method == "POST":
+
+        form = SubscriptionForm(request.POST)
+
+        if form.is_valid():
+
+            subscription = form.save(commit=False)
+
+            plan = subscription.plan
+
+            subscription.end_date = (
+                subscription.start_date
+                + timedelta(days=plan.duration_days)
+            )
+
+            # désactiver abonnement actif
+            Subscription.objects.filter(
+                member=subscription.member,
+                is_active=True
+            ).update(is_active=False)
+
+            subscription.save()
+
+            messages.success(
+                request,
+                "Abonnement enregistré avec succès"
+            )
+
+            return redirect("core:member_list")
+
+    else:
+        form = SubscriptionForm()
+
+    return render(
+        request,
+        "core/create_subscription.html",
+        {"form": form}
+    )
