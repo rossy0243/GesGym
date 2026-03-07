@@ -1,16 +1,18 @@
 #core/views.py
 from datetime import timedelta
-from django.http import HttpResponse
+from decimal import Decimal
+from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.contrib import messages
 from core.decorators import role_required
 from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from .forms import MemberCreationForm, SubscriptionForm, SubscriptionPlanForm
-from .models import Member, Subscription, SubscriptionPlan
+from .models import CashRegister, Member, Payment, Subscription, SubscriptionPlan
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import redirect
 from django.template.loader import render_to_string
+from django.db.models import Sum
 
 @login_required
 def superadmin_dashboard(request):
@@ -29,11 +31,27 @@ def manager_dashboard(request):
     gym = request.gym
     return render(request, 'core/manager.html', {'gym': gym})
 
+
 @login_required
-@role_required(["cashier"])
-def cashier_dashboard(request):
-    gym = request.gym
-    return render(request, 'core/cashier.html', {'gym': gym})
+def cancel_payment_process(request):
+
+    request.session.pop("member_id", None)
+    request.session.pop("plan_id", None)
+
+    return redirect("core:cashier_dashboard")
+
+@login_required
+def payment_previous_step(request, step):
+
+    if step == 1:
+        request.session.pop("member_id", None)
+
+    if step == 2:
+        request.session.pop("plan_id", None)
+
+    request.session["wizard_step"] = step
+
+    return redirect("core:cashier_dashboard")
 
 @login_required
 @role_required(["reception"])
@@ -340,3 +358,267 @@ def create_subscription(request):
         "core/create_subscription.html",
         {"form": form}
     )
+    
+    
+@login_required
+@role_required(["admin","manager","cashier","reception"])
+def payments_dashboard(request):
+
+    gym = request.user.gym
+
+    register = CashRegister.objects.filter(
+        gym=gym,
+        is_closed=False
+    ).first()
+
+    payments = Payment.objects.filter(
+        gym=gym
+    ).select_related("member","subscription")
+
+    today = timezone.now().date()
+
+    today_payments = payments.filter(
+        created_at__date=today,
+        status="success"
+    )
+    plans = SubscriptionPlan.objects.filter(
+    gym=request.user.gym,
+    is_active=True
+)
+
+    total_cash = today_payments.aggregate(
+        total=Sum("amount")
+    )["total"] or 0
+
+    context = {
+        "register": register,
+        "payments": payments.order_by("-created_at")[:20],
+        "today_total": total_cash,
+        "plans": plans
+    }
+
+    return render(
+        request,
+        "core/cashier.html",
+        context
+    )
+    
+@login_required
+def search_members(request):
+
+    query = request.GET.get("q", "")
+
+    members = Member.objects.filter(
+        gym=request.user.gym
+    ).filter(
+        Q(first_name__icontains=query) |
+        Q(last_name__icontains=query) |
+        Q(phone__icontains=query)
+    )[:10]
+
+    data = []
+
+    for m in members:
+        data.append({
+            "id": m.id,
+            "name": f"{m.first_name} {m.last_name}",
+            "phone": m.phone,
+            "status": m.computed_status,
+        })
+
+    return JsonResponse({"members": data})
+
+
+
+
+
+
+#APPLICATION DE LA CAISSE
+
+#vue du dashboard de la caisse
+@login_required
+def cashier_dashboard(request):
+    
+    gym = request.user.gym
+    register = CashRegister.objects.filter(
+        gym=gym,
+        is_closed=False
+    ).first()
+
+    if request.method == "POST":
+
+        if not register:
+            messages.error(request, "Aucune caisse ouverte.")
+            return redirect("core:cashier_dashboard")
+
+        transaction_type = request.POST.get("type", "in")
+
+        amount = request.POST.get("amount")
+        method = request.POST.get("method", "cash")
+
+        # ----------------------
+        # DECAISSEMENT
+        # ----------------------
+        if transaction_type == "out":
+
+            Payment.objects.create(
+                gym=gym,
+                cash_register=register,
+                amount=amount,
+                method="cash",
+                type="out",
+                status="success"
+            )
+
+            messages.success(request, "Décaissement enregistré.")
+
+            return redirect("core:cashier_dashboard")
+
+        # ----------------------
+        # ENCAISSEMENT
+        # ----------------------
+
+        member_id = request.POST.get("member")
+        plan_id = request.POST.get("plan")
+
+        member = get_object_or_404(Member, id=member_id, gym=gym)
+        plan = get_object_or_404(SubscriptionPlan, id=plan_id, gym=gym)
+
+        Subscription.objects.filter(
+            member=member,
+            is_active=True
+        ).update(is_active=False)
+
+        start = timezone.now().date()
+        end = start + timedelta(days=plan.duration_days)
+
+        subscription = Subscription.objects.create(
+            member=member,
+            plan=plan,
+            start_date=start,
+            end_date=end,
+            is_active=True
+        )
+
+        Payment.objects.create(
+            gym=gym,
+            member=member,
+            subscription=subscription,
+            cash_register=register,
+            amount=plan.price,
+            method=method,
+            type="in",
+            status="success"
+        )
+
+        messages.success(request, "Paiement enregistré.")
+
+        return redirect("core:cashier_dashboard")
+
+    members = Member.objects.filter(gym=gym)
+
+    plans = SubscriptionPlan.objects.filter(
+        gym=gym,
+        is_active=True
+    )
+    payments = Payment.objects.filter(
+        gym=gym, cash_register=register
+    ).select_related("member","subscription").order_by("-created_at")[:20]
+
+    entries_today = Payment.objects.filter(gym=gym,
+    cash_register=register,
+    type="in",
+    status="success"
+    ).aggregate(total=Sum("amount"))["total"] or 0
+
+
+    exits_today = Payment.objects.filter(gym=gym,
+        cash_register=register,
+        type="out",
+        status="success"
+    ).aggregate(total=Sum("amount"))["total"] or 0
+
+
+    cash_total = entries_today - exits_today
+    return render(request, "core/cashier.html", {
+        "members": members,
+        "plans": plans,
+        "payments": payments,
+        "register": register,
+        "today_total": cash_total,
+        "today_entries": entries_today,
+        "today_exits": exits_today,
+        
+    })
+
+
+#vue ouverture de la caisse
+@login_required
+@role_required(["cashier", "admin"])
+def open_register(request):
+
+    if request.method != "POST":
+        return redirect("core:cashier_dashboard")
+
+    existing = CashRegister.objects.filter(
+        gym=request.user.gym,
+        is_closed=False
+    ).first()
+
+    if existing:
+        messages.warning(request, "Une caisse est déjà ouverte.")
+        return redirect("core:cashier_dashboard")
+
+    CashRegister.objects.create(
+        gym=request.user.gym,
+        opened_by=request.user
+    )
+
+    messages.success(request, "Caisse ouverte avec succès.")
+
+    return redirect("core:cashier_dashboard")
+
+
+#vue fermeture de la caisse
+@login_required
+@role_required(["cashier", "admin"])
+def close_register(request, register_id):
+
+    register = get_object_or_404(
+        CashRegister,
+        id=register_id,
+        gym=request.user.gym,
+        is_closed=False
+    )
+
+    entries = register.total_entries()
+    exits = register.total_exits()
+    expected_total = register.expected_total()
+
+    if request.method == "POST":
+
+        real_amount = Decimal(request.POST.get("real_amount"))
+        difference = real_amount - expected_total
+
+        register.closing_amount = real_amount
+        register.closed_by = request.user
+        register.closed_at = timezone.now()
+        register.is_closed = True
+        register.difference = difference
+        register.save()
+
+        messages.success(
+            request,
+            f"Caisse fermée. Différence : {difference} CDF"
+        )
+
+        return redirect("core:cashier_dashboard")
+
+    return render(request, "core/close_register.html", {
+        "register": register,
+        "expected_total": expected_total,
+        "entries": entries,
+        "exits": exits
+    })
+
+

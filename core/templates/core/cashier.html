@@ -1,9 +1,571 @@
-<h1>Bienvenue {{ user.username }} - Caissier de {{ gym.name }}</h1>
+{% extends 'base.html' %}
+{% load static %}
 
-<form method="post" action="{% url 'compte:logout' %}">
-        {% csrf_token %}
-        <button type="submit"
-            class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-xl">
-            <i class="fas fa-sign-out-alt mr-2"></i> Logout
+{% block page_titre %}Paiements{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header mb-4 d-flex align-items-center justify-content-between">
+
+    <!-- LEFT -->
+    <div class="d-flex align-items-center gap-3">
+
+        <div class="page-header-title">
+            <h5 class="mb-0">Gestion des Paiements</h5>
+            <small class="text-muted">Caisse & transactions</small>
+        </div>
+
+        {% if register %}
+        <span class="badge bg-success d-flex align-items-center gap-1 px-3 py-2">
+            <span class="material-icons" style="font-size:16px;">circle</span>
+            Caisse ouverte — {{ register.opened_by }}
+            <div class="badge bg-success">
+            Session : {{ register.session_code }}
+            </div>
+        </span>
+        {% else %}
+        <span class="badge bg-danger d-flex align-items-center gap-1 px-3 py-2">
+            <span class="material-icons" style="font-size:16px;">circle</span>
+            Caisse fermée
+        </span>
+        {% endif %}
+
+    </div>
+
+    <!-- RIGHT -->
+    <div class="d-flex align-items-center gap-2">
+
+        {% if register %}
+
+        <button class="btn btn-primary d-flex align-items-center gap-1"
+                data-bs-toggle="modal"
+                data-bs-target="#paymentModal">
+
+            <span class="material-icons" style="font-size:18px;">add</span>
+            Nouveau paiement
+
         </button>
-    </form>
+        <button class="btn btn-warning d-flex align-items-center gap-1"
+            data-bs-toggle="modal"
+            data-bs-target="#withdrawModal">
+
+            <span class="material-icons" style="font-size:18px;">remove</span>
+            Décaissement
+
+            </button>
+
+        <a href="{% url 'core:close_register' register.id %}"
+           class="btn btn-outline-danger d-flex align-items-center gap-1">
+
+            <span class="material-icons" style="font-size:18px;">lock</span>
+            Fermer la caisse
+
+        </a>
+
+        {% else %}
+
+        <form method="POST" action="{% url 'core:open_cash_register' %}" style="display:inline;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-success">
+                <span class="material-icons me-2" style="font-size:18px;">lock_open</span>
+                Ouvrir la caisse
+            </button>
+        </form>
+
+        {% endif %}
+
+    </div>
+
+</div>
+
+<!-- SECTION CAISSE PHYSIQUE (Point de vente) -->
+<div id="caisseSection" class="mx-2">
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card stretch stretch-full">
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <span class="material-icons text-primary">account_balance_wallet</span>
+                        <h6 class="text-muted mb-0">Total Caisse CDF</h6>
+                    </div>
+                    <h3 id="totalUSD">{{ today_total }} CDF</h3>
+                </div>
+            </div>
+        </div>
+  
+        <div class="col-md-4">
+            <div class="card stretch stretch-full">
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <span class="material-icons text-success">trending_up</span>
+                        <h6 class="text-muted mb-0">Entrées aujourd'hui</h6>
+                    </div>
+                    <h3 id="todayEntries">{{ today_entries }} CDF</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card stretch stretch-full">
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <span class="material-icons text-warning">trending_down</span>
+                        <h6 class="text-muted mb-0">Sorties aujourd'hui</h6>
+                    </div>
+                    <h3 id="todayExits">{{ today_exits }} CDF</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <h5 class="card-title mb-0 d-flex align-items-center gap-2">
+                <span class="material-icons">receipt_long</span>Derniers paiements en caisse
+            </h5>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <div class="input-group" style="max-width: 220px;">
+                    <span class="input-group-text bg-white"><span class="material-icons">search</span></span>
+                    <input type="text" class="form-control form-control-sm" placeholder="Client, montant..." id="filterCaisseSearch" oninput="renderCashPayments()">
+                </div>
+                <select class="form-select form-select-sm" style="width: auto;" id="filterCaisseStatut" onchange="renderCashPayments()">
+                    <option value="">Tous les statuts</option>
+                    <option value="success">Réussi</option>
+                    <option value="pending">En attente</option>
+                </select>
+                <select class="form-select form-select-sm" style="width: auto;" id="filterCaisseMode" onchange="renderCashPayments()">
+                    <option value="">Tous les modes</option>
+                    <option value="Espèces">Espèces</option>
+                    <option value="Carte">Carte</option>
+                </select>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0" id="cashPaymentsTable">
+                    <thead>
+                        <tr class="border-b">
+                            <th>Date</th>
+                            <th>Client</th>
+                            <th>Abonnement</th>
+                            <th>Montant</th>
+                            <th>Mode</th>
+                            <th>Statut</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+
+                    {% for payment in payments %}
+
+                    <tr>
+
+                    <td>{{ payment.created_at|date:"d/m/Y H:i" }}</td>
+
+                    <td>
+
+                    {% if payment.member %}
+
+                    {{ payment.member.first_name }} {{ payment.member.last_name }}
+
+                    {% else %}
+
+                    <span class="text-muted">Décaissement</span>
+
+                    {% endif %}
+
+                    </td>
+
+                    <td>
+                    {% if payment.subscription %}
+                    {{ payment.subscription.plan.name }}
+                    {% endif %}
+                    </td>
+
+                    <td>
+                    {{ payment.amount }} CDF
+                    </td>
+
+                    <td>
+                    {{ payment.get_method_display }}
+                    </td>
+
+                    <td>
+
+                    {% if payment.status == "success" %}
+                    <span class="badge bg-success">Réussi</span>
+                    {% elif payment.status == "pending" %}
+                    <span class="badge bg-warning">En attente</span>
+                    {% else %}
+                    <span class="badge bg-danger">Échec</span>
+                    {% endif %}
+
+                    </td>
+
+                    <td class="text-end">
+
+                    <a href="#"
+                    class="btn btn-sm btn-light"
+                    data-id="{{ payment.id }}"
+                    onclick="showTransaction({{ payment.id }})">
+
+                    <span class="material-icons">visibility</span>
+
+                    </a>
+
+                    </td>
+
+                    </tr>
+
+                    {% endfor %}
+
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- SECTION PAIEMENTS EN LIGNE -->
+<div id="onlineSection" style="display: none;">
+    <div class="row mb-4 mx-2">
+        <div class="col-md-3">
+            <div class="card stretch stretch-full">
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <span class="material-icons text-success">check_circle</span>
+                        <h6 class="text-muted mb-0">Paiements réussis</h6>
+                    </div>
+                    <h3 id="successCount">245</h3>
+                    <small class="text-success">+23%</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stretch stretch-full">
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <span class="material-icons text-warning">schedule</span>
+                        <h6 class="text-muted mb-0">En attente</h6>
+                    </div>
+                    <h3 id="pendingCount">12</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stretch stretch-full">
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <span class="material-icons text-danger">error</span>
+                        <h6 class="text-muted mb-0">Échoués</h6>
+                    </div>
+                    <h3 id="failedCount">8</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stretch stretch-full">
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <span class="material-icons text-primary">percent</span>
+                        <h6 class="text-muted mb-0">Taux de succès</h6>
+                    </div>
+                    <h3 id="successRate">96%</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4 mx-2">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                    <h5 class="card-title mb-0 d-flex align-items-center gap-2">
+                        <span class="material-icons">webhook</span>Callbacks récents
+                    </h5>
+                    <span class="badge bg-secondary">HMAC Signature</span>
+                </div>
+                <div class="card-body" id="webhooksList"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mx-2">
+        <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <h5 class="card-title mb-0 d-flex align-items-center gap-2">
+                <span class="material-icons">credit_card</span>Transactions en ligne
+            </h5>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <div class="input-group" style="max-width: 220px;">
+                    <span class="input-group-text bg-white"><span class="material-icons">search</span></span>
+                    <input type="text" class="form-control form-control-sm" placeholder="Client, callback..." id="filterOnlineSearch" oninput="renderOnlinePayments()">
+                </div>
+                <select class="form-select form-select-sm" style="width: auto;" id="filterOnlineStatut" onchange="renderOnlinePayments()">
+                    <option value="">Tous les statuts</option>
+                    <option value="success">Réussi</option>
+                    <option value="pending">En attente</option>
+                    <option value="failed">Échoué</option>
+                </select>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0" id="onlinePaymentsTable">
+                    <thead>
+                        <tr class="border-b">
+                            <th>Date</th>
+                            <th>Client</th>
+                            <th>Abonnement</th>
+                            <th>Montant</th>
+                            <th>Mode</th>
+                            <th>Statut</th>
+                            <th>Callback</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="onlinePaymentsBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- SECTION JOURNAL -->
+<div id="journalSection" style="display: none;">
+    <div class="card mx-2">
+        <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <h5 class="card-title mb-0 d-flex align-items-center gap-2">
+                <span class="material-icons">menu_book</span>Journal des transactions
+            </h5>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <div class="input-group" style="max-width: 220px;">
+                    <span class="input-group-text bg-white"><span class="material-icons">search</span></span>
+                    <input type="text" class="form-control form-control-sm" placeholder="Client, référence..." id="filterJournalSearch" oninput="renderJournal()">
+                </div>
+                <select class="form-select form-select-sm" style="width: auto;" id="filterJournalType" onchange="renderJournal()">
+                    <option value="">Tous les types</option>
+                    <option value="Caisse physique">Caisse physique</option>
+                    <option value="Paiement en ligne">Paiement en ligne</option>
+                </select>
+                <select class="form-select form-select-sm" style="width: auto;" id="filterJournalStatut" onchange="renderJournal()">
+                    <option value="">Tous les statuts</option>
+                    <option value="success">Réussi</option>
+                    <option value="pending">En attente</option>
+                </select>
+                <button class="btn btn-sm btn-light-brand" onclick="exportJournal()">
+                    <span class="material-icons me-2" style="font-size: 18px;">download</span>Exporter
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0" id="journalTable">
+                    <thead>
+                        <tr class="border-b">
+                            <th>Date</th>
+                            <th>ID Transaction</th>
+                            <th>Client</th>
+                            <th>Type</th>
+                            <th>Montant</th>
+                            <th>Statut</th>
+                            <th>Mode</th>
+                            <th>Référence</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="journalBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL NOUVEAU PAIEMENT -->
+<div class="modal fade" id="paymentModal">
+<div class="modal-dialog modal-lg">
+<div class="modal-content">
+
+<form method="POST" action="{% url 'core:cashier_dashboard' %}">
+{% csrf_token %}
+
+<div class="modal-header">
+<h5>Nouveau paiement</h5>
+<button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+</div>
+
+<div class="modal-body">
+
+<!-- CLIENT -->
+<div class="mb-3">
+
+<label>Client</label>
+
+<select name="member" class="form-select">
+
+{% for m in members %}
+
+<option value="{{ m.id }}">
+{{ m.first_name }} {{ m.last_name }}
+</option>
+
+{% endfor %}
+
+</select>
+
+</div>
+
+<!-- PLAN -->
+
+<div class="mb-3">
+
+<label>Formule</label>
+
+<select name="plan" class="form-select">
+
+{% for p in plans %}
+
+<option value="{{ p.id }}">
+{{ p.name }} - {{ p.price }}CDF
+</option>
+
+{% endfor %}
+
+</select>
+
+</div>
+
+<!-- MODE -->
+
+<div class="mb-3">
+
+<label>Mode de paiement</label>
+
+<select name="method" class="form-select">
+
+<option value="cash">Espèces</option>
+<option value="card">Carte</option>
+<option value="mobile_money">Mobile Money</option>
+
+</select>
+
+</div>
+
+<!-- MONTANT -->
+
+<div class="mb-3">
+
+<label>Montant</label>
+
+<input type="number" name="amount" class="form-control" readonly>
+
+</div>
+
+</div>
+
+<div class="modal-footer">
+
+<button class="btn btn-success">
+Encaisser
+</button>
+
+</div>
+
+</form>
+
+</div>
+</div>
+</div>
+
+<!-- MODAL DECAISSEMENT -->
+<div class="modal fade" id="withdrawModal">
+
+<div class="modal-dialog">
+
+<div class="modal-content">
+
+<form method="POST">
+
+{% csrf_token %}
+
+<input type="hidden" name="type" value="out">
+
+<div class="modal-header">
+<h5>Décaissement</h5>
+</div>
+
+<div class="modal-body">
+
+<label>Motif</label>
+
+<input type="text"
+name="description"
+class="form-control">
+
+<label class="mt-2">Montant</label>
+
+<input type="number"
+name="amount"
+class="form-control">
+
+</div>
+
+<div class="modal-footer">
+
+<button class="btn btn-danger">
+
+Valider sortie
+
+</button>
+
+</div>
+
+</form>
+
+</div>
+
+</div>
+
+</div>
+
+<!-- MODAL DÉTAILS TRANSACTION -->
+<div class="modal fade" id="transactionModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title d-flex align-items-center gap-2">
+                    <span class="material-icons">receipt</span>Détails de la transaction
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+            </div>
+            <div class="modal-body">
+                <div id="transactionDetails"></div>
+                <div class="mt-3 p-2 bg-light" id="hmacDetails" style="display: none;">
+                    <small class="text-muted">Signature HMAC:</small>
+                    <code id="hmacSignature" class="d-block mt-1">-</code>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">
+                    <span class="material-icons me-2" style="font-size: 18px;">close</span>Fermer
+                </button>
+                <button type="button" class="btn btn-warning" id="retryCallback" style="display: none;" onclick="retryCallback()">
+                    <span class="material-icons me-2">refresh</span>Réessayer callback
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>window.STATIC_AVATAR_URL = "{% static 'avatar/1.png' %}";</script>
+<script src="{% static 'js/scriptt_paiemnts.js' %}"></script>
+
+{% if step > 1 %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    new bootstrap.Modal(document.getElementById("paymentModal")).show();
+});
+</script>
+{% endif %}
+{% endblock %}
+

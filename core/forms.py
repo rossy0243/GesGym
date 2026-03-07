@@ -62,3 +62,49 @@ class SubscriptionForm(forms.ModelForm):
             }),
             "auto_renew": forms.CheckboxInput(attrs={"class":"form-check-input"})
         }
+        
+class PaymentStep1Form(forms.Form):
+
+    member = forms.ModelChoiceField(
+        queryset=Member.objects.none(),
+        label="Client",
+        widget=forms.Select(attrs={"class": "form-select"})
+    )
+
+    def __init__(self, gym, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["member"].queryset = Member.objects.filter(gym=gym)
+
+
+class PaymentStep2Form(forms.Form):
+
+    plan = forms.ModelChoiceField(
+        queryset=SubscriptionPlan.objects.none(),
+        label="Formule",
+        widget=forms.Select(attrs={"class": "form-select"})
+    )
+
+    def __init__(self, gym, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["plan"].queryset = SubscriptionPlan.objects.filter(
+            gym=gym,
+            is_active=True
+        )
+
+
+class PaymentStep3Form(forms.Form):
+
+    PAYMENT_METHODS = (
+        ("cash", "Espèces"),
+        ("card", "Carte"),
+        ("mobile_money", "Mobile Money"),
+    )
+
+    method = forms.ChoiceField(
+        choices=PAYMENT_METHODS,
+        widget=forms.Select(attrs={"class": "form-select"})
+    )
+
+    amount = forms.DecimalField(
+        widget=forms.NumberInput(attrs={"class": "form-control"})
+    )

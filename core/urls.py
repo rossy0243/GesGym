@@ -23,4 +23,13 @@ urlpatterns = [
     path('subscription-plans/edit/<int:plan_id>/', views.edit_plan, name='edit_subscription_plan'),
     path('subscription-plans/delete/<int:plan_id>/', views.delete_plan, name='delete_subscription_plan'),
     
+    path('open-cash-register/', views.open_register, name='open_cash_register'),
+    path('close-cash-register/<int:register_id>/', views.close_register, name='close_register'),
+    
+    path("search-members/", views.search_members, name="search_members"),
+    
+    path("cancel-payment-process/", views.cancel_payment_process, name="cancel_payment_process"),
+    
+    path("payment-previous-step/<int:step>/", views.payment_previous_step, name="payment_previous_step"),
+    
 ]

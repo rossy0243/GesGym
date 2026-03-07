@@ -1,7 +1,10 @@
 # core/models.py
+import datetime
+
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
+from django.db.models import Sum
 
 class Gym(models.Model):
     name = models.CharField(max_length=150)
@@ -90,28 +93,184 @@ class Subscription(models.Model):
         return f"{self.member} - {self.plan}"
     
     
+class CashRegister(models.Model):
+
+    gym = models.ForeignKey(
+        Gym,
+        on_delete=models.CASCADE
+    )
+    
+    session_code = models.CharField(max_length=20, blank=True, null=True, unique=True)
+    
+    opened_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="register_opened"
+    )
+
+    closed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="register_closed"
+    )
+
+    opening_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0
+    )
+
+    difference = models.DecimalField(
+    max_digits=10,
+    decimal_places=2,
+    null=True,
+    blank=True
+)
+    
+    closing_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True
+    )
+
+    opened_at = models.DateTimeField(auto_now_add=True)
+
+    closed_at = models.DateTimeField(
+        null=True,
+        blank=True
+    )
+
+    is_closed = models.BooleanField(default=False)
+    
+    def save(self, *args, **kwargs):
+
+        is_new = self.pk is None
+
+        super().save(*args, **kwargs)
+
+        if is_new and not self.session_code:
+            self.session_code = f"CS-{self.opened_at.year}-{self.id:04d}"
+            super().save(update_fields=["session_code"])
+            
+    def total_entries(self):
+        return Payment.objects.filter(
+            cash_register=self,
+            type="in",
+            status="success"
+        ).aggregate(total=Sum("amount"))["total"] or 0
+
+    def total_exits(self):
+        return Payment.objects.filter(
+            cash_register=self,
+            type="out",
+            status="success"
+        ).aggregate(total=Sum("amount"))["total"] or 0
+
+    def expected_total(self):
+        return self.total_entries() - self.total_exits()
+    
+    
+    def __str__(self):
+        return self.session_code
+    
+
 class Payment(models.Model):
+
     PAYMENT_METHODS = (
         ("cash", "Cash"),
         ("card", "Card"),
         ("mobile_money", "Mobile Money"),
     )
+    TRANSACTION_TYPE = (
+        ("in", "Entrée"),
+        ("out", "Sortie"),
+    )
+
     STATUS = (
         ("pending", "Pending"),
         ("success", "Success"),
         ("failed", "Failed"),
     )
+    cash_register = models.ForeignKey(
+        CashRegister,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
 
-    gym = models.ForeignKey(Gym, on_delete=models.CASCADE)
-    member = models.ForeignKey(Member, on_delete=models.CASCADE)
-    subscription = models.ForeignKey(Subscription, on_delete=models.SET_NULL, null=True, blank=True)
-    amount = models.DecimalField(max_digits=10, decimal_places=2)
-    method = models.CharField(max_length=20, choices=PAYMENT_METHODS)
-    status = models.CharField(max_length=20, choices=STATUS, default="pending")
-    transaction_id = models.CharField(max_length=200, blank=True, null=True)
+    gym = models.ForeignKey(
+        Gym,
+        on_delete=models.CASCADE
+    )
+
+    member = models.ForeignKey(
+        Member,
+        on_delete=models.CASCADE, 
+        null=True,
+        blank=True
+    )
+
+    subscription = models.ForeignKey(
+        Subscription,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    
+    amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2
+    )
+
+    method = models.CharField(
+        max_length=20,
+        choices=PAYMENT_METHODS
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS,
+        default="pending"
+    )
+    type = models.CharField(
+        max_length=10,
+        choices=TRANSACTION_TYPE,
+        default="in"
+    )
+
+    transaction_id = models.CharField(
+        max_length=200,
+        blank=True,
+        null=True
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     
+    @staticmethod
+    def calculate_cash_total(register):
+
+        entries = Payment.objects.filter(
+            cash_register=register,
+            type="in",
+            status="success"
+        ).aggregate(total=Sum("amount"))["total"] or 0
+
+        exits = Payment.objects.filter(
+            cash_register=register,
+            type="out",
+            status="success"
+        ).aggregate(total=Sum("amount"))["total"] or 0
+
+        return entries - exits
     
+    def __str__(self):
+        return f"{self.member} - {self.amount}"
+
 class AccessLog(models.Model):
     member = models.ForeignKey(Member, on_delete=models.CASCADE)
     check_in_time = models.DateTimeField(auto_now_add=True)
@@ -131,13 +290,3 @@ class Notification(models.Model):
     status = models.BooleanField(default=False)
     
     
-class CashRegister(models.Model):
-    gym = models.ForeignKey(Gym, on_delete=models.CASCADE)
-    opened_by = models.ForeignKey(
-    settings.AUTH_USER_MODEL,
-    on_delete=models.SET_NULL,
-    null=True
-)
-    opened_at = models.DateTimeField(auto_now_add=True)
-    closed_at = models.DateTimeField(blank=True, null=True)
-    is_closed = models.BooleanField(default=False)

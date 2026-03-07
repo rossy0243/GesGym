@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="container mt-4">
+
+<h4>Clôture de caisse</h4>
+
+<div class="card mt-3">
+<div class="card-body">
+
+<h5 class="mb-3">
+Session {{ register.session_code }}
+</h5>
+
+<div class="row text-center mb-4">
+
+<div class="col-md-4">
+<h6 class="text-success">Entrées</h6>
+<h4>{{ entries }} CDF</h4>
+</div>
+
+<div class="col-md-4">
+<h6 class="text-danger">Sorties</h6>
+<h4>{{ exits }} CDF</h4>
+</div>
+
+<div class="col-md-4">
+<h6>Total attendu</h6>
+<h4>{{ expected_total }} CDF</h4>
+</div>
+
+</div>
+
+<form method="POST">
+
+{% csrf_token %}
+
+<label class="form-label">
+Montant réel en caisse
+</label>
+
+<input type="number"
+       name="real_amount"
+       class="form-control"
+       required>
+
+<div class="mt-3">
+
+<button class="btn btn-danger">
+Fermer la caisse
+</button>
+
+<a href="{% url 'core:cashier_dashboard' %}"
+   class="btn btn-light">
+Annuler
+</a>
+
+</div>
+
+</form>
+
+</div>
+</div>
+
+</div>
+
+{% endblock %}
