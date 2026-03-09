@@ -80,10 +80,26 @@
                         <span class="nxl-arrow"><span class="material-icons">chevron_right</span></span>
                     </a>
                     <ul class="nxl-submenu">
-                        <li class="nxl-item" id="nav-acces-manuel"><a class="nxl-link" href="{% url 'core:acces_dashboard' %}">Pointage manuel</a></li>
-                        <li class="nxl-item" id="nav-acces-auto"><a class="nxl-link" href="#">Accès automatisé</a></li>
-                        <li class="nxl-item" id="nav-acces-historique"><a class="nxl-link" href="#">Historique des entrées</a></li>
-                        <li class="nxl-item" id="nav-acces-qrcode"><a class="nxl-link" href="#">Générer QR code</a></li>
+                        <li class="nxl-item">
+                            <a class="nxl-link"
+                            href="{% url 'core:acces_dashboard' %}?section=scan">
+                            Scanner
+                            </a>
+                        </li>
+
+                        <li class="nxl-item">
+                            <a class="nxl-link"
+                            href="{% url 'core:acces_dashboard' %}?section=manual">
+                            Pointage manuel
+                            </a>
+                            </li>
+
+                        <li class="nxl-item">
+                            <a class="nxl-link"
+                            href="{% url 'core:acces_dashboard' %}?section=historique">
+                            Historique
+                            </a>
+                            </li>
                     </ul>
                 </li>
 
@@ -95,9 +111,9 @@
                         <span class="nxl-arrow"><span class="material-icons">chevron_right</span></span>
                     </a>
                     <ul class="nxl-submenu">
-                        <li class="nxl-item" id="nav-rapports-journalier"><a class="nxl-link" href="#">Journalier</a></li>
-                        <li class="nxl-item" id="nav-rapports-mensuel"><a class="nxl-link" href="#">Mensuel</a></li>
-                        <li class="nxl-item" id="nav-rapports-personnalise"><a class="nxl-link" href="#">Personnalisé</a></li>
+                        <li class="nxl-item" id="nav-rapports-journalier"><a class="nxl-link" href="{% url 'core:rapports' %}?section=journalier">Journalier</a></li>
+                        <li class="nxl-item" id="nav-rapports-mensuel"><a class="nxl-link" href="{% url 'core:rapports' %}?section=mensuel">Mensuel</a></li>
+                        <li class="nxl-item" id="nav-rapports-personnalise"><a class="nxl-link" href="{% url 'core:rapports' %}?section=personnalise">Personnalisé</a></li>
                     </ul>
                 </li>
 

@@ -955,13 +955,7 @@ function printMembers() {
     Swal.fire('Impression', 'Préparation de l\'impression...', 'info');
 }
 
-function printQRCode() {
-    Swal.fire('Impression', 'Impression du QR code...', 'info');
-}
 
-function downloadQRCode() {
-    Swal.fire('Téléchargement', 'QR code téléchargé', 'success');
-}
 
 // ================================================
 // INITIALISATION

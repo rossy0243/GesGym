@@ -29,55 +29,127 @@
 <div id="membersListView" class="px-0 mx-2">
 
     <!-- Filtres et recherche -->
-    <div class="card mb-4">
-        <div class="card-body">
-            <div class="d-flex align-items-center gap-2 mb-3">
-                <span class="material-icons text-muted" style="font-size:20px;">filter_list</span>
-                <span class="fw-semibold small text-muted">Filtres avancés</span>
-            </div>
-            <div class="row align-items-end g-3">
-                <div class="col-md-4">
-                    <label class="form-label small text-muted d-flex align-items-center gap-1 mb-1">
-                        <span class="material-icons" style="font-size:16px;">search</span>Recherche
-                    </label>
-                    <div class="input-group">
-                        <span class="input-group-text"><span class="material-icons" style="font-size:18px;">search</span></span>
-                        <input type="text" class="form-control" placeholder="Nom, téléphone, email..." id="searchMember" onkeyup="searchMembers()">
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label small text-muted d-flex align-items-center gap-1 mb-1">
-                        <span class="material-icons" style="font-size:16px;">label_important</span>Statut
-                    </label>
-                    <select class="form-select" id="statusFilter" onchange="filterMembers()">
-                        <option value="all">Tous les statuts</option>
-                        <option value="actif">Actifs</option>
-                        <option value="expire">Expirés</option>
-                        <option value="suspendu">Suspendus</option>
-                        <option value="proche">Proche expiration (7 jours)</option>
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label small text-muted d-flex align-items-center gap-1 mb-1">
-                        <span class="material-icons" style="font-size:16px;">event_available</span>Formule
-                    </label>
-                    <select class="form-select" id="subscriptionFilter" onchange="filterMembers()">
-                        <option value="all">Tous les abonnements</option>
-                        <option value="1mois">1 mois</option>
-                        <option value="3mois">3 mois</option>
-                        <option value="6mois">6 mois</option>
-                        <option value="12mois">12 mois</option>
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <button class="btn btn-light-brand w-100" onclick="resetFilters()">
-                        <span class="material-icons me-2" style="font-size:18px;">refresh</span>Réinitialiser
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
+ <form method="get">
 
+<div class="card mb-4">
+
+<div class="card-body">
+
+<div class="d-flex align-items-center gap-2 mb-3">
+<span class="material-icons text-muted" style="font-size:20px;">filter_list</span>
+<span class="fw-semibold small text-muted">Filtres avancés</span>
+</div>
+
+<div class="row align-items-end g-3">
+
+<!-- Recherche -->
+
+<div class="col-md-4">
+
+<label class="form-label small text-muted d-flex align-items-center gap-1 mb-1">
+<span class="material-icons" style="font-size:16px;">search</span>Recherche
+</label>
+
+<div class="input-group">
+
+<span class="input-group-text">
+<span class="material-icons" style="font-size:18px;">search</span>
+</span>
+
+<input
+type="text"
+class="form-control"
+name="search"
+placeholder="Nom, téléphone, email..."
+value="{{ request.GET.search }}"
+>
+
+</div>
+
+</div>
+
+<!-- Statut -->
+
+<div class="col-md-3">
+
+<label class="form-label small text-muted d-flex align-items-center gap-1 mb-1">
+<span class="material-icons" style="font-size:16px;">label_important</span>Statut
+</label>
+
+<select class="form-select" name="status">
+
+<option value="">Tous les statuts</option>
+
+<option value="active"
+{% if request.GET.status == "active" %}selected{% endif %}>
+Actifs
+</option>
+
+<option value="expired"
+{% if request.GET.status == "expired" %}selected{% endif %}>
+Expirés
+</option>
+
+<option value="suspended"
+{% if request.GET.status == "suspended" %}selected{% endif %}>
+Suspendus
+</option>
+
+<option value="expiring"
+{% if request.GET.status == "expiring" %}selected{% endif %}>
+Proche expiration
+</option>
+
+</select>
+
+</div>
+
+<!-- Formule -->
+
+<div class="col-md-3">
+
+<label class="form-label small text-muted d-flex align-items-center gap-1 mb-1">
+<span class="material-icons" style="font-size:16px;">event_available</span>Formule
+</label>
+
+<select class="form-select" name="plan">
+
+<option value="">Tous les abonnements</option>
+
+{% for plan in plans %}
+
+<option value="{{ plan.id }}"
+{% if request.GET.plan == plan.id|stringformat:"s" %}selected{% endif %}>
+{{ plan.name }}
+</option>
+
+{% endfor %}
+
+</select>
+
+</div>
+
+<!-- boutons -->
+
+<div class="col-md-2 d-flex gap-2">
+
+<button class="btn btn-primary w-100">
+Filtrer
+</button>
+
+<a href="{% url 'core:member_list' %}" class="btn btn-light-brand w-100">
+Réinitialiser
+</a>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+</form>
     <!-- Liste des membres -->
     <div class="card stretch stretch-full">
         <div class="card-header">
@@ -117,7 +189,7 @@
                         </tr>
                     </thead>
                     <tbody id="membersTableBody">
-                        {% for member in members %}
+                        {% for member in page_obj %}
                         <tr class="border-t">
 
                             <td class="p-2">{{ member.id }}</td>
@@ -130,7 +202,7 @@
 
                             <td class="p-2">{{ member.subscription_type }}</td>
 
-                            <td class="p-2">{{ member.expiration_date }}</td>
+                            <td class="p-2">{{ member.expiration_date|default:"-" }}</td>
 
                             <td class="p-2">
                                 <span class="px-2 py-1 text-xs rounded-full
@@ -219,19 +291,88 @@
             </div>
         </div>
         <div class="card-footer">
-            <div class="d-flex justify-content-between align-items-center">
-                <p class="fs-12 text-muted mb-0 d-flex align-items-center gap-1" id="paginationInfo">
-                    <span class="material-icons" style="font-size:16px;">list_alt</span>Affichage 1-10 sur 0 membres
-                </p>
-                <ul class="pagination pagination-custom mb-0" id="paginationControls">
-                    <li class="page-item disabled"><a class="page-link" href="#"><span class="material-icons" style="font-size:16px;">chevron_left</span></a></li>
-                    <li class="page-item active"><a class="page-link" href="#">1</a></li>
-                    <li class="page-item"><a class="page-link" href="#">2</a></li>
-                    <li class="page-item"><a class="page-link" href="#">3</a></li>
-                    <li class="page-item"><a class="page-link" href="#"><span class="material-icons" style="font-size:16px;">chevron_right</span></a></li>
-                </ul>
-            </div>
-        </div>
+
+<div class="d-flex justify-content-between align-items-center">
+
+<p class="fs-12 text-muted mb-0 d-flex align-items-center gap-1">
+
+<span class="material-icons" style="font-size:16px;">list_alt</span>
+
+Affichage
+{{ page_obj.start_index }}-{{ page_obj.end_index }}
+sur
+{{ page_obj.paginator.count }}
+membres
+
+</p>
+
+<ul class="pagination pagination-custom mb-0">
+
+<!-- bouton précédent -->
+
+{% if page_obj.has_previous %}
+
+<li class="page-item">
+<a class="page-link" href="?page={{ page_obj.previous_page_number }}">
+<span class="material-icons" style="font-size:16px;">chevron_left</span>
+</a>
+</li>
+
+{% else %}
+
+<li class="page-item disabled">
+<a class="page-link">
+<span class="material-icons" style="font-size:16px;">chevron_left</span>
+</a>
+</li>
+
+{% endif %}
+
+<!-- pages -->
+
+{% for num in page_obj.paginator.page_range %}
+
+{% if page_obj.number == num %}
+
+<li class="page-item active">
+<a class="page-link">{{ num }}</a>
+</li>
+
+{% else %}
+
+<li class="page-item">
+<a class="page-link" href="?page={{ num }}">{{ num }}</a>
+</li>
+
+{% endif %}
+
+{% endfor %}
+
+<!-- bouton suivant -->
+
+{% if page_obj.has_next %}
+
+<li class="page-item">
+<a class="page-link" href="?page={{ page_obj.next_page_number }}">
+<span class="material-icons" style="font-size:16px;">chevron_right</span>
+</a>
+</li>
+
+{% else %}
+
+<li class="page-item disabled">
+<a class="page-link">
+<span class="material-icons" style="font-size:16px;">chevron_right</span>
+</a>
+</li>
+
+{% endif %}
+
+</ul>
+
+</div>
+
+</div>
     </div>
 </div>
 
@@ -304,7 +445,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <form method="POST" action="{% url 'core:cashier_dashboard' %}">
+                <form method="POST" action="{% url 'core:create_member' %}" id="addMemberForm">
                     {% csrf_token %}
                     <div class="row">
                         <div class="col-md-4 text-center mb-3">
@@ -404,11 +545,13 @@
                             <div class="badge-actif mb-2" id="viewMemberStatus">{{member.computed_status}}</div>
                             <div>
                                 <button class="btn btn-sm btn-light" onclick="printQRCode()">
-                                    <span class="material-icons" style="font-size:18px;">qr_code</span>
+                                    {% if member.qr_image %}
+                                        <img src="{{ member.qr_image.url }}" width="40" height="40" alt="QR Code">
+                                    {% else %}
+                                        <span class="material-icons">qr_code</span>
+                                    {% endif %}
                                 </button>
-                                <button class="btn btn-sm btn-warning" onclick="editMemberFromView()">
-                                    <span class="material-icons" style="font-size:18px;">edit</span>
-                                </button>
+                                
                             </div>
                         </div>
                     </div>
@@ -443,16 +586,16 @@
                         <div class="row">
                             <div class="col-md-6">
                                 <table class="table table-borderless">
-                                    <tr><td class="fw-semibold">Formule :</td><td id="viewSubscriptionType">{{ member.subscription.plan.name }}</td></tr>
-                                    <tr><td class="fw-semibold">Date d'inscription :</td><td id="viewStartDate">{{ member.start_date|date:"d/m/Y" }}</td></tr>
-                                    <tr><td class="fw-semibold">Date d'expiration :</td><td id="viewExpiryDate">{{ member.expiry_date|date:"d/m/Y" }}</td></tr>
+                                    <tr><td class="fw-semibold">Formule :</td><td id="viewSubscriptionType">-</td></tr>
+                                    <tr><td class="fw-semibold">Date d'inscription :</td><td id="viewStartDate">-</td></tr>
+                                    <tr><td class="fw-semibold">Date d'expiration :</td><td id="viewExpiryDate">-</td></tr>
                                 </table>
                             </div>
                             <div class="col-md-6">
                                 <table class="table table-borderless">
-                                    <tr><td class="fw-semibold">Prix :</td><td id="viewPrice">{{ member.subscription_price }} $</td></tr>
-                                    <tr><td class="fw-semibold">Payé :</td><td id="viewPaid">{{ member.amount_paid }} $</td></tr>
-                                    <tr><td class="fw-semibold">Reste :</td><td id="viewRemaining">{{ member.amount_remaining }} $</td></tr>
+                                    <tr><td class="fw-semibold">Prix :</td><td id="viewPrice">0</td></tr>
+                                    <tr><td class="fw-semibold">Payé :</td><td id="viewPaid">0</td></tr>
+                                    <tr><td class="fw-semibold">Reste :</td><td id="viewRemaining">0</td></tr>
                                 </table>
                             </div>
                         </div>
@@ -482,9 +625,6 @@
                     </div>
                     
                     <div class="tab-pane fade" id="access">
-                        <div class="mb-3">
-                            <canvas id="accessChart" style="height: 200px;"></canvas>
-                        </div>
                         <div class="table-responsive">
                             <table class="table table-hover">
                                 <thead>
@@ -563,6 +703,34 @@
 
 
 <script>
+function downloadQRCode(){
+
+    let img = document.querySelector("#memberQRCode img")
+
+    if(!img){
+        alert("QR code indisponible")
+        return
+    }
+
+    fetch(img.src)
+    .then(response => response.blob())
+    .then(blob => {
+
+        const url = window.URL.createObjectURL(blob)
+
+        const a = document.createElement("a")
+
+        a.href = url
+        a.download = "qr_member.png"
+
+        document.body.appendChild(a)
+        a.click()
+
+        a.remove()
+    })
+}
+
+
 function openMemberModal(memberId) {
 
     fetch(`/core/member/${memberId}/`)
@@ -574,6 +742,73 @@ function openMemberModal(memberId) {
         document.getElementById("viewMemberPhone").innerText = data.phone
         document.getElementById("viewMemberEmail").innerText = data.email
         document.getElementById("viewMemberStatus").innerText = data.status
+        document.getElementById("memberQRCode").innerHTML = ""
+
+        // abonnement
+        document.getElementById("viewSubscriptionType").innerText = data.subscription_type || "Aucun"
+        document.getElementById("viewStartDate").innerText = data.start_date || "-"
+        document.getElementById("viewExpiryDate").innerText = data.expiration_date || "-"
+
+        // paiement
+        document.getElementById("viewPrice").innerText = data.price + " CDF"
+        document.getElementById("viewPaid").innerText = data.paid + " CDF"
+        document.getElementById("viewRemaining").innerText = data.remaining + " CDF"
+
+        let paymentTable = document.getElementById("paymentHistory")
+        paymentTable.innerHTML = ""
+
+        data.payments.forEach(p => {
+
+            let statusBadge = p.status === "success"
+                ? `<span class="badge bg-success">Validé</span>`
+                : `<span class="badge bg-danger">Refusé</span>`
+
+            paymentTable.innerHTML += `
+                <tr>
+                    <td>${p.date}</td>
+                    <td>${p.amount} CDF</td>
+                    <td>${p.method}</td>
+                    <td>${statusBadge}</td>
+                </tr>
+            `
+        })
+
+        let accessTable = document.getElementById("accessHistory")
+
+        accessTable.innerHTML = ""
+
+        data.access_logs.forEach(log => {
+
+            let statusBadge = log.status
+                ? `<span class="badge bg-success">Autorisé</span>`
+                : `<span class="badge bg-danger">Refusé</span>`
+
+            accessTable.innerHTML += `
+                <tr>
+                    <td>${log.date}</td>
+                    <td>${log.time}</td>
+                    <td>${log.device}</td>
+                </tr>
+            `
+        })
+
+        let qrContainer = document.getElementById("memberQRCode")
+
+        qrContainer.innerHTML = ""
+
+        if(data.qr_image){
+
+            qrContainer.innerHTML = `
+                <img src="${data.qr_image}" width="150" class="img-fluid">
+            `
+
+        }
+        else{
+
+            qrContainer.innerHTML = `
+                <p class="text-muted">QR code indisponible</p>
+            `
+        }
 
         let modal = new bootstrap.Modal(document.getElementById('viewMemberModal'))
         modal.show()

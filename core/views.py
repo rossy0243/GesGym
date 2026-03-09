@@ -14,10 +14,191 @@ from django.core.exceptions import PermissionDenied
 from django.shortcuts import redirect
 from django.template.loader import render_to_string
 from django.db.models import Q, Sum
+from django.core.paginator import Paginator
+
+
+
+
+#######   MEMBRE  ######
+#CREATION MEMBRE (avec signal pour créer User automatiquement)
+@login_required
+@role_required(["admin", "reception"])
+def create_member(request):
+
+    allowed_roles = ["admin", "reception"]
+    
+    if not request.user.is_authenticated or request.user.role not in allowed_roles:
+        raise PermissionDenied("Accès refusé – rôle non autorisé.")
+    
+    
+    if request.method == "POST":
+        form = MemberCreationForm(request.POST, request.FILES)
+        if form.is_valid():
+            member = form.save(commit=False)
+            member.gym = request.user.gym
+            member.save()  # déclenche signal → crée User automatiquement
+
+            messages.success(
+                request,
+                f"Membre créé avec succès | Mot de passe par défaut : 12345"
+            )
+
+            
+            return redirect("core:member_list")
+            
+    else:
+        form = MemberCreationForm()
+
+    return render(request, "core/create_member.html", {"form": form})
+
+#LISTE DES MEMBRES
+@login_required
+@role_required(["admin", "reception", "manager"])
+def member_list(request):
+
+    if request.user.role not in ["admin", "reception", "manager"]:
+        raise PermissionDenied
+    today = timezone.now().date()
+    limit = today + timedelta(days=7)
+    
+    members = Member.objects.filter(gym=request.user.gym).select_related("user").prefetch_related("subscription_set__plan")
+
+
+    search = request.GET.get("search")
+    status = request.GET.get("status")
+    plan = request.GET.get("plan")
+    # Recherche texte
+    if search:
+
+        members = members.filter(
+
+            Q(first_name__icontains=search) |
+            Q(last_name__icontains=search) |
+            Q(phone__icontains=search) |
+            Q(email__icontains=search)
+
+        )
+
+    # Filtre statut
+    if status == "active":
+
+        members = members.filter(
+            subscription__is_active=True,
+            subscription__end_date__gte=timezone.now().date()
+        )
+
+    elif status == "expired":
+
+        members = members.filter(
+            subscription__end_date__lt=timezone.now().date()
+        )
+
+    elif status == "suspended":
+
+        members = members.filter(status="suspended")
+
+    elif status == "expiring":
+
+        today = timezone.now().date()
+        limit = today + timedelta(days=7)
+
+        members = members.filter(
+            subscription__is_active=True,
+            subscription__end_date__range=(today, limit)
+        )
+
+    # Filtre plan
+    if plan:
+
+        members = members.filter(
+            subscription__plan_id=plan,
+            subscription__is_active=True
+        )
+        
+    paginator = Paginator(members, 10)  # 10 membres par page
+
+    page_number = request.GET.get("page")
+    
+    page_obj = paginator.get_page(page_number)
+    
+    plans = SubscriptionPlan.objects.filter(gym=request.user.gym, is_active=True)
+    
+    form = MemberCreationForm()
+    members = members.distinct()  # éviter doublons si plusieurs abonnements
+    
+    return render(request, "core/member_list.html", {"form": form, "page_obj": page_obj, "plans": plans})
+
+#DETAIL D'UN MEMBRE
+@login_required
+@role_required(["admin", "reception", "manager"])
+def member_detail(request, member_id):
+
+    member = get_object_or_404(
+        Member.objects.select_related("user"),
+        id=member_id,
+        gym=request.user.gym
+    )
+    subscription = member.active_subscription
+    
+    payments = Payment.objects.filter(
+        member=member
+    ).order_by("-created_at")[:5]
+    
+    payments_data = []
+    
+    for p in payments:
+        payments_data.append({
+            "date": p.created_at.strftime("%d/%m/%Y"),
+            "amount": float(p.amount),
+            "method": p.method,
+            "status": p.status
+        })
+        
+    access_logs = AccessLog.objects.filter(
+        member=member
+    ).order_by("-check_in_time")[:5]
+
+    access_data = []
+
+    for log in access_logs:
+        access_data.append({
+            "date": log.check_in_time.strftime("%d/%m/%Y"),
+            "time": log.check_in_time.strftime("%H:%M"),
+            "device": log.device_used,
+            "status": log.access_granted
+        })
+        
+    data = {
+        "id": member.id,
+        "first_name": member.first_name,
+        "last_name": member.last_name,
+        "phone": member.phone,
+        "email": member.email,
+        "status": member.computed_status,
+        "qr_code": member.qr_code,
+        # abonnement
+        "subscription_type": member.subscription_type,
+        "start_date": subscription.start_date.strftime("%d/%m/%Y") if subscription else None,
+        "expiration_date": member.expiration_date.strftime("%d/%m/%Y") if member.expiration_date else None,
+        "price": subscription.plan.price if subscription else 0,
+
+        # paiements
+        "paid": member.amount_paid if hasattr(member, "amount_paid") else 0,
+        "remaining": member.amount_remaining if hasattr(member, "amount_remaining") else 0,
+        
+        "payments": payments_data,
+        "access_logs": access_data,
+        
+        "qr_image": member.qr_image.url if member.qr_image else None,
+        
+    }
+
+    return JsonResponse(data)
+
 
 @login_required
-def superadmin_dashboard(request):
-    return render(request, 'core/superadmin.html')
+def rapports(request):
+    return render(request, 'core/rapports.html')
 
 
 @login_required
@@ -27,7 +208,7 @@ def admin_dashboard(request):
     return render(request, 'core/admin.html', {'gym': gym})
 
 
-#vue controle d'accès
+#vue (scanner + pointage manuel)
 @login_required
 @role_required(["admin", "manager", "reception"])
 def acces_dashboard(request):
@@ -36,10 +217,12 @@ def acces_dashboard(request):
 
     query = request.GET.get("q")
     member_id = request.GET.get("member")
+    section = request.GET.get("section", "scan")
 
     members = []
     selected_member = None
 
+    # recherche membre (pointage manuel)
     if query:
 
         members = Member.objects.filter(
@@ -48,8 +231,10 @@ def acces_dashboard(request):
             Q(first_name__icontains=query) |
             Q(last_name__icontains=query) |
             Q(phone__icontains=query)
-        )[:10]
+        ).order_by("first_name")[:10]
 
+
+    # membre sélectionné
     if member_id:
 
         selected_member = get_object_or_404(
@@ -58,28 +243,48 @@ def acces_dashboard(request):
             gym=gym
         )
 
+
+    # statistiques du jour pour le scanner
+    today = now().date()
+
+    today_entries = AccessLog.objects.filter(
+        member__gym=gym,
+        check_in_time__date=today,
+        access_granted=True
+    ).count()
+
+    today_denied = AccessLog.objects.filter(
+        member__gym=gym,
+        check_in_time__date=today,
+        access_granted=False
+    ).count()
+
+
     return render(request, "core/acces.html", {
         "members": members,
-        "selected_member": selected_member
+        "selected_member": selected_member,
+        "today_entries": today_entries,
+        "today_denied": today_denied,
+        "section": section
     })
 
 def realtime_access(request):
 
-    logs = AccessLog.objects.select_related("member")\
-            .order_by("-check_in_time")[:10]
+    logs = AccessLog.objects.select_related("member").order_by("-check_in_time")[:10]
 
-    data=[]
+    data = []
 
     for log in logs:
 
         data.append({
             "member": f"{log.member.first_name} {log.member.last_name}",
-            "photo": log.member.photo.url if log.member.photo else "/static/avatar/1.png",
             "time": localtime(log.check_in_time).strftime("%H:%M"),
-            "status": "success" if log.access_granted else "denied"
+            "status": "success" if log.access_granted else "denied",
+            "method": log.device_used
         })
 
-    return JsonResponse({"logs":data})
+    return JsonResponse(data, safe=False)
+
 
 @login_required
 def manual_access_entry(request, member_id):
@@ -91,9 +296,11 @@ def manual_access_entry(request, member_id):
     )
 
     access_granted = True
+    reason = ""
 
-    if member.computed_status != "Actif":
+    if not member.active_subscription:
         access_granted = False
+        reason = "Aucun abonnement actif"
 
     AccessLog.objects.create(
         member=member,
@@ -101,12 +308,27 @@ def manual_access_entry(request, member_id):
         device_used="Manuel"
     )
 
-    if access_granted:
-        messages.success(request, "Entrée enregistrée")
-    else:
-        messages.error(request, "Accès refusé (abonnement expiré)")
+    today = now().date()
 
-    return redirect("core:acces_dashboard")
+    today_entries = AccessLog.objects.filter(
+        check_in_time__date=today,
+        access_granted=True
+    ).count()
+
+    today_denied = AccessLog.objects.filter(
+        check_in_time__date=today,
+        access_granted=False
+    ).count()
+
+    return JsonResponse({
+        "member": f"{member.first_name} {member.last_name}",
+        "access": access_granted,
+        "reason": reason,
+        "stats":{
+            "entries":today_entries,
+            "denied":today_denied
+        }
+    })
 
 def member_access(request, qr_code):
 
@@ -114,8 +336,10 @@ def member_access(request, qr_code):
 
     access_granted = True
     reason = ""
+    
+    subscription = member.active_subscription
 
-    if member.computed_status != "Actif":
+    if not subscription:
         access_granted = False
         reason = "Abonnement expiré"
 
@@ -160,73 +384,6 @@ def member_dashboard(request):
         'member': member,
         'gym': member.gym
     })
-
-#gestion des membres
-#vue détail d'un membre (pour modal)
-@login_required
-@role_required(["admin", "reception", "manager"])
-def member_detail(request, member_id):
-
-    member = get_object_or_404(
-        Member.objects.select_related("user"),
-        id=member_id,
-        gym=request.user.gym
-    )
-
-    data = {
-        "id": member.id,
-        "first_name": member.first_name,
-        "last_name": member.last_name,
-        "phone": member.phone,
-        "email": member.email,
-        "status": member.status
-    }
-
-    return JsonResponse(data)
-
-
-@login_required
-@role_required(["admin", "reception"])
-def create_member(request):
-
-    allowed_roles = ["admin", "reception"]
-    
-    if not request.user.is_authenticated or request.user.role not in allowed_roles:
-        raise PermissionDenied("Accès refusé – rôle non autorisé.")
-    
-    
-    if request.method == "POST":
-        form = MemberCreationForm(request.POST, request.FILES)
-        if form.is_valid():
-            member = form.save(commit=False)
-            member.gym = request.user.gym
-            member.save()  # déclenche signal → crée User automatiquement
-
-            messages.success(
-                request,
-                f"Membre créé avec succès | Mot de passe par défaut : 12345"
-            )
-
-            
-            return redirect("core:member_list")
-            
-    else:
-        form = MemberCreationForm()
-
-    return render(request, "core/create_member.html", {"form": form})
-
-@login_required
-@role_required(["admin", "reception", "manager"])
-def member_list(request):
-
-    if request.user.role not in ["admin", "reception", "manager"]:
-        raise PermissionDenied
-
-    members = Member.objects.filter(gym=request.user.gym).select_related("user").prefetch_related("subscription_set__plan")
-
-    form = MemberCreationForm()
-    
-    return render(request, "core/member_list.html", {"members": members, "form": form})
 
 
 @login_required

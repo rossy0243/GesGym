@@ -1,4 +1,4 @@
-let scanner
+let html5QrCode
 
 function openScannerModal(){
 
@@ -30,17 +30,33 @@ function onScanSuccess(decodedText){
     scanner.stop()
 
     fetch(`/core/access/${decodedText}/`)
-    .then(res=>res.json())
-    .then(data=>{
+    .then(res => res.json())
+    .then(data => {
 
-        displayScanResult(data)
+        let result = document.getElementById("scanResult")
 
-        loadRealtimeAccess()
+        let color = data.access ? "success" : "danger"
+
+        result.innerHTML = `
+            <div class="alert alert-${color} text-center">
+
+                <h4>${data.member}</h4>
+
+                <p>${data.access ? "Accès autorisé" : "Accès refusé"}</p>
+
+                ${data.reason ? `<small>${data.reason}</small>` : ""}
+
+            </div>
+        `
+
+        result.style.display = "block"
+
+        document.getElementById("todayEntries").innerText = data.stats.entries
+        document.getElementById("todayDenied").innerText = data.stats.denied
 
     })
 
 }
-
 function displayScanResult(data){
 
     let result = document.getElementById("scanResult")
