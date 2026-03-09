@@ -1,6 +1,7 @@
 #core/views.py
 from datetime import timedelta
 from decimal import Decimal
+from django.utils.timezone import localtime, now
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.contrib import messages
@@ -8,11 +9,11 @@ from core.decorators import role_required
 from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from .forms import MemberCreationForm, SubscriptionForm, SubscriptionPlanForm
-from .models import CashRegister, Member, Payment, Subscription, SubscriptionPlan
+from .models import AccessLog, CashRegister, Member, Payment, Subscription, SubscriptionPlan
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import redirect
 from django.template.loader import render_to_string
-from django.db.models import Sum
+from django.db.models import Q, Sum
 
 @login_required
 def superadmin_dashboard(request):
@@ -25,12 +26,125 @@ def admin_dashboard(request):
     gym = request.gym
     return render(request, 'core/admin.html', {'gym': gym})
 
-@login_required
-@role_required(["manager"])
-def manager_dashboard(request):
-    gym = request.gym
-    return render(request, 'core/manager.html', {'gym': gym})
 
+#vue controle d'accès
+@login_required
+@role_required(["admin", "manager", "reception"])
+def acces_dashboard(request):
+
+    gym = request.gym
+
+    query = request.GET.get("q")
+    member_id = request.GET.get("member")
+
+    members = []
+    selected_member = None
+
+    if query:
+
+        members = Member.objects.filter(
+            gym=gym
+        ).filter(
+            Q(first_name__icontains=query) |
+            Q(last_name__icontains=query) |
+            Q(phone__icontains=query)
+        )[:10]
+
+    if member_id:
+
+        selected_member = get_object_or_404(
+            Member,
+            id=member_id,
+            gym=gym
+        )
+
+    return render(request, "core/acces.html", {
+        "members": members,
+        "selected_member": selected_member
+    })
+
+def realtime_access(request):
+
+    logs = AccessLog.objects.select_related("member")\
+            .order_by("-check_in_time")[:10]
+
+    data=[]
+
+    for log in logs:
+
+        data.append({
+            "member": f"{log.member.first_name} {log.member.last_name}",
+            "photo": log.member.photo.url if log.member.photo else "/static/avatar/1.png",
+            "time": localtime(log.check_in_time).strftime("%H:%M"),
+            "status": "success" if log.access_granted else "denied"
+        })
+
+    return JsonResponse({"logs":data})
+
+@login_required
+def manual_access_entry(request, member_id):
+
+    member = get_object_or_404(
+        Member,
+        id=member_id,
+        gym=request.user.gym
+    )
+
+    access_granted = True
+
+    if member.computed_status != "Actif":
+        access_granted = False
+
+    AccessLog.objects.create(
+        member=member,
+        access_granted=access_granted,
+        device_used="Manuel"
+    )
+
+    if access_granted:
+        messages.success(request, "Entrée enregistrée")
+    else:
+        messages.error(request, "Accès refusé (abonnement expiré)")
+
+    return redirect("core:acces_dashboard")
+
+def member_access(request, qr_code):
+
+    member = get_object_or_404(Member, qr_code=qr_code)
+
+    access_granted = True
+    reason = ""
+
+    if member.computed_status != "Actif":
+        access_granted = False
+        reason = "Abonnement expiré"
+
+    AccessLog.objects.create(
+        member=member,
+        access_granted=access_granted,
+        device_used="QR Scanner"
+    )
+    today = now().date()
+
+    today_entries = AccessLog.objects.filter(
+        check_in_time__date=today,
+        access_granted=True
+    ).count()
+
+    today_denied = AccessLog.objects.filter(
+        check_in_time__date=today,
+        access_granted=False
+    ).count()
+
+    return JsonResponse({
+        "member": f"{member.first_name} {member.last_name}",
+        "access": access_granted,
+        "reason": reason,
+        "stats": {
+            "entries": today_entries,
+            "denied": today_denied
+        }
+    })
 
 @login_required
 @role_required(["reception"])
@@ -47,7 +161,8 @@ def member_dashboard(request):
         'gym': member.gym
     })
 
-
+#gestion des membres
+#vue détail d'un membre (pour modal)
 @login_required
 @role_required(["admin", "reception", "manager"])
 def member_detail(request, member_id):
@@ -408,6 +523,7 @@ def search_members(request):
             "name": f"{m.first_name} {m.last_name}",
             "phone": m.phone,
             "status": m.computed_status,
+            "photo": m.photo.url if m.photo else "/static/avatar/1.png"
         })
 
     return JsonResponse({"members": data})
@@ -648,3 +764,5 @@ def register_detail(request, register_id):
         "register": register,
         "payments": payments
     })
+    
+    

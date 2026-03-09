@@ -1,5 +1,9 @@
 # core/models.py
 import datetime
+import uuid
+import qrcode
+from io import BytesIO
+from django.core.files import File
 
 from django.conf import settings
 from django.db import models
@@ -34,6 +38,21 @@ class Member(models.Model):
         null=True,
         blank=True
     )
+    qr_code = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, db_index=True)
+    qr_image = models.ImageField(upload_to="qrcodes/", blank=True, null=True)
+
+    def generate_qr_code(self):
+
+        qr_data = str(self.qr_code)
+
+        qr = qrcode.make(qr_data)
+
+        buffer = BytesIO()
+        qr.save(buffer)
+
+        filename = f"member_{self.id}.png"
+
+        self.qr_image.save(filename, File(buffer), save=False)
     first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
     photo = models.ImageField(upload_to="members/", blank=True, null=True)
@@ -84,6 +103,14 @@ class Member(models.Model):
 
         return (self.expiration_date - timezone.now().date()).days
     
+    def save(self, *args, **kwargs):
+
+        if not self.qr_image:
+            super().save(*args, **kwargs)
+            self.generate_qr_code()
+
+        super().save(*args, **kwargs)
+        
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
 
