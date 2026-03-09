@@ -17,16 +17,6 @@
             <div class="d-flex flex-wrap align-items-center justify-content-end gap-2 gap-md-3">
                 <!-- Filtres -->
                 <div class="d-flex flex-wrap align-items-center gap-2">
-                    <div class="d-none d-md-flex flex-column me-1">
-                        <span class="fs-11 text-muted">Centre</span>
-                        <select class="form-select form-select-sm" id="siteFilter" onchange="filterReports()">
-                            <option value="all">Tous les centres</option>
-                            <option value="Centre Ville">Centre Ville</option>
-                            <option value="Ngaliema">Ngaliema</option>
-                            <option value="Gombe">Gombe</option>
-                            <option value="Matete">Matete</option>
-                        </select>
-                    </div>
                     <div class="d-flex flex-column">
                         <span class="fs-11 text-muted d-none d-md-inline">Période</span>
                         <select class="form-select form-select-sm w-auto" id="periodFilter" onchange="filterReports()">
@@ -92,15 +82,11 @@
                         <div class="d-flex align-items-start justify-content-between mb-2">
                             <div>
                                 <span class="fs-12 fw-medium text-muted">Chiffre d'affaires</span>
-                                <h3 class="mb-0 fw-bold" id="dailyRevenue">2,450 $</h3>
+                                <h3 class="mb-0 fw-bold" id="dailyRevenue">{{ daily_revenue }} CDF</h3>
                             </div>
                             <div class="report-icon-box">
                                 <span class="material-icons" style="font-size: 28px; color: #3454d1;">payments</span>
                             </div>
-                        </div>
-                        <div class="d-flex align-items-center">
-                            <span class="badge bg-soft-success text-success me-2" id="dailyRevenueTrend">+8%</span>
-                            <span class="fs-12 text-muted">vs. hier</span>
                         </div>
                     </div>
                 </div>
@@ -111,15 +97,11 @@
                         <div class="d-flex align-items-start justify-content-between mb-2">
                             <div>
                                 <span class="fs-12 fw-medium text-muted">Transactions</span>
-                                <h3 class="mb-0 fw-bold" id="dailyTransactions">48</h3>
+                                <h3 class="mb-0 fw-bold" id="dailyTransactions">{{ daily_transactions }}</h3>
                             </div>
                             <div class="report-icon-box">
                                 <span class="material-icons" style="font-size: 28px; color: #10b981;">receipt</span>
                             </div>
-                        </div>
-                        <div class="d-flex align-items-center">
-                            <span class="badge bg-soft-primary text-primary me-2">12 cartes</span>
-                            <span class="fs-12 text-muted">36 cash</span>
                         </div>
                     </div>
                 </div>
@@ -130,16 +112,13 @@
                         <div class="d-flex align-items-start justify-content-between mb-2">
                             <div>
                                 <span class="fs-12 fw-medium text-muted">Nouveaux clients</span>
-                                <h3 class="mb-0 fw-bold" id="dailyNewClients">12</h3>
+                                <h3 class="mb-0 fw-bold" id="dailyNewClients">{{ daily_new_clients }}</h3>
                             </div>
                             <div class="report-icon-box">
                                 <span class="material-icons" style="font-size: 28px; color: #f59e0b;">person_add</span>
                             </div>
                         </div>
-                        <div class="d-flex align-items-center">
-                            <span class="badge bg-soft-success text-success me-2">+5</span>
-                            <span class="fs-12 text-muted">vs. hier</span>
-                        </div>
+                        
                     </div>
                 </div>
             </div>
@@ -149,16 +128,13 @@
                         <div class="d-flex align-items-start justify-content-between mb-2">
                             <div>
                                 <span class="fs-12 fw-medium text-muted">Fréquentation</span>
-                                <h3 class="mb-0 fw-bold" id="dailyVisits">187</h3>
+                                <h3 class="mb-0 fw-bold" id="dailyVisits">{{ daily_visits }}</h3>
                             </div>
                             <div class="report-icon-box">
                                 <span class="material-icons" style="font-size: 28px; color: #ef4444;">directions_run</span>
                             </div>
                         </div>
-                        <div class="d-flex align-items-center">
-                            <span class="badge bg-soft-warning text-warning me-2">85%</span>
-                            <span class="fs-12 text-muted">taux d'occupation</span>
-                        </div>
+                        
                     </div>
                 </div>
             </div>
@@ -193,53 +169,47 @@
                                     <tr class="border-b">
                                         <th>Heure</th>
                                         <th>Client</th>
-                                        <th>Type</th>
                                         <th>Méthode</th>
                                         <th>Montant</th>
                                         <th class="text-end">Référence</th>
                                     </tr>
                                 </thead>
                                 <tbody id="dailyTransactionsBody">
-                                    <tr>
-                                        <td>09:30</td>
-                                        <td>Jean Kazadi</td>
-                                        <td>Abonnement 1 mois</td>
-                                        <td><span class="material-icons me-1" style="font-size: 14px;">credit_card</span>Carte</td>
-                                        <td class="fw-semibold">45 $</td>
-                                        <td class="text-end">#TX-001</td>
-                                    </tr>
-                                    <tr>
-                                        <td>10:15</td>
-                                        <td>Marie Lukusa</td>
-                                        <td>Abonnement 3 mois</td>
-                                        <td><span class="material-icons me-1" style="font-size: 14px;">phone_android</span>M-Pesa</td>
-                                        <td class="fw-semibold">120 $</td>
-                                        <td class="text-end">#TX-002</td>
-                                    </tr>
-                                    <tr>
-                                        <td>11:45</td>
-                                        <td>Paul Mbuyi</td>
-                                        <td>Accès journalier</td>
-                                        <td><span class="material-icons me-1" style="font-size: 14px;">payments</span>Cash</td>
-                                        <td class="fw-semibold">10 $</td>
-                                        <td class="text-end">#TX-003</td>
-                                    </tr>
-                                    <tr>
-                                        <td>14:20</td>
-                                        <td>Sophie Kabeya</td>
-                                        <td>Abonnement 6 mois</td>
-                                        <td><span class="material-icons me-1" style="font-size: 14px;">phone_android</span>Orange Money</td>
-                                        <td class="fw-semibold">250 $</td>
-                                        <td class="text-end">#TX-004</td>
-                                    </tr>
-                                    <tr>
-                                        <td>16:00</td>
-                                        <td>Pierre Luntala</td>
-                                        <td>Renouvellement 1 an</td>
-                                        <td><span class="material-icons me-1" style="font-size: 14px;">phone_android</span>Airtel Money</td>
-                                        <td class="fw-semibold">420 $</td>
-                                        <td class="text-end">#TX-005</td>
-                                    </tr>
+
+                                {% for tx in transactions %}
+
+                                <tr>
+
+                                <td>{{ tx.created_at|time:"H:i" }}</td>
+
+                                <td>
+                                {{ tx.member.first_name }} {{ tx.member.last_name }}
+                                </td>
+
+                                <td>
+                                {{ tx.method }}
+                                </td>
+
+                                <td class="fw-semibold">
+                                {{ tx.amount }} $
+                                </td>
+
+                                <td class="text-end">
+                                #{{ tx.reference }}
+                                </td>
+
+                                </tr>
+
+                                {% empty %}
+
+                                <tr>
+                                <td colspan="6" class="text-center text-muted">
+                                Aucune transaction aujourd'hui
+                                </td>
+                                </tr>
+
+                                {% endfor %}
+
                                 </tbody>
                             </table>
                         </div>
@@ -264,17 +234,7 @@
 
         <!-- Synthèse par méthode de paiement -->
         <div class="row mt-4">
-            <div class="col-xxl-6">
-                <div class="card stretch stretch-full">
-                    <div class="card-header">
-                        <h5 class="card-title">Répartition par méthode de paiement</h5>
-                    </div>
-                    <div class="card-body">
-                        <canvas id="dailyPaymentChart" style="height: 250px;"></canvas>
-                    </div>
-                </div>
-            </div>
-            <div class="col-xxl-6">
+            <div class="col-xxl-12">
                 <div class="card stretch stretch-full">
                     <div class="card-header">
                         <h5 class="card-title">Synthèse des accès</h5>
@@ -283,15 +243,11 @@
                         <div class="vstack gap-3">
                             <div class="d-flex justify-content-between align-items-center">
                                 <span><span class="material-icons text-success me-2" style="font-size: 16px;">check_circle</span>Entrées autorisées</span>
-                                <span class="fw-semibold text-success">182</span>
+                                <span class="fw-semibold text-success">{{ daily_visits }}</span>
                             </div>
                             <div class="d-flex justify-content-between align-items-center">
                                 <span><span class="material-icons text-danger me-2" style="font-size: 16px;">cancel</span>Tentatives refusées (expirés/suspendus)</span>
-                                <span class="fw-semibold text-danger">5</span>
-                            </div>
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span><span class="material-icons text-warning me-2" style="font-size: 16px;">access_time</span>Heure de pointe</span>
-                                <span class="fw-semibold">18h - 20h (45 entrées)</span>
+                                <span class="fw-semibold text-danger">{{denied_access}}</span>
                             </div>
                         </div>
                     </div>
@@ -304,93 +260,50 @@
     <div id="mensuelSection" style="display: none;">
         <!-- KPI mensuels -->
         <div class="row">
-            <div class="col-xxl-3 col-md-6">
+            <div class="col-xxl-4 col-md-6">
                 <div class="card stretch stretch-full stat-card">
                     <div class="card-body">
                         <div class="d-flex align-items-start justify-content-between mb-2">
                             <div>
                                 <span class="fs-12 fw-medium text-muted">CA Mensuel</span>
-                                <h3 class="mb-0 fw-bold" id="monthlyRevenue">45,280 $</h3>
+                                <h3 class="mb-0 fw-bold" id="monthlyRevenue">{{ monthly_revenue }} CDF</h3>
                             </div>
                             <div class="report-icon-box">
                                 <span class="material-icons" style="font-size: 28px; color: #3454d1;">payments</span>
                             </div>
                         </div>
-                        <div class="d-flex align-items-center">
-                            <span class="badge bg-soft-success text-success me-2">+15%</span>
-                            <span class="fs-12 text-muted">vs. mois dernier</span>
-                        </div>
+                        
                     </div>
                 </div>
             </div>
-            <div class="col-xxl-3 col-md-6">
+            <div class="col-xxl-4 col-md-6">
                 <div class="card stretch stretch-full stat-card">
                     <div class="card-body">
                         <div class="d-flex align-items-start justify-content-between mb-2">
                             <div>
                                 <span class="fs-12 fw-medium text-muted">Nouveaux inscrits</span>
-                                <h3 class="mb-0 fw-bold" id="monthlyNewMembers">56</h3>
+                                <h3 class="mb-0 fw-bold" id="monthlyNewMembers">{{ monthly_new_members }}</h3>
                             </div>
                             <div class="report-icon-box">
                                 <span class="material-icons" style="font-size: 28px; color: #10b981;">person_add</span>
                             </div>
                         </div>
-                        <div class="d-flex align-items-center">
-                            <span class="badge bg-soft-success text-success me-2">+8%</span>
-                            <span class="fs-12 text-muted">vs. mois dernier</span>
-                        </div>
+                        
                     </div>
                 </div>
             </div>
-            <div class="col-xxl-3 col-md-6">
-                <div class="card stretch stretch-full stat-card">
-                    <div class="card-body">
-                        <div class="d-flex align-items-start justify-content-between mb-2">
-                            <div>
-                                <span class="fs-12 fw-medium text-muted">Renouvellements</span>
-                                <h3 class="mb-0 fw-bold" id="monthlyRenewals">128</h3>
-                            </div>
-                            <div class="report-icon-box">
-                                <span class="material-icons" style="font-size: 28px; color: #f59e0b;">autorenew</span>
-                            </div>
-                        </div>
-                        <div class="d-flex align-items-center">
-                            <span class="badge bg-soft-warning text-warning me-2">78%</span>
-                            <span class="fs-12 text-muted">taux de rétention</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-xxl-3 col-md-6">
+            <div class="col-xxl-4 col-md-6">
                 <div class="card stretch stretch-full stat-card">
                     <div class="card-body">
                         <div class="d-flex align-items-start justify-content-between mb-2">
                             <div>
                                 <span class="fs-12 fw-medium text-muted">Visites totales</span>
-                                <h3 class="mb-0 fw-bold" id="monthlyVisits">4,250</h3>
+                                <h3 class="mb-0 fw-bold" id="monthlyVisits">{{ monthly_visits }}</h3>
                             </div>
                             <div class="report-icon-box">
                                 <span class="material-icons" style="font-size: 28px; color: #ef4444;">directions_run</span>
                             </div>
                         </div>
-                        <div class="d-flex align-items-center">
-                            <span class="badge bg-soft-info text-info me-2">142/jour</span>
-                            <span class="fs-12 text-muted">moyenne</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Graphique d'évolution mensuelle -->
-        <div class="row mt-4">
-            <div class="col-xxl-12">
-                <div class="card stretch stretch-full">
-                    <div class="card-header">
-                        <h5 class="card-title">Évolution du chiffre d'affaires - Année en cours</h5>
-                    </div>
-                    <div class="card-body">
-                        <canvas id="monthlySalesChart" style="height: 300px;"></canvas>
                     </div>
                 </div>
             </div>
@@ -409,63 +322,27 @@
                                 <thead>
                                     <tr class="border-b">
                                         <th>Formule</th>
-                                        <th>Nouvelles ventes</th>
-                                        <th>Renouvellements</th>
-                                        <th>Total</th>
+                                        <th>Ventes</th>
                                         <th>Montant</th>
-                                        <th>% du CA</th>
                                     </tr>
                                 </thead>
                                 <tbody>
+
+                                    {% for plan in plans_stats %}
+
                                     <tr>
-                                        <td>1 mois</td>
-                                        <td>22</td>
-                                        <td>18</td>
-                                        <td>40</td>
-                                        <td>1,800 $</td>
-                                        <td>4%</td>
+
+                                    <td>{{ plan.plan__name }}</td>
+
+                                    <td>{{ plan.subscriptions  }}</td>
+
+                                    <td>{{ plan.revenue }} CDF</td>
+
                                     </tr>
-                                    <tr>
-                                        <td>3 mois</td>
-                                        <td>18</td>
-                                        <td>42</td>
-                                        <td>60</td>
-                                        <td>7,200 $</td>
-                                        <td>16%</td>
-                                    </tr>
-                                    <tr>
-                                        <td>6 mois</td>
-                                        <td>8</td>
-                                        <td>32</td>
-                                        <td>40</td>
-                                        <td>10,000 $</td>
-                                        <td>22%</td>
-                                    </tr>
-                                    <tr>
-                                        <td>12 mois (1 an)</td>
-                                        <td>5</td>
-                                        <td>28</td>
-                                        <td>33</td>
-                                        <td>16,500 $</td>
-                                        <td>36%</td>
-                                    </tr>
-                                    <tr>
-                                        <td>Personnalisé</td>
-                                        <td>3</td>
-                                        <td>8</td>
-                                        <td>11</td>
-                                        <td>9,780 $</td>
-                                        <td>22%</td>
-                                    </tr>
-                                    <tr class="table-light fw-semibold">
-                                        <td>TOTAL</td>
-                                        <td>56</td>
-                                        <td>128</td>
-                                        <td>184</td>
-                                        <td>45,280 $</td>
-                                        <td>100%</td>
-                                    </tr>
-                                </tbody>
+
+                                    {% endfor %}
+
+                                    </tbody>
                             </table>
                         </div>
                     </div>
@@ -681,5 +558,61 @@
 
 {% block extra_js %}
 <script src="{% static 'js/script_rapport.js' %}"></script>
+<script>
+let sales_labels = {{ sales_labels|safe }};
+let sales_values = {{ sales_values|safe }};
+</script>
+
+<script>
+const ctx = document.getElementById("monthlySalesChart");
+
+if(ctx){
+
+new Chart(ctx,{
+type:"line",
+data:{
+labels: sales_labels,
+datasets:[{
+label:"Chiffre d'affaires",
+data: sales_values,
+borderColor:"#3454d1",
+backgroundColor:"rgba(52,84,209,0.1)",
+fill:true,
+tension:0.4
+}]
+}
+})
+
+}
+</script>
+<script>
+
+document.addEventListener("DOMContentLoaded", function(){
+
+let section = "{{ section|default:'journalier' }}"
+
+const journalier = document.getElementById("journalierSection")
+const mensuel = document.getElementById("mensuelSection")
+const perso = document.getElementById("personnaliseSection")
+
+if(journalier) journalier.style.display = "none"
+if(mensuel) mensuel.style.display = "none"
+if(perso) perso.style.display = "none"
+
+if(section === "journalier"){
+journalier.style.display = "block"
+}
+
+if(section === "mensuel"){
+mensuel.style.display = "block"
+}
+
+if(section === "personnalise"){
+perso.style.display = "block"
+}
+
+})
+
+</script>
 {% endblock %}
 

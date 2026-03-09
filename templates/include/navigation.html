@@ -28,7 +28,7 @@
                     </a>
                     <ul class="nxl-submenu">
                         <li class="nxl-item" id="nav-dashboard-global"><a class="nxl-link" href="{% url 'core:admin_dashboard' %}">Vue d'ensemble</a></li>
-                        <li class="nxl-item" id="nav-dashboard-analytics"><a class="nxl-link" href="#">Analytique</a></li>
+                        
                     </ul>
                 </li>
 
@@ -94,12 +94,6 @@
                             </a>
                             </li>
 
-                        <li class="nxl-item">
-                            <a class="nxl-link"
-                            href="{% url 'core:acces_dashboard' %}?section=historique">
-                            Historique
-                            </a>
-                            </li>
                     </ul>
                 </li>
 
@@ -111,25 +105,17 @@
                         <span class="nxl-arrow"><span class="material-icons">chevron_right</span></span>
                     </a>
                     <ul class="nxl-submenu">
-                        <li class="nxl-item" id="nav-rapports-journalier"><a class="nxl-link" href="{% url 'core:rapports' %}?section=journalier">Journalier</a></li>
-                        <li class="nxl-item" id="nav-rapports-mensuel"><a class="nxl-link" href="{% url 'core:rapports' %}?section=mensuel">Mensuel</a></li>
-                        <li class="nxl-item" id="nav-rapports-personnalise"><a class="nxl-link" href="{% url 'core:rapports' %}?section=personnalise">Personnalisé</a></li>
-                    </ul>
-                </li>
+                        <li class="nxl-item {% if section == 'journalier' %}active{% endif %}">
+                            <a class="nxl-link" href="{% url 'core:reports_dashboard' %}?section=journalier">
+                            Journalier
+                            </a>
+                            </li>
 
-                <!-- Notifications -->
-                <li class="nxl-item nxl-hasmenu {% if nav_active == 'notifications' %}active{% endif %}">
-                    <a href="javascript:void(0);" class="nxl-link">
-                        <span class="nxl-micon"><span class="material-icons">notifications</span></span>
-                        <span class="nxl-mtext">Notifications</span>
-                        <span class="nxl-arrow"><span class="material-icons">chevron_right</span></span>
-                    </a>
-                    <ul class="nxl-submenu">
-                        <li class="nxl-item" id="nav-notifications-dashboard"><a class="nxl-link" href="#">Tableau de bord</a></li>
-                        <li class="nxl-item" id="nav-notifications-modeles"><a class="nxl-link" href="#">Modèles SMS/WhatsApp</a></li>
-                        <li class="nxl-item" id="nav-notifications-planif"><a class="nxl-link" href="#">Planification</a></li>
-                        <li class="nxl-item" id="nav-notifications-historique"><a class="nxl-link" href="#">Historique des envois</a></li>
-                        <li class="nxl-item" id="nav-notifications-config"><a class="nxl-link" href="#">Configuration</a></li>
+                            <li class="nxl-item {% if section == 'mensuel' %}active{% endif %}">
+                            <a class="nxl-link" href="{% url 'core:reports_dashboard' %}?section=mensuel">
+                            Mensuel
+                            </a>
+                            </li>
                     </ul>
                 </li>
 
