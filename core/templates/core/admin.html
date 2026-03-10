@@ -14,20 +14,6 @@
     </div>
     <div class="page-header-right ms-auto">
         <div class="page-header-right-items">
-            <div class="d-flex align-items-center gap-2">
-                <select class="form-select form-select-sm w-auto" id="siteFilter" onchange="updateDashboard()">
-                    <option value="all">Tous les centres</option>
-                    <option value="Centre Ville">Centre Ville</option>
-                    <option value="Ngaliema">Ngaliema</option>
-                    <option value="Gombe">Gombe</option>
-                    <option value="Matete">Matete</option>
-                </select>
-                <select class="form-select form-select-sm w-auto" id="periodFilter" onchange="updateDashboard()">
-                    <option value="today">Aujourd'hui</option>
-                    <option value="week" selected>Cette semaine</option>
-                    <option value="month">Ce mois</option>
-                    <option value="year">Cette année</option>
-                </select>
                 <button class="btn btn-sm btn-primary" onclick="refreshDashboard()">
                     <span class="material-icons me-2" style="font-size: 18px;">refresh</span>Actualiser
                 </button>
