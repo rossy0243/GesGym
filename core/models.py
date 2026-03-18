@@ -138,9 +138,6 @@ class Subscription(models.Model):
     class Meta:
         ordering = ["-start_date"]
     
-    @property
-    def active_subscription(self):
-        return self.subscription_set.filter(is_active=True).first()
 
     def __str__(self):
         return f"{self.member} - {self.plan}"

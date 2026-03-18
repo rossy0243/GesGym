@@ -83,14 +83,14 @@ def member_list(request):
     if status == "active":
 
         members = members.filter(
-            subscription__is_active=True,
-            subscription__end_date__gte=timezone.now().date()
+            subscription_set__is_active=True,
+            subscription_set__end_date__gte=timezone.now().date()
         )
 
     elif status == "expired":
 
         members = members.filter(
-            subscription__end_date__lt=timezone.now().date()
+            subscription_set__end_date__lt=timezone.now().date()
         )
 
     elif status == "suspended":
