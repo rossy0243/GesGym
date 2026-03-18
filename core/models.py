@@ -10,14 +10,37 @@ from django.db import models
 from django.utils import timezone
 from django.db.models import Sum
 
+from .managers import GymManager
+
 class Gym(models.Model):
+
     name = models.CharField(max_length=150)
+
+    # nouvelle relation SaaS
+    organization = models.ForeignKey(
+        "organizations.Organization",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True
+    )
+
     logo = models.ImageField(upload_to="gym_logos/", blank=True, null=True)
+
     phone = models.CharField(max_length=20)
+
     email = models.EmailField(blank=True, null=True)
+
     address = models.TextField()
+
     currency = models.CharField(max_length=10, default="CDF")
+
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+
+        indexes = [
+            models.Index(fields=["organization"]),
+        ]
 
     def __str__(self):
         return self.name
@@ -30,7 +53,8 @@ class Member(models.Model):
         ("suspended", "Suspended"),
     )
 
-    gym = models.ForeignKey(Gym, on_delete=models.CASCADE)
+    gym = models.ForeignKey(Gym, on_delete=models.CASCADE, db_index=True)
+    objects = GymManager()
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -62,6 +86,18 @@ class Member(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="active")
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+
+        indexes = [
+
+            models.Index(fields=["gym"]),
+
+            models.Index(fields=["gym", "status"]),
+
+            models.Index(fields=["gym", "created_at"]),
+
+        ]
+        
     @property
     def active_subscription(self):
         return self.subscription_set.filter(
@@ -95,6 +131,7 @@ class Member(models.Model):
             return "active"
 
         return "expired"
+    
     @property
     def days_remaining(self):
 
@@ -115,13 +152,13 @@ class Member(models.Model):
         return f"{self.first_name} {self.last_name}"
 
 class SubscriptionPlan(models.Model):
-    gym = models.ForeignKey(Gym, on_delete=models.CASCADE)
+    gym = models.ForeignKey(Gym, on_delete=models.CASCADE, db_index=True)
     name = models.CharField(max_length=100)
     duration_days = models.IntegerField()
     price = models.DecimalField(max_digits=10, decimal_places=2)
     description = models.TextField(blank=True, null=True)
     is_active = models.BooleanField(default=True)
-    
+    created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return self.name
@@ -147,7 +184,8 @@ class CashRegister(models.Model):
 
     gym = models.ForeignKey(
         Gym,
-        on_delete=models.CASCADE
+        on_delete=models.CASCADE,
+        db_index=True
     )
     
     session_code = models.CharField(max_length=20, blank=True, null=True, unique=True)
@@ -254,7 +292,8 @@ class Payment(models.Model):
 
     gym = models.ForeignKey(
         Gym,
-        on_delete=models.CASCADE
+        on_delete=models.CASCADE,
+        db_index=True
     )
 
     member = models.ForeignKey(

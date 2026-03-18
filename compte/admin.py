@@ -1,21 +1,19 @@
 # compte/admin.py
-from django.contrib import admin
-from django.contrib.auth.admin import UserAdmin
-from compte.models import User
 
-# Register your models here.
+from django.contrib import admin
+from .models import User
+from .models_roles import UserGymRole
+
+
 @admin.register(User)
-class CustomUserAdmin(UserAdmin):
-    model = User
-    list_display = ("username", "email", "role", "gym", "is_staff", "is_active")
-    list_filter = ("role", "is_staff", "is_active", "gym")
-    fieldsets = UserAdmin.fieldsets + (
-        ("Informations supplémentaires", {
-            "fields": ("role", "gym"),
-        }),
-    )
-    add_fieldsets = UserAdmin.add_fieldsets + (
-        ("Informations supplémentaires", {
-            "fields": ("role", "gym"),
-        }),
-    )
+class UserAdmin(admin.ModelAdmin):
+
+    list_display = ("username", "email", "is_saas_admin")
+
+
+@admin.register(UserGymRole)
+class UserGymRoleAdmin(admin.ModelAdmin):
+
+    list_display = ("user", "gym", "role", "is_active")
+
+    list_filter = ("role", "gym")
