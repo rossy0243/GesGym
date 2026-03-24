@@ -2,13 +2,14 @@
 from django.contrib import messages
 from django.contrib.auth.views import LoginView
 from django.urls import reverse_lazy
+
+from .forms import CustomAuthenticationForm
 from .models import User, UserGymRole
-#from .forms import CustomAuthenticationForm
 from django.contrib.auth.decorators import login_required
 
 class CustomLoginView(LoginView):
     template_name = 'compte/login.html'
-    #authentication_form = CustomAuthenticationForm
+    authentication_form = CustomAuthenticationForm
 
     from compte.models import UserGymRole
 
@@ -30,5 +31,5 @@ class CustomLoginView(LoginView):
         if not role:
             return reverse_lazy("compte:login")
 
-        return reverse_lazy("dashboard")
+        return reverse_lazy("core:dashboard")
         

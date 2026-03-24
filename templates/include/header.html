@@ -82,13 +82,12 @@
                                 <div>
                                     <h6 class="text-dark mb-0">{{ user.first_name }} {{ user.last_name }}</h6>
                                     <span class="fs-12 fw-medium text-muted">{{ user.email }}</span>
+                                    <h6 class="text-dark mb-0"> Poste {{ request.role }}</h6>
                                 </div>
                             </div>
                         </div>
                         <a href="#" class="dropdown-item d-flex align-items-center gap-2">
-                            <img src="{% static 'avatar/1.png' %}" alt="Photo de profil" class="img-fluid user-avtar" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;">
-                            <span class="material-icons">person</span>
-                            <span>Mon Profil</span>
+                            <span>Changer Mot de passe</span>
                         </a>
                         <div class="dropdown-divider"></div>
                         <a href="{% url 'compte:logout' %}" class="dropdown-item">

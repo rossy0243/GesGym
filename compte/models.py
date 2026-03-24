@@ -3,6 +3,8 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 from organizations.models import Gym
 from smartclub import settings
+from .utils import generate_username
+from django.contrib.auth.hashers import make_password
 
 
 class User(AbstractUser):
@@ -16,6 +18,21 @@ class User(AbstractUser):
         default=False,
         help_text="Administrateur global du SaaS"
     )
+    
+    def save(self, *args, **kwargs):
+
+        # Générer username automatiquement si vide
+        if not self.username:
+            self.username = generate_username(
+                self.first_name,
+                self.last_name
+            )
+
+        # Mot de passe par défaut si vide
+        if not self.password:
+            self.password = make_password("12345")
+
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.username

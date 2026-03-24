@@ -27,9 +27,9 @@
                         <span class="nxl-arrow"><span class="material-icons">chevron_right</span></span>
                     </a>
                     <ul class="nxl-submenu">
-                        <li class="nxl-item" id="nav-dashboard-global"><a class="nxl-link" href="{% url 'core:admin_dashboard' %}?view=dashboard">Vue d'ensemble</a></li>
+                        <li class="nxl-item" id="nav-dashboard-global"><a class="nxl-link" href="#?view=dashboard">Vue d'ensemble</a></li>
                         <li class="nxl-item" id="nav-analytics">
-                            <a class="nxl-link" href="{% url 'core:admin_dashboard' %}?view=analytics">
+                            <a class="nxl-link" href="#?view=analytics">
                                 <span class="nxl-mtext">Vue analytique</span>
                             </a>
                         </li>
@@ -44,7 +44,7 @@
                         <span class="nxl-arrow"><span class="material-icons">chevron_right</span></span>
                     </a>
                     <ul class="nxl-submenu">
-                        <li class="nxl-item" id="nav-clients-tous"><a class="nxl-link" href="{% url 'core:member_list' %}">Tous les clients</a></li>
+                        <li class="nxl-item" id="nav-clients-tous"><a class="nxl-link" href="#">Tous les clients</a></li>
                         
                     </ul>
                 </li>
@@ -57,7 +57,7 @@
                         <span class="nxl-arrow"><span class="material-icons">chevron_right</span></span>
                     </a>
                     <ul class="nxl-submenu">
-                        <li class="nxl-item" id="nav-abonnements-formules"><a class="nxl-link" href="{% url 'core:subscription_plan_list' %}">Formules</a></li>
+                        <li class="nxl-item" id="nav-abonnements-formules"><a class="nxl-link" href="#">Formules</a></li>
                         
                     </ul>
                 </li>
@@ -70,7 +70,7 @@
                         <span class="nxl-arrow"><span class="material-icons">chevron_right</span></span>
                     </a>
                     <ul class="nxl-submenu">
-                        <li class="nxl-item" id="nav-paiements-caisse"><a class="nxl-link" href="{% url 'core:cashier_dashboard' %}">Point de vente</a></li>
+                        <li class="nxl-item" id="nav-paiements-caisse"><a class="nxl-link" href="#">Point de vente</a></li>
                         <li class="nxl-item" id="nav-paiements-journal"><a class="nxl-link" href="#">Journal des transactions</a></li>
                         <li class="nxl-item" id="nav-paiements-online"><a class="nxl-link" href="#">Paiements en ligne</a></li>
                     </ul>
@@ -86,14 +86,14 @@
                     <ul class="nxl-submenu">
                         <li class="nxl-item">
                             <a class="nxl-link"
-                            href="{% url 'core:acces_dashboard' %}?section=scan">
+                            href="#?section=scan">
                             Scanner
                             </a>
                         </li>
 
                         <li class="nxl-item">
                             <a class="nxl-link"
-                            href="{% url 'core:acces_dashboard' %}?section=manual">
+                            href="#?section=manual">
                             Pointage manuel
                             </a>
                             </li>
@@ -110,13 +110,13 @@
                     </a>
                     <ul class="nxl-submenu">
                         <li class="nxl-item {% if section == 'journalier' %}active{% endif %}">
-                            <a class="nxl-link" href="{% url 'core:reports_dashboard' %}?section=journalier">
+                            <a class="nxl-link" href="#?section=journalier">
                             Journalier
                             </a>
                             </li>
 
                             <li class="nxl-item {% if section == 'mensuel' %}active{% endif %}">
-                            <a class="nxl-link" href="{% url 'core:reports_dashboard' %}?section=mensuel">
+                            <a class="nxl-link" href="#?section=mensuel">
                             Mensuel
                             </a>
                             </li>
