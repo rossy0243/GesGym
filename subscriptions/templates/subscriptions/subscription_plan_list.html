@@ -23,8 +23,6 @@
     </div>
 </div>
 
-
-
 <!-- Contenu des onglets -->
 <div class="tab-content" id="subscriptionTabsContent">
     <!-- Onglet FORMULES -->
@@ -122,7 +120,7 @@
 
 
                             <form method="POST"
-                            action="{% url 'core:delete_subscription_plan' plan.id %}"
+                            action="{% url 'subscriptions:delete_subscription_plan' plan.id %}"
                             onsubmit="return confirm('Supprimer cette formule ?');">
 
                             {% csrf_token %}
@@ -426,7 +424,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <form id="newFormuleForm" method="post" action="{% url 'core:create_subscription_plan' %}">
+                <form id="newFormuleForm" method="post" action="{% url 'subscriptions:create_subscription_plan' %}">
                     {% csrf_token %}
                     <input type="hidden" id="formuleId" value="">
                     <div class="mb-3">
@@ -556,60 +554,86 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'js/script_abonnements.js' %}"></script>
 <script>
-document.addEventListener('DOMContentLoaded', () => {
-    // Écouteur global de fermeture (une fois seulement)
-    const modalEl = document.getElementById('addFormuleModal');
-    modalEl.addEventListener('hidden.bs.modal', function () {
-        // Force le reset du body scroll
-        document.body.classList.remove('modal-open');
-        document.body.style.paddingRight = '';
-        document.body.style.overflow = '';
-        document.body.style.position = '';
-        
-        console.log('Modal fermé → body scroll restauré'); // pour debug
-    });
+// === OUVRIR LE MODAL D'ÉDITION ===
+document.querySelectorAll('.btn-edit-plan').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        const planId = this.dataset.planId;
 
-    // Pour les boutons Éditer
-    document.querySelectorAll('.btn-edit-plan').forEach(btn => {
-        btn.addEventListener('click', e => {
-            e.preventDefault();
-            const planId = btn.dataset.planId;
-            const url = `/core/subscription-plans/edit/${planId}/`;  // adapte si besoin
+        const modal = new bootstrap.Modal(document.getElementById('addFormuleModal'));
+        modal.show();
 
-            // Optionnel : loader pendant fetch
-            const modalContent = modalEl.querySelector('.modal-content');
-            modalContent.innerHTML = `
-                <div class="modal-body text-center py-5">
-                    <div class="spinner-border text-primary" role="status"></div>
-                    <p>Chargement...</p>
-                </div>
-            `;
+        // Charger les données du plan
+        fetch(`/subscriptions/subscription-plans/edit/${planId}/`)
+            .then(response => response.json())
+            .then(data => {
+                // Remplir le formulaire
+                document.getElementById('addFormuleModalTitle').textContent = "Modifier la formule";
+                document.getElementById('addFormuleBtn').textContent = "Enregistrer les modifications";
 
-            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-            modal.show();
-
-            fetch(url, {
-                headers: { 'X-Requested-With': 'XMLHttpRequest' }
-            })
-            .then(r => {
-                if (!r.ok) throw new Error('Erreur');
-                return r.text();
-            })
-            .then(html => {
-                // Remplace proprement
-                modalContent.innerHTML = html;  // ou .replaceChildren() + insertAdjacentHTML
-                
-                // Ré-instancie si besoin (souvent pas nécessaire avec l'écouteur hidden)
-                // bootstrap.Modal.getOrCreateInstance(modalEl).show();
+                // Remplir les champs
+                document.getElementById('id_name').value = data.name || "";
+                document.getElementById('id_duration_days').value = data.duration_days || "";
+                document.getElementById('id_price').value = data.price || "";
+                document.getElementById('id_description').value = data.description || "";
+                document.getElementById('id_is_active').checked = data.is_active || false;
             })
             .catch(err => {
                 console.error(err);
-                alert('Erreur chargement édition.');
+                alert("Erreur lors du chargement des données.");
             });
-        });
     });
+});
+
+// === SOUMISSION DU FORMULAIRE (AJAX) ===
+document.addEventListener('submit', function(e) {
+    const form = e.target;
+
+    if (form.id === 'newFormuleForm' || form.id === 'editPlanForm') {
+        e.preventDefault();
+
+        const formData = new FormData(form);
+        const url = form.getAttribute('action');
+
+        fetch(url, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.text().then(text => {
+                    throw new Error(text.substring(0, 200));
+                });
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                alert(data.message || "Modifié avec succès !");
+                bootstrap.Modal.getInstance(document.getElementById('addFormuleModal')).hide();
+                location.reload();
+            } else {
+                let errorMsg = "Erreurs :\n";
+                if (data.errors) {
+                    for (let field in data.errors) {
+                        errorMsg += `• ${field}: ${data.errors[field]}\n`;
+                    }
+                } else {
+                    errorMsg += "Erreur inconnue.";
+                }
+                alert(errorMsg);
+            }
+        })
+        .catch(error => {
+            console.error("Erreur :", error);
+            alert("Erreur lors de la sauvegarde :\n" + error.message);
+        });
+    }
 });
 </script>
 

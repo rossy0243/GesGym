@@ -21,8 +21,12 @@ class SubscriptionPlan(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     class Meta:
 
-        unique_together = ("gym", "name")
-
+        constraints = [
+            models.UniqueConstraint(
+                fields=['gym', 'name'],
+                name='unique_plan_name_per_gym'
+            )
+        ]
         indexes = [
             models.Index(fields=["gym"]),
             models.Index(fields=["gym", "is_active"]),

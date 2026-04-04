@@ -1,0 +1,35 @@
+<form id="editPlanForm" method="post">
+    {% csrf_token %}
+    <input type="hidden" name="plan_id" value="{{ plan.id }}">
+
+    <div class="mb-3">
+        <label class="form-label">Nom de la formule</label>
+        {{ form.name }}
+        {{ form.name.errors }}
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Durée (jours)</label>
+        {{ form.duration_days }}
+        {{ form.duration_days.errors }}
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Prix (CDF)</label>
+        {{ form.price }}
+        {{ form.price.errors }}
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Description</label>
+        {{ form.description }}
+        {{ form.description.errors }}
+    </div>
+
+    <div class="form-check mb-3">
+        {{ form.is_active }}
+        <label class="form-check-label" for="{{ form.is_active.id_for_label }}">
+            Formule active
+        </label>
+    </div>
+</form>
