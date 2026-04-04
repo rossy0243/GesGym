@@ -221,18 +221,23 @@ class Payment(models.Model):
         ]
 
     def clean(self):
-        """
-        Sécurité multi-tenant :
-        Vérifie la cohérence des relations
-        """
+        if self.currency == "USD" and not self.exchange_rate:
+            raise ValidationError("Le taux de change est requis lorsque le paiement est en USD.")
 
+        if self.currency == "CDF":
+            self.amount_cdf = self.amount
+            self.exchange_rate = None
+
+        elif self.currency == "USD":
+            if not self.exchange_rate:
+                raise ValidationError("Le taux de change est requis pour USD")
+            self.amount_cdf = self.amount * self.exchange_rate
+
+        # Sécurité multi-tenant
         if self.member and self.member.gym != self.gym:
             raise ValidationError("Le membre n'appartient pas à ce gym.")
-
         if self.subscription and self.subscription.gym != self.gym:
             raise ValidationError("L'abonnement n'appartient pas à ce gym.")
-        if self.cash_register and self.cash_register.is_closed:
-            raise ValidationError("La caisse est fermée.")
         if self.product and self.product.gym != self.gym:
             raise ValidationError("Le produit n'appartient pas à ce gym.")
         

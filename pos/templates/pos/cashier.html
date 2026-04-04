@@ -54,7 +54,7 @@
 
             </button>
 
-        <a href="{% url 'core:close_register' register.id %}"
+        <a href="{% url 'pos:close_register' register.id %}"
            class="btn btn-outline-danger d-flex align-items-center gap-1">
 
             <span class="material-icons" style="font-size:18px;">lock</span>
@@ -64,7 +64,7 @@
 
         {% else %}
 
-        <form method="POST" action="{% url 'core:open_cash_register' %}" style="display:inline;">
+        <form method="POST" action="{% url 'pos:open_register' %}" style="display:inline;">
             {% csrf_token %}
             <button type="submit" class="btn btn-success">
                 <span class="material-icons me-2" style="font-size:18px;">lock_open</span>
@@ -398,99 +398,83 @@
 </div>
 
 <!-- MODAL NOUVEAU PAIEMENT -->
-<div class="modal fade" id="paymentModal">
-<div class="modal-dialog modal-lg">
-<div class="modal-content">
+<div class="modal fade" id="paymentModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="POST" id="paymentForm">
+                {% csrf_token %}
 
-<form method="POST" action="{% url 'core:cashier_dashboard' %}">
-{% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title">Nouveau Paiement</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
 
-<div class="modal-header">
-<h5>Nouveau paiement</h5>
-<button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-</div>
+                <div class="modal-body">
 
-<div class="modal-body">
+                    <!-- Client -->
+                    <div class="mb-3">
+                        <label class="form-label">Client</label>
+                        <select name="member" class="form-select" required>
+                            <option value="">-- Sélectionner un client --</option>
+                            {% for m in members %}
+                            <option value="{{ m.id }}">{{ m.first_name }} {{ m.last_name }} ({{ m.phone }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
 
-<!-- CLIENT -->
-<div class="mb-3">
+                    <!-- Formule -->
+                    <div class="mb-3">
+                        <label class="form-label">Formule d'abonnement</label>
+                        <select name="plan" class="form-select" required>
+                            <option value="">-- Choisir une formule --</option>
+                            {% for p in plans %}
+                            <option value="{{ p.id }}">{{ p.name }} - {{ p.price }} CDF ({{ p.duration_days }} jours)</option>
+                            {% endfor %}
+                        </select>
+                    </div>
 
-<label>Client</label>
+                    <!-- Montant + Devise + Taux -->
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Montant</label>
+                            <input type="number" step="0.01" name="amount" id="amountInput" class="form-control" required>
+                        </div>
 
-<select name="member" class="form-select">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Devise</label>
+                            <select name="currency" id="currencySelect" class="form-select" required>
+                                <option value="CDF">CDF (Franc Congolais)</option>
+                                <option value="USD">USD (Dollar Américain)</option>
+                            </select>
+                        </div>
 
-{% for m in members %}
+                        <div class="col-md-4 mb-3" id="exchangeRateGroup" style="display: none;">
+                            <label class="form-label">Taux de change (1 USD = ? CDF)</label>
+                            <input type="number" step="0.01" name="exchange_rate" id="exchangeRateInput" class="form-control" placeholder="Ex: 2800">
+                        </div>
+                    </div>
 
-<option value="{{ m.id }}">
-{{ m.first_name }} {{ m.last_name }}
-</option>
+                    <!-- Mode de paiement -->
+                    <div class="mb-3">
+                        <label class="form-label">Mode de paiement</label>
+                        <select name="method" class="form-select">
+                            <option value="cash">Espèces</option>
+                            <option value="card">Carte Bancaire</option>
+                            <option value="mobile_money">Mobile Money</option>
+                        </select>
+                    </div>
 
-{% endfor %}
+                </div>
 
-</select>
-
-</div>
-
-<!-- PLAN -->
-
-<div class="mb-3">
-
-<label>Formule</label>
-
-<select name="plan" class="form-select">
-
-{% for p in plans %}
-
-<option value="{{ p.id }}">
-{{ p.name }} - {{ p.price }}CDF
-</option>
-
-{% endfor %}
-
-</select>
-
-</div>
-
-<!-- MODE -->
-
-<div class="mb-3">
-
-<label>Mode de paiement</label>
-
-<select name="method" class="form-select">
-
-<option value="cash">Espèces</option>
-<option value="card">Carte</option>
-<option value="mobile_money">Mobile Money</option>
-
-</select>
-
-</div>
-
-<!-- MONTANT -->
-
-<div class="mb-3">
-
-<label>Montant</label>
-
-<input type="number" name="amount" class="form-control" readonly>
-
-</div>
-
-</div>
-
-<div class="modal-footer">
-
-<button class="btn btn-success">
-Encaisser
-</button>
-
-</div>
-
-</form>
-
-</div>
-</div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-success">
+                        <span class="material-icons me-2">payments</span> Encaisser
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 </div>
 
 <!-- MODAL DECAISSEMENT -->
@@ -576,8 +560,24 @@ Valider sortie
 
 {% block extra_js %}
 <script>window.STATIC_AVATAR_URL = "{% static 'avatar/1.png' %}";</script>
-<script src="{% static 'js/scriptt_paiemnts.js' %}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+    const currencySelect = document.getElementById('currencySelect');
+    const exchangeRateGroup = document.getElementById('exchangeRateGroup');
+    const exchangeRateInput = document.getElementById('exchangeRateInput');
 
+    currencySelect.addEventListener('change', function () {
+        if (this.value === 'USD') {
+            exchangeRateGroup.style.display = 'block';
+            exchangeRateInput.required = true;
+        } else {
+            exchangeRateGroup.style.display = 'none';
+            exchangeRateInput.required = false;
+            exchangeRateInput.value = '';
+        }
+    });
+});
+</script>
 {% if step > 1 %}
 <script>
 document.addEventListener("DOMContentLoaded", function () {
