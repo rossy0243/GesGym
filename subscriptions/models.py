@@ -1,3 +1,5 @@
+from datetime import timedelta, timezone
+
 from django.db import models
 from members.models import Member
 from organizations.models import Gym
@@ -64,6 +66,9 @@ class MemberSubscription(models.Model):
     auto_renew = models.BooleanField(default=False)
 
     created_at = models.DateTimeField(auto_now_add=True)
+    
+    is_paused = models.BooleanField(default=False, verbose_name="Abonnement en pause")
+    paused_at = models.DateTimeField(null=True, blank=True, verbose_name="Date de mise en pause")
 
     class Meta:
 
@@ -93,6 +98,15 @@ class MemberSubscription(models.Model):
 
             if exists:
                 raise ValidationError("Ce membre a déjà un abonnement actif.")
+            
+    def resume_subscription(self):
+        """Reprend l'abonnement après une pause"""
+        if self.is_paused and self.paused_at:
+            paused_duration = (timezone.now() - self.paused_at).days
+            self.end_date += timedelta(days=paused_duration)
+            self.is_paused = False
+            self.paused_at = None
+            self.save()
     
     def __str__(self):
         return f"{self.member} - {self.plan}"

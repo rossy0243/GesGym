@@ -67,8 +67,9 @@ def member_list(request):
         ).distinct()
 
     elif status == "expired":
+        # Membres dont l'abonnement actif est expiré
         members = members.filter(
-            subscriptions__end_date__lt=today
+            ~Q(subscriptions__is_active=True, subscriptions__end_date__gte=today)
         ).distinct()
 
     elif status == "suspended":
@@ -189,18 +190,25 @@ def edit_member(request, member_id):
 
     if request.method == "POST":
         form = MemberCreationForm(request.POST, request.FILES, instance=member)
+        
         if form.is_valid():
             form.save()
             messages.success(request, "Membre modifié avec succès.")
-            return redirect("members:member_list")
+            
+            # Réponse JSON pour le modal (au lieu de redirect)
+            return JsonResponse({
+                'success': True,
+                'message': 'Membre modifié avec succès.'
+            })
+
         else:
-            # Retourner les erreurs en JSON pour le modal
+            # Retourner les erreurs de validation
             return JsonResponse({
                 'success': False,
                 'errors': form.errors
             }, status=400)
 
-    # GET : Retourner les données du membre pour pré-remplir le modal
+    # GET : Retourner les données pour pré-remplir le formulaire
     data = {
         'id': member.id,
         'first_name': member.first_name,
@@ -252,6 +260,7 @@ def member_detail(request, member_id):
             "status": log.access_granted
         })
     data = {
+        "id": member.id,
         "photo_url": member.photo.url if member.photo else None,
         "username": member.user.username if member.user else "Non défini",
         "first_name": member.first_name,
@@ -298,19 +307,42 @@ def delete_member(request, member_id):
 
 @login_required
 def suspend_member(request, member_id):
-
     if request.role not in ["admin", "manager"]:
         raise PermissionDenied
 
-    member = get_object_or_404(
-        Member,
-        id=member_id,
-        gym=request.gym
-    )
+    member = get_object_or_404(Member, id=member_id, gym=request.gym)
 
+    # Suspendre le membre
     member.status = "suspended"
     member.save()
 
-    messages.warning(request, "Membre suspendu.")
+    # Mettre en pause l'abonnement actif
+    active_sub = member.active_subscription
+    if active_sub and not active_sub.is_paused:
+        active_sub.is_paused = True
+        active_sub.paused_at = timezone.now()
+        active_sub.pause_reason = "Suspension manuelle"
+        active_sub.save()
 
+    messages.warning(request, f"{member.first_name} {member.last_name} a été suspendu. Son abonnement est en pause.")
+    return redirect("members:member_list")
+
+
+@login_required
+def reactivate_member(request, member_id):
+    if request.role not in ["admin", "manager"]:
+        raise PermissionDenied
+
+    member = get_object_or_404(Member, id=member_id, gym=request.gym)
+
+    # Réactiver le membre
+    member.status = "active"
+    member.save()
+
+    # Reprendre l'abonnement en pause
+    active_sub = member.active_subscription
+    if active_sub and active_sub.is_paused:
+        active_sub.resume_subscription()   # utilise la méthode qu'on a ajoutée
+
+    messages.success(request, f"{member.first_name} {member.last_name} a été réactivé avec succès.")
     return redirect("members:member_list")

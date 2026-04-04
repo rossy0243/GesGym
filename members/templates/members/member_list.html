@@ -27,7 +27,6 @@
 
 <!-- Vue principale : Liste des membres (contenu aligné sur une même largeur) -->
 <div id="membersListView" class="px-0 mx-2">
-
     <!-- Filtres et recherche -->
  <form method="get">
 
@@ -70,39 +69,7 @@ value="{{ search }}"
 
 <!-- Statut -->
 
-<div class="col-md-3">
 
-<label class="form-label small text-muted d-flex align-items-center gap-1 mb-1">
-<span class="material-icons" style="font-size:16px;">label_important</span>Statut
-</label>
-
-<select class="form-select" name="status">
-
-<option value="">Tous les statuts</option>
-
-<option value="active"
-{% if status == "active" %}selected{% endif %}>
-Actifs
-</option>
-
-<option value="expired"
-{% if status == "expired" %}selected{% endif %}>
-Expirés
-</option>
-
-<option value="suspended"
-{% if status == "suspended" %}selected{% endif %}>
-Suspendus
-</option>
-
-<option value="expiring"
-{% if status == "expiring" %}selected{% endif %}>
-Proche expiration
-</option>
-
-</select>
-
-</div>
 
 <!-- Formule -->
 
@@ -150,6 +117,7 @@ Réinitialiser
 </div>
 
 </form>
+</div>
 
 
 <!-- Liste des membres -->
@@ -258,6 +226,7 @@ Réinitialiser
                                     <a onclick="openMemberModal({{ member.id }})" class="dropdown-item">
                                         <span class="material-icons me-2">visibility</span>Voir
                                     </a>
+                                    
                                     <a onclick="openEditMemberModal({{ member.id }})" class="dropdown-item">
                                         <span class="material-icons me-2">edit</span>Modifier
                                     </a>
@@ -549,10 +518,13 @@ Réinitialiser
                         </div>
 
                         <div class="col-md-6">
-                            
+                            <p class="mb-1 fs-12 text-muted">
+                                <span class="material-icons" style="font-size:14px;">tag</span> 
+                                ID : <span id="viewMemberId">-</span>
+                            </p>
                             <h4 id="viewMemberName" class="mb-1">-</h4>
                             
-                            <!-- Nouveau : Username -->
+                            <!-- Username -->
                             <p class="mb-2">
                                 <span class="material-icons" style="font-size:14px;">alternate_email</span> 
                                 Username : <strong id="viewMemberUsername">-</strong>
@@ -570,7 +542,7 @@ Réinitialiser
 
                         <div class="col-md-3 text-end">
                             <div class="badge-actif mb-3" id="viewMemberStatus">-</div>
-                            <button class="btn btn-sm btn-light" onclick="printQRCode()">
+                            <button class="btn btn-sm btn-light" onclick="downloadQRCode()">
                                 <span class="material-icons" style="font-size:20px;">qr_code</span>
                             </button>
                         </div>
@@ -682,8 +654,12 @@ Réinitialiser
                 <button type="button" class="btn btn-light d-flex align-items-center gap-2" data-bs-dismiss="modal">
                     <span class="material-icons" style="font-size:20px;">close</span>Fermer
                 </button>
-                <button type="button" class="btn btn-warning d-flex align-items-center gap-2" onclick="suspendMember()" id="suspendBtn">
-                    <span class="material-icons" style="font-size:20px;">pause_circle</span>Suspendre
+                <button type="button" class="btn d-flex align-items-center gap-2" 
+                        onclick="toggleMemberStatus()" 
+                        id="statusToggleBtn"
+                        style="background-color: #f39c12; color: white;">
+                    <span class="material-icons" style="font-size:20px;" id="statusIcon">pause_circle</span>
+                    <span id="statusBtnText">Suspendre</span>
                 </button>
             </div>
         </div>
@@ -763,7 +739,8 @@ function openMemberModal(memberId) {
             document.getElementById("viewMemberUsername").innerText = data.username || "Non défini";
 
             // === INFORMATIONS DE BASE ===
-            
+            // === ID DU MEMBRE (IMPORTANT POUR LA SUSPENSION) ===
+            document.getElementById("viewMemberId").innerText = data.id || "-";
             document.getElementById("viewMemberName").innerText = `${data.first_name || ''} ${data.last_name || ''}`.trim() || "-";
             document.getElementById("viewMemberPhone").innerText = data.phone || "-";
             document.getElementById("viewMemberEmail").innerText = data.email || "-";
@@ -819,7 +796,8 @@ function openMemberModal(memberId) {
                     </tr>
                 `;
             });
-
+            currentMemberId = data.id;
+            currentMemberStatus = data.status;
             // Remplir le tableau des accès
             let accessTable = document.getElementById("accessHistory");
             accessTable.innerHTML = "";
@@ -835,8 +813,10 @@ function openMemberModal(memberId) {
                         <td>${log.device}</td>
                     </tr>
                 `;
+            
+            
             });
-
+            updateStatusButton();
             // Ouvrir le modal
             const modal = new bootstrap.Modal(document.getElementById('viewMemberModal'));
             modal.show();
@@ -848,6 +828,21 @@ function openMemberModal(memberId) {
         });
 }
 
+function updateStatusButton() {
+    const btn = document.getElementById("statusToggleBtn");
+    const text = document.getElementById("statusBtnText");
+    const icon = document.getElementById("statusIcon");
+
+    if (currentMemberStatus === "suspended") {
+        btn.style.backgroundColor = "#27ae60";
+        text.textContent = "Réactiver";
+        icon.textContent = "play_circle";
+    } else {
+        btn.style.backgroundColor = "#f39c12";
+        text.textContent = "Suspendre";
+        icon.textContent = "pause_circle";
+    }
+}
 function downloadQRCode() {
     const canvas = document.getElementById("memberQRCode");
     if (!canvas || canvas.tagName !== "CANVAS") {
@@ -862,6 +857,7 @@ function downloadQRCode() {
 }
 
 
+// === OUVRIR MODAL D'ÉDITION ===
 function openEditMemberModal(memberId) {
     fetch(`/members/edit/${memberId}/`)
         .then(response => response.json())
@@ -892,9 +888,10 @@ function openEditMemberModal(memberId) {
         });
 }
 
-
+// === SAUVEGARDER LES MODIFICATIONS ===
 function saveEditedMember() {
-    const formData = new FormData(document.getElementById("editMemberForm"));
+    const form = document.getElementById("editMemberForm");
+    const formData = new FormData(form);
     const memberId = document.getElementById("edit_member_id").value;
 
     fetch(`/members/edit/${memberId}/`, {
@@ -906,17 +903,50 @@ function saveEditedMember() {
     })
     .then(response => response.json())
     .then(data => {
-        if (data.success !== false) {
+        if (data.success) {
             alert("Membre modifié avec succès !");
-            location.reload();   // Recharger la liste
+            location.reload();        // Recharge la liste pour voir les changements
         } else {
-            alert("Erreur lors de la modification : " + JSON.stringify(data.errors));
+            let errorMsg = "Erreurs de validation :\n";
+            for (let field in data.errors) {
+                errorMsg += `- ${field}: ${data.errors[field].join(', ')}\n`;
+            }
+            alert(errorMsg);
         }
     })
-    .catch(err => {
-        console.error(err);
-        alert("Une erreur est survenue lors de la sauvegarde.");
+    .catch(error => {
+        console.error("Erreur :", error);
+        alert("Erreur lors de la communication avec le serveur.");
     });
+}
+
+</script>
+<script>
+let currentMemberId = null;
+let currentMemberStatus = null;
+function toggleMemberStatus() {
+    if (!currentMemberId) return;
+
+    if (currentMemberStatus === "suspended") {
+        if (confirm("Réactiver ce membre ? Son abonnement reprendra sans perte de jours.")) {
+            fetch(`/members/reactivate/${currentMemberId}/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }
+            }).then(() => location.reload());
+        }
+    } else {
+        const confirmModal = new bootstrap.Modal(document.getElementById('suspendConfirmModal'));
+        confirmModal.show();
+    }
+}
+
+function confirmSuspend() {
+    if (!currentMemberId) return;
+
+    fetch(`/members/suspend/${currentMemberId}/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }
+    }).then(() => location.reload());
 }
 </script>
 
