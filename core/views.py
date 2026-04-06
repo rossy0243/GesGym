@@ -6,14 +6,15 @@ from django.db.models.functions import ExtractMonth, TruncDate
 from django.utils.timezone import now
 from datetime import timedelta
 import calendar
-
 from access.models import AccessLog
 from members.models import Member
+from organizations.models import GymModule
 from pos.models import Payment
+from services.dashboard_service import OrganizationDashboardService
 from subscriptions.models import MemberSubscription
 
 @login_required
-def dashboard(request):
+def gym_dashboard(request, gym_id):
 
     if not request.gym:
         return HttpResponseForbidden()
@@ -24,7 +25,13 @@ def dashboard(request):
     gym = request.gym
     today = now().date()
     view = request.GET.get("view", "dashboard")
+    # Récupérer les modules actifs
+    active_modules = GymModule.objects.filter(
+        gym=gym,
+        is_active=True
+    ).values_list('module__code', flat=True)
 
+    
     # ======================
     # MEMBRES
     # ======================
@@ -249,6 +256,8 @@ def dashboard(request):
         plan_values.append(p["total"])
 
     context = {
+        "active_modules": active_modules,
+        "gym": gym,
         "context_view": view,
 
         "total_members": total_members,
@@ -431,3 +440,18 @@ def reports_dashboard(request):
         }
 
     return render(request, "core/rapports.html", context)
+
+
+@login_required
+def organization_dashboard(request, org_id):
+    """Dashboard pour le role Owner (vue consolidée)"""
+    service = OrganizationDashboardService(org_id)
+    
+    context = {
+        'organization': service.org,
+        'gyms': service.gyms,
+        'machines': service.get_machines_summary(),
+        'coaching': service.get_coaching_summary(),
+        # ... autres modules
+    }
+    return render(request, 'dashboard/organization_dashboard.html', context)

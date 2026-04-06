@@ -1,8 +1,6 @@
 from django.db import models
 from members.models import Member
-from organizations.models import Gym
-
-
+from organizations.models import Gym, Organization
 
 class Coach(models.Model):
     """

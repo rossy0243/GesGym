@@ -22,15 +22,16 @@
                         <span class="nxl-arrow"><span class="material-icons">chevron_right</span></span>
                     </a>
                     <ul class="nxl-submenu">
-                        <li class="nxl-item" id="nav-dashboard-global"><a class="nxl-link" href="{% url 'core:dashboard' %}?view=dashboard">Vue d'ensemble</a></li>
+                        <li class="nxl-item" id="nav-dashboard-global"><a class="nxl-link" href="{% url 'core:gym_dashboard' gym_id=request.gym.id %}?view=dashboard">Vue d'ensemble</a></li>
                         <li class="nxl-item" id="nav-analytics">
-                            <a class="nxl-link" href="{% url 'core:dashboard' %}?view=analytics">
+                            <a class="nxl-link" href="{% url 'core:gym_dashboard' gym_id=request.gym.id %}?view=analytics">
                                 <span class="nxl-mtext">Vue analytique</span>
                             </a>
                         </li>
                     </ul>
                 </li>
 
+                {% if module_members %}
                 <!-- Members -->
                 <li class="nxl-item nxl-hasmenu {% if nav_active == 'clients' %}active{% endif %}">
                     <a href="javascript:void(0);" class="nxl-link">
@@ -47,7 +48,9 @@
                         
                     </ul>
                 </li>
+                {% endif %}
 
+                {% if module_subscriptions %}
                 <!-- Abonnements -->
                 <li class="nxl-item nxl-hasmenu {% if nav_active == 'abonnements' %}active{% endif %}">
                     <a href="javascript:void(0);" class="nxl-link">
@@ -60,7 +63,9 @@
                         
                     </ul>
                 </li>
+                {% endif %}
 
+                {% if module_pos %}
                 <!-- Paiements -->
                 <li class="nxl-item nxl-hasmenu {% if nav_active == 'paiements' %}active{% endif %}">
                     <a href="javascript:void(0);" class="nxl-link">
@@ -74,7 +79,9 @@
                      
                     </ul>
                 </li>
+                {% endif %}
 
+                {% if module_access %}
                 <!-- Contrôle d'accès -->
                 <li class="nxl-item nxl-hasmenu {% if nav_active == 'acces' %}active{% endif %}">
                     <a href="javascript:void(0);" class="nxl-link">
@@ -99,7 +106,9 @@
 
                     </ul>
                 </li>
+                {% endif %}
 
+                {% if module_core %}
                 <!-- Rapports -->
                 <li class="nxl-item nxl-hasmenu {% if nav_active == 'rapports' %}active{% endif %}">
                     <a href="javascript:void(0);" class="nxl-link">
@@ -121,7 +130,9 @@
                             </li>
                     </ul>
                 </li>
+                {% endif %}
 
+                {% if module_coaching %}
                 <!-- Coaching -->
                 <li class="nxl-item nxl-hasmenu {% if nav_active == 'coaching' %}active{% endif %}">
                     <a href="javascript:void(0);" class="nxl-link">
@@ -138,7 +149,9 @@
                         
                     </ul>
                 </li>
+                {% endif %}
 
+                {% if module_machines %}
                 <!-- Machines -->
                 <li class="nxl-item nxl-hasmenu {% if nav_active == 'machines' %}active{% endif %}">
                     <a href="javascript:void(0);" class="nxl-link">
@@ -159,7 +172,9 @@
                         </li>
                     </ul>
                 </li>
+                {% endif %}
 
+                {% if module_rh %}
                 <!-- rh -->
                 <li class="nxl-item nxl-hasmenu {% if nav_active == 'rh' %}active{% endif %}">
                     <a href="javascript:void(0);" class="nxl-link">
@@ -186,7 +201,9 @@
                         </li>
                     </ul>
                 </li>
+                {% endif %}
 
+                {% if module_products %}
                 <!-- products -->
                 <li class="nxl-item nxl-hasmenu {% if nav_active == 'products' %}active{% endif %}">
                     <a href="javascript:void(0);" class="nxl-link">
@@ -212,6 +229,7 @@
                         </li>
                     </ul>
                 </li>
+                {% endif %}
 
                 <!-- Paramètres -->
                 <li class="nxl-item nxl-hasmenu {% if nav_active == 'parametres' %}active{% endif %}">

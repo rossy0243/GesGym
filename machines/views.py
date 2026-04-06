@@ -3,15 +3,17 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.db.models import Sum, Count
-
+from smartclub.decorators import module_required
 from organizations.models import Gym
 from .models import Machine, MaintenanceLog
 from .forms import MachineForm, MaintenanceLogForm
 
+
 @login_required
-def machine_list(request, gym_id):
-    """Liste des machines d'un gym"""
-    gym = get_object_or_404(Gym, id=gym_id)
+@module_required('MACHINES')
+def machine_list(request):
+    """Liste des machines - plus besoin de gym_id"""
+    gym = request.gym  # ← Vient du middleware !
     machines = gym.machines.all().order_by('name')
     
     # Filtres
@@ -32,28 +34,25 @@ def machine_list(request, gym_id):
     }
     return render(request, 'machines/machine_list.html', context)
 
+
 @login_required
-def machine_detail(request, gym_id, machine_id):
-    """Détail d'une machine avec son historique"""
-    machine = get_object_or_404(Machine, id=machine_id, gym_id=gym_id)
+@module_required('MACHINES')
+def machine_detail(request, machine_id):
+    """Détail d'une machine"""
+    machine = get_object_or_404(Machine, id=machine_id, gym=request.gym)
     maintenance_logs = machine.maintenance_logs.all().order_by('-created_at')
-    
-    # Statistiques
-    total_maintenance_cost = maintenance_logs.aggregate(Sum('cost'))['cost__sum'] or 0
-    maintenance_count = maintenance_logs.count()
     
     context = {
         'machine': machine,
         'maintenance_logs': maintenance_logs,
-        'total_maintenance_cost': total_maintenance_cost,
-        'maintenance_count': maintenance_count,
     }
     return render(request, 'machines/machine_detail.html', context)
 
 @login_required
-def machine_create(request, gym_id):
+@module_required('MACHINES')
+def machine_create(request):
     """Créer une nouvelle machine"""
-    gym = get_object_or_404(Gym, id=gym_id)
+    gym = request.gym
     
     if request.method == 'POST':
         form = MachineForm(request.POST)

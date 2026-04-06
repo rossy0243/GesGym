@@ -1,7 +1,6 @@
+# organizations/models.py
 from django.db import models
 # Create your models here.
-
-
 class Organization(models.Model):
     """
     Représente une entreprise cliente du SaaS.
