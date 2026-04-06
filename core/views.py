@@ -289,3 +289,145 @@ def dashboard(request):
 
     return render(request, "core/dashboard.html", context)
 
+@login_required
+def reports_dashboard(request):
+    gym = request.gym
+    today = now().date()
+    section = request.GET.get("section", "journalier")
+    # =========================
+    # CA du jour
+    # =========================
+    payments_today = Payment.objects.filter(
+        gym=gym,
+        created_at__date=today
+    )
+
+    daily_revenue = payments_today.aggregate(
+        total=Sum("amount")
+    )["total"] or 0
+
+    daily_transactions = payments_today.count()
+
+    # =========================
+    # Nouveaux membres
+    # =========================
+    daily_new_clients = Member.objects.filter(
+        gym=gym,
+        created_at__date=today
+    ).count()
+    
+    # =========================
+    # Fréquentation
+    # =========================
+    daily_visits = AccessLog.objects.filter(
+        member__gym=gym,
+        check_in_time__date=today,
+        access_granted=True
+    ).count()
+
+    denied_access = AccessLog.objects.filter(
+        member__gym=gym,
+        check_in_time__date=today,
+        access_granted=False
+    ).count()
+
+    # =========================
+    # Transactions détaillées
+    # =========================
+    transactions = payments_today.select_related(
+        "member"
+    ).order_by("-created_at")[:50]
+
+    # =========================
+    # KPI MENSUELS
+    # =========================
+
+    today = now().date()
+    current_year = today.year
+    current_month = today.month
+
+    payments_month = Payment.objects.filter(
+        gym=gym,
+        created_at__year=current_year,
+        created_at__month=current_month
+    )
+
+    monthly_revenue = payments_month.aggregate(
+        total=Sum("amount")
+    )["total"] or 0
+
+    monthly_transactions = payments_month.count()
+
+
+    # nouveaux membres ce mois
+    monthly_new_members = Member.objects.filter(
+        gym=gym,
+        created_at__year=current_year,
+        created_at__month=current_month
+    ).count()
+
+
+    # renouvellements abonnement
+    monthly_renewals = MemberSubscription.objects.filter(
+        member__gym=gym,
+        start_date__year=current_year,
+        start_date__month=current_month
+    ).count()
+
+
+    # visites
+    monthly_visits = AccessLog.objects.filter(
+        member__gym=gym,
+        check_in_time__year=current_year,
+        check_in_time__month=current_month,
+        access_granted=True
+    ).count()
+    
+    plans_stats = MemberSubscription.objects.filter(
+        member__gym=gym,
+        start_date__year=current_year,
+        start_date__month=current_month
+        ).values(
+            "plan__name"
+        ).annotate(
+            subscriptions=Count("id"),
+            revenue=Sum("payments__amount")
+        ).order_by("-revenue")
+    
+    monthly_sales = Payment.objects.filter(
+        gym=gym,
+        created_at__year=current_year
+        ).annotate(
+            month=ExtractMonth("created_at")
+        ).values("month").annotate(
+            total=Sum("amount")
+        ).order_by("month")
+    
+    sales_labels = []
+    sales_values = []
+
+    for m in monthly_sales:
+        sales_labels.append(m["month"])
+        sales_values.append(float(m["total"]))
+    context = {
+        "section": section,
+            # journalier
+        "daily_revenue": daily_revenue,
+        "daily_transactions": daily_transactions,
+        "daily_new_clients": daily_new_clients,
+        "daily_visits": daily_visits,
+        "denied_access": denied_access,
+        "transactions": transactions,
+
+        # mensuel
+        "monthly_revenue": monthly_revenue,
+        "monthly_new_members": monthly_new_members,
+        "monthly_renewals": monthly_renewals,
+        "monthly_visits": monthly_visits,
+        "plans_stats": plans_stats,
+        "sales_labels": sales_labels,
+        "sales_values": sales_values,
+        "monthly_transactions": monthly_transactions
+        }
+
+    return render(request, "core/rapports.html", context)

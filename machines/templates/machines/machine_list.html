@@ -1,0 +1,115 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Machines - {{ gym.name }}</h1>
+        <a href="{% url 'machines:create' gym.id %}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Ajouter une machine
+        </a>
+    </div>
+
+    <!-- Filtres -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Filtrer par statut</label>
+                    <select name="status" class="form-select">
+                        <option value="">Tous</option>
+                        {% for value, label in status_choices %}
+                        <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-secondary">Filtrer</button>
+                    {% if status_filter %}
+                    <a href="{% url 'machines:list' gym.id %}" class="btn btn-link">Réinitialiser</a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Liste des machines -->
+    <div class="row">
+        {% for machine in machines %}
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <h5 class="card-title">{{ machine.name }}</h5>
+                        <span class="badge {% if machine.status == 'ok' %}bg-success{% elif machine.status == 'maintenance' %}bg-warning{% else %}bg-danger{% endif %}">
+                            {{ machine.get_status_display }}
+                        </span>
+                    </div>
+                    
+                    {% if machine.purchase_date %}
+                    <p class="card-text">
+                        <small class="text-muted">
+                            <i class="fas fa-calendar"></i> Acheté: {{ machine.purchase_date|date:"d/m/Y" }}
+                        </small>
+                    </p>
+                    {% endif %}
+                    
+                    <p class="card-text">
+                        <small class="text-muted">
+                            <i class="fas fa-tools"></i> Maintenances: {{ machine.maintenance_logs.count }}
+                        </small>
+                    </p>
+                    
+                    <div class="mt-3">
+                        <a href="{% url 'machines:detail' gym.id machine.id %}" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-eye"></i> Détails
+                        </a>
+                        <a href="{% url 'machines:update' gym.id machine.id %}" class="btn btn-sm btn-outline-secondary">
+                            <i class="fas fa-edit"></i> Modifier
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-12">
+            <div class="alert alert-info">
+                Aucune machine trouvée. <a href="{% url 'machines:create' gym.id %}">Ajoutez votre première machine</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    {% if machines.has_other_pages %}
+    <nav aria-label="Page navigation" class="mt-4">
+        <ul class="pagination justify-content-center">
+            {% if machines.has_previous %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ machines.previous_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}">
+                    Précédent
+                </a>
+            </li>
+            {% endif %}
+            
+            {% for num in machines.paginator.page_range %}
+            <li class="page-item {% if machines.number == num %}active{% endif %}">
+                <a class="page-link" href="?page={{ num }}{% if status_filter %}&status={{ status_filter }}{% endif %}">
+                    {{ num }}
+                </a>
+            </li>
+            {% endfor %}
+            
+            {% if machines.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ machines.next_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}">
+                    Suivant
+                </a>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+{% endblock %}

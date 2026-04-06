@@ -2,7 +2,6 @@ from django.db import models
 from django.conf import settings
 from django.utils import timezone
 import uuid
-from coaching.models import Coach
 from organizations.models import Gym
 from core.managers import GymManager
 
@@ -56,13 +55,7 @@ class Member(models.Model):
         blank=True,
         null=True
     )
-    coach = models.ForeignKey(
-    Coach,
-    on_delete=models.SET_NULL,
-    null=True,
-    blank=True,
-    related_name="members"
-    )
+    
 
     coach_notes = models.TextField(
         blank=True,

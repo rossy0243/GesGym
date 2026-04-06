@@ -1,0 +1,38 @@
+<!-- templates/machines/maintenance_confirm_delete.html -->
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-danger text-white">
+                    <h3 class="mb-0">Confirmer la suppression</h3>
+                </div>
+                <div class="card-body">
+                    <p>Êtes-vous sûr de vouloir supprimer cette maintenance ?</p>
+                    <p><strong>Machine:</strong> {{ maintenance.machine.name }}</p>
+                    <p><strong>Date:</strong> {{ maintenance.created_at|date:"d/m/Y H:i" }}</p>
+                    <p><strong>Description:</strong> {{ maintenance.description|truncatewords:20 }}</p>
+                    {% if maintenance.cost %}
+                    <p><strong>Coût:</strong> {{ maintenance.cost }} €</p>
+                    {% endif %}
+                    
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <a href="{% url 'machines:detail' maintenance.machine.gym.id maintenance.machine.id %}" 
+                               class="btn btn-secondary">
+                                Annuler
+                            </a>
+                            <button type="submit" class="btn btn-danger">
+                                Confirmer la suppression
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -85,14 +85,14 @@
                     <ul class="nxl-submenu">
                         <li class="nxl-item">
                             <a class="nxl-link"
-                            href="#?section=scan">
+                            href="{% url 'access:acces_dashboard' %}?section=scan">
                             Scanner
                             </a>
                         </li>
 
                         <li class="nxl-item">
                             <a class="nxl-link"
-                            href="#?section=manual">
+                            href="{% url 'access:acces_dashboard' %}?section=manual">
                             Pointage manuel
                             </a>
                             </li>
@@ -109,16 +109,54 @@
                     </a>
                     <ul class="nxl-submenu">
                         <li class="nxl-item {% if section == 'journalier' %}active{% endif %}">
-                            <a class="nxl-link" href="#?section=journalier">
+                            <a class="nxl-link" href="{% url 'core:rapport' %}?section=journalier">
                             Journalier
                             </a>
                             </li>
 
                             <li class="nxl-item {% if section == 'mensuel' %}active{% endif %}">
-                            <a class="nxl-link" href="#?section=mensuel">
+                            <a class="nxl-link" href="{% url 'core:rapport' %}?section=mensuel">
                             Mensuel
                             </a>
                             </li>
+                    </ul>
+                </li>
+
+                <!-- Coaching -->
+                <li class="nxl-item nxl-hasmenu {% if nav_active == 'coaching' %}active{% endif %}">
+                    <a href="javascript:void(0);" class="nxl-link">
+                        <span class="nxl-micon"><span class="material-icons">person</span></span>
+                        <span class="nxl-mtext">Coaching</span>
+                        <span class="nxl-arrow"><span class="material-icons">chevron_right</span></span>
+                    </a>
+                    <ul class="nxl-submenu">
+                        <li class="nxl-item {% if nav_sub == 'coaches' %}active{% endif %}">
+                            <a class="nxl-link" href="{% url 'coaching:coach_list' %}">
+                                Coaches
+                            </a>
+                        </li>
+                        
+                    </ul>
+                </li>
+
+                <!-- Machines -->
+                <li class="nxl-item nxl-hasmenu {% if nav_active == 'machines' %}active{% endif %}">
+                    <a href="javascript:void(0);" class="nxl-link">
+                        <span class="nxl-micon"><span class="material-icons">fitness_center</span></span>
+                        <span class="nxl-mtext">Machines</span>
+                        <span class="nxl-arrow"><span class="material-icons">chevron_right</span></span>
+                    </a>
+                    <ul class="nxl-submenu">
+                        <li class="nxl-item {% if nav_sub == 'liste' %}active{% endif %}">
+                            <a class="nxl-link" href="{% url 'machines:list' gym_id=request.gym.id %}">
+                                Liste des machines
+                            </a>
+                        </li>
+                        <li class="nxl-item {% if nav_sub == 'maintenance' %}active{% endif %}">
+                            <a class="nxl-link" href="{% url 'machines:maintenance_dashboard' gym_id=request.gym.id %}">
+                                Tableau de bord des maintenances
+                            </a>
+                        </li>
                     </ul>
                 </li>
 

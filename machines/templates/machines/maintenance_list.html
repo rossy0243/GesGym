@@ -1,0 +1,153 @@
+<!-- templates/machines/maintenance_list.html -->
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Historique des maintenances - {{ gym.name }}</h1>
+        <div>
+            <a href="{% url 'machines:maintenance_dashboard' gym.id %}" class="btn btn-info">
+                Tableau de bord
+            </a>
+            <a href="{% url 'machines:list' gym.id %}" class="btn btn-secondary">
+                Machines
+            </a>
+        </div>
+    </div>
+    
+    <!-- Statistiques -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Total maintenances</h5>
+                    <h3>{{ stats.total }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Coût total</h5>
+                    <h3>{{ stats.total_cost }} €</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Coût moyen</h5>
+                    <h3>
+                        {% if stats.total %}
+                            {{ stats.total_cost|floatformat:2|default:"0" }} €
+                        {% else %}
+                            0 €
+                        {% endif %}
+                    </h3>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Liste des maintenances -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Détail des maintenances</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Machine</th>
+                            <th>Description</th>
+                            <th>Coût</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for maint in maintenances %}
+                        <tr>
+                            <td>{{ maint.created_at|date:"d/m/Y H:i" }}</td>
+                            <td>{{ maint.machine.name }}</td>
+                            <td>{{ maint.description|truncatewords:15 }}</td>
+                            <td>
+                                {% if maint.cost %}
+                                    {{ maint.cost }} €
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{% url 'machines:detail' gym.id maint.machine.id %}" 
+                                   class="btn btn-sm btn-outline-primary">
+                                    Voir machine
+                                </a>
+                                <button type="button" 
+                                        class="btn btn-sm btn-outline-danger"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#deleteModal{{ maint.id }}">
+                                    Supprimer
+                                </button>
+                                
+                                <!-- Modal de confirmation -->
+                                <div class="modal fade" id="deleteModal{{ maint.id }}" tabindex="-1">
+                                    <div class="modal-dialog">
+                                        <div class="modal-content">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title">Confirmer la suppression</h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                Êtes-vous sûr de vouloir supprimer cette maintenance ?
+                                            </div>
+                                            <div class="modal-footer">
+                                                <form method="post" action="{% url 'machines:maintenance_delete' gym.id maint.id %}">
+                                                    {% csrf_token %}
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                                                    <button type="submit" class="btn btn-danger">Supprimer</button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center">Aucune maintenance enregistrée</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Pagination -->
+            {% if maintenances.has_other_pages %}
+            <nav aria-label="Page navigation" class="mt-4">
+                <ul class="pagination justify-content-center">
+                    {% if maintenances.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ maintenances.previous_page_number }}">Précédent</a>
+                    </li>
+                    {% endif %}
+                    
+                    {% for num in maintenances.paginator.page_range %}
+                    <li class="page-item {% if maintenances.number == num %}active{% endif %}">
+                        <a class="page-link" href="?page={{ num }}">{{ num }}</a>
+                    </li>
+                    {% endfor %}
+                    
+                    {% if maintenances.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ maintenances.next_page_number }}">Suivant</a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

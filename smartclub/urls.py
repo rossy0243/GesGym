@@ -27,6 +27,9 @@ urlpatterns = [
     path('members/', include('members.urls')),
     path('subscriptions/', include('subscriptions.urls')),
     path('pos/', include('pos.urls')),
+    path('access/', include('access.urls')),
+    path("coaching/", include("coaching.urls")),
+    path("machines/", include("machines.urls")),
     path('', include('core.urls')),  # dashboard ici
 ]
 if settings.DEBUG:

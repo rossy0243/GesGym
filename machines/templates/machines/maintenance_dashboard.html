@@ -1,0 +1,141 @@
+<!-- templates/machines/maintenance_dashboard.html -->
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>Tableau de bord des maintenances - {{ gym.name }}</h1>
+    
+    <!-- Cartes de statistiques -->
+    <div class="row mt-4 mb-4">
+        <div class="col-md-3">
+            <div class="card text-white bg-primary">
+                <div class="card-body">
+                    <h5 class="card-title">Total machines</h5>
+                    <h2 class="card-text">{{ total_machines }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-info">
+                <div class="card-body">
+                    <h5 class="card-title">Maintenances effectuées</h5>
+                    <h2 class="card-text">{{ total_maintenances }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-success">
+                <div class="card-body">
+                    <h5 class="card-title">Coût total (CDF)</h5>
+                    <h2 class="card-text">{{ total_maintenance_cost }} </h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-warning">
+                <div class="card-body">
+                    <h5 class="card-title">Machines en maintenance</h5>
+                    <h2 class="card-text">{{ machines_by_status.maintenance }}</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <!-- Statut des machines -->
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Statut des machines</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group">
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            OK
+                            <span class="badge bg-success rounded-pill">{{ machines_by_status.ok }}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            En maintenance
+                            <span class="badge bg-warning rounded-pill">{{ machines_by_status.maintenance }}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            En panne
+                            <span class="badge bg-danger rounded-pill">{{ machines_by_status.broken }}</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Top machines avec le plus de maintenances -->
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Machines les plus maintenues</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group">
+                        {% for machine in top_maintenance_machines %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            {{ machine.name }}
+                            <span class="badge bg-primary rounded-pill">{{ machine.maintenance_count }} maintenance(s)</span>
+                        </li>
+                        {% empty %}
+                        <li class="list-group-item">Aucune donnée</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <!-- Coût des maintenances par machine -->
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Coût des maintenances par machine</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group">
+                        {% for item in maintenance_cost_by_machine %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            {{ item.machine__name }}
+                            <span class="badge bg-info rounded-pill">{{ item.total_cost|default:0 }} €</span>
+                        </li>
+                        {% empty %}
+                        <li class="list-group-item">Aucune donnée</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Dernières maintenances -->
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Dernières maintenances</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group">
+                        {% for maint in recent_maintenances %}
+                        <li class="list-group-item">
+                            <strong>{{ maint.machine.name }}</strong>
+                            <br>
+                            <small class="text-muted">{{ maint.created_at|date:"d/m/Y H:i" }}</small>
+                            <p class="mb-0 mt-1">{{ maint.description|truncatewords:10 }}</p>
+                            {% if maint.cost %}
+                            <small class="text-success">Coût: {{ maint.cost }} €</small>
+                            {% endif %}
+                        </li>
+                        {% empty %}
+                        <li class="list-group-item">Aucune maintenance enregistrée</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

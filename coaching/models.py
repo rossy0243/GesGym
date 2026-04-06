@@ -1,5 +1,7 @@
 from django.db import models
+from members.models import Member
 from organizations.models import Gym
+
 
 
 class Coach(models.Model):
@@ -22,6 +24,12 @@ class Coach(models.Model):
         max_length=255,
         blank=True,
         null=True
+    )
+    # RELATION COACH ↔ MEMBERS
+    members = models.ManyToManyField(
+        Member,
+        related_name="coaches",
+        blank=True
     )
 
     is_active = models.BooleanField(default=True)

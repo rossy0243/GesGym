@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}Coachs{% endblock %}
+
+{% block content %}
+
+<a href="{% url 'coaching:create_coach' %}">Ajouter un coach</a>
+
+<table class="table">
+    <thead>
+        <tr>
+            <th>Nom</th>
+            <th>Téléphone</th>
+            <th>Spécialité</th>
+            <th>Membres assignés</th>
+        </tr>
+    </thead>
+
+    <tbody>
+        {% for coach in coaches %}
+        <tr>
+            <td>{{ coach.name }}</td>
+            <td>{{ coach.phone }}</td>
+            <td>{{ coach.specialty }}</td>
+
+            <td>
+                {% for member in coach.members.all|slice:3 %}
+                    <span class="badge bg-primary">
+                        {{ member.first_name }}
+                    </span>
+                {% empty %}
+                    <span class="text-muted">Aucun</span>
+                {% endfor %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

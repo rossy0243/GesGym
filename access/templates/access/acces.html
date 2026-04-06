@@ -414,7 +414,7 @@ function onScanSuccess(decodedText) {
 
     html5QrCode.stop();
 
-    fetch(`/core/access/${decodedText}/`)
+    fetch(`/access/access/${decodedText}/`)
     .then(res => res.json())
     .then(data => {
 
@@ -510,7 +510,7 @@ return cookieValue;
 
 function manualEntry(memberId){
 
-fetch(`/core/access/manual/entry/${memberId}/`,{
+fetch(`/access/access/manual/entry/${memberId}/`,{
 method:"POST",
 headers:{
 "X-CSRFToken":getCookie("csrftoken"),
@@ -539,7 +539,7 @@ showSection("scan")
 <script>
 function loadRealtimeAccess(){
 
-fetch("/core/access/realtime/")
+fetch("/access/access/realtime/")
 .then(res=>res.json())
 .then(data=>{
 

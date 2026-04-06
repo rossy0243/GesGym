@@ -1,8 +1,6 @@
 from django.db import models
-
 from organizations.models import Gym
 
-# Create your models here.
 class Machine(models.Model):
     """
     Machines du gym (tapis, vélo, etc.)
@@ -35,8 +33,8 @@ class Machine(models.Model):
 
     def __str__(self):
         return self.name
-    
-    
+
+
 class MaintenanceLog(models.Model):
     """
     Historique des maintenances machines
@@ -58,3 +56,6 @@ class MaintenanceLog(models.Model):
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"{self.machine.name} - {self.created_at.strftime('%Y-%m-%d')}"
