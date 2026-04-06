@@ -30,6 +30,8 @@ urlpatterns = [
     path('access/', include('access.urls')),
     path("coaching/", include("coaching.urls")),
     path("machines/", include("machines.urls")),
+    path('rh/', include('rh.urls')),
+    path('products/', include('products.urls')),
     path('', include('core.urls')),  # dashboard ici
 ]
 if settings.DEBUG:

@@ -1,0 +1,114 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Employés - {{ gym.name }}</h1>
+        <a href="{% url 'rh:create' gym.id %}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Ajouter un employé
+        </a>
+    </div>
+
+    <!-- Filtres -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Rôle</label>
+                    <select name="role" class="form-select">
+                        <option value="">Tous</option>
+                        {% for value, label in role_choices %}
+                        <option value="{{ value }}" {% if role_filter == value %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Statut</label>
+                    <select name="active" class="form-select">
+                        <option value="">Tous</option>
+                        <option value="active" {% if active_filter == 'active' %}selected{% endif %}>Actifs</option>
+                        <option value="inactive" {% if active_filter == 'inactive' %}selected{% endif %}>Inactifs</option>
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-secondary">Filtrer</button>
+                    {% if role_filter or active_filter %}
+                    <a href="{% url 'rh:list' gym.id %}" class="btn btn-link">Réinitialiser</a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Liste des employés -->
+    <div class="row">
+        {% for employee in employees %}
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <h5 class="card-title">{{ employee.name }}</h5>
+                        <span class="badge {% if employee.is_active %}bg-success{% else %}bg-secondary{% endif %}">
+                            {% if employee.is_active %}Actif{% else %}Inactif{% endif %}
+                        </span>
+                    </div>
+                    
+                    <p class="card-text">
+                        <strong>Rôle:</strong> {{ employee.get_role_display }}<br>
+                        <strong>Salaire journalier:</strong> {{ employee.daily_salary }} €<br>
+                        <strong>Téléphone:</strong> {{ employee.phone|default:"Non renseigné" }}
+                    </p>
+                    
+                    <div class="mt-3">
+                        <a href="{% url 'rh:detail' gym.id employee.id %}" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-eye"></i> Détails
+                        </a>
+                        <a href="{% url 'rh:update' gym.id employee.id %}" class="btn btn-sm btn-outline-secondary">
+                            <i class="fas fa-edit"></i> Modifier
+                        </a>
+                        {% if employee.is_active %}
+                        <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteModal{{ employee.id }}">
+                            <i class="fas fa-trash"></i> Désactiver
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal de confirmation désactivation -->
+        {% if employee.is_active %}
+        <div class="modal fade" id="deleteModal{{ employee.id }}" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Confirmer la désactivation</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        Êtes-vous sûr de vouloir désactiver l'employé "{{ employee.name }}" ?
+                    </div>
+                    <div class="modal-footer">
+                        <form method="post" action="{% url 'rh:delete' gym.id employee.id %}">
+                            {% csrf_token %}
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                            <button type="submit" class="btn btn-danger">Désactiver</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        {% empty %}
+        <div class="col-12">
+            <div class="alert alert-info">
+                Aucun employé trouvé. <a href="{% url 'rh:create' gym.id %}">Ajoutez votre premier employé</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+{% load employee_filters %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Tableau de bord des salaires - {{ gym.name }}</h1>
+        <div>
+            <a href="{% url 'rh:attendance_bulk' gym.id %}" class="btn btn-primary">
+                <i class="fas fa-check-square"></i> Enregistrer présences
+            </a>
+            <a href="{% url 'rh:list' gym.id %}" class="btn btn-secondary">
+                <i class="fas fa-users"></i> Employés
+            </a>
+        </div>
+    </div>
+    
+    <!-- Sélecteur de mois -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Mois</label>
+                    <select name="month" class="form-select">
+                        {% for m in available_months %}
+                        <option value="{{ m.month }}" {% if month == m.month and year == m.year %}selected{% endif %}>
+                            {{ m.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Année</label>
+                    <select name="year" class="form-select">
+                        {% for y in "2024,2025,2026"|split:"," %}
+                        <option value="{{ y }}" {% if year == y|add:0 %}selected{% endif %}>{{ y }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary">Afficher</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Résumé -->
+    <div class="alert alert-info">
+        <h5>Résumé pour {{ month_name }} {{ year }}</h5>
+        <p class="mb-0">Total des salaires à payer: <strong>{{ total_salaries }} €</strong></p>
+    </div>
+    
+    <!-- Tableau des salaires -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Détail des salaires</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Employé</th>
+                            <th>Rôle</th>
+                            <th>Jours présents</th>
+                            <th>Salaire journalier</th>
+                            <th>Salaire mensuel</th>
+                            <th>Statut</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for data in payroll_data %}
+                        <tr>
+                            <td>{{ data.employee.name }}</td>
+                            <td>{{ data.employee.get_role_display }}</td>
+                            <td>{{ data.present_days }}</td>
+                            <td>{{ data.employee.daily_salary }} €</td>
+                            <td><strong>{{ data.salary }} €</strong></td>
+                            <td>
+                                {% if data.is_paid %}
+                                <span class="badge bg-success">Payé</span>
+                                {% else %}
+                                <span class="badge bg-warning">À payer</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if not data.is_paid and data.salary > 0 %}
+                                <a href="{% url 'rh:process_payment' gym.id data.employee.id year month %}" 
+                                   class="btn btn-success btn-sm">
+                                    <i class="fas fa-money-bill"></i> Payer
+                                </a>
+                                {% endif %}
+                                <a href="{% url 'rh:detail' gym.id data.employee.id %}?year={{ year }}&month={{ month }}" 
+                                   class="btn btn-info btn-sm">
+                                    <i class="fas fa-eye"></i> Détail
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center">Aucun employé actif</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-danger text-white">
+                    <h3 class="mb-0">Confirmer la désactivation</h3>
+                </div>
+                <div class="card-body">
+                    <p>Êtes-vous sûr de vouloir désactiver l'employé suivant ?</p>
+                    <p><strong>Nom:</strong> {{ employee.name }}</p>
+                    <p><strong>Rôle:</strong> {{ employee.get_role_display }}</p>
+                    <p><strong>Salaire journalier:</strong> {{ employee.daily_salary }} €</p>
+                    
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        L'employé sera désactivé mais ses données resteront dans le système.
+                    </div>
+                    
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <a href="{% url 'rh:detail' employee.gym.id employee.id %}" 
+                               class="btn btn-secondary">
+                                Annuler
+                            </a>
+                            <button type="submit" class="btn btn-danger">
+                                Désactiver
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

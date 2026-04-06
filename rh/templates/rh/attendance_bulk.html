@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+{% load employee_filters %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="mb-0">{{ title }}</h3>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        <div class="mb-4">
+                            <label class="form-label">Date</label>
+                            {{ form.date }}
+                        </div>
+                        
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i> Enregistrez les présences pour tous les employés
+                        </div>
+                        
+                        <div class="table-responsive">
+                            <table class="table table-bordered">
+                                <thead>
+                                    <tr>
+                                        <th>Employé</th>
+                                        <th>Rôle</th>
+                                        <th>Statut</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for employee in active_employees %}
+                                    <tr>
+                                        <td>{{ employee.name }}</td>
+                                        <td>{{ employee.get_role_display }}</td>
+                                        <td>
+                                            {{ form|get_item:employee.id }}
+                                        </td>
+                                    </tr>
+                                    {% empty %}
+                                    <tr>
+                                        <td colspan="3" class="text-center">Aucun employé actif</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-3">
+                            <a href="{% url 'rh:attendance_list' gym.id %}" class="btn btn-secondary">
+                                Annuler
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                Enregistrer les présences
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Sélectionner tous les employés présents/absents
+document.addEventListener('DOMContentLoaded', function() {
+    const selects = document.querySelectorAll('select');
+    
+    const btnAllPresent = document.createElement('button');
+    btnAllPresent.type = 'button';
+    btnAllPresent.className = 'btn btn-sm btn-success me-2';
+    btnAllPresent.textContent = 'Tous présents';
+    
+    const btnAllAbsent = document.createElement('button');
+    btnAllAbsent.type = 'button';
+    btnAllAbsent.className = 'btn btn-sm btn-danger';
+    btnAllAbsent.textContent = 'Tous absents';
+    
+    const buttonGroup = document.createElement('div');
+    buttonGroup.className = 'mb-3';
+    buttonGroup.appendChild(btnAllPresent);
+    buttonGroup.appendChild(btnAllAbsent);
+    
+    document.querySelector('.card-body').insertBefore(buttonGroup, document.querySelector('.table-responsive'));
+    
+    btnAllPresent.addEventListener('click', function() {
+        selects.forEach(select => {
+            if (select.options.length >= 2) {
+                select.value = 'present';
+            }
+        });
+    });
+    
+    btnAllAbsent.addEventListener('click', function() {
+        selects.forEach(select => {
+            if (select.options.length >= 2) {
+                select.value = 'absent';
+            }
+        });
+    });
+});
+</script>
+{% endblock %}
