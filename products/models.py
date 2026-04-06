@@ -1,8 +1,6 @@
 from django.db import models
-
 from organizations.models import Gym
 
-# Create your models here.
 class Product(models.Model):
     """
     Produit vendu dans le gym (boisson, complément, etc.)
@@ -33,7 +31,26 @@ class Product(models.Model):
     def __str__(self):
         return self.name
     
-    
+    def update_stock(self, quantity, movement_type, reason=None):
+        """Met à jour le stock et crée un mouvement"""
+        if movement_type == 'in':
+            self.quantity += quantity
+        elif movement_type == 'out':
+            if self.quantity < quantity:
+                raise ValueError(f"Stock insuffisant pour {self.name}")
+            self.quantity -= quantity
+        
+        self.save()
+        
+        StockMovement.objects.create(
+            gym=self.gym,
+            product=self,
+            quantity=quantity,
+            movement_type=movement_type,
+            reason=reason
+        )
+
+
 class StockMovement(models.Model):
     """
     Historique des mouvements de stock
@@ -77,3 +94,7 @@ class StockMovement(models.Model):
             models.Index(fields=["gym"]),
             models.Index(fields=["product"]),
         ]
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.product.name} - {self.get_movement_type_display()} - {self.quantity}"

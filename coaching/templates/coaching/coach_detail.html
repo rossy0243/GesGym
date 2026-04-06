@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>{{ coach.name }}</h1>
+        <div>
+            <a href="{% url 'coaching:update' coach.gym.id coach.id %}" class="btn btn-outline-secondary">
+                <i class="fas fa-edit"></i> Modifier
+            </a>
+            <a href="{% url 'coaching:list' coach.gym.id %}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Retour
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-4 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Informations</h5>
+                </div>
+                <div class="card-body">
+                    <p><strong>Téléphone:</strong> {{ coach.phone|default:"Non renseigné" }}</p>
+                    <p><strong>Spécialité:</strong> {{ coach.specialty|default:"Non renseignée" }}</p>
+                    <p><strong>Statut:</strong> 
+                        <span class="badge {% if coach.is_active %}bg-success{% else %}bg-secondary{% endif %}">
+                            {% if coach.is_active %}Actif{% else %}Inactif{% endif %}
+                        </span>
+                    </p>
+                    <p><strong>Date d'ajout:</strong> {{ coach.created_at|date:"d/m/Y" }}</p>
+                    <p><strong>Membres suivis:</strong> {{ members.count }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-8 mb-4">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Membres suivis</h5>
+                    {% if available_members %}
+                    <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#assignModal">
+                        <i class="fas fa-plus"></i> Assigner un membre
+                    </button>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    {% if members %}
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr><th>Nom</th><th>Action</th></tr>
+                            </thead>
+                            <tbody>
+                                {% for member in members %}
+                                <tr>
+                                    <td>{{ member.first_name }} - {{ member.last_name }}</td>
+                                    <td>
+                                        <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#removeModal{{ member.id }}">
+                                            Retirer
+                                        </button>
+                                        <div class="modal fade" id="removeModal{{ member.id }}" tabindex="-1">
+                                            <div class="modal-dialog">
+                                                <div class="modal-content">
+                                                    <div class="modal-header">
+                                                        <h5 class="modal-title">Confirmer</h5>
+                                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                    </div>
+                                                    <div class="modal-body">
+                                                        Retirer {{ member.first_name }} {{ member.last_name }} de {{ coach.name }} ?
+                                                    </div>
+                                                    <div class="modal-footer">
+                                                        <form method="post" action="{% url 'coaching:remove_member' coach.gym.id coach.id member.id %}">
+                                                            {% csrf_token %}
+                                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                                                            <button type="submit" class="btn btn-danger">Retirer</button>
+                                                        </form>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted text-center">Aucun membre assigné</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Assigner -->
+<div class="modal fade" id="assignModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Assigner un membre à {{ coach.name }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="{% url 'coaching:assign_member' coach.gym.id coach.id %}">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <select name="member" class="form-select" required>
+                        <option value="">Sélectionner un membre</option>
+                        {% for member in available_members %}
+                        <option value="{{ member.id }}">{{ member.first_name }} {{ member.last_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary">Assigner</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

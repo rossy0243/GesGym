@@ -1,0 +1,174 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Dashboard des stocks - {{ gym.name }}</h1>
+        <div>
+            <a href="{% url 'products:list' gym.id %}" class="btn btn-primary">
+                <i class="fas fa-box"></i> Produits
+            </a>
+            <a href="{% url 'products:movement_list' gym.id %}" class="btn btn-secondary">
+                <i class="fas fa-history"></i> Mouvements
+            </a>
+        </div>
+    </div>
+    
+    <!-- Cartes statistiques -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-white bg-primary">
+                <div class="card-body">
+                    <h5 class="card-title">Produits actifs</h5>
+                    <h2 class="card-text">{{ total_products }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-success">
+                <div class="card-body">
+                    <h5 class="card-title">Valeur du stock</h5>
+                    <h2 class="card-text">{{ total_value|floatformat:2 }} €</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-warning">
+                <div class="card-body">
+                    <h5 class="card-title">Stock bas (&le;5)</h5>
+                    <h2 class="card-text">{{ low_stock_products|length }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-danger">
+                <div class="card-body">
+                    <h5 class="card-title">Rupture de stock</h5>
+                    <h2 class="card-text">{{ out_of_stock_products|length }}</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <!-- Produits en stock bas -->
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header bg-warning">
+                    <h5 class="mb-0">⚠️ Produits en stock bas (&le;5)</h5>
+                </div>
+                <div class="card-body">
+                    {% if low_stock_products %}
+                    <ul class="list-group">
+                        {% for product in low_stock_products %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <a href="{% url 'products:detail' gym.id product.id %}">
+                                {{ product.name }}
+                            </a>
+                            <div>
+                                <span class="badge bg-warning">Stock: {{ product.quantity }}</span>
+                                <span class="ms-2">{{ product.price }} €</span>
+                            </div>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p class="text-muted text-center mb-0">Aucun produit en stock bas</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Produits en rupture -->
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0">🚫 Produits en rupture de stock</h5>
+                </div>
+                <div class="card-body">
+                    {% if out_of_stock_products %}
+                    <ul class="list-group">
+                        {% for product in out_of_stock_products %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <a href="{% url 'products:detail' gym.id product.id %}">
+                                {{ product.name }}
+                            </a>
+                            <a href="{% url 'products:add_movement' gym.id product.id %}" class="btn btn-sm btn-success">
+                                <i class="fas fa-plus"></i> Réapprovisionner
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p class="text-muted text-center mb-0">Aucune rupture de stock</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <!-- Top produits par valeur -->
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">💰 Top produits par valeur de stock</h5>
+                </div>
+                <div class="card-body">
+                    {% if top_value_products %}
+                    <ul class="list-group">
+                        {% for product in top_value_products %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            {{ product.name }}
+                            <div>
+                                <span class="badge bg-info">{{ product.quantity }} unités</span>
+                                <span class="ms-2 fw-bold">{{ product.price|floatformat:2|add:product.quantity|floatformat:2 }} €</span>
+                            </div>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p class="text-muted text-center mb-0">Aucune donnée</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Derniers mouvements -->
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">📋 Derniers mouvements</h5>
+                </div>
+                <div class="card-body">
+                    {% if recent_movements %}
+                    <div class="list-group">
+                        {% for movement in recent_movements %}
+                        <div class="list-group-item">
+                            <div class="d-flex justify-content-between">
+                                <div>
+                                    <strong>{{ movement.product.name }}</strong>
+                                    <span class="badge {% if movement.movement_type == 'in' %}bg-success{% else %}bg-danger{% endif %} ms-2">
+                                        {{ movement.get_movement_type_display }}
+                                    </span>
+                                </div>
+                                <span class="text-muted">{{ movement.created_at|date:"d/m/Y H:i" }}</span>
+                            </div>
+                            <div class="mt-1">
+                                <span>Quantité: {{ movement.quantity }}</span>
+                                {% if movement.reason %}
+                                <span class="ms-3 text-muted">Raison: {{ movement.reason }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted text-center mb-0">Aucun mouvement</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

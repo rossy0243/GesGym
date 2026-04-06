@@ -131,7 +131,7 @@
                     </a>
                     <ul class="nxl-submenu">
                         <li class="nxl-item {% if nav_sub == 'coaches' %}active{% endif %}">
-                            <a class="nxl-link" href="{% url 'coaching:coach_list' %}">
+                            <a class="nxl-link" href="{% url 'coaching:list' gym_id=request.gym.id %}">
                                 Coaches
                             </a>
                         </li>
@@ -182,6 +182,32 @@
                         <li class="nxl-item {% if nav_sub == 'paie' %}active{% endif %}">
                             <a class="nxl-link" href="{% url 'rh:payroll_dashboard' gym_id=request.gym.id %}">
                                 Paie
+                            </a>
+                        </li>
+                    </ul>
+                </li>
+
+                <!-- products -->
+                <li class="nxl-item nxl-hasmenu {% if nav_active == 'products' %}active{% endif %}">
+                    <a href="javascript:void(0);" class="nxl-link">
+                        <span class="nxl-micon"><span class="material-icons">inventory_2</span></span>
+                        <span class="nxl-mtext">Stock & produits</span>
+                        <span class="nxl-arrow"><span class="material-icons">chevron_right</span></span>
+                    </a>
+                    <ul class="nxl-submenu">
+                        <li class="nxl-item {% if nav_sub == 'product_list' %}active{% endif %}">
+                            <a class="nxl-link" href="{% url 'products:list' gym_id=request.gym.id %}">
+                                Liste des produits
+                            </a>
+                        </li>
+                        <li class="nxl-item {% if nav_sub == 'stock_dashboard' %}active{% endif %}">
+                            <a class="nxl-link" href="{% url 'products:stock_dashboard' gym_id=request.gym.id %}">
+                                Tableau de bord du stock
+                            </a>
+                        </li>
+                        <li class="nxl-item {% if nav_sub == 'movement_list' %}active{% endif %}">
+                            <a class="nxl-link" href="{% url 'products:movement_list' gym_id=request.gym.id %}">
+                                Historique des mouvements
                             </a>
                         </li>
                     </ul>
