@@ -2,6 +2,7 @@
 from django.db.models import Count, Sum, Avg, Q
 from organizations.models import Gym, Organization
 from machines.models import Machine, MaintenanceLog
+from django.shortcuts import get_object_or_404
 
 class OrganizationDashboardService:
     """Service pour agréger les données de toutes les salles d'une organisation"""

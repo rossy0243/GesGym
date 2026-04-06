@@ -1,0 +1,82 @@
+<!-- templates/admin/create_owner.html -->
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>Créer un propriétaire (Owner)</h1>
+    
+    <div class="card mt-4">
+        <div class="card-body">
+            <form method="post">
+                {% csrf_token %}
+                
+                <div class="form-group mb-3">
+                    <label for="first_name">Prénom *</label>
+                    <input type="text" name="first_name" id="first_name" 
+                           class="form-control" required>
+                </div>
+                
+                <div class="form-group mb-3">
+                    <label for="last_name">Nom *</label>
+                    <input type="text" name="last_name" id="last_name" 
+                           class="form-control" required>
+                </div>
+                
+                <div class="form-group mb-3">
+                    <label for="email">Email</label>
+                    <input type="email" name="email" id="email" 
+                           class="form-control">
+                    <small class="text-muted">Optionnel</small>
+                </div>
+                
+                <div class="form-group mb-3">
+                    <label for="organization">Organisation *</label>
+                    <select name="organization" id="organization" class="form-control" required>
+                        <option value="">Sélectionner une organisation</option>
+                        {% for org in organizations %}
+                        <option value="{{ org.id }}">{{ org.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <small class="text-muted">
+                        L'Owner aura accès à TOUS les gyms de cette organisation
+                    </small>
+                </div>
+                
+                <div class="alert alert-info">
+                    <strong>📋 Résumé :</strong>
+                    <ul class="mb-0 mt-2">
+                        <li>Username généré automatiquement : <strong>prénom.nom</strong></li>
+                        <li>Mot de passe par défaut : <code>12345</code></li>
+                        <li>L'Owner pourra se connecter à l'admin Django</li>
+                        <li>L'Owner aura accès à <strong>TOUS les gyms</strong> de son organisation</li>
+                        <li>L'Owner pourra gérer les utilisateurs de tous ses gyms</li>
+                    </ul>
+                </div>
+                
+                <div class="alert alert-warning">
+                    <strong>⚠️ Important :</strong>
+                    <p class="mb-0">Seul un Superuser peut créer un Owner. Cette action est irréversible.</p>
+                </div>
+                
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-primary">Créer le Owner</button>
+                    <a href="{% url 'admin:compte_user_changelist' %}" class="btn btn-secondary">Annuler</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+    .form-control {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+    }
+    .form-control:focus {
+        border-color: #004e92;
+        outline: none;
+    }
+</style>
+{% endblock %}

@@ -27,6 +27,24 @@
             </div>
         </div>
         <div class="header-right ms-auto">
+            {% if user.is_authenticated and user_has_owner_role %}
+        <div class="gym-selector">
+            <select id="gym_selector" class="form-select form-select-sm">
+                {% for gym in user_owned_gyms %}
+                <option value="{{ gym.id }}" {% if gym.id == current_gym.id %}selected{% endif %}>
+                    {{ gym.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <script>
+            document.getElementById('gym_selector').addEventListener('change', function() {
+                var gymId = this.value;
+                window.location.href = "/core/switch-gym/" + gymId + "/";
+            });
+        </script>
+        {% endif %}
             <div class="d-flex align-items-center">
                 {% if show_dark %}
                 <div class="nxl-h-item dark-light-theme">

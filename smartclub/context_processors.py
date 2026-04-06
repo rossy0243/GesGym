@@ -1,6 +1,27 @@
 # context_processors.py (à côté de settings.py)
 from organizations.models import GymModule
 
+def user_owner_check(request):
+    """
+    Ajoute une variable pour savoir si l'utilisateur connecté est Owner
+    """
+    user_has_owner_role = False
+    
+    if hasattr(request, 'gym') and request.gym and request.user.is_authenticated:
+        from compte.models import UserGymRole
+        role = UserGymRole.objects.filter(
+            user=request.user,
+            gym=request.gym,
+            is_active=True
+        ).first()
+        
+        if role and role.role == 'owner':
+            user_has_owner_role = True
+    
+    return {
+        'user_has_owner_role': user_has_owner_role,
+    }
+
 def modules_processor(request):
     """
     Ajoute les modules activés dans TOUS les templates

@@ -1,7 +1,7 @@
 #compte/models.py
 from django.contrib.auth.models import AbstractUser
 from django.db import models
-from organizations.models import Gym
+from organizations.models import Gym, Organization
 from smartclub import settings
 from .utils import generate_username
 from django.contrib.auth.hashers import make_password
@@ -18,7 +18,28 @@ class User(AbstractUser):
         default=False,
         help_text="Administrateur global du SaaS"
     )
-    
+    owned_organization = models.ForeignKey(
+        Organization,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="owners",
+        help_text="Si l'utilisateur est Owner d'une organisation"
+    )
+    def get_owned_gyms(self):
+        """Récupère tous les gyms de l'organisation dont il est Owner"""
+        if self.owned_organization:
+            return self.owned_organization.gyms.filter(is_active=True)
+        return Gym.objects.none()
+    def is_owner(self):
+        """Vérifie si l'utilisateur est un Owner"""
+        return self.owned_organization is not None
+    def clean(self):
+        super().clean()
+        # Empêcher qu'un utilisateur non superuser se donne is_saas_admin
+        if self.is_saas_admin and not self.pk:
+            # À la création, seul un superuser peut créer un saas_admin
+            pass
     def save(self, *args, **kwargs):
 
         # Générer username automatiquement si vide

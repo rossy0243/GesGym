@@ -76,6 +76,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'smartclub.context_processors.modules_processor',
+                'smartclub.context_processors.user_owner_check',
             ],
         },
     },
@@ -142,5 +143,5 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 LOGIN_URL = "compte:login"
-LOGIN_REDIRECT_URL = "core:dashboard"
+LOGIN_REDIRECT_URL = "core:dashboard_redirect"
 LOGOUT_REDIRECT_URL = "compte:login"

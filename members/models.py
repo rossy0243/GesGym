@@ -66,6 +66,8 @@ class Member(models.Model):
     phone = models.CharField(max_length=20, db_index=True)
 
     email = models.EmailField(blank=True, null=True, db_index=True)
+    
+    is_active = models.BooleanField(default=True)
 
     status = models.CharField(
         max_length=20,

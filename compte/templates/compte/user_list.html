@@ -1,0 +1,152 @@
+<!-- templates/compte/user_list.html -->
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Gestion des utilisateurs - {{ gym.name }}</h1>
+        <a href="{% url 'compte:create_user' %}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Nouvel utilisateur
+        </a>
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Liste des utilisateurs</h5>
+        </div>
+        <div class="card-body">
+            {% if users %}
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead>
+                        <tr>
+                            <th>Nom d'utilisateur</th>
+                            <th>Nom complet</th>
+                            <th>Email</th>
+                            <th>Rôle</th>
+                            <th>Statut</th>
+                            <th>Date d'ajout</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user_role in users %}
+                        <tr>
+                            <td>
+                                <strong>{{ user_role.user.username }}</strong>
+                            </td>
+                            <td>
+                                {{ user_role.user.first_name }} {{ user_role.user.last_name }}
+                            </td>
+                            <td>
+                                {{ user_role.user.email|default:"-" }}
+                            </td>
+                            <td>
+                                <span class="badge 
+                                    {% if user_role.role == 'manager' %}bg-primary
+                                    {% elif user_role.role == 'coach' %}bg-info
+                                    {% elif user_role.role == 'reception' %}bg-secondary
+                                    {% elif user_role.role == 'cashier' %}bg-warning
+                                    {% elif user_role.role == 'accountant' %}bg-dark
+                                    {% else %}bg-light
+                                    {% endif %}">
+                                    {{ user_role.get_role_display }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if user_role.is_active %}
+                                <span class="badge bg-success">Actif</span>
+                                {% else %}
+                                <span class="badge bg-danger">Inactif</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {{ user_role.created_at|date:"d/m/Y" }}
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <button type="button" 
+                                            class="btn btn-outline-primary"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#resetModal{{ user_role.user.id }}">
+                                        <i class="fas fa-key"></i> Reset pwd
+                                    </button>
+                                    <button type="button"
+                                            class="btn btn-outline-danger"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#deactivateModal{{ user_role.user.id }}">
+                                        <i class="fas fa-ban"></i>
+                                    </button>
+                                </div>
+                                
+                                <!-- Modal Reset Password -->
+                                <div class="modal fade" id="resetModal{{ user_role.user.id }}" tabindex="-1">
+                                    <div class="modal-dialog">
+                                        <div class="modal-content">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title">Réinitialiser le mot de passe</h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <p>Êtes-vous sûr de vouloir réinitialiser le mot de passe de :</p>
+                                                <p><strong>{{ user_role.user.get_full_name|default:user_role.user.username }}</strong></p>
+                                                <p>Le nouveau mot de passe sera : <code>12345</code></p>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <form method="post" action="{% url 'compte:reset_password' user_role.user.id %}">
+                                                    {% csrf_token %}
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                                                    <button type="submit" class="btn btn-warning">Réinitialiser</button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Modal Désactiver -->
+                                <div class="modal fade" id="deactivateModal{{ user_role.user.id }}" tabindex="-1">
+                                    <div class="modal-dialog">
+                                        <div class="modal-content">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title">Désactiver l'utilisateur</h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <p>Êtes-vous sûr de vouloir désactiver :</p>
+                                                <p><strong>{{ user_role.user.get_full_name|default:user_role.user.username }}</strong></p>
+                                                <p>L'utilisateur ne pourra plus se connecter.</p>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <form method="post" action="{% url 'compte:deactivate_user' user_role.user.id %}">
+                                                    {% csrf_token %}
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                                                    <button type="submit" class="btn btn-danger">Désactiver</button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info text-center">
+                <p class="mb-0">Aucun utilisateur trouvé.</p>
+                <a href="{% url 'compte:create_user' %}" class="btn btn-primary mt-3">Créer votre premier utilisateur</a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+    // Tooltips pour les boutons
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl)
+    })
+</script>
+{% endblock %}

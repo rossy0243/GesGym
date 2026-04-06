@@ -17,3 +17,18 @@ class CustomAuthenticationForm(AuthenticationForm):
             "placeholder": "Mot de passe"
         })
     )
+    
+    
+class CreateUserForm(forms.Form):
+    first_name = forms.CharField(max_length=150, widget=forms.TextInput(attrs={'class': 'form-control'}))
+    last_name = forms.CharField(max_length=150, widget=forms.TextInput(attrs={'class': 'form-control'}))
+    email = forms.EmailField(required=False, widget=forms.EmailInput(attrs={'class': 'form-control'}))
+    
+    ROLE_CHOICES = (
+        ('manager', 'Manager'),
+        ('coach', 'Coach'),
+        ('reception', 'Réceptionniste'),
+        ('cashier', 'Caissier'),
+        ('accountant', 'Comptable'),
+    )
+    role = forms.ChoiceField(choices=ROLE_CHOICES, widget=forms.Select(attrs={'class': 'form-control'}))

@@ -22,12 +22,26 @@
                         <span class="nxl-arrow"><span class="material-icons">chevron_right</span></span>
                     </a>
                     <ul class="nxl-submenu">
-                        <li class="nxl-item" id="nav-dashboard-global"><a class="nxl-link" href="{% url 'core:gym_dashboard' gym_id=request.gym.id %}?view=dashboard">Vue d'ensemble</a></li>
+                        <!-- Vérifier si request.gym existe avant d'utiliser son id -->
+                        {% if request.gym %}
+                        <li class="nxl-item" id="nav-dashboard-global">
+                            <a class="nxl-link" href="{% url 'core:gym_dashboard' gym_id=request.gym.id %}?view=dashboard">
+                                Vue d'ensemble
+                            </a>
+                        </li>
                         <li class="nxl-item" id="nav-analytics">
                             <a class="nxl-link" href="{% url 'core:gym_dashboard' gym_id=request.gym.id %}?view=analytics">
                                 <span class="nxl-mtext">Vue analytique</span>
                             </a>
                         </li>
+                        {% else %}
+                        <!-- Si pas de gym (cas de l'Owner sur vue organisation) -->
+                        <li class="nxl-item" id="nav-dashboard-global">
+                            <a class="nxl-link" href="{% url 'core:organization_dashboard' org_id=request.organization.id %}">
+                                Vue globale
+                            </a>
+                        </li>
+                        {% endif %}
                     </ul>
                 </li>
 
@@ -239,12 +253,19 @@
                         <span class="nxl-arrow"><span class="material-icons">chevron_right</span></span>
                     </a>
                     <ul class="nxl-submenu">
-                        <li class="nxl-item {% if nav_sub == 'general' %}active{% endif %}" id="nav-settings-general"><a class="nxl-link" href="#">Général</a></li>
-                        <li class="nxl-item {% if nav_sub == 'finance' %}active{% endif %}" id="nav-settings-finance"><a class="nxl-link" href="#">Finances</a></li>
-                        <li class="nxl-item {% if nav_sub == 'api' %}active{% endif %}" id="nav-settings-api"><a class="nxl-link" href="#">API Paiements</a></li>
-                        <li class="nxl-item {% if nav_sub == 'users' %}active{% endif %}" id="nav-settings-users"><a class="nxl-link" href="#">Utilisateurs & rôles</a></li>
-                        <li class="nxl-item {% if nav_sub == 'notifications' %}active{% endif %}" id="nav-settings-notifications"><a class="nxl-link" href="#">Notifications</a></li>
-                        <li class="nxl-item {% if nav_sub == 'backup' %}active{% endif %}" id="nav-settings-backup"><a class="nxl-link" href="#">Sauvegarde</a></li>
+                        <!-- Gestion des utilisateurs (visible uniquement pour Owner) -->
+                    {% if user_has_owner_role %}
+                    <li class="nxl-item {% if nav_sub == 'users' %}active{% endif %}" id="nav-settings-users">
+                        <a class="nxl-link" href="{% url 'compte:user_list' %}">
+                            <i class="fas fa-users"></i> Utilisateurs & rôles
+                        </a>
+                    </li>
+                    <li class="nxl-item {% if nav_sub == 'create_user' %}active{% endif %}" id="nav-settings-create-user">
+                        <a class="nxl-link" href="{% url 'compte:create_user' %}">
+                            <i class="fas fa-user-plus"></i> Nouvel utilisateur
+                        </a>
+                    </li>
+                    {% endif %}
                     </ul>
                 </li>
 
