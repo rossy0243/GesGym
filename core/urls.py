@@ -6,11 +6,7 @@ app_name = "core"
 urlpatterns = [
     path('', dashboard_redirect, name='dashboard_redirect'),
     path('select-gym/', select_gym, name='select_gym'),
-    # Dashboard par gym (existant)
     path('gym/<int:gym_id>/dashboard/', gym_dashboard, name='gym_dashboard'),
-    
-    # Dashboard organisation (NOUVEAU - pour Owner)
-    path('organization/<int:org_id>/dashboard/', organization_dashboard, name='organization_dashboard'),
-    
     path('rapport/', reports_dashboard, name='rapport'),
+    path('switch-gym/<int:gym_id>/', select_gym, name='switch_gym'),
 ]

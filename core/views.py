@@ -1,5 +1,4 @@
 from django.contrib import messages
-
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
 from django.http import HttpResponseForbidden
@@ -13,7 +12,6 @@ from compte.models import UserGymRole
 from members.models import Member
 from organizations.models import Gym, GymModule, Organization
 from pos.models import Payment
-from services.dashboard_service import OrganizationDashboardService
 from subscriptions.models import MemberSubscription
 
 
@@ -21,15 +19,30 @@ from subscriptions.models import MemberSubscription
 def dashboard_redirect(request):
     """Redirige vers le bon dashboard après connexion"""
     
-    # Owner → Dashboard Organisation
+    if not request.user.is_authenticated:
+        return redirect('login')
+
+    # === CAS OWNER ===
     if hasattr(request, 'is_owner') and request.is_owner:
-        return redirect('core:organization_dashboard', org_id=request.organization.id)
-    
-    # Autres rôles (Manager, Coach, etc.) → Dashboard Gym
+        # Si l'Owner a plusieurs gyms → on le redirige vers la sélection
+        if len(getattr(request, 'owned_gyms', [])) > 1:
+            return redirect('core:select_gym')
+        
+        # Si l'Owner n'a qu'un seul gym → on va directement sur son dashboard
+        elif len(getattr(request, 'owned_gyms', [])) == 1:
+            gym = request.owned_gyms[0]
+            request.session['current_gym_id'] = gym.id
+            return redirect('core:gym_dashboard', gym_id=gym.id)
+        
+        # Fallback
+        else:
+            return redirect('core:select_gym')
+
+    # === CAS UTILISATEUR NORMAL (Manager, Coach, etc.) ===
     if hasattr(request, 'gym') and request.gym:
         return redirect('core:gym_dashboard', gym_id=request.gym.id)
-    
-    # Fallback : page de sélection (au cas où)
+
+    # Fallback général
     return redirect('core:select_gym')
 
 @login_required
@@ -61,21 +74,42 @@ def select_gym(request):
 
 @login_required
 def switch_gym(request, gym_id):
-    """Permet à un Owner de changer de gym"""
-    
-    # Vérifier que l'utilisateur a accès à ce gym
-    if request.user.owned_organization:
-        gym = get_object_or_404(Gym, id=gym_id, organization=request.user.owned_organization)
-        
-        # Stocker le gym choisi en session
-        request.session['current_gym_id'] = gym_id
-        messages.success(request, f"Vous travaillez maintenant sur : {gym.name}")
-        return redirect('core:gym_dashboard', gym_id=gym_id)
-    
-    return redirect(request.META.get('HTTP_REFERER', 'core:dashboard_redirect'))
+    """
+    Permet à un Owner de changer de gym actif.
+    Version robuste avec vérifications de sécurité.
+    """
+    user = request.user
 
+    # Vérification 1 : L'utilisateur doit être Owner
+    if not getattr(user, 'is_owner', False) or not user.owned_organization:
+        messages.error(request, "Vous n'avez pas le droit de changer de gym.")
+        return redirect('core:dashboard_redirect')
 
-# core/views.py - Modifier la fonction gym_dashboard
+    # Vérification 2 : Le gym doit appartenir à son organisation
+    gym = get_object_or_404(
+        Gym,
+        id=gym_id,
+        organization=user.owned_organization,
+        is_active=True
+    )
+
+    # Vérification 3 : Optionnel - Vérifier que l'utilisateur a bien accès à ce gym
+    if gym not in user.owned_gyms:   # si tu as la propriété owned_gyms dans le middleware
+        messages.error(request, "Accès refusé à ce gym.")
+        return redirect('core:select_gym')
+
+    # Tout est OK → on change le gym actif en session
+    request.session['current_gym_id'] = gym.id
+    request.session.modified = True  # Force la sauvegarde de la session
+
+    messages.success(
+        request, 
+        f"Vous travaillez maintenant sur : <strong>{gym.name}</strong>",
+        extra_tags='safe'
+    )
+
+    # Redirection vers le dashboard du gym
+    return redirect('core:gym_dashboard', gym_id=gym.id)
 
 @login_required
 def gym_dashboard(request, gym_id):

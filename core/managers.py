@@ -1,3 +1,4 @@
+# core/managers.py
 from django.db import models
 
 

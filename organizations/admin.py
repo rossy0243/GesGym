@@ -31,7 +31,18 @@ class GymAdmin(admin.ModelAdmin):
 
 @admin.register(GymModule)
 class GymModuleAdmin(admin.ModelAdmin):
-    list_display = ['gym', 'module', 'is_active', 'activated_at']
-    list_filter = ['is_active', 'module', 'gym__organization']
-    search_fields = ['gym__name', 'module__name']
-    readonly_fields = ['activated_at']
+    list_display = ('id','organization_name', 'gym_name',  'module', 'is_active', 'activated_at')
+    list_filter = ('is_active', 'module', 'gym__organization')
+    search_fields = ('gym__name', 'module__name', 'gym__organization__name')
+    readonly_fields = ('is_active',)
+    ordering = ('-activated_at',)
+
+    def organization_name(self, obj):
+        return obj.gym.organization.name if obj.gym and obj.gym.organization else "-"
+    organization_name.short_description = "Organisation"
+    organization_name.admin_order_field = 'gym__organization__name'   # permet de trier
+
+    def gym_name(self, obj):
+        return obj.gym.name if obj.gym else "-"
+    gym_name.short_description = "Gym"
+    gym_name.admin_order_field = 'gym__name'

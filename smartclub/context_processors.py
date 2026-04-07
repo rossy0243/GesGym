@@ -24,33 +24,42 @@ def user_owner_check(request):
 
 def modules_processor(request):
     """
-    Ajoute les modules activés dans TOUS les templates
+    Injecte les modules activés dans tous les templates.
+    Gère correctement Owner et utilisateurs normaux.
     """
     modules = {
-        'MEMBERS': False,
-        'SUBSCRIPTIONS': False,
-        'POS': False,
-        'ACCESS': False,
-        'NOTIFICATIONS': False,
-        'PRODUCTS': False,
-        'MACHINES': False,
-        'COACHING': False,
-        'RH': False,
-        'WEBSITE': False,
-        'COMPTE': False,
-        'CORE': False,
+        'MEMBERS': False, 'SUBSCRIPTIONS': False, 'POS': False, 'ACCESS': False,
+        'NOTIFICATIONS': False, 'PRODUCTS': False, 'MACHINES': False,
+        'COACHING': False, 'RH': False, 'WEBSITE': False, 'COMPTE': False, 'CORE': False,
     }
-    
-    if hasattr(request, 'gym') and request.gym:
+
+    if not request.user.is_authenticated:
+        return {'active_modules': [], **modules}
+
+    # Cas Owner
+    if getattr(request, 'is_owner', False) and request.organization:
+        gyms = request.organization.gyms.filter(is_active=True)
+        gym_modules = GymModule.objects.filter(
+            gym__in=gyms,
+            is_active=True
+        ).select_related('module')
+
+    # Cas utilisateur normal (Manager, Cashier, etc.)
+    elif getattr(request, 'gym', None):
         gym_modules = GymModule.objects.filter(
             gym=request.gym,
             is_active=True
         ).select_related('module')
-        
-        for gm in gym_modules:
-            modules[gm.module.code] = True
-    
-    # Variables simples à utiliser dans les templates
+
+    else:
+        gym_modules = []
+
+    # Activation des modules
+    for gm in gym_modules:
+        code = gm.module.code
+        if code in modules:
+            modules[code] = True
+
     context = {
         'active_modules': [code for code, active in modules.items() if active],
         'module_members': modules['MEMBERS'],
@@ -66,5 +75,5 @@ def modules_processor(request):
         'module_compte': modules['COMPTE'],
         'module_core': modules['CORE'],
     }
-    
+
     return context

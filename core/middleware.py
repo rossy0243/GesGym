@@ -1,40 +1,65 @@
 # core/middleware.py
-from compte.models import UserGymRole
 from organizations.models import Gym
+from compte.models import UserGymRole
 
 class GymMiddleware:
+    """
+    Middleware principal pour gérer le contexte multi-tenant :
+    - Owner → organisation + ses gyms
+    - Autres rôles → gym spécifique
+    """
+
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
-        # Initialisation des attributs
+        # Initialisation par défaut
         request.gym = None
         request.organization = None
         request.is_owner = False
-        request.role = None  # ← AJOUTER CETTE LIGNE
+        request.role = None
         request.owned_gyms = []
 
-        if request.user.is_authenticated:
-            # Cas 1 : Owner (lié à une organisation)
-            if hasattr(request.user, 'owned_organization') and request.user.owned_organization:
-                request.is_owner = True
-                request.organization = request.user.owned_organization
-                request.role = 'owner'  # ← AJOUTER
-                request.gym = None
-                # Récupérer les gyms de l'organisation
-                request.owned_gyms = list(request.organization.gyms.filter(is_active=True))
-            
-            # Cas 2 : Autres rôles (Manager, Coach, etc.)
-            else:
-                role = UserGymRole.objects.filter(
-                    user=request.user,
-                    is_active=True
-                ).select_related("gym__organization").first()
+        if not request.user.is_authenticated:
+            return self.get_response(request)
 
-                if role:
-                    request.gym = role.gym
-                    request.organization = role.gym.organization
-                    request.role = role.role  # ← AJOUTER
-                    request.is_owner = False
+        user = request.user
+
+        # ====================== CAS OWNER ======================
+        if hasattr(user, 'owned_organization') and user.owned_organization:
+            request.is_owner = True
+            request.organization = user.owned_organization
+            request.role = 'owner'
+
+            # Récupérer tous les gyms actifs de son organisation
+            request.owned_gyms = list(
+                user.owned_organization.gyms.filter(is_active=True)
+            )
+
+            # Définir le gym actuel (priorité à la session)
+            current_gym_id = request.session.get('current_gym_id')
+            if current_gym_id:
+                try:
+                    request.gym = Gym.objects.get(
+                        id=current_gym_id,
+                        organization=request.organization
+                    )
+                except Gym.DoesNotExist:
+                    request.gym = request.owned_gyms[0] if request.owned_gyms else None
+            elif request.owned_gyms:
+                request.gym = request.owned_gyms[0]  # gym par défaut
+
+        # ====================== CAS UTILISATEUR NORMAL ======================
+        else:
+            role_entry = UserGymRole.objects.filter(
+                user=user,
+                is_active=True
+            ).select_related('gym__organization').first()
+
+            if role_entry:
+                request.gym = role_entry.gym
+                request.organization = role_entry.gym.organization
+                request.role = role_entry.role
+                request.is_owner = False
 
         return self.get_response(request)

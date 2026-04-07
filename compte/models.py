@@ -34,6 +34,11 @@ class User(AbstractUser):
     def is_owner(self):
         """Vérifie si l'utilisateur est un Owner"""
         return self.owned_organization is not None
+    def can_access_gym(self, gym):
+        """Vérifie si l'utilisateur peut accéder à ce gym"""
+        if self.is_owner() and self.owned_organization:
+            return gym.organization == self.owned_organization
+        return False
     def clean(self):
         super().clean()
         # Empêcher qu'un utilisateur non superuser se donne is_saas_admin
