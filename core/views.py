@@ -10,7 +10,7 @@ import calendar
 from access.models import AccessLog
 from compte.models import UserGymRole
 from members.models import Member
-from organizations.models import Gym, GymModule, Organization
+from organizations.models import Gym, GymModule
 from pos.models import Payment
 from subscriptions.models import MemberSubscription
 
@@ -629,99 +629,3 @@ def reports_dashboard(request):
         }
 
     return render(request, "core/rapports.html", context)
-
-
-@login_required
-def organization_dashboard(request, org_id):
-    """Dashboard pour le role Owner - Vue consolidée avec grille des gyms"""
-    
-    # Vérifier que l'utilisateur est bien Owner de cette organisation
-    if not hasattr(request, 'is_owner') or not request.is_owner:
-        return HttpResponseForbidden("Seul un Owner peut accéder à ce dashboard")
-    
-    if request.user.owned_organization_id != org_id:
-        return HttpResponseForbidden("Vous n'êtes pas propriétaire de cette organisation")
-    
-    from datetime import timedelta
-    from django.utils.timezone import now
-    from members.models import Member
-    from machines.models import Machine
-    from coaching.models import Coach
-    from subscriptions.models import MemberSubscription
-    
-    organization = get_object_or_404(Organization, id=org_id)
-    gyms = organization.gyms.filter(is_active=True)
-    
-    today = now().date()
-    
-    # Récupérer les données pour chaque gym
-    gyms_data = []
-    total_members = 0
-    total_machines = 0
-    total_maintenance_cost = 0
-    
-    for gym in gyms:
-        # Machines
-        machines = Machine.objects.filter(gym=gym)
-        machines_ok = machines.filter(status='ok').count()
-        machines_maintenance = machines.filter(status='maintenance').count()
-        machines_broken = machines.filter(status='broken').count()
-        machines_total = machines.count()
-        
-        # Pourcentage
-        machines_ok_percent = (machines_ok / machines_total * 100) if machines_total > 0 else 0
-        machines_maintenance_percent = (machines_maintenance / machines_total * 100) if machines_total > 0 else 0
-        machines_broken_percent = (machines_broken / machines_total * 100) if machines_total > 0 else 0
-        
-        # Membres
-        members_count = Member.objects.filter(gym=gym, is_active=True).count()
-        
-        # Coachs
-        coaches_count = Coach.objects.filter(gym=gym, is_active=True).count()
-        
-        # Abonnements expirant bientôt
-        expiry_soon = MemberSubscription.objects.filter(
-            member__gym=gym,
-            end_date__gte=today,
-            end_date__lte=today + timedelta(days=15),
-            is_active=True
-        ).count()
-        
-        # Coût maintenance
-        from machines.models import MaintenanceLog
-        gym_maintenance_cost = MaintenanceLog.objects.filter(
-            machine__gym=gym
-        ).aggregate(total=Sum('cost'))['total'] or 0
-        
-        gyms_data.append({
-            'id': gym.id,
-            'name': gym.name,
-            'machines': machines_total,
-            'machines_ok': machines_ok,
-            'machines_maintenance': machines_maintenance,
-            'machines_broken': machines_broken,
-            'machines_ok_percent': round(machines_ok_percent, 1),
-            'machines_maintenance_percent': round(machines_maintenance_percent, 1),
-            'machines_broken_percent': round(machines_broken_percent, 1),
-            'members': members_count,
-            'coaches': coaches_count,
-            'expiry_soon': expiry_soon,
-            'maintenance_cost': gym_maintenance_cost,
-        })
-        
-        total_members += members_count
-        total_machines += machines_total
-        total_maintenance_cost += gym_maintenance_cost
-    
-    context = {
-        'organization': organization,
-        'gyms': gyms,
-        'gyms_data': gyms_data,
-        'total_gyms': gyms.count(),
-        'members_total': total_members,
-        'machines_total': total_machines,
-        'maintenance_cost_total': total_maintenance_cost,
-        'user_role': 'owner',
-        'nav_active': 'dashboard',
-    }
-    return render(request, 'core/organization_dashboard.html', context)

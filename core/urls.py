@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import  dashboard_redirect, reports_dashboard, gym_dashboard, organization_dashboard, select_gym, switch_gym
+from .views import  dashboard_redirect, reports_dashboard, gym_dashboard, select_gym, switch_gym
 
 app_name = "core"
 
