@@ -94,7 +94,7 @@ def switch_gym(request, gym_id):
     )
 
     # Vérification 3 : Optionnel - Vérifier que l'utilisateur a bien accès à ce gym
-    if gym not in user.owned_gyms:   # si tu as la propriété owned_gyms dans le middleware
+    if gym not in request.owned_gyms:   # si tu as la propriété owned_gyms dans le middleware
         messages.error(request, "Accès refusé à ce gym.")
         return redirect('core:select_gym')
 

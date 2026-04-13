@@ -96,7 +96,7 @@ document.addEventListener('DOMContentLoaded', function() {
         selector.addEventListener('change', function() {
             const gymId = this.value;
             if (gymId) {
-                window.location.href = "{% url 'core:switch_gym' 0 %}".replace('0', gymId);
+                window.location.href = "{% url 'core:switch_gym' 999 %}".replace('999', gymId);
             }
         });
     }
