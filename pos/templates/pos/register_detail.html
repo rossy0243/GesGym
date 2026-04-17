@@ -1,75 +1,324 @@
 {% extends "base.html" %}
+{% load static %}
+
+{% block page_titre %}Détail session de caisse{% endblock %}
 
 {% block content %}
 
-<h4>Session {{ register.session_code }}</h4>
+<!-- [ page-header ] start -->
+<div class="page-header mb-4">
+    <div class="page-header-left d-flex align-items-center">
+        <div class="page-header-title d-flex align-items-center gap-2">
+            <span class="material-icons text-primary" style="font-size:28px;">receipt_long</span>
+            <div>
+                <h5 class="m-b-0 mb-0">Session {{ register.session_code }}</h5>
+                <small class="text-muted">Détail complet des opérations de caisse</small>
+            </div>
+        </div>
+    </div>
 
-<p>
-Ouvert par : {{ register.opened_by }} <br>
-Ouverture : {{ register.opened_at }} <br>
-Fermeture : {{ register.closed_at }} <br>
-Fonds ouverture : {{ register.opening_amount }} CDF <br>
-Taux session : 1 USD = {{ register.exchange_rate }} CDF
-</p>
+    <div class="page-header-right ms-auto">
+        <div class="d-flex align-items-center gap-2">
+            <a href="{% url 'pos:register_history' %}" class="btn btn-light">
+                <span class="material-icons me-1" style="font-size:18px;">arrow_back</span>
+                Retour
+            </a>
+            <a href="javascript:void(0);" onclick="window.print()" class="btn btn-primary">
+                <span class="material-icons me-1" style="font-size:18px;">print</span>
+                Imprimer
+            </a>
+        </div>
+    </div>
+</div>
+<!-- [ page-header ] end -->
 
-<div class="card">
+<style>
+.register-detail-card,
+.register-detail-card .custom-card-action {
+    overflow: visible;
+}
 
-<table class="table">
+.stat-card {
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+    height: 100%;
+}
 
-<thead>
-<tr>
-<th>Date</th>
-<th>Type</th>
-<th>Client</th>
-<th>Montant</th>
-<th>Mode</th>
-</tr>
-</thead>
+.stat-card .icon-box {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(13, 110, 253, 0.08);
+    color: #0d6efd;
+    flex-shrink: 0;
+}
 
-<tbody>
+.info-card {
+    border-radius: 18px;
+}
 
-{% for p in payments %}
+.info-table td {
+    padding: 10px 0;
+    border: none;
+    vertical-align: middle;
+}
 
-<tr>
+.info-label {
+    color: #64748b;
+    font-weight: 600;
+    width: 180px;
+}
 
-<td>{{ p.created_at|date:"d/m/Y H:i" }}</td>
+.amount-badge {
+    background: #f8fafc;
+    color: #0f172a;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    padding: 8px 12px;
+    border-radius: 999px;
+    font-weight: 600;
+    display: inline-block;
+}
 
-<td>
-{% if p.type == "in" %}
-<span class="text-success">Entrée</span>
-{% else %}
-<span class="text-danger">Sortie</span>
-{% endif %}
-</td>
+.session-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    background: #f8fafc;
+    font-weight: 600;
+    color: #0f172a;
+}
 
-<td>
+.table thead th {
+    white-space: nowrap;
+}
 
-{% if p.member %}
-{{ p.member.first_name }} {{ p.member.last_name }}
-{% else %}
-Décaissement
-{% endif %}
+.empty-state-icon {
+    font-size: 64px;
+    color: #94a3b8;
+}
 
-</td>
+@media (max-width: 768px) {
+    .page-header {
+        flex-direction: column;
+        gap: 12px;
+        align-items: flex-start !important;
+    }
+}
+</style>
 
-<td>
-<div class="fw-semibold">{{ p.amount }} {{ p.currency }}</div>
-<small class="text-muted">{{ p.amount_cdf }} CDF comptable</small>
-{% if p.amount_usd %}
-<small class="d-block text-muted">Reference : {{ p.amount_usd }} USD</small>
-{% endif %}
-</td>
+<!-- Cartes résumé -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="stat-card p-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="icon-box">
+                    <span class="material-icons">confirmation_number</span>
+                </div>
+                <div>
+                    <div class="fs-12 text-muted">Session</div>
+                    <h6 class="mb-0">{{ register.session_code }}</h6>
+                </div>
+            </div>
+        </div>
+    </div>
 
-<td>{{ p.get_method_display }}</td>
+    <div class="col-md-3">
+        <div class="stat-card p-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="icon-box" style="background: rgba(25, 135, 84, 0.08); color:#198754;">
+                    <span class="material-icons">account_balance_wallet</span>
+                </div>
+                <div>
+                    <div class="fs-12 text-muted">Fonds d'ouverture</div>
+                    <h6 class="mb-0">{{ register.opening_amount }} CDF</h6>
+                </div>
+            </div>
+        </div>
+    </div>
 
-</tr>
+    <div class="col-md-3">
+        <div class="stat-card p-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="icon-box" style="background: rgba(255, 193, 7, 0.12); color:#b78103;">
+                    <span class="material-icons">currency_exchange</span>
+                </div>
+                <div>
+                    <div class="fs-12 text-muted">Taux session</div>
+                    <h6 class="mb-0">1 USD = {{ register.exchange_rate }} CDF</h6>
+                </div>
+            </div>
+        </div>
+    </div>
 
-{% endfor %}
+    <div class="col-md-3">
+        <div class="stat-card p-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="icon-box" style="background: rgba(220, 53, 69, 0.08); color:#dc3545;">
+                    <span class="material-icons">payments</span>
+                </div>
+                <div>
+                    <div class="fs-12 text-muted">Nb opérations</div>
+                    <h6 class="mb-0">{{ payments|length }}</h6>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
-</tbody>
+<!-- Infos session -->
+<div class="card info-card mb-4">
+    <div class="card-header">
+        <h5 class="card-title d-flex align-items-center gap-2 mb-0">
+            <span class="material-icons" style="font-size:22px;">info</span>
+            Informations de la session
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="row g-4">
+            <div class="col-md-6">
+                <table class="table info-table mb-0">
+                    <tr>
+                        <td class="info-label">Session</td>
+                        <td>
+                            <span class="session-pill">
+                                <span class="material-icons text-primary" style="font-size:18px;">confirmation_number</span>
+                                {{ register.session_code }}
+                            </span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="info-label">Ouvert par</td>
+                        <td>{{ register.opened_by }}</td>
+                    </tr>
+                    <tr>
+                        <td class="info-label">Ouverture</td>
+                        <td>{{ register.opened_at|date:"d/m/Y H:i" }}</td>
+                    </tr>
+                </table>
+            </div>
 
-</table>
+            <div class="col-md-6">
+                <table class="table info-table mb-0">
+                    <tr>
+                        <td class="info-label">Fermeture</td>
+                        <td>
+                            {% if register.closed_at %}
+                                {{ register.closed_at|date:"d/m/Y H:i" }}
+                            {% else %}
+                                <span class="badge bg-warning text-dark px-3 py-2">Session en cours</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="info-label">Fonds ouverture</td>
+                        <td><span class="amount-badge">{{ register.opening_amount }} CDF</span></td>
+                    </tr>
+                    <tr>
+                        <td class="info-label">Taux session</td>
+                        <td><span class="badge bg-light text-dark px-3 py-2">1 USD = {{ register.exchange_rate }} CDF</span></td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
 
+<!-- Tableau paiements -->
+<div class="card stretch stretch-full register-detail-card">
+    <div class="card-header">
+        <h5 class="card-title d-flex align-items-center gap-2 mb-0">
+            <span class="material-icons" style="font-size:22px;">payments</span>
+            Historique des opérations
+        </h5>
+    </div>
+
+    <div class="card-body custom-card-action p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Client</th>
+                        <th>Montant</th>
+                        <th>Mode</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for p in payments %}
+                    <tr>
+                        <td>
+                            <div class="fw-semibold">{{ p.created_at|date:"d/m/Y" }}</div>
+                            <small class="text-muted">{{ p.created_at|date:"H:i" }}</small>
+                        </td>
+
+                        <td>
+                            {% if p.type == "in" %}
+                                <span class="badge bg-success px-3 py-2">Entrée</span>
+                            {% else %}
+                                <span class="badge bg-danger px-3 py-2">Sortie</span>
+                            {% endif %}
+                        </td>
+
+                        <td>
+                            {% if p.member %}
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="material-icons text-secondary" style="font-size:20px;">person</span>
+                                    <span>{{ p.member.first_name }} {{ p.member.last_name }}</span>
+                                </div>
+                            {% else %}
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="material-icons text-secondary" style="font-size:20px;">money_off</span>
+                                    <span>Décaissement</span>
+                                </div>
+                            {% endif %}
+                        </td>
+
+                        <td>
+                            <div class="fw-semibold">{{ p.amount }} {{ p.currency }}</div>
+                            <small class="d-block text-muted">{{ p.amount_cdf }} CDF comptable</small>
+                            {% if p.amount_usd %}
+                                <small class="d-block text-muted">Référence : {{ p.amount_usd }} USD</small>
+                            {% endif %}
+                        </td>
+
+                        <td>
+                            <span class="badge bg-light text-dark px-3 py-2">
+                                {{ p.get_method_display }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-center py-5">
+                            <div class="d-flex flex-column align-items-center justify-content-center">
+                                <span class="material-icons empty-state-icon">payments</span>
+                                <p class="mt-3 mb-1 fw-semibold text-muted">Aucune opération trouvée</p>
+                                <small class="text-muted">Les mouvements de cette session apparaîtront ici</small>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card-footer">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <p class="fs-12 text-muted mb-0">
+                Total : {{ payments|length }} opération{{ payments|length|pluralize }}
+            </p>
+        </div>
+    </div>
 </div>
 
 {% endblock %}

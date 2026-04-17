@@ -61,7 +61,7 @@ def machine_create(request):
             machine.gym = gym
             machine.save()
             messages.success(request, f'Machine "{machine.name}" créée avec succès!')
-            return redirect('machines:detail', gym_id=gym.id, machine_id=machine.id)
+            return redirect('machines:detail', machine_id=machine.id)
     else:
         form = MachineForm()
     

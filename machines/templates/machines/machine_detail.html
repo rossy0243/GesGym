@@ -1,85 +1,245 @@
 {% extends 'base.html' %}
+{% load static %}
+
+{% block page_titre %}Détail machine{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1>{{ machine.name }}</h1>
-        <div>
-            <a href="{% url 'machines:update' machine.gym.id machine.id %}" class="btn btn-outline-secondary">
+
+<div class="page-header mb-4">
+    <div class="page-header-left d-flex align-items-center">
+        <div class="page-header-title d-flex align-items-center gap-2">
+            <span class="material-icons text-primary" style="font-size:28px;">precision_manufacturing</span>
+            <div>
+                <h5 class="mb-0">{{ machine.name }}</h5>
+                <small class="text-muted">{{ machine.gym.name }}</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="page-header-right ms-auto">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <a href="{% url 'machines:update' machine.gym.id machine.id %}" class="btn btn-outline-secondary d-flex align-items-center gap-2">
+                <span class="material-icons" style="font-size:18px;">edit</span>
                 Modifier
             </a>
-            <a href="{% url 'machines:delete' machine.gym.id machine.id %}" class="btn btn-outline-danger">
+            <a href="{% url 'machines:delete' machine.gym.id machine.id %}" class="btn btn-outline-danger d-flex align-items-center gap-2">
+                <span class="material-icons" style="font-size:18px;">delete</span>
                 Supprimer
             </a>
-            <a href="{% url 'machines:list' machine.gym.id %}" class="btn btn-secondary">
+            <a href="{% url 'machines:list' machine.gym.id %}" class="btn btn-light d-flex align-items-center gap-2">
+                <span class="material-icons" style="font-size:18px;">arrow_back</span>
                 Retour
             </a>
         </div>
     </div>
+</div>
 
-    <div class="row">
-        <!-- Informations machine -->
-        <div class="col-md-4 mb-4">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">Informations</h5>
+<style>
+.machine-detail-card,
+.machine-maintenance-card {
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+}
+
+.machine-stat-card {
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+    height: 100%;
+}
+
+.machine-stat-card .icon-box {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.machine-avatar-lg {
+    width: 84px;
+    height: 84px;
+    border-radius: 50%;
+    background: #eef2ff;
+    color: #3454d1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 1rem;
+}
+
+.info-line {
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.info-line:last-child {
+    border-bottom: none;
+}
+
+.empty-state-icon {
+    font-size: 64px;
+    color: #94a3b8;
+}
+
+.table td,
+.table th {
+    vertical-align: middle;
+}
+
+@media (max-width: 768px) {
+    .page-header {
+        flex-direction: column;
+        gap: 12px;
+        align-items: flex-start !important;
+    }
+}
+</style>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="machine-stat-card p-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="icon-box" style="background: rgba(13, 110, 253, 0.08); color:#0d6efd;">
+                    <span class="material-icons">build_circle</span>
                 </div>
-                <div class="card-body">
-                    <p><strong>Statut:</strong> 
-                        <span class="badge {% if machine.status == 'ok' %}bg-success{% elif machine.status == 'maintenance' %}bg-warning{% else %}bg-danger{% endif %}">
-                            {{ machine.get_status_display }}
-                        </span>
-                    </p>
-                    <p><strong>Date d'achat:</strong> {{ machine.purchase_date|default:"Non renseignée"|date:"d/m/Y" }}</p>
-                    <p><strong>Date d'ajout:</strong> {{ machine.created_at|date:"d/m/Y H:i" }}</p>
-                    <p><strong>Gym:</strong> {{ machine.gym.name }}</p>
+                <div>
+                    <div class="fs-12 text-muted">Maintenances</div>
+                    <h4 class="mb-0">{{ maintenance_logs|length }}</h4>
                 </div>
             </div>
         </div>
+    </div>
 
-        <!-- Maintenance logs -->
-        <div class="col-md-8 mb-4">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">Historique des maintenances</h5>
-                    <a href="{% url 'machines:add_maintenance' machine.gym.id machine.id %}" class="btn btn-primary btn-sm">
-                        + Ajouter une maintenance
-                    </a>
+    <div class="col-md-4">
+        <div class="machine-stat-card p-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="icon-box" style="background: rgba(25, 135, 84, 0.08); color:#198754;">
+                    <span class="material-icons">verified</span>
                 </div>
-                <div class="card-body">
-                    {% if maintenance_logs %}
-                        <div class="table-responsive">
-                            <table class="table table-sm">
-                                <thead>
-                                    <tr>
-                                        <th>Date</th>
-                                        <th>Description</th>
-                                        <th>Coût</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for log in maintenance_logs %}
-                                    <tr>
-                                        <td>{{ log.created_at|date:"d/m/Y H:i" }}</td>
-                                        <td>{{ log.description|truncatewords:20 }}</td>
-                                        <td>
-                                            {% if log.cost %}
-                                                {{ log.cost }} €
-                                            {% else %}
-                                                -
-                                            {% endif %}
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    {% else %}
-                        <p class="text-muted text-center mb-0">Aucune maintenance enregistrée</p>
-                    {% endif %}
+                <div>
+                    <div class="fs-12 text-muted">Statut</div>
+                    <h4 class="mb-0">{{ machine.get_status_display }}</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="machine-stat-card p-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="icon-box" style="background: rgba(255, 193, 7, 0.12); color:#b78103;">
+                    <span class="material-icons">location_city</span>
+                </div>
+                <div>
+                    <div class="fs-12 text-muted">Salle</div>
+                    <h4 class="mb-0">{{ machine.gym.name }}</h4>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+<div class="row g-4">
+    <!-- Informations machine -->
+    <div class="col-md-4">
+        <div class="machine-detail-card p-4">
+            <div class="text-center mb-3">
+                <div class="machine-avatar-lg">
+                    <span class="material-icons" style="font-size:36px;">precision_manufacturing</span>
+                </div>
+                <h4 class="mb-1">{{ machine.name }}</h4>
+                <span class="badge {% if machine.status == 'ok' %}bg-success{% elif machine.status == 'maintenance' %}bg-warning text-dark{% else %}bg-danger{% endif %} px-3 py-2">
+                    {{ machine.get_status_display }}
+                </span>
+            </div>
+
+            <div class="info-line">
+                <strong>Statut :</strong><br>
+                <span class="text-muted">{{ machine.get_status_display }}</span>
+            </div>
+
+            <div class="info-line">
+                <strong>Date d'achat :</strong><br>
+                <span class="text-muted">
+                    {% if machine.purchase_date %}
+                        {{ machine.purchase_date|date:"d/m/Y" }}
+                    {% else %}
+                        Non renseignée
+                    {% endif %}
+                </span>
+            </div>
+
+            <div class="info-line">
+                <strong>Date d'ajout :</strong><br>
+                <span class="text-muted">{{ machine.created_at|date:"d/m/Y H:i" }}</span>
+            </div>
+
+            <div class="info-line">
+                <strong>Gym :</strong><br>
+                <span class="text-muted">{{ machine.gym.name }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Maintenance logs -->
+    <div class="col-md-8">
+        <div class="machine-maintenance-card">
+            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h5 class="mb-0 d-flex align-items-center gap-2">
+                    <span class="material-icons">build</span>
+                    Historique des maintenances
+                </h5>
+
+                <a href="{% url 'machines:add_maintenance' machine.gym.id machine.id %}" class="btn btn-primary btn-sm d-flex align-items-center gap-1">
+                    <span class="material-icons" style="font-size:16px;">add</span>
+                    Ajouter une maintenance
+                </a>
+            </div>
+
+            <div class="card-body">
+                {% if maintenance_logs %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Description</th>
+                                    <th>Coût</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for log in maintenance_logs %}
+                                <tr>
+                                    <td>{{ log.created_at|date:"d/m/Y H:i" }}</td>
+                                    <td>{{ log.description|truncatewords:20 }}</td>
+                                    <td>
+                                        {% if log.cost %}
+                                            {{ log.cost }} €
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center py-5">
+                        <span class="material-icons empty-state-icon">build</span>
+                        <p class="mt-3 mb-1 fw-semibold text-muted">Aucune maintenance enregistrée</p>
+                        <small class="text-muted">Les interventions de maintenance apparaîtront ici.</small>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}

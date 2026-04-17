@@ -4,169 +4,214 @@
 {% block page_titre %}Rapports{% endblock %}
 
 {% block content %}
-<!-- [page-header] start (avec filtres et actions) -->
-<div class="page-header">
+
+<div class="page-header mb-4">
     <div class="page-header-left d-flex align-items-center">
-        <div class="page-header-title">
-            <h5 class="m-b-10" id="pageTitle">Rapports - Journalier</h5>
-            <small class="text-muted d-none d-md-inline">Vue globale de la journée en cours</small>
+        <div class="page-header-title d-flex align-items-center gap-2">
+            <span class="material-icons text-primary" style="font-size:28px;">insights</span>
+            <div>
+                <h5 class="mb-0" id="pageTitle">Rapports - Journalier</h5>
+                <small class="text-muted d-none d-md-inline">Vue globale de la période sélectionnée</small>
+            </div>
         </div>
     </div>
+
     <div class="page-header-right ms-auto">
-        <div class="page-header-right-items">
-            <div class="d-flex flex-wrap align-items-center justify-content-end gap-2 gap-md-3">
-                <!-- Filtres -->
-                <div class="d-flex flex-wrap align-items-center gap-2">
-                    <div class="d-flex flex-column">
-                        <span class="fs-11 text-muted d-none d-md-inline">Période</span>
-                        <select class="form-select form-select-sm w-auto" id="periodFilter" onchange="filterReports()">
-                            <option value="today">Aujourd'hui</option>
-                            <option value="yesterday">Hier</option>
-                            <option value="week" selected>Cette semaine</option>
-                            <option value="month">Ce mois</option>
-                            <option value="year">Cette année</option>
-                            <option value="custom">Personnalisé</option>
-                        </select>
-                    </div>
-                    <!-- Dates personnalisées (cachées par défaut) -->
-                    <input type="date" class="form-control form-control-sm w-auto" id="dateFrom" style="display: none;" onchange="filterReports()">
-                    <input type="date" class="form-control form-control-sm w-auto" id="dateTo" style="display: none;" onchange="filterReports()">
+        <div class="d-flex flex-wrap align-items-center justify-content-end gap-2 gap-md-3">
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <div class="d-flex flex-column">
+                    <span class="fs-11 text-muted d-none d-md-inline">Période</span>
+                    <select class="form-select form-select-sm w-auto" id="periodFilter" onchange="filterReports()">
+                        <option value="today">Aujourd'hui</option>
+                        <option value="yesterday">Hier</option>
+                        <option value="week" selected>Cette semaine</option>
+                        <option value="month">Ce mois</option>
+                        <option value="year">Cette année</option>
+                        <option value="custom">Personnalisé</option>
+                    </select>
                 </div>
 
-                <!-- Actions -->
-                <div class="d-flex flex-wrap align-items-center gap-2">
-                    <button class="btn btn-sm btn-primary" onclick="generateSelectedReport()">
-                        <span class="material-icons me-2" style="font-size: 18px;">play_arrow</span>Générer
-                    </button>
-                    <div class="dropdown">
-                        <a class="btn btn-sm btn-light-brand" data-bs-toggle="dropdown">
-                            <span class="material-icons me-2" style="font-size: 18px;">download</span>Exporter
+                <input type="date" class="form-control form-control-sm w-auto" id="dateFrom" style="display:none;" onchange="filterReports()">
+                <input type="date" class="form-control form-control-sm w-auto" id="dateTo" style="display:none;" onchange="filterReports()">
+            </div>
+
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <button class="btn btn-sm btn-primary" onclick="generateSelectedReport()">
+                    <span class="material-icons me-2" style="font-size:18px;">play_arrow</span>Générer
+                </button>
+
+                <div class="dropdown">
+                    <a class="btn btn-sm btn-light-brand" data-bs-toggle="dropdown">
+                        <span class="material-icons me-2" style="font-size:18px;">download</span>Exporter
+                    </a>
+                    <div class="dropdown-menu dropdown-menu-end">
+                        <a href="javascript:void(0);" class="dropdown-item" onclick="exportReport('pdf')">
+                            <span class="material-icons me-2" style="font-size:18px;">picture_as_pdf</span>PDF
                         </a>
-                        <div class="dropdown-menu dropdown-menu-end">
-                            <a href="javascript:void(0);" class="dropdown-item" onclick="exportReport('pdf')">
-                                <span class="material-icons me-2" style="font-size: 18px;">picture_as_pdf</span> PDF
-                            </a>
-                            <a href="javascript:void(0);" class="dropdown-item" onclick="exportReport('excel')">
-                                <span class="material-icons me-2" style="font-size: 18px;">table_chart</span> Excel (XLSX)
-                            </a>
-                            <a href="javascript:void(0);" class="dropdown-item" onclick="exportReport('csv')">
-                                <span class="material-icons me-2" style="font-size: 18px;">grid_on</span> CSV
-                            </a>
-                        </div>
+                        <a href="javascript:void(0);" class="dropdown-item" onclick="exportReport('excel')">
+                            <span class="material-icons me-2" style="font-size:18px;">table_chart</span>Excel (XLSX)
+                        </a>
+                        <a href="javascript:void(0);" class="dropdown-item" onclick="exportReport('csv')">
+                            <span class="material-icons me-2" style="font-size:18px;">grid_on</span>CSV
+                        </a>
                     </div>
-                    <div class="vr d-none d-md-block"></div>
-                    <button class="btn btn-sm btn-outline-secondary" onclick="toggleDailyClosure()">
-                        <span class="material-icons me-1" style="font-size: 18px;">lock</span>
-                        <span id="dailyClosureLabel">Clôturer la journée</span>
-                    </button>
-                    <button class="btn btn-sm btn-outline-primary" onclick="openDailyAdjustmentDialog()" id="dailyAdjustBtn">
-                        <span class="material-icons me-1" style="font-size: 18px;">edit</span>
-                        Ajustement après clôture
-                    </button>
                 </div>
+
+                <div class="vr d-none d-md-block"></div>
+
+                <button class="btn btn-sm btn-outline-secondary" onclick="toggleDailyClosure()">
+                    <span class="material-icons me-1" style="font-size:18px;">lock</span>
+                    <span id="dailyClosureLabel">Clôturer la journée</span>
+                </button>
+
+                <button class="btn btn-sm btn-outline-primary" onclick="openDailyAdjustmentDialog()" id="dailyAdjustBtn">
+                    <span class="material-icons me-1" style="font-size:18px;">edit</span>
+                    Ajustement après clôture
+                </button>
             </div>
         </div>
     </div>
 </div>
 
-<!-- [Main Content] start -->
+<style>
+.report-stat-card {
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+    height: 100%;
+}
+
+.report-stat-card .icon-box {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.report-section-card {
+    border-radius: 18px;
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+}
+
+.report-switcher .btn {
+    border-radius: 999px;
+}
+
+.empty-state-icon {
+    font-size: 64px;
+    color: #94a3b8;
+}
+
+.template-box {
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 16px;
+    padding: 1rem;
+    height: 100%;
+    background: #fff;
+}
+
+@media (max-width: 768px) {
+    .page-header {
+        flex-direction: column;
+        gap: 12px;
+        align-items: flex-start !important;
+    }
+}
+</style>
+
+<div class="report-switcher d-flex flex-wrap gap-2 mb-4">
+    <button type="button" class="btn btn-light" onclick="showReportSection('journalier')">
+        <span class="material-icons me-1" style="font-size:18px;">today</span>Journalier
+    </button>
+    <button type="button" class="btn btn-light" onclick="showReportSection('mensuel')">
+        <span class="material-icons me-1" style="font-size:18px;">calendar_month</span>Mensuel
+    </button>
+    <button type="button" class="btn btn-light" onclick="showReportSection('personnalise')">
+        <span class="material-icons me-1" style="font-size:18px;">tune</span>Personnalisé
+    </button>
+</div>
+
 <div class="main-content" id="mainContent">
 
-    <!-- SECTION RAPPORT JOURNALIER -->
     <div id="journalierSection">
-        <!-- Aperçu des KPI du jour -->
-        <div class="row">
+        <div class="row g-3">
             <div class="col-xxl-3 col-md-6">
-                <div class="card stretch stretch-full stat-card">
-                    <div class="card-body">
-                        <div class="d-flex align-items-start justify-content-between mb-2">
-                            <div>
-                                <span class="fs-12 fw-medium text-muted">Chiffre d'affaires</span>
-                                <h3 class="mb-0 fw-bold" id="dailyRevenue">{{ daily_revenue }} CDF</h3>
-                            </div>
-                            <div class="report-icon-box">
-                                <span class="material-icons" style="font-size: 28px; color: #3454d1;">payments</span>
-                            </div>
+                <div class="report-stat-card p-3">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="icon-box" style="background: rgba(13, 110, 253, 0.08); color:#0d6efd;">
+                            <span class="material-icons">payments</span>
+                        </div>
+                        <div>
+                            <div class="fs-12 text-muted">Chiffre d'affaires</div>
+                            <h4 class="mb-0 fw-bold" id="dailyRevenue">{{ daily_revenue }} CDF</h4>
                         </div>
                     </div>
                 </div>
             </div>
+
             <div class="col-xxl-3 col-md-6">
-                <div class="card stretch stretch-full stat-card">
-                    <div class="card-body">
-                        <div class="d-flex align-items-start justify-content-between mb-2">
-                            <div>
-                                <span class="fs-12 fw-medium text-muted">Transactions</span>
-                                <h3 class="mb-0 fw-bold" id="dailyTransactions">{{ daily_transactions }}</h3>
-                            </div>
-                            <div class="report-icon-box">
-                                <span class="material-icons" style="font-size: 28px; color: #10b981;">receipt</span>
-                            </div>
+                <div class="report-stat-card p-3">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="icon-box" style="background: rgba(25, 135, 84, 0.08); color:#198754;">
+                            <span class="material-icons">receipt</span>
+                        </div>
+                        <div>
+                            <div class="fs-12 text-muted">Transactions</div>
+                            <h4 class="mb-0 fw-bold" id="dailyTransactions">{{ daily_transactions }}</h4>
                         </div>
                     </div>
                 </div>
             </div>
+
             <div class="col-xxl-3 col-md-6">
-                <div class="card stretch stretch-full stat-card">
-                    <div class="card-body">
-                        <div class="d-flex align-items-start justify-content-between mb-2">
-                            <div>
-                                <span class="fs-12 fw-medium text-muted">Nouveaux clients</span>
-                                <h3 class="mb-0 fw-bold" id="dailyNewClients">{{ daily_new_clients }}</h3>
-                            </div>
-                            <div class="report-icon-box">
-                                <span class="material-icons" style="font-size: 28px; color: #f59e0b;">person_add</span>
-                            </div>
+                <div class="report-stat-card p-3">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="icon-box" style="background: rgba(255, 193, 7, 0.12); color:#b78103;">
+                            <span class="material-icons">person_add</span>
                         </div>
-                        
+                        <div>
+                            <div class="fs-12 text-muted">Nouveaux clients</div>
+                            <h4 class="mb-0 fw-bold" id="dailyNewClients">{{ daily_new_clients }}</h4>
+                        </div>
                     </div>
                 </div>
             </div>
+
             <div class="col-xxl-3 col-md-6">
-                <div class="card stretch stretch-full stat-card">
-                    <div class="card-body">
-                        <div class="d-flex align-items-start justify-content-between mb-2">
-                            <div>
-                                <span class="fs-12 fw-medium text-muted">Fréquentation</span>
-                                <h3 class="mb-0 fw-bold" id="dailyVisits">{{ daily_visits }}</h3>
-                            </div>
-                            <div class="report-icon-box">
-                                <span class="material-icons" style="font-size: 28px; color: #ef4444;">directions_run</span>
-                            </div>
+                <div class="report-stat-card p-3">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="icon-box" style="background: rgba(220, 53, 69, 0.08); color:#dc3545;">
+                            <span class="material-icons">directions_run</span>
                         </div>
-                        
+                        <div>
+                            <div class="fs-12 text-muted">Fréquentation</div>
+                            <h4 class="mb-0 fw-bold" id="dailyVisits">{{ daily_visits }}</h4>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Tableau des transactions détaillées du jour -->
-        <div class="row mt-4">
-            <div class="col-xxl-12">
-                <div class="card stretch stretch-full">
+        <div class="row mt-4 g-3">
+            <div class="col-xxl-8">
+                <div class="card report-section-card">
                     <div class="card-header">
-                        <h5 class="card-title">Détail des transactions - Journalier</h5>
-                        <div class="card-header-action">
-                            <div class="dropdown">
-                                <a href="javascript:void(0);" class="avatar-text avatar-sm" data-bs-toggle="dropdown">
-                                    <span class="material-icons">more_vert</span>
-                                </a>
-                                <div class="dropdown-menu dropdown-menu-end">
-                                    <a href="javascript:void(0);" class="dropdown-item" onclick="exportCurrentView('pdf')">
-                                        <span class="material-icons me-2">download</span>Exporter
-                                    </a>
-                                    <a href="javascript:void(0);" class="dropdown-item" onclick="printCurrentView()">
-                                        <span class="material-icons me-2">print</span>Imprimer
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
+                        <h5 class="card-title d-flex align-items-center gap-2 mb-0">
+                            <span class="material-icons">receipt_long</span>
+                            Détail des transactions
+                        </h5>
                     </div>
-                    <div class="card-body custom-card-action p-0">
+
+                    <div class="card-body p-0">
                         <div class="table-responsive">
                             <table class="table table-hover mb-0">
-                                <thead>
-                                    <tr class="border-b">
+                                <thead class="table-light">
+                                    <tr>
                                         <th>Heure</th>
                                         <th>Client</th>
                                         <th>Méthode</th>
@@ -175,79 +220,61 @@
                                     </tr>
                                 </thead>
                                 <tbody id="dailyTransactionsBody">
-
-                                {% for tx in transactions %}
-
-                                <tr>
-
-                                <td>{{ tx.created_at|time:"H:i" }}</td>
-
-                                <td>
-                                {{ tx.member.first_name }} {{ tx.member.last_name }}
-                                </td>
-
-                                <td>
-                                {{ tx.method }}
-                                </td>
-
-                                <td class="fw-semibold">
-                                {{ tx.amount }} $
-                                </td>
-
-                                <td class="text-end">
-                                #{{ tx.reference }}
-                                </td>
-
-                                </tr>
-
-                                {% empty %}
-
-                                <tr>
-                                <td colspan="6" class="text-center text-muted">
-                                Aucune transaction aujourd'hui
-                                </td>
-                                </tr>
-
-                                {% endfor %}
-
+                                    {% for tx in transactions %}
+                                    <tr>
+                                        <td>{{ tx.created_at|time:"H:i" }}</td>
+                                        <td>{{ tx.member.first_name }} {{ tx.member.last_name }}</td>
+                                        <td>{{ tx.method }}</td>
+                                        <td class="fw-semibold">{{ tx.amount }} $</td>
+                                        <td class="text-end">#{{ tx.reference }}</td>
+                                    </tr>
+                                    {% empty %}
+                                    <tr>
+                                        <td colspan="5" class="text-center py-5">
+                                            <div class="d-flex flex-column align-items-center justify-content-center">
+                                                <span class="material-icons empty-state-icon">receipt_long</span>
+                                                <p class="mt-3 mb-1 fw-semibold text-muted">Aucune transaction aujourd'hui</p>
+                                                <small class="text-muted">Les opérations de la période apparaîtront ici</small>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
                                 </tbody>
                             </table>
                         </div>
                     </div>
-                    <div class="card-footer">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <p class="fs-12 text-muted mb-0">Affichage 1-5 sur 48 transactions</p>
-                            <ul class="pagination pagination-custom mb-0">
-                                <li class="page-item disabled"><a class="page-link" href="#"><span class="material-icons" style="font-size: 16px;">chevron_left</span></a></li>
-                                <li class="page-item active"><a class="page-link" href="#">1</a></li>
-                                <li class="page-item"><a class="page-link" href="#">2</a></li>
-                                <li class="page-item"><a class="page-link" href="#">3</a></li>
-                                <li class="page-item"><a class="page-link" href="#">4</a></li>
-                                <li class="page-item"><a class="page-link" href="#">5</a></li>
-                                <li class="page-item"><a class="page-link" href="#"><span class="material-icons" style="font-size: 16px;">chevron_right</span></a></li>
-                            </ul>
+
+                    <div class="card-footer d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <p class="fs-12 text-muted mb-0">Total : {{ transactions|length }} transaction{{ transactions|length|pluralize }}</p>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-sm btn-light" onclick="exportCurrentView('pdf')">
+                                <span class="material-icons me-1" style="font-size:16px;">download</span>Exporter
+                            </button>
+                            <button class="btn btn-sm btn-light" onclick="printCurrentView()">
+                                <span class="material-icons me-1" style="font-size:16px;">print</span>Imprimer
+                            </button>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Synthèse par méthode de paiement -->
-        <div class="row mt-4">
-            <div class="col-xxl-12">
-                <div class="card stretch stretch-full">
+            <div class="col-xxl-4">
+                <div class="card report-section-card h-100">
                     <div class="card-header">
-                        <h5 class="card-title">Synthèse des accès</h5>
+                        <h5 class="card-title d-flex align-items-center gap-2 mb-0">
+                            <span class="material-icons">summarize</span>
+                            Synthèse des accès
+                        </h5>
                     </div>
                     <div class="card-body">
                         <div class="vstack gap-3">
                             <div class="d-flex justify-content-between align-items-center">
-                                <span><span class="material-icons text-success me-2" style="font-size: 16px;">check_circle</span>Entrées autorisées</span>
+                                <span><span class="material-icons text-success me-2" style="font-size:16px;">check_circle</span>Entrées autorisées</span>
                                 <span class="fw-semibold text-success">{{ daily_visits }}</span>
                             </div>
                             <div class="d-flex justify-content-between align-items-center">
-                                <span><span class="material-icons text-danger me-2" style="font-size: 16px;">cancel</span>Tentatives refusées (expirés/suspendus)</span>
-                                <span class="fw-semibold text-danger">{{denied_access}}</span>
+                                <span><span class="material-icons text-danger me-2" style="font-size:16px;">cancel</span>Tentatives refusées</span>
+                                <span class="fw-semibold text-danger">{{ denied_access }}</span>
                             </div>
                         </div>
                     </div>
@@ -256,109 +283,120 @@
         </div>
     </div>
 
-    <!-- SECTION RAPPORT MENSUEL -->
-    <div id="mensuelSection" style="display: none;">
-        <!-- KPI mensuels -->
-        <div class="row">
+    <div id="mensuelSection" style="display:none;">
+        <div class="row g-3">
             <div class="col-xxl-4 col-md-6">
-                <div class="card stretch stretch-full stat-card">
-                    <div class="card-body">
-                        <div class="d-flex align-items-start justify-content-between mb-2">
-                            <div>
-                                <span class="fs-12 fw-medium text-muted">CA Mensuel</span>
-                                <h3 class="mb-0 fw-bold" id="monthlyRevenue">{{ monthly_revenue }} CDF</h3>
-                            </div>
-                            <div class="report-icon-box">
-                                <span class="material-icons" style="font-size: 28px; color: #3454d1;">payments</span>
-                            </div>
+                <div class="report-stat-card p-3">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="icon-box" style="background: rgba(13, 110, 253, 0.08); color:#0d6efd;">
+                            <span class="material-icons">payments</span>
                         </div>
-                        
+                        <div>
+                            <div class="fs-12 text-muted">CA Mensuel</div>
+                            <h4 class="mb-0 fw-bold" id="monthlyRevenue">{{ monthly_revenue }} CDF</h4>
+                        </div>
                     </div>
                 </div>
             </div>
+
             <div class="col-xxl-4 col-md-6">
-                <div class="card stretch stretch-full stat-card">
-                    <div class="card-body">
-                        <div class="d-flex align-items-start justify-content-between mb-2">
-                            <div>
-                                <span class="fs-12 fw-medium text-muted">Nouveaux inscrits</span>
-                                <h3 class="mb-0 fw-bold" id="monthlyNewMembers">{{ monthly_new_members }}</h3>
-                            </div>
-                            <div class="report-icon-box">
-                                <span class="material-icons" style="font-size: 28px; color: #10b981;">person_add</span>
-                            </div>
+                <div class="report-stat-card p-3">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="icon-box" style="background: rgba(25, 135, 84, 0.08); color:#198754;">
+                            <span class="material-icons">person_add</span>
                         </div>
-                        
+                        <div>
+                            <div class="fs-12 text-muted">Nouveaux inscrits</div>
+                            <h4 class="mb-0 fw-bold" id="monthlyNewMembers">{{ monthly_new_members }}</h4>
+                        </div>
                     </div>
                 </div>
             </div>
+
             <div class="col-xxl-4 col-md-6">
-                <div class="card stretch stretch-full stat-card">
-                    <div class="card-body">
-                        <div class="d-flex align-items-start justify-content-between mb-2">
-                            <div>
-                                <span class="fs-12 fw-medium text-muted">Visites totales</span>
-                                <h3 class="mb-0 fw-bold" id="monthlyVisits">{{ monthly_visits }}</h3>
-                            </div>
-                            <div class="report-icon-box">
-                                <span class="material-icons" style="font-size: 28px; color: #ef4444;">directions_run</span>
-                            </div>
+                <div class="report-stat-card p-3">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="icon-box" style="background: rgba(220, 53, 69, 0.08); color:#dc3545;">
+                            <span class="material-icons">directions_run</span>
+                        </div>
+                        <div>
+                            <div class="fs-12 text-muted">Visites totales</div>
+                            <h4 class="mb-0 fw-bold" id="monthlyVisits">{{ monthly_visits }}</h4>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Tableau récapitulatif mensuel -->
-        <div class="row mt-4">
-            <div class="col-xxl-12">
-                <div class="card stretch stretch-full">
+        <div class="row mt-4 g-3">
+            <div class="col-xxl-7">
+                <div class="card report-section-card h-100">
                     <div class="card-header">
-                        <h5 class="card-title">Récapitulatif mensuel - Détail par formule</h5>
+                        <h5 class="card-title d-flex align-items-center gap-2 mb-0">
+                            <span class="material-icons">table_chart</span>
+                            Récapitulatif mensuel par formule
+                        </h5>
                     </div>
-                    <div class="card-body custom-card-action p-0">
+                    <div class="card-body p-0">
                         <div class="table-responsive">
                             <table class="table table-hover mb-0">
-                                <thead>
-                                    <tr class="border-b">
+                                <thead class="table-light">
+                                    <tr>
                                         <th>Formule</th>
                                         <th>Ventes</th>
                                         <th>Montant</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-
                                     {% for plan in plans_stats %}
-
                                     <tr>
-
-                                    <td>{{ plan.plan__name }}</td>
-
-                                    <td>{{ plan.subscriptions  }}</td>
-
-                                    <td>{{ plan.revenue }} CDF</td>
-
+                                        <td>{{ plan.plan__name }}</td>
+                                        <td>{{ plan.subscriptions }}</td>
+                                        <td>{{ plan.revenue }} CDF</td>
                                     </tr>
-
+                                    {% empty %}
+                                    <tr>
+                                        <td colspan="3" class="text-center py-5">
+                                            <div class="d-flex flex-column align-items-center justify-content-center">
+                                                <span class="material-icons empty-state-icon">table_chart</span>
+                                                <p class="mt-3 mb-1 fw-semibold text-muted">Aucune donnée mensuelle</p>
+                                                <small class="text-muted">Les statistiques mensuelles apparaîtront ici</small>
+                                            </div>
+                                        </td>
+                                    </tr>
                                     {% endfor %}
-
-                                    </tbody>
+                                </tbody>
                             </table>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-xxl-5">
+                <div class="card report-section-card h-100">
+                    <div class="card-header">
+                        <h5 class="card-title d-flex align-items-center gap-2 mb-0">
+                            <span class="material-icons">show_chart</span>
+                            Tendance mensuelle
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="monthlySalesChart" height="180"></canvas>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- SECTION RAPPORT PERSONNALISÉ -->
-    <div id="personnaliseSection" style="display: none;">
-        <!-- Constructeur de rapport personnalisé -->
-        <div class="row">
+    <div id="personnaliseSection" style="display:none;">
+        <div class="row g-3">
             <div class="col-xxl-4">
-                <div class="card stretch stretch-full">
+                <div class="card report-section-card h-100">
                     <div class="card-header">
-                        <h5 class="card-title">Constructeur de rapport</h5>
+                        <h5 class="card-title d-flex align-items-center gap-2 mb-0">
+                            <span class="material-icons">tune</span>
+                            Constructeur de rapport
+                        </h5>
                     </div>
                     <div class="card-body">
                         <form id="customReportForm">
@@ -373,6 +411,7 @@
                                 </select>
                                 <small class="text-muted">Maintenez Ctrl pour sélection multiple</small>
                             </div>
+
                             <div class="mb-3">
                                 <label class="form-label">Période</label>
                                 <div class="row">
@@ -384,6 +423,7 @@
                                     </div>
                                 </div>
                             </div>
+
                             <div class="mb-3">
                                 <label class="form-label">Centre(s)</label>
                                 <select class="form-select" id="customSites" multiple size="3">
@@ -394,27 +434,29 @@
                                     <option value="Matete">Matete</option>
                                 </select>
                             </div>
+
                             <div class="mb-3">
                                 <label class="form-label">Colonnes à afficher</label>
                                 <div class="vstack gap-2">
                                     <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" value="" id="colDate" checked>
+                                        <input class="form-check-input" type="checkbox" id="colDate" checked>
                                         <label class="form-check-label" for="colDate">Date</label>
                                     </div>
                                     <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" value="" id="colClient" checked>
+                                        <input class="form-check-input" type="checkbox" id="colClient" checked>
                                         <label class="form-check-label" for="colClient">Client</label>
                                     </div>
                                     <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" value="" id="colMontant" checked>
+                                        <input class="form-check-input" type="checkbox" id="colMontant" checked>
                                         <label class="form-check-label" for="colMontant">Montant</label>
                                     </div>
                                     <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" value="" id="colStatut" checked>
+                                        <input class="form-check-input" type="checkbox" id="colStatut" checked>
                                         <label class="form-check-label" for="colStatut">Statut</label>
                                     </div>
                                 </div>
                             </div>
+
                             <div class="mb-3">
                                 <label class="form-label">Regroupement</label>
                                 <select class="form-select" id="reportGrouping">
@@ -426,6 +468,7 @@
                                     <option value="type">Par type d'abonnement</option>
                                 </select>
                             </div>
+
                             <button type="button" class="btn btn-primary w-100" onclick="generateCustomReport()">
                                 <span class="material-icons me-2">bar_chart</span>Générer le rapport
                             </button>
@@ -433,21 +476,24 @@
                     </div>
                 </div>
             </div>
+
             <div class="col-xxl-8">
-                <div class="card stretch stretch-full">
-                    <div class="card-header">
-                        <h5 class="card-title">Aperçu du rapport personnalisé</h5>
-                        <div class="card-header-action">
-                            <button class="btn btn-sm btn-light-brand" onclick="saveReportTemplate()">
-                                <span class="material-icons me-2">save</span>Sauvegarder modèle
-                            </button>
-                        </div>
+                <div class="card report-section-card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <h5 class="card-title d-flex align-items-center gap-2 mb-0">
+                            <span class="material-icons">preview</span>
+                            Aperçu du rapport personnalisé
+                        </h5>
+                        <button class="btn btn-sm btn-light-brand" onclick="saveReportTemplate()">
+                            <span class="material-icons me-2">save</span>Sauvegarder modèle
+                        </button>
                     </div>
+
                     <div class="card-body p-0">
                         <div class="table-responsive">
                             <table class="table table-hover mb-0">
-                                <thead>
-                                    <tr class="border-b">
+                                <thead class="table-light">
+                                    <tr>
                                         <th>Date</th>
                                         <th>Client</th>
                                         <th>Montant</th>
@@ -483,77 +529,65 @@
                             </table>
                         </div>
                     </div>
-                    <div class="card-footer">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <p class="fs-12 text-muted mb-0">Affichage 1-5 sur 24 résultats</p>
-                            <div>
-                                <span class="badge bg-soft-info text-info me-2">Modèle: Rapport standard</span>
-                            </div>
-                        </div>
+
+                    <div class="card-footer d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <p class="fs-12 text-muted mb-0">Affichage 1-5 sur 24 résultats</p>
+                        <span class="badge bg-light text-primary">Modèle : Rapport standard</span>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Modèles sauvegardés -->
-        <div class="row mt-4">
-            <div class="col-xxl-12">
-                <div class="card stretch stretch-full">
-                    <div class="card-header">
-                        <h5 class="card-title">Modèles de rapports sauvegardés</h5>
+        <div class="row mt-4 g-3">
+            <div class="col-md-4">
+                <div class="template-box">
+                    <div class="d-flex align-items-center gap-3">
+                        <span class="material-icons text-primary" style="font-size:32px;">receipt</span>
+                        <div>
+                            <h6 class="mb-1">Rapport de trésorerie</h6>
+                            <p class="fs-12 text-muted mb-2">Transactions + Paiements</p>
+                            <a href="javascript:void(0);" class="btn btn-sm btn-light-brand" onclick="loadTemplate('tresorerie')">
+                                <span class="material-icons me-1" style="font-size:16px;">visibility</span>Charger
+                            </a>
+                        </div>
                     </div>
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-4">
-                                <div class="border rounded p-3">
-                                    <div class="d-flex align-items-center gap-3">
-                                        <span class="material-icons text-primary" style="font-size: 32px;">receipt</span>
-                                        <div>
-                                            <h6 class="mb-1">Rapport de trésorerie</h6>
-                                            <p class="fs-12 text-muted mb-2">Transactions + Paiements</p>
-                                            <a href="javascript:void(0);" class="btn btn-sm btn-light-brand" onclick="loadTemplate('tresorerie')">
-                                                <span class="material-icons me-1" style="font-size: 16px;">visibility</span>Charger
-                                            </a>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="border rounded p-3">
-                                    <div class="d-flex align-items-center gap-3">
-                                        <span class="material-icons text-primary" style="font-size: 32px;">group</span>
-                                        <div>
-                                            <h6 class="mb-1">Suivi des adhésions</h6>
-                                            <p class="fs-12 text-muted mb-2">Clients + Abonnements</p>
-                                            <a href="javascript:void(0);" class="btn btn-sm btn-light-brand" onclick="loadTemplate('adhesions')">
-                                                <span class="material-icons me-1" style="font-size: 16px;">visibility</span>Charger
-                                            </a>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="border rounded p-3">
-                                    <div class="d-flex align-items-center gap-3">
-                                        <span class="material-icons text-primary" style="font-size: 32px;">insights</span>
-                                        <div>
-                                            <h6 class="mb-1">Rapport de fréquentation</h6>
-                                            <p class="fs-12 text-muted mb-2">Accès + Historique</p>
-                                            <a href="javascript:void(0);" class="btn btn-sm btn-light-brand" onclick="loadTemplate('frequentation')">
-                                                <span class="material-icons me-1" style="font-size: 16px;">visibility</span>Charger
-                                            </a>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="template-box">
+                    <div class="d-flex align-items-center gap-3">
+                        <span class="material-icons text-primary" style="font-size:32px;">group</span>
+                        <div>
+                            <h6 class="mb-1">Suivi des adhésions</h6>
+                            <p class="fs-12 text-muted mb-2">Clients + Abonnements</p>
+                            <a href="javascript:void(0);" class="btn btn-sm btn-light-brand" onclick="loadTemplate('adhesions')">
+                                <span class="material-icons me-1" style="font-size:16px;">visibility</span>Charger
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="template-box">
+                    <div class="d-flex align-items-center gap-3">
+                        <span class="material-icons text-primary" style="font-size:32px;">insights</span>
+                        <div>
+                            <h6 class="mb-1">Rapport de fréquentation</h6>
+                            <p class="fs-12 text-muted mb-2">Accès + Historique</p>
+                            <a href="javascript:void(0);" class="btn btn-sm btn-light-brand" onclick="loadTemplate('frequentation')">
+                                <span class="material-icons me-1" style="font-size:16px;">visibility</span>Charger
+                            </a>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
+
 </div>
-<!-- [Main Content] end -->
+
 {% endblock %}
 
 {% block extra_js %}
@@ -566,53 +600,44 @@ let sales_values = {{ sales_values|safe }};
 <script>
 const ctx = document.getElementById("monthlySalesChart");
 
-if(ctx){
-
-new Chart(ctx,{
-type:"line",
-data:{
-labels: sales_labels,
-datasets:[{
-label:"Chiffre d'affaires",
-data: sales_values,
-borderColor:"#3454d1",
-backgroundColor:"rgba(52,84,209,0.1)",
-fill:true,
-tension:0.4
-}]
-}
-})
-
+if (ctx) {
+    new Chart(ctx, {
+        type: "line",
+        data: {
+            labels: sales_labels,
+            datasets: [{
+                label: "Chiffre d'affaires",
+                data: sales_values,
+                borderColor: "#3454d1",
+                backgroundColor: "rgba(52,84,209,0.1)",
+                fill: true,
+                tension: 0.4
+            }]
+        }
+    });
 }
 </script>
+
 <script>
+function showReportSection(section) {
+    const journalier = document.getElementById("journalierSection");
+    const mensuel = document.getElementById("mensuelSection");
+    const perso = document.getElementById("personnaliseSection");
 
-document.addEventListener("DOMContentLoaded", function(){
+    if (journalier) journalier.style.display = "none";
+    if (mensuel) mensuel.style.display = "none";
+    if (perso) perso.style.display = "none";
 
-let section = "{{ section|default:'journalier' }}"
-
-const journalier = document.getElementById("journalierSection")
-const mensuel = document.getElementById("mensuelSection")
-const perso = document.getElementById("personnaliseSection")
-
-if(journalier) journalier.style.display = "none"
-if(mensuel) mensuel.style.display = "none"
-if(perso) perso.style.display = "none"
-
-if(section === "journalier"){
-journalier.style.display = "block"
+    if (section === "journalier" && journalier) journalier.style.display = "block";
+    if (section === "mensuel" && mensuel) mensuel.style.display = "block";
+    if (section === "personnalise" && perso) perso.style.display = "block";
 }
+</script>
 
-if(section === "mensuel"){
-mensuel.style.display = "block"
-}
-
-if(section === "personnalise"){
-perso.style.display = "block"
-}
-
-})
-
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    let section = "{{ section|default:'journalier' }}";
+    showReportSection(section);
+});
 </script>
 {% endblock %}
-

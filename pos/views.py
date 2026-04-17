@@ -299,14 +299,76 @@ def close_register(request, register_id):
 #vue historique des caisses
 @login_required
 def register_history(request):
-
     registers = CashRegister.objects.filter(
         gym=request.gym,
         is_closed=True
-    ).order_by("-closed_at")
+    )
+
+    # --- filtres ---
+    search = request.GET.get("search", "").strip()
+    status = request.GET.get("status", "").strip()
+    date_from = request.GET.get("date_from", "").strip()
+    date_to = request.GET.get("date_to", "").strip()
+    sort = request.GET.get("sort", "recent").strip()
+
+    if search:
+        registers = registers.filter(
+            Q(session_code__icontains=search) |
+            Q(opened_by__username__icontains=search) |
+            Q(opened_by__first_name__icontains=search) |
+            Q(opened_by__last_name__icontains=search)
+        )
+
+    # même si ta requête de base est déjà is_closed=True,
+    # on garde ce filtre pour coller au template premium sans casser la logique
+    if status == "open":
+        registers = CashRegister.objects.filter(
+            gym=request.gym,
+            is_closed=False
+        )
+        if search:
+            registers = registers.filter(
+                Q(session_code__icontains=search) |
+                Q(opened_by__username__icontains=search) |
+                Q(opened_by__first_name__icontains=search) |
+                Q(opened_by__last_name__icontains=search)
+            )
+    elif status == "closed":
+        registers = registers.filter(is_closed=True)
+
+    if date_from:
+        registers = registers.filter(opened_at__date__gte=date_from)
+
+    if date_to:
+        registers = registers.filter(opened_at__date__lte=date_to)
+
+    # --- tri ---
+    if sort == "oldest":
+        registers = registers.order_by("closed_at")
+    elif sort == "difference_desc":
+        registers = registers.order_by("-difference", "-closed_at")
+    elif sort == "difference_asc":
+        registers = registers.order_by("difference", "-closed_at")
+    else:
+        registers = registers.order_by("-closed_at")
+
+    # --- stats ---
+    all_registers = CashRegister.objects.filter(gym=request.gym)
+
+    positive_count = all_registers.filter(difference__gt=0).count()
+    negative_count = all_registers.filter(difference__lt=0).count()
+    open_count = all_registers.filter(is_closed=False).count()
 
     return render(request, "pos/register_history.html", {
-        "registers": registers
+        "registers": registers,
+        "search": search,
+        "status": status,
+        "date_from": date_from,
+        "date_to": date_to,
+        "sort": sort,
+        "positive_count": positive_count,
+        "negative_count": negative_count,
+        "open_count": open_count,
     })
 
 #vue détail d'une session de caisse

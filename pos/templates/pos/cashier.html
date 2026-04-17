@@ -4,170 +4,265 @@
 {% block page_titre %}Paiements{% endblock %}
 
 {% block content %}
-<!-- Page Header -->
-<div class="page-header mb-4 d-flex align-items-center justify-content-between">
 
-    <!-- LEFT -->
-    <div class="d-flex align-items-center gap-3">
-
-        <div class="page-header-title">
-            <h5 class="mb-0">Gestion des Paiements</h5>
-            <small class="text-muted">Caisse & transactions</small>
+<div class="page-header mb-4">
+    <div class="page-header-left d-flex align-items-center">
+        <div class="page-header-title d-flex align-items-center gap-2">
+            <span class="material-icons text-primary" style="font-size:28px;">payments</span>
+            <div>
+                <h5 class="mb-0">Gestion des Paiements</h5>
+                <small class="text-muted">Caisse & transactions</small>
+            </div>
         </div>
-
-        {% if register %}
-        <span class="badge bg-success d-flex align-items-center gap-1 px-3 py-2 flex-wrap">
-            <span class="material-icons" style="font-size:16px;">circle</span>
-            Caisse ouverte — {{ register.opened_by }}
-            <div class="badge bg-success">
-            Session : {{ register.session_code }}
-            </div>
-            <div class="badge bg-light text-success">
-            1 USD = {{ register.exchange_rate }} CDF
-            </div>
-        </span>
-        {% else %}
-        <span class="badge bg-danger d-flex align-items-center gap-1 px-3 py-2">
-            <span class="material-icons" style="font-size:16px;">circle</span>
-            Caisse fermée
-        </span>
-        {% endif %}
-
     </div>
 
-    <!-- RIGHT -->
-    <div class="d-flex align-items-center gap-2">
+    <div class="page-header-right ms-auto">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            {% if register %}
+                <span class="badge bg-success d-flex align-items-center gap-2 px-3 py-2">
+                    <span class="material-icons" style="font-size:16px;">radio_button_checked</span>
+                    Caisse ouverte
+                </span>
 
-        {% if register %}
+                <span class="badge bg-light text-success px-3 py-2">
+                    Session : {{ register.session_code }}
+                </span>
 
-        <button class="btn btn-primary d-flex align-items-center gap-1"
-                data-bs-toggle="modal"
-                data-bs-target="#paymentModal">
+                <span class="badge bg-light text-dark px-3 py-2">
+                    1 USD = {{ register.exchange_rate }} CDF
+                </span>
 
-            <span class="material-icons" style="font-size:18px;">add</span>
-            Nouveau paiement
+                <button class="btn btn-primary d-flex align-items-center gap-1"
+                        data-bs-toggle="modal"
+                        data-bs-target="#paymentModal">
+                    <span class="material-icons" style="font-size:18px;">add</span>
+                    Nouveau paiement
+                </button>
 
-        </button>
-        <button class="btn btn-warning d-flex align-items-center gap-1"
-            data-bs-toggle="modal"
-            data-bs-target="#withdrawModal">
+                <button class="btn btn-warning d-flex align-items-center gap-1"
+                        data-bs-toggle="modal"
+                        data-bs-target="#withdrawModal">
+                    <span class="material-icons" style="font-size:18px;">remove</span>
+                    Décaissement
+                </button>
 
-            <span class="material-icons" style="font-size:18px;">remove</span>
-            Décaissement
+                <a href="{% url 'pos:close_register' register.id %}"
+                   class="btn btn-outline-danger d-flex align-items-center gap-1">
+                    <span class="material-icons" style="font-size:18px;">lock</span>
+                    Fermer la caisse
+                </a>
+            {% else %}
+                <span class="badge bg-danger d-flex align-items-center gap-2 px-3 py-2">
+                    <span class="material-icons" style="font-size:16px;">radio_button_checked</span>
+                    Caisse fermée
+                </span>
 
-            </button>
-
-        <a href="{% url 'pos:close_register' register.id %}"
-           class="btn btn-outline-danger d-flex align-items-center gap-1">
-
-            <span class="material-icons" style="font-size:18px;">lock</span>
-            Fermer la caisse
-
-        </a>
-
-        {% else %}
-
-        <button type="button"
-                class="btn btn-success d-flex align-items-center gap-1"
-                data-bs-toggle="modal"
-                data-bs-target="#openRegisterModal">
-            <span class="material-icons me-2" style="font-size:18px;">lock_open</span>
-            Ouvrir la caisse
-        </button>
-
-        {% endif %}
-
+                <button type="button"
+                        class="btn btn-success d-flex align-items-center gap-1"
+                        data-bs-toggle="modal"
+                        data-bs-target="#openRegisterModal">
+                    <span class="material-icons me-2" style="font-size:18px;">lock_open</span>
+                    Ouvrir la caisse
+                </button>
+            {% endif %}
+        </div>
     </div>
-
 </div>
 
-<!-- SECTION CAISSE PHYSIQUE (Point de vente) -->
+<style>
+.cashier-stat-card {
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+    height: 100%;
+}
+
+.cashier-stat-card .icon-box {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.cashier-table-card,
+.cashier-table-card .custom-card-action {
+    overflow: visible;
+}
+
+.cashier-filter-card {
+    border-radius: 18px;
+}
+
+.amount-badge {
+    background: #f8fafc;
+    color: #0f172a;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    padding: 8px 12px;
+    border-radius: 999px;
+    font-weight: 600;
+    display: inline-block;
+}
+
+.empty-state-icon {
+    font-size: 64px;
+    color: #94a3b8;
+}
+
+.table thead th {
+    white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+    .page-header {
+        flex-direction: column;
+        gap: 12px;
+        align-items: flex-start !important;
+    }
+}
+</style>
+
 <div id="caisseSection" class="mx-2">
-    <div class="row mb-4">
+    <div class="row g-3 mb-4">
         <div class="col-md-4">
-            <div class="card stretch stretch-full">
-                <div class="card-body">
-                    <div class="d-flex align-items-center gap-2 mb-2">
-                        <span class="material-icons text-primary">account_balance_wallet</span>
-                        <h6 class="text-muted mb-0">Total attendu CDF</h6>
+            <div class="cashier-stat-card p-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="icon-box" style="background: rgba(13, 110, 253, 0.08); color:#0d6efd;">
+                        <span class="material-icons">account_balance_wallet</span>
                     </div>
-                    <h3 id="totalUSD">
+                    <div>
+                        <div class="fs-12 text-muted">Total attendu CDF</div>
+                        <h4 class="mb-0">
+                            {% if register %}{{ today_total }}{% else %}0{% endif %} CDF
+                        </h4>
                         {% if register %}
-                            {{ today_total }}
-                        {% else %}
-                            0
-                        {% endif %} CDF
-                    </h3>
-                    {% if register %}
-                    <small class="text-muted">Fonds ouverture : {{ register.opening_amount }} CDF</small>
-                    {% endif %}
+                            <small class="text-muted">Fonds ouverture : {{ register.opening_amount }} CDF</small>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
         </div>
-  
+
         <div class="col-md-4">
-            <div class="card stretch stretch-full">
-                <div class="card-body">
-                    <div class="d-flex align-items-center gap-2 mb-2">
-                        <span class="material-icons text-success">trending_up</span>
-                        <h6 class="text-muted mb-0">Entrées aujourd'hui</h6>
+            <div class="cashier-stat-card p-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="icon-box" style="background: rgba(25, 135, 84, 0.08); color:#198754;">
+                        <span class="material-icons">trending_up</span>
                     </div>
-                    <h3 id="todayEntries">
-                        {% if register %}
-                            {{ today_entries }}
-                        {% else %}
-                            0
-                        {% endif %} CDF
-                    </h3>
+                    <div>
+                        <div class="fs-12 text-muted">Entrées aujourd'hui</div>
+                        <h4 class="mb-0">
+                            {% if register %}{{ today_entries }}{% else %}0{% endif %} CDF
+                        </h4>
+                    </div>
                 </div>
             </div>
         </div>
+
         <div class="col-md-4">
-            <div class="card stretch stretch-full">
-                <div class="card-body">
-                    <div class="d-flex align-items-center gap-2 mb-2">
-                        <span class="material-icons text-warning">trending_down</span>
-                        <h6 class="text-muted mb-0">Sorties aujourd'hui</h6>
+            <div class="cashier-stat-card p-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="icon-box" style="background: rgba(255, 193, 7, 0.12); color:#b78103;">
+                        <span class="material-icons">trending_down</span>
                     </div>
-                    <h3 id="todayExits">
-                        {% if register %}
-                            {{ today_exits }}
-                        {% else %}
-                            0
-                        {% endif %} CDF
-                    </h3>
+                    <div>
+                        <div class="fs-12 text-muted">Sorties aujourd'hui</div>
+                        <h4 class="mb-0">
+                            {% if register %}{{ today_exits }}{% else %}0{% endif %} CDF
+                        </h4>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="card">
-        <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-            <h5 class="card-title mb-0 d-flex align-items-center gap-2">
-                <span class="material-icons">receipt_long</span>Derniers paiements en caisse
-            </h5>
-            <div class="d-flex flex-wrap align-items-center gap-2">
-                <div class="input-group" style="max-width: 220px;">
-                    <span class="input-group-text bg-white"><span class="material-icons">search</span></span>
-                    <input type="text" class="form-control form-control-sm" placeholder="Client, montant..." id="filterCaisseSearch" oninput="renderCashPayments()">
+    {% if register %}
+    <div class="card cashier-filter-card mb-4">
+        <div class="card-body">
+            <div class="d-flex align-items-center gap-2 mb-3">
+                <span class="material-icons text-muted" style="font-size:20px;">filter_list</span>
+                <span class="fw-semibold small text-muted">Filtres rapides</span>
+            </div>
+
+            <div class="row g-3 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label small text-muted d-flex align-items-center gap-1 mb-1">
+                        <span class="material-icons" style="font-size:16px;">search</span>Recherche
+                    </label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-white">
+                            <span class="material-icons" style="font-size:18px;">search</span>
+                        </span>
+                        <input type="text"
+                               class="form-control"
+                               placeholder="Client, montant..."
+                               id="filterCaisseSearch"
+                               oninput="renderCashPayments()">
+                    </div>
                 </div>
-                <select class="form-select form-select-sm" style="width: auto;" id="filterCaisseStatut" onchange="renderCashPayments()">
-                    <option value="">Tous les statuts</option>
-                    <option value="success">Réussi</option>
-                    <option value="pending">En attente</option>
-                </select>
-                <select class="form-select form-select-sm" style="width: auto;" id="filterCaisseMode" onchange="renderCashPayments()">
-                    <option value="">Tous les modes</option>
-                    <option value="Espèces">Espèces</option>
-                    <option value="Carte">Carte</option>
-                </select>
+
+                <div class="col-md-3">
+                    <label class="form-label small text-muted d-flex align-items-center gap-1 mb-1">
+                        <span class="material-icons" style="font-size:16px;">task_alt</span>Statut
+                    </label>
+                    <select class="form-select" id="filterCaisseStatut" onchange="renderCashPayments()">
+                        <option value="">Tous les statuts</option>
+                        <option value="success">Réussi</option>
+                        <option value="pending">En attente</option>
+                    </select>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label small text-muted d-flex align-items-center gap-1 mb-1">
+                        <span class="material-icons" style="font-size:16px;">payments</span>Mode
+                    </label>
+                    <select class="form-select" id="filterCaisseMode" onchange="renderCashPayments()">
+                        <option value="">Tous les modes</option>
+                        <option value="Espèces">Espèces</option>
+                        <option value="Carte">Carte</option>
+                        <option value="Mobile Money">Mobile Money</option>
+                    </select>
+                </div>
+
+                <div class="col-md-2 d-grid">
+                    <button type="button" class="btn btn-light-brand" onclick="resetCashFilters()">
+                        Réinitialiser
+                    </button>
+                </div>
             </div>
         </div>
-        <div class="card-body p-0">
+    </div>
+    {% endif %}
+
+    <div class="card cashier-table-card">
+        <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <h5 class="card-title mb-0 d-flex align-items-center gap-2">
+                <span class="material-icons">receipt_long</span>
+                Derniers paiements en caisse
+            </h5>
+
+            {% if register %}
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <a href="{% url 'pos:register_history' %}" class="btn btn-sm btn-light">
+                    <span class="material-icons me-1" style="font-size:16px;">history</span>
+                    Historique
+                </a>
+                <a href="javascript:void(0);" onclick="window.print()" class="btn btn-sm btn-light">
+                    <span class="material-icons me-1" style="font-size:16px;">print</span>
+                    Imprimer
+                </a>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="card-body custom-card-action p-0">
             <div class="table-responsive">
                 <table class="table table-hover mb-0" id="cashPaymentsTable">
-                    <thead>
-                        <tr class="border-b">
+                    <thead class="table-light">
+                        <tr>
                             <th>Date</th>
                             <th>Client</th>
                             <th>Abonnement</th>
@@ -178,230 +273,86 @@
                         </tr>
                     </thead>
                     <tbody>
+                        {% for payment in payments %}
+                        <tr>
+                            <td>
+                                <div class="fw-semibold">{{ payment.created_at|date:"d/m/Y" }}</div>
+                                <small class="text-muted">{{ payment.created_at|date:"H:i" }}</small>
+                            </td>
 
-                    {% for payment in payments %}
+                            <td>
+                                {% if payment.member %}
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="material-icons text-secondary" style="font-size:20px;">person</span>
+                                        <span>{{ payment.member.first_name }} {{ payment.member.last_name }}</span>
+                                    </div>
+                                {% else %}
+                                    <span class="text-muted">Décaissement</span>
+                                {% endif %}
+                            </td>
 
-                    <tr>
+                            <td>
+                                {% if payment.subscription %}
+                                    {{ payment.subscription.plan.name }}
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
 
-                    <td>{{ payment.created_at|date:"d/m/Y H:i" }}</td>
+                            <td>
+                                <div class="fw-semibold">{{ payment.amount }} {{ payment.currency }}</div>
+                                <small class="text-muted d-block">{{ payment.amount_cdf }} CDF comptable</small>
+                                {% if payment.amount_usd %}
+                                    <small class="d-block text-muted">Référence : {{ payment.amount_usd }} USD</small>
+                                {% endif %}
+                            </td>
 
-                    <td>
+                            <td>
+                                <span class="badge bg-light text-dark px-3 py-2">
+                                    {{ payment.get_method_display }}
+                                </span>
+                            </td>
 
-                    {% if payment.member %}
+                            <td>
+                                {% if payment.status == "success" %}
+                                    <span class="badge bg-success px-3 py-2">Réussi</span>
+                                {% elif payment.status == "pending" %}
+                                    <span class="badge bg-warning text-dark px-3 py-2">En attente</span>
+                                {% else %}
+                                    <span class="badge bg-danger px-3 py-2">Échec</span>
+                                {% endif %}
+                            </td>
 
-                    {{ payment.member.first_name }} {{ payment.member.last_name }}
-
-                    {% else %}
-
-                    <span class="text-muted">Décaissement</span>
-
-                    {% endif %}
-
-                    </td>
-
-                    <td>
-                    {% if payment.subscription %}
-                    {{ payment.subscription.plan.name }}
-                    {% endif %}
-                    </td>
-
-                    <td>
-                    <div class="fw-semibold">{{ payment.amount }} {{ payment.currency }}</div>
-                    <small class="text-muted">{{ payment.amount_cdf }} CDF comptable</small>
-                    {% if payment.amount_usd %}
-                    <small class="d-block text-muted">Reference : {{ payment.amount_usd }} USD</small>
-                    {% endif %}
-                    </td>
-
-                    <td>
-                    {{ payment.get_method_display }}
-                    </td>
-
-                    <td>
-
-                    {% if payment.status == "success" %}
-                    <span class="badge bg-success">Réussi</span>
-                    {% elif payment.status == "pending" %}
-                    <span class="badge bg-warning">En attente</span>
-                    {% else %}
-                    <span class="badge bg-danger">Échec</span>
-                    {% endif %}
-
-                    </td>
-
-                    <td class="text-end">
-
-                    <a href="#"
-                    class="btn btn-sm btn-light"
-                    data-id="{{ payment.id }}"
-                    onclick="showTransaction({{ payment.id }})">
-
-                    <span class="material-icons">visibility</span>
-
-                    </a>
-
-                    </td>
-
-                    </tr>
-
-                    {% endfor %}
-
+                            <td class="text-end">
+                                <a href="#"
+                                   class="btn btn-sm btn-light"
+                                   data-id="{{ payment.id }}"
+                                   onclick="showTransaction({{ payment.id }})">
+                                    <span class="material-icons">visibility</span>
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center py-5">
+                                <div class="d-flex flex-column align-items-center justify-content-center">
+                                    <span class="material-icons empty-state-icon">payments</span>
+                                    <p class="mt-3 mb-1 fw-semibold text-muted">Aucun paiement enregistré</p>
+                                    <small class="text-muted">Les opérations de la caisse apparaîtront ici</small>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
                     </tbody>
                 </table>
             </div>
         </div>
-    </div>
-</div>
 
-<!-- SECTION PAIEMENTS EN LIGNE -->
-<div id="onlineSection" style="display: none;">
-    <div class="row mb-4 mx-2">
-        <div class="col-md-3">
-            <div class="card stretch stretch-full">
-                <div class="card-body">
-                    <div class="d-flex align-items-center gap-2 mb-2">
-                        <span class="material-icons text-success">check_circle</span>
-                        <h6 class="text-muted mb-0">Paiements réussis</h6>
-                    </div>
-                    <h3 id="successCount">245</h3>
-                    <small class="text-success">+23%</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card stretch stretch-full">
-                <div class="card-body">
-                    <div class="d-flex align-items-center gap-2 mb-2">
-                        <span class="material-icons text-warning">schedule</span>
-                        <h6 class="text-muted mb-0">En attente</h6>
-                    </div>
-                    <h3 id="pendingCount">12</h3>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card stretch stretch-full">
-                <div class="card-body">
-                    <div class="d-flex align-items-center gap-2 mb-2">
-                        <span class="material-icons text-danger">error</span>
-                        <h6 class="text-muted mb-0">Échoués</h6>
-                    </div>
-                    <h3 id="failedCount">8</h3>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card stretch stretch-full">
-                <div class="card-body">
-                    <div class="d-flex align-items-center gap-2 mb-2">
-                        <span class="material-icons text-primary">percent</span>
-                        <h6 class="text-muted mb-0">Taux de succès</h6>
-                    </div>
-                    <h3 id="successRate">96%</h3>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="row mb-4 mx-2">
-        <div class="col-md-12">
-            <div class="card">
-                <div class="card-header d-flex align-items-center justify-content-between">
-                    <h5 class="card-title mb-0 d-flex align-items-center gap-2">
-                        <span class="material-icons">webhook</span>Callbacks récents
-                    </h5>
-                    <span class="badge bg-secondary">HMAC Signature</span>
-                </div>
-                <div class="card-body" id="webhooksList"></div>
-            </div>
-        </div>
-    </div>
-
-    <div class="card mx-2">
-        <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-            <h5 class="card-title mb-0 d-flex align-items-center gap-2">
-                <span class="material-icons">credit_card</span>Transactions en ligne
-            </h5>
-            <div class="d-flex flex-wrap align-items-center gap-2">
-                <div class="input-group" style="max-width: 220px;">
-                    <span class="input-group-text bg-white"><span class="material-icons">search</span></span>
-                    <input type="text" class="form-control form-control-sm" placeholder="Client, callback..." id="filterOnlineSearch" oninput="renderOnlinePayments()">
-                </div>
-                <select class="form-select form-select-sm" style="width: auto;" id="filterOnlineStatut" onchange="renderOnlinePayments()">
-                    <option value="">Tous les statuts</option>
-                    <option value="success">Réussi</option>
-                    <option value="pending">En attente</option>
-                    <option value="failed">Échoué</option>
-                </select>
-            </div>
-        </div>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-hover mb-0" id="onlinePaymentsTable">
-                    <thead>
-                        <tr class="border-b">
-                            <th>Date</th>
-                            <th>Client</th>
-                            <th>Abonnement</th>
-                            <th>Montant</th>
-                            <th>Mode</th>
-                            <th>Statut</th>
-                            <th>Callback</th>
-                            <th class="text-end">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="onlinePaymentsBody"></tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- SECTION JOURNAL -->
-<div id="journalSection" style="display: none;">
-    <div class="card mx-2">
-        <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-            <h5 class="card-title mb-0 d-flex align-items-center gap-2">
-                <span class="material-icons">menu_book</span>Journal des transactions
-            </h5>
-            <div class="d-flex flex-wrap align-items-center gap-2">
-                <div class="input-group" style="max-width: 220px;">
-                    <span class="input-group-text bg-white"><span class="material-icons">search</span></span>
-                    <input type="text" class="form-control form-control-sm" placeholder="Client, référence..." id="filterJournalSearch" oninput="renderJournal()">
-                </div>
-                <select class="form-select form-select-sm" style="width: auto;" id="filterJournalType" onchange="renderJournal()">
-                    <option value="">Tous les types</option>
-                    <option value="Caisse physique">Caisse physique</option>
-                    <option value="Paiement en ligne">Paiement en ligne</option>
-                </select>
-                <select class="form-select form-select-sm" style="width: auto;" id="filterJournalStatut" onchange="renderJournal()">
-                    <option value="">Tous les statuts</option>
-                    <option value="success">Réussi</option>
-                    <option value="pending">En attente</option>
-                </select>
-                <button class="btn btn-sm btn-light-brand" onclick="exportJournal()">
-                    <span class="material-icons me-2" style="font-size: 18px;">download</span>Exporter
-                </button>
-            </div>
-        </div>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-hover mb-0" id="journalTable">
-                    <thead>
-                        <tr class="border-b">
-                            <th>Date</th>
-                            <th>ID Transaction</th>
-                            <th>Client</th>
-                            <th>Type</th>
-                            <th>Montant</th>
-                            <th>Statut</th>
-                            <th>Mode</th>
-                            <th>Référence</th>
-                            <th class="text-end">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="journalBody"></tbody>
-                </table>
+        <div class="card-footer">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <p class="fs-12 text-muted mb-0">
+                    Total : {{ payments|length }} opération{{ payments|length|pluralize }}
+                </p>
             </div>
         </div>
     </div>
@@ -416,7 +367,8 @@
 
                 <div class="modal-header">
                     <h5 class="modal-title d-flex align-items-center gap-2">
-                        <span class="material-icons">lock_open</span>Ouverture de caisse
+                        <span class="material-icons">lock_open</span>
+                        Ouverture de caisse
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
                 </div>
@@ -426,7 +378,9 @@
                         <span class="material-icons">currency_exchange</span>
                         <div>
                             <strong>Taux de session obligatoire</strong>
-                            <div class="small">Ce taux sera fige pour toutes les ventes de cette session et servira a convertir les ventes USD en CDF.</div>
+                            <div class="small">
+                                Ce taux sera figé pour toutes les ventes de cette session et servira à convertir les ventes USD en CDF.
+                            </div>
                         </div>
                     </div>
 
@@ -461,7 +415,8 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
                     <button type="submit" class="btn btn-success">
-                        <span class="material-icons me-2">check_circle</span>Ouvrir la caisse
+                        <span class="material-icons me-2">check_circle</span>
+                        Ouvrir la caisse
                     </button>
                 </div>
             </form>
@@ -477,35 +432,36 @@
                 {% csrf_token %}
 
                 <div class="modal-header">
-                    <h5 class="modal-title">Nouveau Paiement</h5>
+                    <h5 class="modal-title d-flex align-items-center gap-2">
+                        <span class="material-icons">payments</span>
+                        Nouveau paiement
+                    </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
 
                 <div class="modal-body">
-
-                    <!-- Client -->
                     <div class="mb-3">
                         <label class="form-label">Client</label>
                         <select name="member" class="form-select" required>
                             <option value="">-- Sélectionner un client --</option>
                             {% for m in members %}
-                            <option value="{{ m.id }}">{{ m.first_name }} {{ m.last_name }} ({{ m.phone }})</option>
+                                <option value="{{ m.id }}">{{ m.first_name }} {{ m.last_name }} ({{ m.phone }})</option>
                             {% endfor %}
                         </select>
                     </div>
 
-                    <!-- Formule -->
                     <div class="mb-3">
                         <label class="form-label">Formule d'abonnement</label>
                         <select name="plan" id="planSelect" class="form-select" required>
                             <option value="">-- Choisir une formule --</option>
                             {% for p in plans %}
-                            <option value="{{ p.id }}" data-price-usd="{{ p.price }}">{{ p.name }} - {{ p.price }} USD ({{ p.duration_days }} jours)</option>
+                                <option value="{{ p.id }}" data-price-usd="{{ p.price }}">
+                                    {{ p.name }} - {{ p.price }} USD ({{ p.duration_days }} jours)
+                                </option>
                             {% endfor %}
                         </select>
                     </div>
 
-                    <!-- Montant + Devise -->
                     <div class="row">
                         <div class="col-md-4 mb-3">
                             <label class="form-label">Montant</label>
@@ -515,7 +471,7 @@
                         <div class="col-md-4 mb-3">
                             <label class="form-label">Devise</label>
                             <select name="currency" id="currencySelect" class="form-select" required>
-                                <option value="USD">USD (Dollar Americain)</option>
+                                <option value="USD">USD (Dollar Américain)</option>
                                 <option value="CDF">CDF (Franc Congolais)</option>
                             </select>
                         </div>
@@ -528,7 +484,6 @@
                         </div>
                     </div>
 
-                    <!-- Mode de paiement -->
                     <div class="mb-3">
                         <label class="form-label">Mode de paiement</label>
                         <select name="method" class="form-select">
@@ -537,13 +492,13 @@
                             <option value="mobile_money">Mobile Money</option>
                         </select>
                     </div>
-
                 </div>
 
                 <div class="modal-footer">
                     <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
                     <button type="submit" class="btn btn-success">
-                        <span class="material-icons me-2">payments</span> Encaisser
+                        <span class="material-icons me-2">payments</span>
+                        Encaisser
                     </button>
                 </div>
             </form>
@@ -552,57 +507,48 @@
 </div>
 
 <!-- MODAL DECAISSEMENT -->
-<div class="modal fade" id="withdrawModal">
+<div class="modal fade" id="withdrawModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST">
+                {% csrf_token %}
+                <input type="hidden" name="type" value="out">
 
-<div class="modal-dialog">
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2">
+                        <span class="material-icons">remove_circle</span>
+                        Décaissement
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
 
-<div class="modal-content">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Motif</label>
+                        <input type="text" name="description" class="form-control" placeholder="Ex: Achat fournitures">
+                    </div>
 
-<form method="POST">
+                    <div class="mb-3">
+                        <label class="form-label">Montant (CDF)</label>
+                        <input type="number"
+                               name="amount"
+                               class="form-control"
+                               min="0.01"
+                               step="0.01"
+                               required>
+                    </div>
+                </div>
 
-{% csrf_token %}
-
-<input type="hidden" name="type" value="out">
-
-<div class="modal-header">
-<h5>Décaissement</h5>
-</div>
-
-<div class="modal-body">
-
-<label>Motif</label>
-
-<input type="text"
-name="description"
-class="form-control">
-
-<label class="mt-2">Montant (CDF)</label>
-
-<input type="number"
-name="amount"
-class="form-control"
-min="0.01"
-step="0.01"
-required>
-
-</div>
-
-<div class="modal-footer">
-
-<button class="btn btn-danger">
-
-Valider sortie
-
-</button>
-
-</div>
-
-</form>
-
-</div>
-
-</div>
-
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
+                    <button class="btn btn-danger">
+                        <span class="material-icons me-2">check_circle</span>
+                        Valider la sortie
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 </div>
 
 <!-- MODAL DÉTAILS TRANSACTION -->
@@ -611,7 +557,8 @@ Valider sortie
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title d-flex align-items-center gap-2">
-                    <span class="material-icons">receipt</span>Détails de la transaction
+                    <span class="material-icons">receipt</span>
+                    Détails de la transaction
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
             </div>
@@ -624,19 +571,23 @@ Valider sortie
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">
-                    <span class="material-icons me-2" style="font-size: 18px;">close</span>Fermer
+                    <span class="material-icons me-2" style="font-size: 18px;">close</span>
+                    Fermer
                 </button>
                 <button type="button" class="btn btn-warning" id="retryCallback" style="display: none;" onclick="retryCallback()">
-                    <span class="material-icons me-2">refresh</span>Réessayer callback
+                    <span class="material-icons me-2">refresh</span>
+                    Réessayer callback
                 </button>
             </div>
         </div>
     </div>
 </div>
+
 {% endblock %}
 
 {% block extra_js %}
 <script>window.STATIC_AVATAR_URL = "{% static 'avatar/1.png' %}";</script>
+
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const planSelect = document.getElementById('planSelect');
@@ -663,11 +614,26 @@ document.addEventListener('DOMContentLoaded', function () {
         amountInput.value = priceUsd.toFixed(2);
     }
 
+    window.resetCashFilters = function () {
+        const search = document.getElementById('filterCaisseSearch');
+        const status = document.getElementById('filterCaisseStatut');
+        const mode = document.getElementById('filterCaisseMode');
+
+        if (search) search.value = "";
+        if (status) status.value = "";
+        if (mode) mode.value = "";
+
+        if (typeof renderCashPayments === "function") {
+            renderCashPayments();
+        }
+    }
+
     planSelect?.addEventListener('change', refreshPaymentAmount);
     currencySelect?.addEventListener('change', refreshPaymentAmount);
     refreshPaymentAmount();
 });
 </script>
+
 {% if step > 1 %}
 <script>
 document.addEventListener("DOMContentLoaded", function () {
@@ -676,4 +642,3 @@ document.addEventListener("DOMContentLoaded", function () {
 </script>
 {% endif %}
 {% endblock %}
-
