@@ -916,7 +916,7 @@ function openMemberModal(memberId) {
             document.getElementById("viewExpiryDate").innerText = data.expiration_date || "-";
 
             // === PAIEMENTS ===
-            document.getElementById("viewPrice").innerText = (data.price || 0) + " CDF";
+            document.getElementById("viewPrice").innerText = (data.price || 0) + " USD";
             document.getElementById("viewPaid").innerText = (data.paid || 0) + " CDF";
             document.getElementById("viewRemaining").innerText = (data.remaining || 0) + " CDF";
 

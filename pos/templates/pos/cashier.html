@@ -16,11 +16,14 @@
         </div>
 
         {% if register %}
-        <span class="badge bg-success d-flex align-items-center gap-1 px-3 py-2">
+        <span class="badge bg-success d-flex align-items-center gap-1 px-3 py-2 flex-wrap">
             <span class="material-icons" style="font-size:16px;">circle</span>
             Caisse ouverte — {{ register.opened_by }}
             <div class="badge bg-success">
             Session : {{ register.session_code }}
+            </div>
+            <div class="badge bg-light text-success">
+            1 USD = {{ register.exchange_rate }} CDF
             </div>
         </span>
         {% else %}
@@ -64,13 +67,13 @@
 
         {% else %}
 
-        <form method="POST" action="{% url 'pos:open_register' %}" style="display:inline;">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-success">
-                <span class="material-icons me-2" style="font-size:18px;">lock_open</span>
-                Ouvrir la caisse
-            </button>
-        </form>
+        <button type="button"
+                class="btn btn-success d-flex align-items-center gap-1"
+                data-bs-toggle="modal"
+                data-bs-target="#openRegisterModal">
+            <span class="material-icons me-2" style="font-size:18px;">lock_open</span>
+            Ouvrir la caisse
+        </button>
 
         {% endif %}
 
@@ -86,7 +89,7 @@
                 <div class="card-body">
                     <div class="d-flex align-items-center gap-2 mb-2">
                         <span class="material-icons text-primary">account_balance_wallet</span>
-                        <h6 class="text-muted mb-0">Total Caisse CDF</h6>
+                        <h6 class="text-muted mb-0">Total attendu CDF</h6>
                     </div>
                     <h3 id="totalUSD">
                         {% if register %}
@@ -95,6 +98,9 @@
                             0
                         {% endif %} CDF
                     </h3>
+                    {% if register %}
+                    <small class="text-muted">Fonds ouverture : {{ register.opening_amount }} CDF</small>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -111,7 +117,7 @@
                             {{ today_entries }}
                         {% else %}
                             0
-                        {% endif %}
+                        {% endif %} CDF
                     </h3>
                 </div>
             </div>
@@ -200,7 +206,11 @@
                     </td>
 
                     <td>
-                    {{ payment.amount }} CDF
+                    <div class="fw-semibold">{{ payment.amount }} {{ payment.currency }}</div>
+                    <small class="text-muted">{{ payment.amount_cdf }} CDF comptable</small>
+                    {% if payment.amount_usd %}
+                    <small class="d-block text-muted">Reference : {{ payment.amount_usd }} USD</small>
+                    {% endif %}
                     </td>
 
                     <td>
@@ -397,6 +407,68 @@
     </div>
 </div>
 
+<!-- MODAL OUVERTURE CAISSE -->
+<div class="modal fade" id="openRegisterModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="POST" action="{% url 'pos:open_register' %}">
+                {% csrf_token %}
+
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2">
+                        <span class="material-icons">lock_open</span>Ouverture de caisse
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+                </div>
+
+                <div class="modal-body">
+                    <div class="alert alert-info d-flex gap-2">
+                        <span class="material-icons">currency_exchange</span>
+                        <div>
+                            <strong>Taux de session obligatoire</strong>
+                            <div class="small">Ce taux sera fige pour toutes les ventes de cette session et servira a convertir les ventes USD en CDF.</div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Fonds d'ouverture (CDF)</label>
+                        <input type="number"
+                               name="opening_amount"
+                               class="form-control"
+                               min="0"
+                               step="0.01"
+                               value="0"
+                               required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Taux USD-CDF du jour</label>
+                        <div class="input-group">
+                            <span class="input-group-text">1 USD =</span>
+                            <input type="number"
+                                   name="exchange_rate"
+                                   class="form-control"
+                                   min="1"
+                                   step="0.01"
+                                   placeholder="Ex: 2800"
+                                   value="{% if latest_exchange_rate %}{{ latest_exchange_rate.rate }}{% endif %}"
+                                   required>
+                            <span class="input-group-text">CDF</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-success">
+                        <span class="material-icons me-2">check_circle</span>Ouvrir la caisse
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <!-- MODAL NOUVEAU PAIEMENT -->
 <div class="modal fade" id="paymentModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
@@ -425,32 +497,34 @@
                     <!-- Formule -->
                     <div class="mb-3">
                         <label class="form-label">Formule d'abonnement</label>
-                        <select name="plan" class="form-select" required>
+                        <select name="plan" id="planSelect" class="form-select" required>
                             <option value="">-- Choisir une formule --</option>
                             {% for p in plans %}
-                            <option value="{{ p.id }}">{{ p.name }} - {{ p.price }} CDF ({{ p.duration_days }} jours)</option>
+                            <option value="{{ p.id }}" data-price-usd="{{ p.price }}">{{ p.name }} - {{ p.price }} USD ({{ p.duration_days }} jours)</option>
                             {% endfor %}
                         </select>
                     </div>
 
-                    <!-- Montant + Devise + Taux -->
+                    <!-- Montant + Devise -->
                     <div class="row">
                         <div class="col-md-4 mb-3">
                             <label class="form-label">Montant</label>
-                            <input type="number" step="0.01" name="amount" id="amountInput" class="form-control" required>
+                            <input type="number" step="0.01" name="amount" id="amountInput" class="form-control" readonly required>
                         </div>
 
                         <div class="col-md-4 mb-3">
                             <label class="form-label">Devise</label>
                             <select name="currency" id="currencySelect" class="form-select" required>
+                                <option value="USD">USD (Dollar Americain)</option>
                                 <option value="CDF">CDF (Franc Congolais)</option>
-                                <option value="USD">USD (Dollar Américain)</option>
                             </select>
                         </div>
 
-                        <div class="col-md-4 mb-3" id="exchangeRateGroup" style="display: none;">
-                            <label class="form-label">Taux de change (1 USD = ? CDF)</label>
-                            <input type="number" step="0.01" name="exchange_rate" id="exchangeRateInput" class="form-control" placeholder="Ex: 2800">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Taux session</label>
+                            <div class="form-control bg-light">
+                                1 USD = {{ register.exchange_rate|default:"-" }} CDF
+                            </div>
                         </div>
                     </div>
 
@@ -502,11 +576,14 @@
 name="description"
 class="form-control">
 
-<label class="mt-2">Montant</label>
+<label class="mt-2">Montant (CDF)</label>
 
 <input type="number"
 name="amount"
-class="form-control">
+class="form-control"
+min="0.01"
+step="0.01"
+required>
 
 </div>
 
@@ -561,21 +638,34 @@ Valider sortie
 {% block extra_js %}
 <script>window.STATIC_AVATAR_URL = "{% static 'avatar/1.png' %}";</script>
 <script>
-    document.addEventListener('DOMContentLoaded', function () {
+document.addEventListener('DOMContentLoaded', function () {
+    const planSelect = document.getElementById('planSelect');
     const currencySelect = document.getElementById('currencySelect');
-    const exchangeRateGroup = document.getElementById('exchangeRateGroup');
-    const exchangeRateInput = document.getElementById('exchangeRateInput');
+    const amountInput = document.getElementById('amountInput');
+    const sessionExchangeRate = Number("{{ register.exchange_rate|default:0 }}");
 
-    currencySelect.addEventListener('change', function () {
-        if (this.value === 'USD') {
-            exchangeRateGroup.style.display = 'block';
-            exchangeRateInput.required = true;
-        } else {
-            exchangeRateGroup.style.display = 'none';
-            exchangeRateInput.required = false;
-            exchangeRateInput.value = '';
+    function refreshPaymentAmount() {
+        if (!planSelect || !currencySelect || !amountInput) return;
+
+        const selectedPlan = planSelect.options[planSelect.selectedIndex];
+        const priceUsd = Number(selectedPlan?.dataset?.priceUsd || 0);
+
+        if (!priceUsd) {
+            amountInput.value = "";
+            return;
         }
-    });
+
+        if (currencySelect.value === "CDF") {
+            amountInput.value = (priceUsd * sessionExchangeRate).toFixed(2);
+            return;
+        }
+
+        amountInput.value = priceUsd.toFixed(2);
+    }
+
+    planSelect?.addEventListener('change', refreshPaymentAmount);
+    currencySelect?.addEventListener('change', refreshPaymentAmount);
+    refreshPaymentAmount();
 });
 </script>
 {% if step > 1 %}

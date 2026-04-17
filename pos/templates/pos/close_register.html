@@ -15,21 +15,31 @@ Session {{ register.session_code }}
 
 <div class="row text-center mb-4">
 
-<div class="col-md-4">
+<div class="col-md-3">
+<h6 class="text-muted">Fonds ouverture</h6>
+<h4>{{ register.opening_amount }} CDF</h4>
+</div>
+
+<div class="col-md-3">
 <h6 class="text-success">Entrées</h6>
 <h4>{{ entries }} CDF</h4>
 </div>
 
-<div class="col-md-4">
+<div class="col-md-3">
 <h6 class="text-danger">Sorties</h6>
 <h4>{{ exits }} CDF</h4>
 </div>
 
-<div class="col-md-4">
+<div class="col-md-3">
 <h6>Total attendu</h6>
 <h4>{{ expected_total }} CDF</h4>
 </div>
 
+</div>
+
+<div class="alert alert-light border d-flex align-items-center gap-2">
+<span class="material-icons">currency_exchange</span>
+<span>Taux de session : <strong>1 USD = {{ register.exchange_rate }} CDF</strong></span>
 </div>
 
 <form method="POST">
@@ -43,6 +53,8 @@ Montant réel en caisse
 <input type="number"
        name="real_amount"
        class="form-control"
+       min="0"
+       step="0.01"
        required>
 
 <div class="mt-3">

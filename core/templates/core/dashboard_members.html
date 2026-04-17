@@ -354,7 +354,7 @@
                             <tbody>
                                 {% for payment in recent_payments %}
                                 <tr>
-                                    <td>{% if payment.member %}{{ payment.member.first_name }} {{ payment.member.last_name }}{% else %}Sans membre{% endif %}</td>
+                                    <td>{% if payment.member %}{{ payment.member.first_name }} {{ payment.member.last_name }}{% else %}Décaissement{% endif %}</td>
                                     <td>{{ payment.amount_cdf|floatformat:0 }} CDF</td>
                                     <td>{{ payment.get_method_display }}</td>
                                     <td>{{ payment.created_at|date:"d/m H:i" }}</td>

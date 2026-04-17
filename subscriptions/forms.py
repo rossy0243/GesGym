@@ -12,6 +12,9 @@ class SubscriptionPlanForm(forms.ModelForm):
     class Meta:
         model = SubscriptionPlan
         fields = ['name', 'duration_days', 'price', 'description', 'is_active']
+        labels = {
+            'price': 'Prix (USD)',
+        }
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'duration_days': forms.NumberInput(attrs={'class': 'form-control', 'min': 1}),

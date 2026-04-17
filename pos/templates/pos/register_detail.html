@@ -7,7 +7,9 @@
 <p>
 Ouvert par : {{ register.opened_by }} <br>
 Ouverture : {{ register.opened_at }} <br>
-Fermeture : {{ register.closed_at }}
+Fermeture : {{ register.closed_at }} <br>
+Fonds ouverture : {{ register.opening_amount }} CDF <br>
+Taux session : 1 USD = {{ register.exchange_rate }} CDF
 </p>
 
 <div class="card">
@@ -50,7 +52,13 @@ Décaissement
 
 </td>
 
-<td>{{ p.amount }} CDF</td>
+<td>
+<div class="fw-semibold">{{ p.amount }} {{ p.currency }}</div>
+<small class="text-muted">{{ p.amount_cdf }} CDF comptable</small>
+{% if p.amount_usd %}
+<small class="d-block text-muted">Reference : {{ p.amount_usd }} USD</small>
+{% endif %}
+</td>
 
 <td>{{ p.get_method_display }}</td>
 

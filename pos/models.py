@@ -2,10 +2,19 @@ from django.db import models
 from django.conf import settings
 from django.db.models import Sum
 from django.core.exceptions import ValidationError
+from decimal import Decimal, ROUND_HALF_UP
 from organizations.models import Gym
 from members.models import Member
 from products.models import Product
 from subscriptions.models import MemberSubscription
+
+
+MONEY_QUANTIZER = Decimal("0.01")
+
+
+def _money(value):
+    return Decimal(str(value)).quantize(MONEY_QUANTIZER, rounding=ROUND_HALF_UP)
+
 
 class CashRegister(models.Model):
 
@@ -27,6 +36,7 @@ class CashRegister(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
+        blank=True,
         related_name="register_opened"
     )
 
@@ -42,6 +52,14 @@ class CashRegister(models.Model):
         max_digits=10,
         decimal_places=2,
         default=0
+    )
+
+    exchange_rate = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Taux fige pour cette session: 1 USD = X CDF"
     )
 
     closing_amount = models.DecimalField(
@@ -72,6 +90,8 @@ class CashRegister(models.Model):
 
     def save(self, *args, **kwargs):
 
+        self.full_clean()
+
         is_new = self.pk is None
         super().save(*args, **kwargs)
 
@@ -84,17 +104,17 @@ class CashRegister(models.Model):
             gym=self.gym,
             type="in",
             status="success"
-        ).aggregate(total=Sum("amount"))["total"] or 0
+        ).aggregate(total=Sum("amount_cdf"))["total"] or 0
 
     def total_exits(self):
         return self.payments.filter(
             gym=self.gym,
             type="out",
             status="success"
-        ).aggregate(total=Sum("amount"))["total"] or 0
+        ).aggregate(total=Sum("amount_cdf"))["total"] or 0
 
     def expected_total(self):
-        return self.total_entries() - self.total_exits()
+        return self.opening_amount + self.total_entries() - self.total_exits()
     
     def clean(self):
 
@@ -104,8 +124,14 @@ class CashRegister(models.Model):
                 is_closed=False
             ).exclude(pk=self.pk).exists()
 
+            if not self.exchange_rate or self.exchange_rate <= 0:
+                raise ValidationError("Le taux USD-CDF est obligatoire pour ouvrir la caisse.")
+
             if exists:
                 raise ValidationError("Une caisse est déjà ouverte pour ce gym.")
+        if self.opening_amount < 0:
+            raise ValidationError("Le fonds d'ouverture ne peut pas etre negatif.")
+
     def __str__(self):
         return self.session_code or f"Register {self.id}"
     
@@ -177,8 +203,18 @@ class Payment(models.Model):
 
     amount_cdf = models.DecimalField(
         max_digits=15,
-        decimal_places=2
+        decimal_places=2,
+        blank=True
     )
+
+    amount_usd = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Montant de reference en USD lorsque la vente est pricee en USD"
+    )
+
     amount = models.DecimalField(max_digits=10, decimal_places=2)
 
     method = models.CharField(max_length=20, choices=PAYMENT_METHODS)
@@ -197,6 +233,12 @@ class Payment(models.Model):
 
     transaction_id = models.CharField(
         max_length=200,
+        blank=True,
+        null=True
+    )
+
+    description = models.CharField(
+        max_length=255,
         blank=True,
         null=True
     )
@@ -221,17 +263,30 @@ class Payment(models.Model):
         ]
 
     def clean(self):
-        if self.currency == "USD" and not self.exchange_rate:
-            raise ValidationError("Le taux de change est requis lorsque le paiement est en USD.")
+        if self.cash_register and self.cash_register.gym != self.gym:
+            raise ValidationError("La caisse n'appartient pas a ce gym.")
+
+        if self.cash_register and not self.exchange_rate:
+            self.exchange_rate = self.cash_register.exchange_rate
+
+        if self.exchange_rate is not None and self.exchange_rate <= 0:
+            raise ValidationError("Le taux de change doit etre superieur a zero.")
+
+        if self.amount <= 0:
+            raise ValidationError("Le montant doit etre superieur a zero.")
 
         if self.currency == "CDF":
+            self.amount = _money(self.amount)
             self.amount_cdf = self.amount
-            self.exchange_rate = None
 
         elif self.currency == "USD":
             if not self.exchange_rate:
                 raise ValidationError("Le taux de change est requis pour USD")
-            self.amount_cdf = self.amount * self.exchange_rate
+            self.amount = _money(self.amount)
+            self.amount_cdf = _money(self.amount * self.exchange_rate)
+
+        if self.amount_usd is None and self.currency == "USD":
+            self.amount_usd = self.amount
 
         # Sécurité multi-tenant
         if self.member and self.member.gym != self.gym:
@@ -242,18 +297,24 @@ class Payment(models.Model):
             raise ValidationError("Le produit n'appartient pas à ce gym.")
         
     def save(self, *args, **kwargs):
+        if self.cash_register and not self.exchange_rate:
+            self.exchange_rate = self.cash_register.exchange_rate
 
-        # Calcul automatique du montant CDF
         if self.currency == "CDF":
+            self.amount = _money(self.amount)
             self.amount_cdf = self.amount
-            self.exchange_rate = None
 
         elif self.currency == "USD":
             if not self.exchange_rate:
                 raise ValidationError("Le taux de change est requis pour USD")
 
-            self.amount_cdf = self.amount * self.exchange_rate
+            self.amount = _money(self.amount)
+            self.amount_cdf = _money(self.amount * self.exchange_rate)
 
+        if self.amount_usd is None and self.currency == "USD":
+            self.amount_usd = self.amount
+
+        self.full_clean()
         super().save(*args, **kwargs)
         
     def __str__(self):

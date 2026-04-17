@@ -695,11 +695,13 @@ def reports_dashboard(request):
     # =========================
     payments_today = Payment.objects.filter(
         gym=gym,
-        created_at__date=today
+        created_at__date=today,
+        status="success",
+        type="in",
     )
 
     daily_revenue = payments_today.aggregate(
-        total=Sum("amount")
+        total=Sum("amount_cdf")
     )["total"] or 0
 
     daily_transactions = payments_today.count()
@@ -745,11 +747,13 @@ def reports_dashboard(request):
     payments_month = Payment.objects.filter(
         gym=gym,
         created_at__year=current_year,
-        created_at__month=current_month
+        created_at__month=current_month,
+        status="success",
+        type="in",
     )
 
     monthly_revenue = payments_month.aggregate(
-        total=Sum("amount")
+        total=Sum("amount_cdf")
     )["total"] or 0
 
     monthly_transactions = payments_month.count()
@@ -786,17 +790,22 @@ def reports_dashboard(request):
         ).values(
             "plan__name"
         ).annotate(
-            subscriptions=Count("id"),
-            revenue=Sum("payments__amount")
+            subscriptions=Count("id", distinct=True),
+            revenue=Sum(
+                "payments__amount_cdf",
+                filter=Q(payments__status="success", payments__type="in")
+            )
         ).order_by("-revenue")
     
     monthly_sales = Payment.objects.filter(
         gym=gym,
-        created_at__year=current_year
+        created_at__year=current_year,
+        status="success",
+        type="in",
         ).annotate(
             month=ExtractMonth("created_at")
         ).values("month").annotate(
-            total=Sum("amount")
+            total=Sum("amount_cdf")
         ).order_by("month")
     
     sales_labels = []

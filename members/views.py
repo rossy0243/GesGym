@@ -294,7 +294,9 @@ def member_detail(request, member_id):
     for p in payments:
         payments_data.append({
             "date": p.created_at.strftime("%d/%m/%Y"),
-            "amount": float(p.amount),
+            "amount": float(p.amount_cdf),
+            "original_amount": float(p.amount),
+            "original_currency": p.currency,
             "method": p.method,
             "status": p.status
         })
