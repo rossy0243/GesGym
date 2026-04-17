@@ -602,14 +602,31 @@ def gym_dashboard(request, gym_id):
     checkins_today = today_checkins if user_role == "reception" else 0
     sales_today = daily_revenue if user_role == "cashier" else 0
 
-    total_maintenance_cost = 0
-    total_revenue = monthly_revenue
-    if user_role == "accountant" and "MACHINES" in active_modules:
-        from machines.models import MaintenanceLog
+    machine_kpis = {
+        "total_machines": 0,
+        "machines_ok": 0,
+        "machines_maintenance": 0,
+        "machines_broken": 0,
+        "machines_ok_percent": 0,
+        "machines_maintenance_percent": 0,
+        "machines_broken_percent": 0,
+        "availability_rate": 0,
+        "attention_count": 0,
+        "total_maintenances": 0,
+        "total_maintenance_cost": 0,
+        "period_maintenances": 0,
+        "period_maintenance_cost": 0,
+        "monthly_maintenance_cost": 0,
+        "average_maintenance_cost": 0,
+        "top_costly_machine": "-",
+    }
+    if "MACHINES" in active_modules:
+        from machines.kpis import build_machine_kpis
 
-        total_maintenance_cost = MaintenanceLog.objects.filter(
-            machine__gym=gym
-        ).aggregate(total=Sum("cost"))["total"] or 0
+        machine_kpis = build_machine_kpis(gym, period_data)
+
+    total_maintenance_cost = machine_kpis["total_maintenance_cost"]
+    total_revenue = monthly_revenue
 
     context = {
         "active_modules": active_modules,
@@ -682,6 +699,7 @@ def gym_dashboard(request, gym_id):
         "sales_labels": sales_labels,
         "sales_values": sales_values,
     }
+    context.update(machine_kpis)
 
     return render(request, "core/dashboard_members.html", context)
 

@@ -351,14 +351,15 @@
 
                 <select class="form-select form-select-sm" style="width:auto;" id="filterHistoriqueMethode" onchange="renderHistorique()">
                     <option value="">Toutes les méthodes</option>
-                    <option value="QR code">QR code</option>
+                    <option value="QR Scanner">QR Scanner</option>
                     <option value="Manuel">Manuel</option>
                 </select>
 
                 <select class="form-select form-select-sm" style="width:auto;" id="filterHistoriqueAgent" onchange="renderHistorique()">
                     <option value="">Tous les agents</option>
-                    <option value="Karim">Karim</option>
-                    <option value="Sophie">Sophie</option>
+                    {% for agent in history_agents %}
+                    <option value="{{ agent.id }}">{{ agent.get_full_name|default:agent.username }}</option>
+                    {% endfor %}
                 </select>
 
                 <button class="btn btn-sm btn-light-brand" onclick="exportHistorique()">
@@ -382,12 +383,59 @@
                             <th>Actions</th>
                         </tr>
                     </thead>
-                    <tbody id="historiqueBody"></tbody>
+                    <tbody id="historiqueBody">
+                        {% for log in history_logs %}
+                        <tr data-history-row
+                            data-search="{{ log.member.first_name }} {{ log.member.last_name }} {{ log.member.phone }} {{ log.member.qr_code }}"
+                            data-date="{{ log.check_in_time|date:'Y-m-d' }}"
+                            data-status="{% if log.access_granted %}success{% else %}denied{% endif %}"
+                            data-method="{{ log.device_used|default:'' }}"
+                            data-agent="{% if log.scanned_by_id %}{{ log.scanned_by_id }}{% endif %}">
+                            <td>
+                                <div class="fw-semibold">{{ log.check_in_time|date:"d/m/Y" }}</div>
+                                <small class="text-muted">{{ log.check_in_time|date:"H:i" }}</small>
+                            </td>
+                            <td>
+                                <div class="fw-semibold">{{ log.member.first_name }} {{ log.member.last_name }}</div>
+                                <small class="text-muted">{{ log.member.phone }}</small>
+                            </td>
+                            <td><code>{{ log.member.qr_code }}</code></td>
+                            <td>
+                                {% if log.access_granted %}
+                                    <span class="badge bg-success px-3 py-2">AutorisÃ©</span>
+                                {% else %}
+                                    <span class="badge bg-danger px-3 py-2">RefusÃ©</span>
+                                    {% if log.denial_reason %}
+                                        <small class="d-block text-muted mt-1">{{ log.denial_reason }}</small>
+                                    {% endif %}
+                                {% endif %}
+                            </td>
+                            <td>{{ log.device_used|default:"-" }}</td>
+                            <td>
+                                {% if log.scanned_by %}
+                                    {{ log.scanned_by.get_full_name|default:log.scanned_by.username }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge bg-light text-dark">Log #{{ log.id }}</span>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr data-empty-history>
+                            <td colspan="7" class="text-center py-5">
+                                <span class="material-icons empty-state-icon">history</span>
+                                <p class="mt-2 mb-0 text-muted">Aucun accÃ¨s enregistrÃ© pour ce gym</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
                 </table>
             </div>
 
             <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
-                <span class="text-muted small" id="paginationInfo">1-10 sur 156 entrées</span>
+                <span class="text-muted small" id="paginationInfo">{{ history_logs|length }} entree{{ history_logs|length|pluralize }}</span>
                 <div class="pagination-custom d-flex align-items-center gap-1">
                     <button class="btn btn-sm btn-light" onclick="prevPage()">
                         <span class="material-icons" style="font-size:18px;">chevron_left</span>
@@ -521,7 +569,6 @@ window.STATIC_URLS = window.STATIC_URLS || {
 
 <script src="https://unpkg.com/html5-qrcode"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-<script src="{% static 'js/script_acces.js' %}"></script>
 
 <script>
 let html5QrCode = null;
@@ -530,19 +577,6 @@ function openScannerModal() {
     const modal = new bootstrap.Modal(document.getElementById("scannerModal"));
     modal.show();
     setTimeout(startScanner, 500);
-}
-
-function startScanner() {
-    html5QrCode = new Html5Qrcode("reader");
-
-    html5QrCode.start(
-        { facingMode: "environment" },
-        {
-            fps: 10,
-            qrbox: 250
-        },
-        onScanSuccess
-    );
 }
 
 function stopScanner() {
@@ -556,7 +590,9 @@ function stopScanner() {
     }
 }
 
-function onScanSuccess(decodedText) {
+function legacyOnScanSuccess(decodedText) {
+    return onScanSuccess(decodedText);
+
     html5QrCode.stop();
 
     fetch(`/access/access/${decodedText}/`)
@@ -641,6 +677,8 @@ function manualEntry(memberId) {
 
         document.getElementById("todayEntries").innerText = data.stats.entries;
         document.getElementById("todayDenied").innerText = data.stats.denied;
+        loadRealtimeAccess();
+        prependHistoryLog(data.log);
 
         history.pushState(null, "", "?section=scan");
         showSection("scan");
@@ -678,6 +716,196 @@ setInterval(loadRealtimeAccess, 5000);
 
 document.addEventListener("DOMContentLoaded", function () {
     loadRealtimeAccess();
+});
+</script>
+
+<script>
+function showScanResult(data) {
+    const result = document.getElementById("scanResult");
+    if (!result) return;
+
+    result.innerHTML = `
+        <div class="alert ${data.access ? "alert-success" : "alert-danger"}">
+            <h4>${data.member}</h4>
+            <p>${data.access ? "Acces autorise" : "Acces refuse"}</p>
+            ${data.reason ? `<small>${data.reason}</small>` : ""}
+        </div>
+    `;
+    result.style.display = "block";
+}
+
+function startScanner() {
+    if (typeof Html5Qrcode === "undefined") {
+        showScanResult({
+            access: false,
+            member: "Scanner indisponible",
+            reason: "La librairie de scan QR n'a pas pu etre chargee."
+        });
+        return;
+    }
+
+    html5QrCode = new Html5Qrcode("reader");
+    html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 250 },
+        onScanSuccess
+    ).catch(() => {
+        showScanResult({
+            access: false,
+            member: "Camera indisponible",
+            reason: "Impossible de demarrer la camera sur cet appareil."
+        });
+    });
+}
+
+function onScanSuccess(decodedText) {
+    if (html5QrCode) {
+        html5QrCode.stop();
+    }
+
+    fetch(`/access/access/${decodedText}/`, {
+        method: "POST",
+        headers: {
+            "X-CSRFToken": getCookie("csrftoken"),
+            "X-Requested-With": "XMLHttpRequest"
+        }
+    })
+        .then(res => {
+            if (!res.ok) throw new Error("Invalid QR code");
+            return res.json();
+        })
+        .then(data => {
+            showScanResult(data);
+            document.getElementById("todayEntries").innerText = data.stats.entries;
+            document.getElementById("todayDenied").innerText = data.stats.denied;
+            loadRealtimeAccess();
+            prependHistoryLog(data.log);
+        })
+        .catch(() => {
+            showScanResult({
+                access: false,
+                member: "QR code invalide",
+                reason: "Ce QR code ne correspond pas a un membre de ce gym."
+            });
+        });
+}
+
+function renderHistorique() {
+    const search = (document.getElementById("filterHistoriqueSearch")?.value || "").toLowerCase().trim();
+    const dateFrom = document.getElementById("filterHistoriqueDateFrom")?.value || "";
+    const dateTo = document.getElementById("filterHistoriqueDateTo")?.value || "";
+    const status = document.getElementById("filterHistoriqueStatut")?.value || "";
+    const method = document.getElementById("filterHistoriqueMethode")?.value || "";
+    const agent = document.getElementById("filterHistoriqueAgent")?.value || "";
+    let visibleCount = 0;
+
+    document.querySelectorAll("[data-history-row]").forEach(row => {
+        const rowSearch = (row.dataset.search || "").toLowerCase();
+        const rowDate = row.dataset.date || "";
+        const matchesSearch = !search || rowSearch.includes(search);
+        const matchesDateFrom = !dateFrom || rowDate >= dateFrom;
+        const matchesDateTo = !dateTo || rowDate <= dateTo;
+        const matchesStatus = !status || row.dataset.status === status;
+        const matchesMethod = !method || row.dataset.method === method;
+        const matchesAgent = !agent || row.dataset.agent === agent;
+        const isVisible = matchesSearch && matchesDateFrom && matchesDateTo && matchesStatus && matchesMethod && matchesAgent;
+
+        row.style.display = isVisible ? "" : "none";
+        if (isVisible) visibleCount += 1;
+    });
+
+    const paginationInfo = document.getElementById("paginationInfo");
+    if (paginationInfo) {
+        paginationInfo.innerText = `${visibleCount} entree${visibleCount > 1 ? "s" : ""}`;
+    }
+}
+
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function ensureAgentFilterOption(log) {
+    const filter = document.getElementById("filterHistoriqueAgent");
+    if (!filter || !log?.agent_id || filter.querySelector(`option[value="${log.agent_id}"]`)) return;
+
+    const option = document.createElement("option");
+    option.value = log.agent_id;
+    option.textContent = log.agent || "Agent";
+    filter.appendChild(option);
+}
+
+function buildHistoryRow(log) {
+    const statusBadge = log.status === "success"
+        ? `<span class="badge bg-success px-3 py-2">Autorise</span>`
+        : `<span class="badge bg-danger px-3 py-2">Refuse</span>${log.reason ? `<small class="d-block text-muted mt-1">${escapeHtml(log.reason)}</small>` : ""}`;
+
+    return `
+        <tr data-history-row
+            data-search="${escapeHtml(`${log.member} ${log.phone} ${log.qr_code}`)}"
+            data-date="${escapeHtml(log.date_iso)}"
+            data-status="${escapeHtml(log.status)}"
+            data-method="${escapeHtml(log.method)}"
+            data-agent="${escapeHtml(log.agent_id)}">
+            <td>
+                <div class="fw-semibold">${escapeHtml(log.date)}</div>
+                <small class="text-muted">${escapeHtml(log.time)}</small>
+            </td>
+            <td>
+                <div class="fw-semibold">${escapeHtml(log.member)}</div>
+                <small class="text-muted">${escapeHtml(log.phone)}</small>
+            </td>
+            <td><code>${escapeHtml(log.qr_code)}</code></td>
+            <td>${statusBadge}</td>
+            <td>${escapeHtml(log.method)}</td>
+            <td>${escapeHtml(log.agent)}</td>
+            <td><span class="badge bg-light text-dark">Log #${escapeHtml(log.id)}</span></td>
+        </tr>
+    `;
+}
+
+function prependHistoryLog(log) {
+    if (!log) return;
+
+    const body = document.getElementById("historiqueBody");
+    if (!body) return;
+
+    document.querySelector("[data-empty-history]")?.remove();
+    ensureAgentFilterOption(log);
+    body.insertAdjacentHTML("afterbegin", buildHistoryRow(log));
+    renderHistorique();
+}
+
+function exportHistorique() {
+    const rows = Array.from(document.querySelectorAll("[data-history-row]"))
+        .filter(row => row.style.display !== "none");
+    const lines = [["Date", "Client", "Code membre", "Statut", "Methode", "Agent", "Reference"]];
+
+    rows.forEach(row => {
+        const cells = Array.from(row.querySelectorAll("td")).map(cell => `"${cell.innerText.replace(/"/g, '""').trim()}"`);
+        lines.push(cells);
+    });
+
+    const blob = new Blob([lines.map(line => line.join(",")).join("\n")], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "historique-access.csv";
+    link.click();
+    URL.revokeObjectURL(link.href);
+}
+
+function prevPage() {}
+function nextPage() {}
+
+document.addEventListener("DOMContentLoaded", function () {
+    renderHistorique();
+
+    const scannerModal = document.getElementById("scannerModal");
+    scannerModal?.addEventListener("hidden.bs.modal", stopScanner);
 });
 </script>
 

@@ -115,7 +115,7 @@
                     {% endfor %}
 
                     <div class="d-flex justify-content-end gap-2 flex-wrap mt-4">
-                        <a href="{% if machine %}{% url 'machines:detail' gym.id machine.id %}{% else %}{% url 'machines:list' %}{% endif %}"
+                        <a href="{% if machine %}{% url 'machines:detail' machine.id %}{% else %}{% url 'machines:list' %}{% endif %}"
                            class="btn btn-light d-flex align-items-center gap-2">
                             <span class="material-icons" style="font-size:18px;">arrow_back</span>
                             Annuler

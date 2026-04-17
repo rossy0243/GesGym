@@ -18,15 +18,15 @@
 
     <div class="page-header-right ms-auto">
         <div class="d-flex align-items-center gap-2 flex-wrap">
-            <a href="{% url 'machines:update' machine.gym.id machine.id %}" class="btn btn-outline-secondary d-flex align-items-center gap-2">
+            <a href="{% url 'machines:update' machine.id %}" class="btn btn-outline-secondary d-flex align-items-center gap-2">
                 <span class="material-icons" style="font-size:18px;">edit</span>
                 Modifier
             </a>
-            <a href="{% url 'machines:delete' machine.gym.id machine.id %}" class="btn btn-outline-danger d-flex align-items-center gap-2">
+            <a href="{% url 'machines:delete' machine.id %}" class="btn btn-outline-danger d-flex align-items-center gap-2">
                 <span class="material-icons" style="font-size:18px;">delete</span>
                 Supprimer
             </a>
-            <a href="{% url 'machines:list' machine.gym.id %}" class="btn btn-light d-flex align-items-center gap-2">
+            <a href="{% url 'machines:list' %}" class="btn btn-light d-flex align-items-center gap-2">
                 <span class="material-icons" style="font-size:18px;">arrow_back</span>
                 Retour
             </a>
@@ -196,7 +196,7 @@
                     Historique des maintenances
                 </h5>
 
-                <a href="{% url 'machines:add_maintenance' machine.gym.id machine.id %}" class="btn btn-primary btn-sm d-flex align-items-center gap-1">
+                <a href="{% url 'machines:add_maintenance' machine.id %}" class="btn btn-primary btn-sm d-flex align-items-center gap-1">
                     <span class="material-icons" style="font-size:16px;">add</span>
                     Ajouter une maintenance
                 </a>
@@ -220,7 +220,7 @@
                                     <td>{{ log.description|truncatewords:20 }}</td>
                                     <td>
                                         {% if log.cost %}
-                                            {{ log.cost }} €
+                                            {{ log.cost }} CDF
                                         {% else %}
                                             -
                                         {% endif %}

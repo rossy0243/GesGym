@@ -335,7 +335,7 @@
     </div>
 
     <div class="row g-3">
-        <div class="col-xl-6">
+        <div class="col-xl-4">
             <div class="card stretch stretch-full">
                 <div class="card-header">
                     <h5 class="card-title">Derniers paiements</h5>
@@ -370,7 +370,38 @@
                 </div>
             </div>
         </div>
-        <div class="col-xl-6">
+        <div class="col-xl-4">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title">KPI machines</h5>
+                </div>
+                <div class="card-body">
+                    <div class="vstack gap-3">
+                        <div class="d-flex justify-content-between">
+                            <span>Disponibilite du parc</span>
+                            <strong>{{ availability_rate|default:0 }}%</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Machines OK</span>
+                            <strong>{{ machines_ok|default:0 }} / {{ total_machines|default:0 }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>A surveiller</span>
+                            <strong>{{ attention_count|default:0 }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Maintenances {{ period_label_lower }}</span>
+                            <strong>{{ period_maintenances|default:0 }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Cout maintenance</span>
+                            <strong>{{ period_maintenance_cost|default:0|floatformat:0 }} CDF</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-4">
             <div class="card stretch stretch-full">
                 <div class="card-header">
                     <h5 class="card-title">Lecture KPI members</h5>

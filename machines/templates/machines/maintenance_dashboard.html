@@ -101,7 +101,7 @@
                         {% for item in maintenance_cost_by_machine %}
                         <li class="list-group-item d-flex justify-content-between align-items-center">
                             {{ item.machine__name }}
-                            <span class="badge bg-info rounded-pill">{{ item.total_cost|default:0 }} €</span>
+                            <span class="badge bg-info rounded-pill">{{ item.total_cost|default:0 }} CDF</span>
                         </li>
                         {% empty %}
                         <li class="list-group-item">Aucune donnée</li>
@@ -126,7 +126,7 @@
                             <small class="text-muted">{{ maint.created_at|date:"d/m/Y H:i" }}</small>
                             <p class="mb-0 mt-1">{{ maint.description|truncatewords:10 }}</p>
                             {% if maint.cost %}
-                            <small class="text-success">Coût: {{ maint.cost }} €</small>
+                            <small class="text-success">Coût: {{ maint.cost }} CDF</small>
                             {% endif %}
                         </li>
                         {% empty %}

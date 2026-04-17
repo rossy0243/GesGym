@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+
+{% block page_titre %}Supprimer une machine{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm" style="border-radius:18px;">
+                <div class="card-header bg-danger text-white" style="border-radius:18px 18px 0 0;">
+                    <h3 class="mb-0 d-flex align-items-center gap-2">
+                        <span class="material-icons">warning</span>
+                        Confirmer la suppression
+                    </h3>
+                </div>
+                <div class="card-body p-4">
+                    <p class="mb-2">Voulez-vous vraiment supprimer cette machine ?</p>
+                    <p class="mb-1"><strong>Machine :</strong> {{ machine.name }}</p>
+                    <p class="mb-4"><strong>Gym :</strong> {{ gym.name }}</p>
+
+                    <div class="alert alert-warning">
+                        Les maintenances liees a cette machine seront aussi supprimees.
+                    </div>
+
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="d-flex justify-content-end gap-2 flex-wrap">
+                            <a href="{% url 'machines:detail' machine.id %}" class="btn btn-light">
+                                Annuler
+                            </a>
+                            <button type="submit" class="btn btn-danger">
+                                Supprimer
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

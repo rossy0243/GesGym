@@ -28,3 +28,9 @@ class MaintenanceLogForm(forms.ModelForm):
             'description': 'Description',
             'cost': 'Coût (CDF)',
         }
+
+    def clean_cost(self):
+        cost = self.cleaned_data.get('cost')
+        if cost is not None and cost < 0:
+            raise forms.ValidationError("Le cout ne peut pas etre negatif.")
+        return cost

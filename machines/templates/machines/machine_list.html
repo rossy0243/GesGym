@@ -98,49 +98,57 @@
 </style>
 
 <div class="row g-3 mb-4">
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="machine-stat-card p-3">
             <div class="d-flex align-items-center gap-3">
                 <div class="icon-box" style="background: rgba(13, 110, 253, 0.08); color:#0d6efd;">
                     <span class="material-icons">inventory_2</span>
                 </div>
                 <div>
-                    <div class="fs-12 text-muted">Machines affichées</div>
-                    <h4 class="mb-0">{{ machines.paginator.count }}</h4>
+                    <div class="fs-12 text-muted">Total machines</div>
+                    <h4 class="mb-0">{{ total_machines }}</h4>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="machine-stat-card p-3">
             <div class="d-flex align-items-center gap-3">
                 <div class="icon-box" style="background: rgba(25, 135, 84, 0.08); color:#198754;">
-                    <span class="material-icons">tune</span>
+                    <span class="material-icons">verified</span>
                 </div>
                 <div>
-                    <div class="fs-12 text-muted">Filtre actif</div>
-                    <h4 class="mb-0">
-                        {% if status_filter %}
-                            {{ status_filter }}
-                        {% else %}
-                            Tous
-                        {% endif %}
-                    </h4>
+                    <div class="fs-12 text-muted">Disponibilite</div>
+                    <h4 class="mb-0">{{ availability_rate }}%</h4>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="col-md-4">
+    <div class="col-md-3">
+        <div class="machine-stat-card p-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="icon-box" style="background: rgba(220, 53, 69, 0.08); color:#dc3545;">
+                    <span class="material-icons">priority_high</span>
+                </div>
+                <div>
+                    <div class="fs-12 text-muted">A surveiller</div>
+                    <h4 class="mb-0">{{ attention_count }}</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
         <div class="machine-stat-card p-3">
             <div class="d-flex align-items-center gap-3">
                 <div class="icon-box" style="background: rgba(255, 193, 7, 0.12); color:#b78103;">
-                    <span class="material-icons">location_city</span>
+                    <span class="material-icons">payments</span>
                 </div>
                 <div>
-                    <div class="fs-12 text-muted">Salle</div>
-                    <h4 class="mb-0">{{ gym.name }}</h4>
+                    <div class="fs-12 text-muted">Maintenance mois</div>
+                    <h4 class="mb-0">{{ monthly_maintenance_cost|floatformat:0 }} CDF</h4>
                 </div>
             </div>
         </div>
@@ -210,11 +218,11 @@
             </div>
 
             <div class="d-flex gap-2 flex-wrap">
-                <a href="{% url 'machines:detail' gym.id machine.id %}" class="btn btn-sm btn-outline-primary d-flex align-items-center gap-1">
+                <a href="{% url 'machines:detail' machine.id %}" class="btn btn-sm btn-outline-primary d-flex align-items-center gap-1">
                     <span class="material-icons" style="font-size:16px;">visibility</span>
                     Détails
                 </a>
-                <a href="{% url 'machines:update' gym.id machine.id %}" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1">
+                <a href="{% url 'machines:update' machine.id %}" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1">
                     <span class="material-icons" style="font-size:16px;">edit</span>
                     Modifier
                 </a>

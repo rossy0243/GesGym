@@ -31,6 +31,12 @@ class AccessLog(models.Model):
         null=True
     )
 
+    denial_reason = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True
+    )
+
     scanned_by = models.ForeignKey(
         "compte.User",
         on_delete=models.SET_NULL,
@@ -51,8 +57,17 @@ class AccessLog(models.Model):
         ordering = ["-check_in_time"]
 
     def clean(self):
-        if self.member.gym != self.gym:
-            raise ValidationError("Le membre n'appartient pas à ce gym.")
+        if self.member_id and not self.gym_id:
+            self.gym = self.member.gym
+
+        if self.member_id and self.gym_id and self.member.gym_id != self.gym_id:
+            raise ValidationError("Le membre n'appartient pas a ce gym.")
+
+    def save(self, *args, **kwargs):
+        if self.member_id and not self.gym_id:
+            self.gym = self.member.gym
+        self.full_clean()
+        return super().save(*args, **kwargs)
     
     def __str__(self):
         return f"{self.member} - {self.check_in_time}"
