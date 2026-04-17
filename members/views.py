@@ -283,6 +283,7 @@ def member_detail(request, member_id):
         gym=request.gym
     )
     subscription = member.active_subscription
+    organization = request.gym.organization if request.gym else None
     
     payments = Payment.objects.filter(
         member=member, gym = request.gym
@@ -314,6 +315,9 @@ def member_detail(request, member_id):
     data = {
         "id": member.id,
         "photo_url": member.photo.url if member.photo else None,
+        "organization_name": organization.name if organization else "",
+        "organization_logo_url": organization.logo.url if organization and organization.logo else "",
+        "gym_name": request.gym.name if request.gym else "",
         "username": member.user.username if member.user else "Non défini",
         "first_name": member.first_name,
         "last_name": member.last_name,

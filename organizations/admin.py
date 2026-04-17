@@ -13,6 +13,7 @@ class OrganizationAdmin(admin.ModelAdmin):
     list_display = ['name', 'slug', 'is_active', 'created_at']
     search_fields = ['name', 'slug']
     prepopulated_fields = {'slug': ('name',)}
+    fields = ['name', 'slug', 'logo', 'is_active']
 
 # Permet d'activer des modules directement depuis la page d'un Gym
 class GymModuleInline(admin.TabularInline):

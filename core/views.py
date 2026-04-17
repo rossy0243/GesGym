@@ -7,6 +7,7 @@ from django.db.models.functions import ExtractMonth, TruncDate
 from django.utils.timezone import now
 from datetime import timedelta
 import calendar
+import json
 from access.models import AccessLog
 from compte.models import UserGymRole
 from members.models import Member
@@ -21,6 +22,12 @@ PERIOD_LABELS = {
     "month": "Mois",
     "year": "Année",
 }
+
+MONTH_LABELS = ["", "Jan", "Fev", "Mar", "Avr", "Mai", "Juin", "Juil", "Aout", "Sep", "Oct", "Nov", "Dec"]
+
+
+def _to_json(value):
+    return json.dumps(value, ensure_ascii=False)
 
 
 def _get_period_window(period_key, reference_date):
@@ -162,6 +169,74 @@ def _build_attendance_rows(gym, period_data):
     max_count = max((row["count"] for row in rows), default=0)
     for row in rows:
         row["percent"] = round((row["count"] / max_count) * 100, 1) if max_count else 0
+
+    return rows
+
+
+def _build_member_growth_rows(members_qs, period_data):
+    created_members = members_qs.filter(
+        created_at__date__range=(period_data["start_date"], period_data["end_date"])
+    )
+    period_key = period_data["key"]
+    rows = []
+
+    if period_key == "day":
+        counts_by_slot = {}
+        for hour in created_members.values_list("created_at__hour", flat=True):
+            slot_start = (hour // 4) * 4
+            counts_by_slot[slot_start] = counts_by_slot.get(slot_start, 0) + 1
+
+        for slot_start in range(0, 24, 4):
+            slot_end = slot_start + 3
+            rows.append({
+                "label": f"{slot_start:02d}h-{slot_end:02d}h",
+                "count": counts_by_slot.get(slot_start, 0),
+            })
+
+    elif period_key == "week":
+        counts_by_day = {
+            item["day"]: item["count"]
+            for item in created_members.annotate(day=TruncDate("created_at"))
+            .values("day")
+            .annotate(count=Count("id"))
+        }
+        weekdays = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
+        for index in range(7):
+            current_day = period_data["start_date"] + timedelta(days=index)
+            rows.append({"label": weekdays[index], "count": counts_by_day.get(current_day, 0)})
+
+    elif period_key == "month":
+        counts_by_day = {
+            item["day"]: item["count"]
+            for item in created_members.annotate(day=TruncDate("created_at"))
+            .values("day")
+            .annotate(count=Count("id"))
+        }
+        week_start = period_data["start_date"]
+        week_index = 1
+        while week_start <= period_data["end_date"]:
+            week_end = min(week_start + timedelta(days=6), period_data["end_date"])
+            total = 0
+            current_day = week_start
+            while current_day <= week_end:
+                total += counts_by_day.get(current_day, 0)
+                current_day += timedelta(days=1)
+            rows.append({"label": f"Semaine {week_index}", "count": total})
+            week_start = week_end + timedelta(days=1)
+            week_index += 1
+
+    else:
+        counts_by_month = {
+            item["month"]: item["count"]
+            for item in created_members.annotate(month=ExtractMonth("created_at"))
+            .values("month")
+            .annotate(count=Count("id"))
+        }
+        for month_number in range(1, 13):
+            rows.append({
+                "label": MONTH_LABELS[month_number],
+                "count": counts_by_month.get(month_number, 0),
+            })
 
     return rows
 
@@ -424,6 +499,9 @@ def gym_dashboard(request, gym_id):
     attendance_rows = _build_attendance_rows(gym, period_data)
     week_labels = [row["label"] for row in attendance_rows]
     week_values = [row["count"] for row in attendance_rows]
+    member_growth_rows = _build_member_growth_rows(members_qs, period_data)
+    member_growth_labels = [row["label"] for row in member_growth_rows]
+    member_growth_values = [row["count"] for row in member_growth_rows]
 
     daily_revenue = 0
     monthly_revenue = 0
@@ -479,8 +557,10 @@ def gym_dashboard(request, gym_id):
         is_active=True,
         end_date__gte=today,
     ).count()
-    plan_labels = [plan["plan__name"] for plan in plans_stats]
+    plan_labels = [plan["plan__name"] or "Sans nom" for plan in plans_stats]
     plan_values = [plan["total"] for plan in plans_stats]
+    status_chart_labels = ["Actifs", "Expires", "Suspendus"]
+    status_chart_values = [active_members, expired_members, suspended_members]
 
     recent_payments = []
     if user_role in ["owner", "manager", "accountant", "cashier"]:
@@ -584,6 +664,17 @@ def gym_dashboard(request, gym_id):
         "attendance_rows": attendance_rows,
         "week_labels": week_labels,
         "week_values": week_values,
+        "member_growth_rows": member_growth_rows,
+        "status_chart_labels": _to_json(status_chart_labels),
+        "status_chart_values": _to_json(status_chart_values),
+        "member_growth_labels": _to_json(member_growth_labels),
+        "member_growth_values": _to_json(member_growth_values),
+        "plan_chart_labels": _to_json(plan_labels),
+        "plan_chart_values": _to_json(plan_values),
+        "attendance_chart_labels": _to_json(week_labels),
+        "attendance_chart_values": _to_json(week_values),
+        "sales_chart_labels": _to_json(sales_labels),
+        "sales_chart_values": _to_json(sales_values),
         "recent_payments": recent_payments,
         "pending_count": pending_count,
         "pending_total": pending_total,

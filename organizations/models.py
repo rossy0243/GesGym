@@ -11,6 +11,12 @@ class Organization(models.Model):
 
     slug = models.SlugField(unique=True)
 
+    logo = models.ImageField(
+        upload_to="organizations/logos/",
+        blank=True,
+        null=True
+    )
+
     is_active = models.BooleanField(default=True)
 
     created_at = models.DateTimeField(auto_now_add=True)

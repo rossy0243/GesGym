@@ -1,13 +1,29 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block page_titre %}Tableau de bord{% endblock %}
+{% block page_titre %}{% if context_view == "analytics" %}Analytics membres{% else %}Tableau de bord{% endif %}{% endblock %}
 
 {% block content %}
+<style>
+.member-analytics-chart {
+    position: relative;
+    height: 245px;
+}
+
+.member-analytics-chart.compact {
+    height: 210px;
+}
+
+.member-analytics-chart canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+</style>
+
 <div class="page-header">
     <div class="page-header-left d-flex align-items-center">
         <div class="page-header-title">
-            <h5 class="m-b-10">Tableau de bord</h5>
+            <h5 class="m-b-10">{% if context_view == "analytics" %}Vue analytique membres{% else %}Tableau de bord{% endif %}</h5>
             <div class="fs-12 text-muted">{{ gym.name }} - {{ period_label }} : {{ period_range_label }}</div>
         </div>
     </div>
@@ -125,13 +141,61 @@
     </div>
 
     <div class="row g-3 mb-4">
+        <div class="col-xl-4">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title">Portefeuille membres</h5>
+                </div>
+                <div class="card-body">
+                    <div class="member-analytics-chart compact">
+                        <canvas id="memberStatusChart"></canvas>
+                    </div>
+                    <div class="d-flex justify-content-between text-muted fs-12 mt-3">
+                        <span>Actifs {{ active_members }}</span>
+                        <span>Expires {{ expired_members }}</span>
+                        <span>Suspendus {{ suspended_members }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-4">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title">Inscriptions {{ period_label_lower }}</h5>
+                </div>
+                <div class="card-body">
+                    <div class="member-analytics-chart compact">
+                        <canvas id="memberGrowthChart"></canvas>
+                    </div>
+                    <div class="fs-12 text-muted mt-3">Nouveaux membres sur la periode: <strong>{{ new_members_period }}</strong></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-4">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title">Formules actives</h5>
+                </div>
+                <div class="card-body">
+                    <div class="member-analytics-chart compact">
+                        <canvas id="planDistributionChart"></canvas>
+                    </div>
+                    <div class="fs-12 text-muted mt-3">Abonnements actifs: <strong>{{ total_subscriptions }}</strong></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
         <div class="col-xl-8">
             <div class="card stretch stretch-full">
                 <div class="card-header">
                     <h5 class="card-title">Evolution des revenus</h5>
                 </div>
                 <div class="card-body">
-                    <canvas id="monthlyRevenueChart" style="max-height: 320px;"></canvas>
+                    <div class="member-analytics-chart">
+                        <canvas id="monthlyRevenueChart"></canvas>
+                    </div>
                 </div>
             </div>
         </div>
@@ -208,6 +272,9 @@
                     <h5 class="card-title">Frequentation {{ period_label_lower }}</h5>
                 </div>
                 <div class="card-body">
+                    <div class="member-analytics-chart compact mb-4">
+                        <canvas id="attendanceTrendChart"></canvas>
+                    </div>
                     <div class="vstack gap-3">
                         {% for row in attendance_rows %}
                         <div class="d-flex justify-content-between align-items-center gap-3">
@@ -341,33 +408,165 @@
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-    const revenueCanvas = document.getElementById("monthlyRevenueChart");
-    if (revenueCanvas) {
-        const salesLabels = {{ sales_labels|default:"[]"|safe }};
-        const salesValues = {{ sales_values|default:"[]"|safe }};
-        new Chart(revenueCanvas, {
-            type: "line",
-            data: {
-                labels: salesLabels,
-                datasets: [{
-                    label: "Revenus",
-                    data: salesValues,
-                    borderColor: "#0d6efd",
-                    backgroundColor: "rgba(13, 110, 253, 0.12)",
-                    fill: true,
-                    tension: 0.3
-                }]
+const chartColors = ["#3454d1", "#17c666", "#ffa21d", "#3dc7be", "#ea4d4d", "#64748b", "#6610f2"];
+const mutedGrid = "rgba(100, 116, 139, 0.12)";
+
+Chart.defaults.font.family = "Inter, sans-serif";
+Chart.defaults.color = "#64748b";
+
+function normalizeDoughnutData(labels, values, emptyLabel) {
+    const numericValues = values.map(value => Number(value || 0));
+    const total = numericValues.reduce((sum, value) => sum + value, 0);
+    if (!numericValues.length || total === 0) {
+        return {
+            labels: [emptyLabel],
+            values: [1],
+            colors: ["#e5e7eb"]
+        };
+    }
+    return {
+        labels,
+        values: numericValues,
+        colors: chartColors
+    };
+}
+
+function lineOptions(formatTick) {
+    return {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: false
+            }
+        },
+        scales: {
+            x: {
+                grid: {
+                    display: false
+                }
             },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: false
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    precision: 0,
+                    callback: formatTick || undefined
+                },
+                grid: {
+                    color: mutedGrid
+                }
+            }
+        }
+    };
+}
+
+function renderDoughnutChart(canvasId, labels, values, emptyLabel) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+
+    const data = normalizeDoughnutData(labels, values, emptyLabel);
+    new Chart(canvas, {
+        type: "doughnut",
+        data: {
+            labels: data.labels,
+            datasets: [{
+                data: data.values,
+                backgroundColor: data.colors,
+                borderColor: "#ffffff",
+                borderWidth: 4,
+                hoverOffset: 8
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: "68%",
+            plugins: {
+                legend: {
+                    position: "bottom",
+                    labels: {
+                        usePointStyle: true,
+                        boxWidth: 8,
+                        padding: 14
                     }
                 }
             }
-        });
-    }
+        }
+    });
+}
+
+renderDoughnutChart(
+    "memberStatusChart",
+    {{ status_chart_labels|default:"[]"|safe }},
+    {{ status_chart_values|default:"[]"|safe }},
+    "Aucun membre"
+);
+
+renderDoughnutChart(
+    "planDistributionChart",
+    {{ plan_chart_labels|default:"[]"|safe }},
+    {{ plan_chart_values|default:"[]"|safe }},
+    "Aucune formule"
+);
+
+const memberGrowthCanvas = document.getElementById("memberGrowthChart");
+if (memberGrowthCanvas) {
+    new Chart(memberGrowthCanvas, {
+        type: "bar",
+        data: {
+            labels: {{ member_growth_labels|default:"[]"|safe }},
+            datasets: [{
+                label: "Nouveaux membres",
+                data: {{ member_growth_values|default:"[]"|safe }},
+                backgroundColor: "rgba(52, 84, 209, 0.78)",
+                borderRadius: 10,
+                maxBarThickness: 42
+            }]
+        },
+        options: lineOptions()
+    });
+}
+
+const attendanceCanvas = document.getElementById("attendanceTrendChart");
+if (attendanceCanvas) {
+    new Chart(attendanceCanvas, {
+        type: "line",
+        data: {
+            labels: {{ attendance_chart_labels|default:"[]"|safe }},
+            datasets: [{
+                label: "Visites",
+                data: {{ attendance_chart_values|default:"[]"|safe }},
+                borderColor: "#17c666",
+                backgroundColor: "rgba(23, 198, 102, 0.12)",
+                fill: true,
+                tension: 0.35,
+                pointRadius: 3,
+                pointBackgroundColor: "#17c666"
+            }]
+        },
+        options: lineOptions()
+    });
+}
+
+const revenueCanvas = document.getElementById("monthlyRevenueChart");
+if (revenueCanvas) {
+    new Chart(revenueCanvas, {
+        type: "line",
+        data: {
+            labels: {{ sales_chart_labels|default:"[]"|safe }},
+            datasets: [{
+                label: "Revenus",
+                data: {{ sales_chart_values|default:"[]"|safe }},
+                borderColor: "#0d6efd",
+                backgroundColor: "rgba(13, 110, 253, 0.12)",
+                fill: true,
+                tension: 0.3,
+                pointRadius: 3,
+                pointBackgroundColor: "#0d6efd"
+            }]
+        },
+        options: lineOptions(value => `${Number(value).toLocaleString("fr-FR")} CDF`)
+    });
+}
 </script>
 {% endblock %}
