@@ -18,8 +18,12 @@ from .accounting_reports import (
     accounting_filename,
     build_accounting_report,
     build_csv_export,
+    build_custom_csv_export,
+    build_custom_report,
+    build_custom_xlsx_export,
     build_xlsx_export,
     get_report_period,
+    get_report_section,
 )
 
 
@@ -785,7 +789,7 @@ def gym_dashboard(request, gym_id):
     return render(request, "core/dashboard_members.html", context)
 
 @login_required
-def reports_dashboard(request):
+def _legacy_reports_dashboard(request):
     gym = getattr(request, "gym", None)
     if not gym:
         return redirect("core:select_gym")
@@ -953,6 +957,115 @@ def reports_dashboard(request):
 
 
 @login_required
+def reports_dashboard(request):
+    gym = getattr(request, "gym", None)
+    if not gym:
+        return redirect("core:select_gym")
+
+    user_role = getattr(request, "role", None)
+    if user_role not in ["owner", "manager", "accountant", "cashier"]:
+        return HttpResponseForbidden("Acces non autorise")
+
+    section = get_report_section(request.GET)
+    default_period_by_section = {
+        "journalier": "today",
+        "mensuel": "month",
+        "personnalise": "custom",
+    }
+    period_data = get_report_period(
+        request.GET,
+        default_period=default_period_by_section.get(section, "month"),
+    )
+    accounting_report = build_accounting_report(gym, period_data)
+
+    payments_period = Payment.objects.filter(
+        gym=gym,
+        created_at__date__range=(period_data["start_date"], period_data["end_date"]),
+        status="success",
+    )
+    incoming_period = payments_period.filter(type="in")
+
+    daily_revenue = incoming_period.aggregate(total=Sum("amount_cdf"))["total"] or 0
+    daily_transactions = payments_period.count()
+    daily_new_clients = Member.objects.filter(
+        gym=gym,
+        created_at__date__range=(period_data["start_date"], period_data["end_date"]),
+    ).count()
+    daily_visits = AccessLog.objects.filter(
+        gym=gym,
+        check_in_time__date__range=(period_data["start_date"], period_data["end_date"]),
+        access_granted=True,
+    ).count()
+    denied_access = AccessLog.objects.filter(
+        gym=gym,
+        check_in_time__date__range=(period_data["start_date"], period_data["end_date"]),
+        access_granted=False,
+    ).count()
+    transactions = payments_period.select_related("member", "cash_register").order_by("-created_at")[:50]
+
+    monthly_revenue = daily_revenue
+    monthly_transactions = daily_transactions
+    monthly_new_members = daily_new_clients
+    monthly_renewals = MemberSubscription.objects.filter(
+        member__gym=gym,
+        start_date__range=(period_data["start_date"], period_data["end_date"]),
+    ).count()
+    monthly_visits = daily_visits
+
+    plans_stats = MemberSubscription.objects.filter(
+        member__gym=gym,
+        start_date__range=(period_data["start_date"], period_data["end_date"]),
+    ).values("plan__name").annotate(
+        subscriptions=Count("id", distinct=True),
+        revenue=Sum(
+            "payments__amount_cdf",
+            filter=Q(payments__status="success", payments__type="in"),
+        ),
+    ).order_by("-revenue")
+
+    monthly_sales = incoming_period.annotate(
+        month=ExtractMonth("created_at")
+    ).values("month").annotate(
+        total=Sum("amount_cdf")
+    ).order_by("month")
+
+    sales_labels = []
+    sales_values = []
+    for item in monthly_sales:
+        sales_labels.append(calendar.month_abbr[item["month"]])
+        sales_values.append(float(item["total"]))
+
+    custom_report = build_custom_report(gym, request.GET, period_data, limit=50)
+
+    context = {
+        "section": section,
+        "selected_period": period_data["key"],
+        "date_from": period_data["date_from"],
+        "date_to": period_data["date_to"],
+        "report_period_label": period_data["label"],
+        "accounting_report": accounting_report,
+        "can_export_accounting": user_role in ["owner", "manager", "accountant"],
+        "custom_report": custom_report,
+        "daily_revenue": daily_revenue,
+        "daily_transactions": daily_transactions,
+        "daily_new_clients": daily_new_clients,
+        "daily_visits": daily_visits,
+        "denied_access": denied_access,
+        "transactions": transactions,
+        "monthly_revenue": monthly_revenue,
+        "monthly_new_members": monthly_new_members,
+        "monthly_renewals": monthly_renewals,
+        "monthly_visits": monthly_visits,
+        "plans_stats": plans_stats,
+        "sales_labels": sales_labels,
+        "sales_values": sales_values,
+        "monthly_transactions": monthly_transactions,
+    }
+
+    return render(request, "core/rapports.html", context)
+
+
+@login_required
 def accounting_report_export(request):
     gym = getattr(request, "gym", None)
     if not gym:
@@ -968,7 +1081,25 @@ def accounting_report_export(request):
     if export_format not in ["csv", "xlsx"]:
         return HttpResponseBadRequest("Format d'export non supporte.")
 
-    period_data = get_report_period(request.GET)
+    section = get_report_section(request.GET)
+    default_period = "custom" if section == "personnalise" else "month"
+    period_data = get_report_period(request.GET, default_period=default_period)
+
+    if section == "personnalise":
+        custom_report = build_custom_report(gym, request.GET, period_data)
+        if export_format == "csv":
+            content = build_custom_csv_export(custom_report)
+            content_type = "text/csv; charset=utf-8"
+        else:
+            content = build_custom_xlsx_export(custom_report)
+            content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+        response = HttpResponse(content, content_type=content_type)
+        response["Content-Disposition"] = (
+            f'attachment; filename="{accounting_filename(gym, period_data, export_format)}"'
+        )
+        return response
+
     report = build_accounting_report(gym, period_data)
 
     if export_format == "csv":

@@ -151,3 +151,40 @@ class AccountingReportExportTests(TestCase):
         self.assertIn("Synthese du fichier comptable", content)
         self.assertIn("Alice", content)
         self.assertNotIn("Other Tenant Subscription", content)
+
+    def test_custom_report_preview_uses_selected_types_and_columns(self):
+        response = self.client.get(
+            reverse("core:rapport"),
+            {
+                "section": "personnalise",
+                "period": "month",
+                "types": ["transactions"],
+                "columns": ["date", "description", "amount_cdf"],
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        self.assertIn("Apercu du rapport personnalise", content)
+        self.assertIn("Abonnement Alice", content)
+        self.assertIn("Achat fournitures", content)
+        self.assertNotIn("Other Tenant Subscription", content)
+
+    def test_custom_report_export_is_scoped_to_current_gym(self):
+        response = self.client.get(
+            reverse("core:rapport_export"),
+            {
+                "format": "csv",
+                "section": "personnalise",
+                "period": "month",
+                "types": ["transactions"],
+                "columns": ["date", "description", "amount_cdf"],
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        self.assertIn("Rapport personnalise GesGym", content)
+        self.assertIn("Abonnement Alice", content)
+        self.assertIn("Achat fournitures", content)
+        self.assertNotIn("Other Tenant Subscription", content)

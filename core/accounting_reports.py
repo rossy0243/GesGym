@@ -10,7 +10,10 @@ from django.db.models import Sum
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 
+from access.models import AccessLog
+from members.models import Member
 from pos.models import CashRegister, Payment
+from subscriptions.models import MemberSubscription
 
 
 MONEY_QUANTIZER = Decimal("0.01")
@@ -23,6 +26,49 @@ PERIOD_CHOICES = {
     "year": "Cette annee",
     "custom": "Personnalisee",
 }
+
+REPORT_SECTIONS = {
+    "journalier": "Journalier",
+    "mensuel": "Mensuel",
+    "personnalise": "Personnalise",
+}
+
+CUSTOM_DATA_TYPES = OrderedDict(
+    [
+        ("transactions", "Transactions POS"),
+        ("members", "Membres"),
+        ("access", "Acces"),
+        ("subscriptions", "Abonnements"),
+        ("registers", "Sessions de caisse"),
+    ]
+)
+
+CUSTOM_COLUMNS = OrderedDict(
+    [
+        ("date", "Date"),
+        ("dataset", "Type"),
+        ("client", "Client / Responsable"),
+        ("description", "Libelle"),
+        ("amount_cdf", "Montant CDF"),
+        ("method", "Methode"),
+        ("status", "Statut"),
+        ("reference", "Reference"),
+        ("source", "Source"),
+    ]
+)
+
+CUSTOM_GROUPINGS = OrderedDict(
+    [
+        ("none", "Aucun"),
+        ("day", "Par jour"),
+        ("week", "Par semaine"),
+        ("month", "Par mois"),
+        ("type", "Par type de donnee"),
+    ]
+)
+
+DEFAULT_CUSTOM_TYPES = ["transactions"]
+DEFAULT_CUSTOM_COLUMNS = ["date", "dataset", "client", "description", "amount_cdf", "status"]
 
 CATEGORY_INCOME_ACCOUNTS = {
     "subscription": ("7060", "Ventes abonnements"),
@@ -66,9 +112,10 @@ def local_date(value):
     return timezone.localtime(value).date() if value else None
 
 
-def get_report_period(params, today=None):
+def get_report_period(params, today=None, default_period="month"):
     today = today or timezone.localdate()
-    period = params.get("period", "month")
+    default_period = default_period if default_period in PERIOD_CHOICES else "month"
+    period = params.get("period", default_period)
     period = period if period in PERIOD_CHOICES else "month"
 
     if period == "today":
@@ -107,6 +154,21 @@ def get_report_period(params, today=None):
         "date_from": start_date.isoformat(),
         "date_to": end_date.isoformat(),
     }
+
+
+def get_report_section(params):
+    section = params.get("section", "journalier")
+    return section if section in REPORT_SECTIONS else "journalier"
+
+
+def query_list(params, name, allowed, default):
+    values = []
+    if hasattr(params, "getlist"):
+        values = params.getlist(name)
+    elif params.get(name):
+        values = str(params.get(name)).split(",")
+    values = [value for value in values if value in allowed]
+    return values or list(default)
 
 
 def payment_queryset(gym, start_date, end_date):
@@ -324,6 +386,366 @@ def build_accounting_report(gym, period_data):
         "transaction_count": len(journal_rows),
         "register_count": len(register_rows),
     }
+
+
+def custom_row(
+    *,
+    date,
+    sort_date,
+    dataset,
+    client="",
+    description="",
+    amount_cdf="",
+    method="",
+    status="",
+    reference="",
+    source="",
+):
+    return {
+        "date": date,
+        "sort_date": sort_date,
+        "dataset": dataset,
+        "client": client,
+        "description": description,
+        "amount_cdf": amount_cdf,
+        "method": method,
+        "status": status,
+        "reference": reference,
+        "source": source,
+    }
+
+
+def build_transaction_rows(gym, period_data):
+    method_labels = dict(Payment.PAYMENT_METHODS)
+    type_labels = dict(Payment.TRANSACTION_TYPE)
+    category_labels = dict(Payment.CATEGORY_CHOICES)
+    rows = []
+
+    for payment in payment_queryset(gym, period_data["start_date"], period_data["end_date"]):
+        rows.append(
+            custom_row(
+                date=format_datetime(payment.created_at),
+                sort_date=local_date(payment.created_at),
+                dataset="Transaction POS",
+                client=member_label(payment.member),
+                description=payment.description or category_labels.get(payment.category, payment.category),
+                amount_cdf=money(payment.amount_cdf),
+                method=method_labels.get(payment.method, payment.method),
+                status=type_labels.get(payment.type, payment.type),
+                reference=piece_reference(payment),
+                source=source_label(payment) or "pos",
+            )
+        )
+
+    return rows
+
+
+def build_member_rows(gym, period_data):
+    rows = []
+    members = Member.objects.filter(
+        gym=gym,
+        created_at__date__range=(period_data["start_date"], period_data["end_date"]),
+    ).order_by("created_at", "id")
+
+    for member in members:
+        rows.append(
+            custom_row(
+                date=format_datetime(member.created_at),
+                sort_date=local_date(member.created_at),
+                dataset="Membre",
+                client=member_label(member),
+                description=member.phone or member.email or "",
+                status=member.get_status_display(),
+                reference=f"MEM-{member.id:06d}",
+                source="members",
+            )
+        )
+
+    return rows
+
+
+def build_access_rows(gym, period_data):
+    rows = []
+    logs = (
+        AccessLog.objects.filter(
+            gym=gym,
+            check_in_time__date__range=(period_data["start_date"], period_data["end_date"]),
+        )
+        .select_related("member", "scanned_by")
+        .order_by("check_in_time", "id")
+    )
+
+    for log in logs:
+        rows.append(
+            custom_row(
+                date=format_datetime(log.check_in_time),
+                sort_date=local_date(log.check_in_time),
+                dataset="Acces",
+                client=member_label(log.member),
+                description=log.denial_reason or log.device_used or "Controle acces",
+                status="Autorise" if log.access_granted else "Refuse",
+                reference=f"ACC-{log.id:06d}",
+                source="access",
+            )
+        )
+
+    return rows
+
+
+def build_subscription_rows(gym, period_data):
+    rows = []
+    subscriptions = (
+        MemberSubscription.objects.filter(
+            gym=gym,
+            start_date__range=(period_data["start_date"], period_data["end_date"]),
+        )
+        .select_related("member", "plan")
+        .prefetch_related("payments")
+        .order_by("start_date", "id")
+    )
+
+    for subscription in subscriptions:
+        amount_cdf = money(
+            subscription.payments.filter(status="success", type="in").aggregate(total=Sum("amount_cdf"))["total"]
+        )
+        if subscription.is_paused:
+            status = "En pause"
+        elif subscription.is_active:
+            status = "Actif"
+        else:
+            status = "Cloture"
+
+        rows.append(
+            custom_row(
+                date=format_date(subscription.start_date),
+                sort_date=subscription.start_date,
+                dataset="Abonnement",
+                client=member_label(subscription.member),
+                description=subscription.plan.name if subscription.plan else "Formule supprimee",
+                amount_cdf=amount_cdf if amount_cdf else "",
+                status=status,
+                reference=f"SUB-{subscription.id:06d}",
+                source="subscriptions",
+            )
+        )
+
+    return rows
+
+
+def build_register_rows(gym, period_data):
+    rows = []
+    registers = (
+        CashRegister.objects.filter(
+            gym=gym,
+            payments__status="success",
+            payments__created_at__date__range=(period_data["start_date"], period_data["end_date"]),
+        )
+        .distinct()
+        .order_by("opened_at", "id")
+    )
+
+    for register in registers:
+        period_payments = register.payments.filter(
+            gym=gym,
+            status="success",
+            created_at__date__range=(period_data["start_date"], period_data["end_date"]),
+        )
+        entries = money(period_payments.filter(type="in").aggregate(total=Sum("amount_cdf"))["total"])
+        exits = money(period_payments.filter(type="out").aggregate(total=Sum("amount_cdf"))["total"])
+        rows.append(
+            custom_row(
+                date=format_datetime(register.opened_at),
+                sort_date=local_date(register.opened_at),
+                dataset="Session de caisse",
+                client=user_label(register.opened_by),
+                description=register.session_code or f"Caisse #{register.id}",
+                amount_cdf=entries - exits,
+                method="POS",
+                status="Fermee" if register.is_closed else "Ouverte",
+                reference=register.session_code or f"Caisse #{register.id}",
+                source="pos.CashRegister",
+            )
+        )
+
+    return rows
+
+
+CUSTOM_ROW_BUILDERS = {
+    "transactions": build_transaction_rows,
+    "members": build_member_rows,
+    "access": build_access_rows,
+    "subscriptions": build_subscription_rows,
+    "registers": build_register_rows,
+}
+
+
+def group_custom_rows(rows, grouping):
+    if grouping == "none":
+        return rows
+
+    buckets = OrderedDict()
+    for row in rows:
+        sort_date = row.get("sort_date")
+        if grouping == "day":
+            key = sort_date.isoformat() if sort_date else "sans-date"
+            label = format_date(sort_date) if sort_date else "Sans date"
+        elif grouping == "week":
+            if sort_date:
+                iso_year, iso_week, _ = sort_date.isocalendar()
+                key = f"{iso_year}-W{iso_week:02d}"
+                label = f"Semaine {iso_week:02d}/{iso_year}"
+            else:
+                key = "sans-date"
+                label = "Sans date"
+        elif grouping == "month":
+            key = sort_date.strftime("%Y-%m") if sort_date else "sans-date"
+            label = sort_date.strftime("%m/%Y") if sort_date else "Sans date"
+        else:
+            key = row["dataset"]
+            label = row["dataset"]
+
+        if key not in buckets:
+            buckets[key] = {
+                "date": label,
+                "dataset": "Regroupement",
+                "client": "",
+                "description": label,
+                "amount_cdf": Decimal("0.00"),
+                "method": "",
+                "status": "0 ligne",
+                "reference": key,
+                "source": f"group:{grouping}",
+                "sort_date": sort_date,
+                "count": 0,
+            }
+
+        buckets[key]["count"] += 1
+        amount = row.get("amount_cdf")
+        if isinstance(amount, Decimal):
+            buckets[key]["amount_cdf"] += amount
+
+    grouped_rows = []
+    for bucket in buckets.values():
+        bucket["status"] = f"{bucket['count']} ligne" + ("s" if bucket["count"] > 1 else "")
+        grouped_rows.append(bucket)
+
+    return grouped_rows
+
+
+def build_custom_report(gym, params, period_data, limit=None):
+    selected_types = query_list(params, "types", CUSTOM_DATA_TYPES.keys(), DEFAULT_CUSTOM_TYPES)
+    selected_columns = query_list(params, "columns", CUSTOM_COLUMNS.keys(), DEFAULT_CUSTOM_COLUMNS)
+    grouping = params.get("grouping", "none")
+    grouping = grouping if grouping in CUSTOM_GROUPINGS else "none"
+
+    rows = []
+    for data_type in selected_types:
+        rows.extend(CUSTOM_ROW_BUILDERS[data_type](gym, period_data))
+
+    rows.sort(key=lambda item: (item.get("sort_date") or period_data["start_date"], item.get("reference") or ""))
+    rows = group_custom_rows(rows, grouping)
+    total_count = len(rows)
+    preview_rows = rows[:limit] if limit else rows
+    headers = [{"key": key, "label": CUSTOM_COLUMNS[key]} for key in selected_columns]
+    for row in preview_rows:
+        row["cells"] = [row.get(header["key"], "") for header in headers]
+
+    return {
+        "available_types": [{"key": key, "label": label} for key, label in CUSTOM_DATA_TYPES.items()],
+        "available_columns": [{"key": key, "label": label} for key, label in CUSTOM_COLUMNS.items()],
+        "available_groupings": [{"key": key, "label": label} for key, label in CUSTOM_GROUPINGS.items()],
+        "selected_types": selected_types,
+        "selected_columns": selected_columns,
+        "grouping": grouping,
+        "headers": headers,
+        "rows": preview_rows,
+        "total_count": total_count,
+        "preview_count": len(preview_rows),
+        "period": period_data,
+    }
+
+
+def custom_report_table_rows(custom_report):
+    headers = [header["label"] for header in custom_report["headers"]]
+    rows = [headers]
+    for row in custom_report["rows"]:
+        rows.append([row.get(header["key"], "") for header in custom_report["headers"]])
+    return rows
+
+
+def build_custom_csv_export(custom_report):
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=";")
+    writer.writerow(["Rapport personnalise GesGym"])
+    writer.writerow(["Periode", custom_report["period"]["label"]])
+    writer.writerow(["Types", ", ".join(CUSTOM_DATA_TYPES[item] for item in custom_report["selected_types"])])
+    writer.writerow(["Regroupement", CUSTOM_GROUPINGS[custom_report["grouping"]]])
+    writer.writerow([])
+    for row in custom_report_table_rows(custom_report):
+        writer.writerow(row)
+    return ("\ufeff" + output.getvalue()).encode("utf-8")
+
+
+def build_custom_xlsx_export(custom_report):
+    report_rows = [
+        ["Rapport personnalise GesGym"],
+        ["Periode", custom_report["period"]["label"]],
+        ["Types", ", ".join(CUSTOM_DATA_TYPES[item] for item in custom_report["selected_types"])],
+        ["Regroupement", CUSTOM_GROUPINGS[custom_report["grouping"]]],
+        [],
+    ]
+    report_rows.extend(custom_report_table_rows(custom_report))
+
+    stream = io.BytesIO()
+    with zipfile.ZipFile(stream, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(
+            "[Content_Types].xml",
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+            '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+            '<Default Extension="xml" ContentType="application/xml"/>'
+            '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+            '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+            '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
+            '</Types>',
+        )
+        archive.writestr(
+            "_rels/.rels",
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+            '</Relationships>',
+        )
+        archive.writestr(
+            "xl/workbook.xml",
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+            'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+            '<sheets><sheet name="Personnalise" sheetId="1" r:id="rId1"/></sheets>'
+            '</workbook>',
+        )
+        archive.writestr(
+            "xl/_rels/workbook.xml.rels",
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+            '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+            '</Relationships>',
+        )
+        archive.writestr("xl/worksheets/sheet1.xml", worksheet_xml(report_rows))
+        archive.writestr(
+            "xl/styles.xml",
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+            '<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>'
+            '<fills count="1"><fill><patternFill patternType="none"/></fill></fills>'
+            '<borders count="1"><border/></borders>'
+            '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+            '<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>'
+            '</styleSheet>',
+        )
+
+    return stream.getvalue()
 
 
 def accounting_filename(gym, period_data, extension):

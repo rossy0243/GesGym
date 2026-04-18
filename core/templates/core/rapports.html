@@ -500,6 +500,181 @@
                     <div class="card-body">
                         <form id="customReportForm">
                             <div class="mb-3">
+                                <label class="form-label">Type de donnees</label>
+                                <select class="form-select" id="reportDataType" multiple size="5">
+                                    {% for item in custom_report.available_types %}
+                                    <option value="{{ item.key }}" {% if item.key in custom_report.selected_types %}selected{% endif %}>{{ item.label }}</option>
+                                    {% endfor %}
+                                </select>
+                                <small class="text-muted">Maintenez Ctrl pour selection multiple</small>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Periode</label>
+                                <div class="row">
+                                    <div class="col-6">
+                                        <input type="date" class="form-control" id="customDateFrom" value="{{ date_from }}">
+                                    </div>
+                                    <div class="col-6">
+                                        <input type="date" class="form-control" id="customDateTo" value="{{ date_to }}">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Gym</label>
+                                <input type="text" class="form-control" value="{{ gym.name }}" disabled>
+                                <small class="text-muted">Le rapport reste strictement limite au gym actif.</small>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Colonnes a afficher</label>
+                                <div class="vstack gap-2">
+                                    {% for column in custom_report.available_columns %}
+                                    <div class="form-check">
+                                        <input class="form-check-input custom-column" type="checkbox" value="{{ column.key }}" id="col-{{ column.key }}" {% if column.key in custom_report.selected_columns %}checked{% endif %}>
+                                        <label class="form-check-label" for="col-{{ column.key }}">{{ column.label }}</label>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Regroupement</label>
+                                <select class="form-select" id="reportGrouping">
+                                    {% for grouping in custom_report.available_groupings %}
+                                    <option value="{{ grouping.key }}" {% if grouping.key == custom_report.grouping %}selected{% endif %}>{{ grouping.label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <button type="button" class="btn btn-primary w-100" onclick="generateCustomReport()">
+                                <span class="material-icons me-2">bar_chart</span>Generer le rapport
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-xxl-8">
+                <div class="card report-section-card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <h5 class="card-title d-flex align-items-center gap-2 mb-0">
+                            <span class="material-icons">preview</span>
+                            Apercu du rapport personnalise
+                        </h5>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-sm btn-light-brand" onclick="exportCustomReport('xlsx')">
+                                <span class="material-icons me-2">table_chart</span>XLSX
+                            </button>
+                            <button class="btn btn-sm btn-light" onclick="exportCustomReport('csv')">
+                                <span class="material-icons me-2">grid_on</span>CSV
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        {% for header in custom_report.headers %}
+                                        <th>{{ header.label }}</th>
+                                        {% endfor %}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for row in custom_report.rows %}
+                                    <tr>
+                                        {% for cell in row.cells %}
+                                        <td>{{ cell }}</td>
+                                        {% endfor %}
+                                    </tr>
+                                    {% empty %}
+                                    <tr>
+                                        <td colspan="{{ custom_report.headers|length }}" class="text-center py-5">
+                                            <div class="d-flex flex-column align-items-center justify-content-center">
+                                                <span class="material-icons empty-state-icon">preview</span>
+                                                <p class="mt-3 mb-1 fw-semibold text-muted">Aucune donnee pour cette selection</p>
+                                                <small class="text-muted">Changez la periode ou ajoutez d'autres types de donnees.</small>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="card-footer d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <p class="fs-12 text-muted mb-0">Affichage {{ custom_report.preview_count }} sur {{ custom_report.total_count }} resultat{{ custom_report.total_count|pluralize }}</p>
+                        <span class="badge bg-light text-primary">Regroupement : {{ custom_report.grouping }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4 g-3">
+            <div class="col-md-4">
+                <div class="template-box">
+                    <div class="d-flex align-items-center gap-3">
+                        <span class="material-icons text-primary" style="font-size:32px;">receipt</span>
+                        <div>
+                            <h6 class="mb-1">Rapport de tresorerie</h6>
+                            <p class="fs-12 text-muted mb-2">Transactions + caisses</p>
+                            <a href="javascript:void(0);" class="btn btn-sm btn-light-brand" onclick="loadTemplate('tresorerie')">
+                                <span class="material-icons me-1" style="font-size:16px;">visibility</span>Charger
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="template-box">
+                    <div class="d-flex align-items-center gap-3">
+                        <span class="material-icons text-primary" style="font-size:32px;">group</span>
+                        <div>
+                            <h6 class="mb-1">Suivi des adhesions</h6>
+                            <p class="fs-12 text-muted mb-2">Membres + abonnements</p>
+                            <a href="javascript:void(0);" class="btn btn-sm btn-light-brand" onclick="loadTemplate('adhesions')">
+                                <span class="material-icons me-1" style="font-size:16px;">visibility</span>Charger
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="template-box">
+                    <div class="d-flex align-items-center gap-3">
+                        <span class="material-icons text-primary" style="font-size:32px;">insights</span>
+                        <div>
+                            <h6 class="mb-1">Rapport de frequentation</h6>
+                            <p class="fs-12 text-muted mb-2">Acces + historique</p>
+                            <a href="javascript:void(0);" class="btn btn-sm btn-light-brand" onclick="loadTemplate('frequentation')">
+                                <span class="material-icons me-1" style="font-size:16px;">visibility</span>Charger
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="personnaliseSectionLegacy" style="display:none;">
+        <div class="row g-3">
+            <div class="col-xxl-4">
+                <div class="card report-section-card h-100">
+                    <div class="card-header">
+                        <h5 class="card-title d-flex align-items-center gap-2 mb-0">
+                            <span class="material-icons">tune</span>
+                            Constructeur de rapport
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="customReportForm">
+                            <div class="mb-3">
                                 <label class="form-label">Type de données</label>
                                 <select class="form-select" id="reportDataType" multiple size="5">
                                     <option value="transactions" selected>Transactions</option>
@@ -717,10 +892,13 @@ if (ctx) {
 </script>
 
 <script>
+let currentReportSection = "{{ section|default:'journalier' }}";
+
 function showReportSection(section) {
     const journalier = document.getElementById("journalierSection");
     const mensuel = document.getElementById("mensuelSection");
     const perso = document.getElementById("personnaliseSection");
+    const pageTitle = document.getElementById("pageTitle");
 
     if (journalier) journalier.style.display = "none";
     if (mensuel) mensuel.style.display = "none";
@@ -729,6 +907,14 @@ function showReportSection(section) {
     if (section === "journalier" && journalier) journalier.style.display = "block";
     if (section === "mensuel" && mensuel) mensuel.style.display = "block";
     if (section === "personnalise" && perso) perso.style.display = "block";
+    currentReportSection = section;
+
+    const titles = {
+        journalier: "Rapports - Journalier",
+        mensuel: "Rapports - Mensuel",
+        personnalise: "Rapports - Personnalise"
+    };
+    if (pageTitle) pageTitle.textContent = titles[section] || "Rapports";
 }
 
 function toggleCustomDates() {
@@ -744,6 +930,7 @@ function toggleCustomDates() {
 function buildReportQuery(format) {
     const params = new URLSearchParams();
     const period = document.getElementById("periodFilter").value;
+    params.set("section", currentReportSection);
     params.set("period", period);
     if (format) params.set("format", format);
 
@@ -753,7 +940,34 @@ function buildReportQuery(format) {
         params.set("date_from", dateFrom);
         params.set("date_to", dateTo);
     }
+    if (currentReportSection === "personnalise") {
+        appendCustomParams(params);
+    }
     return params.toString();
+}
+
+function appendCustomParams(params) {
+    const typeSelect = document.getElementById("reportDataType");
+    if (typeSelect) {
+        Array.from(typeSelect.selectedOptions).forEach(option => {
+            params.append("types", option.value);
+        });
+    }
+
+    document.querySelectorAll(".custom-column:checked").forEach(input => {
+        params.append("columns", input.value);
+    });
+
+    const grouping = document.getElementById("reportGrouping");
+    if (grouping) params.set("grouping", grouping.value);
+
+    const customDateFrom = document.getElementById("customDateFrom");
+    const customDateTo = document.getElementById("customDateTo");
+    if (customDateFrom && customDateTo && customDateFrom.value && customDateTo.value) {
+        params.set("period", "custom");
+        params.set("date_from", customDateFrom.value);
+        params.set("date_to", customDateTo.value);
+    }
 }
 
 function applyReportFilters() {
@@ -793,7 +1007,20 @@ function openDailyAdjustmentDialog() {
 }
 
 function generateCustomReport() {
-    applyReportFilters();
+    currentReportSection = "personnalise";
+    const params = new URLSearchParams();
+    params.set("section", "personnalise");
+    appendCustomParams(params);
+    window.location.href = "{% url 'core:rapport' %}?" + params.toString();
+}
+
+function exportCustomReport(format) {
+    currentReportSection = "personnalise";
+    const params = new URLSearchParams();
+    params.set("section", "personnalise");
+    params.set("format", format);
+    appendCustomParams(params);
+    window.location.href = "{% url 'core:rapport_export' %}?" + params.toString();
 }
 
 function saveReportTemplate() {
@@ -802,9 +1029,34 @@ function saveReportTemplate() {
     }
 }
 
-function loadTemplate() {
+function setCustomTypes(types) {
+    const typeSelect = document.getElementById("reportDataType");
+    if (!typeSelect) return;
+    Array.from(typeSelect.options).forEach(option => {
+        option.selected = types.includes(option.value);
+    });
+}
+
+function setCustomColumns(columns) {
+    document.querySelectorAll(".custom-column").forEach(input => {
+        input.checked = columns.includes(input.value);
+    });
+}
+
+function loadTemplate(template) {
     const periodFilter = document.getElementById("periodFilter");
-    if (periodFilter) periodFilter.value = "month";
+    if (periodFilter) periodFilter.value = "custom";
+    currentReportSection = "personnalise";
+    if (template === "tresorerie") {
+        setCustomTypes(["transactions", "registers"]);
+        setCustomColumns(["date", "dataset", "description", "amount_cdf", "method", "status", "reference"]);
+    } else if (template === "adhesions") {
+        setCustomTypes(["members", "subscriptions"]);
+        setCustomColumns(["date", "dataset", "client", "description", "amount_cdf", "status"]);
+    } else if (template === "frequentation") {
+        setCustomTypes(["access"]);
+        setCustomColumns(["date", "client", "description", "status", "source"]);
+    }
     toggleCustomDates();
 }
 </script>
@@ -814,8 +1066,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const periodFilter = document.getElementById("periodFilter");
     if (periodFilter) periodFilter.value = "{{ selected_period|default:'month' }}";
     toggleCustomDates();
-    let section = "{{ section|default:'journalier' }}";
-    showReportSection(section);
+    showReportSection(currentReportSection);
 });
 </script>
 {% endblock %}
