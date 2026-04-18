@@ -1,7 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
-from django.http import HttpResponseForbidden
+from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseForbidden
 from django.db.models import Q, Count, Sum, Exists, OuterRef
 from django.db.models.functions import ExtractMonth, TruncDate
 from django.utils.timezone import now
@@ -14,6 +14,13 @@ from members.models import Member
 from organizations.models import Gym, GymModule
 from pos.models import Payment
 from subscriptions.models import MemberSubscription
+from .accounting_reports import (
+    accounting_filename,
+    build_accounting_report,
+    build_csv_export,
+    build_xlsx_export,
+    get_report_period,
+)
 
 
 PERIOD_LABELS = {
@@ -779,9 +786,18 @@ def gym_dashboard(request, gym_id):
 
 @login_required
 def reports_dashboard(request):
-    gym = request.gym
+    gym = getattr(request, "gym", None)
+    if not gym:
+        return redirect("core:select_gym")
+
+    user_role = getattr(request, "role", None)
+    if user_role not in ["owner", "manager", "accountant", "cashier"]:
+        return HttpResponseForbidden("Acces non autorise")
+
     today = now().date()
     section = request.GET.get("section", "journalier")
+    period_data = get_report_period(request.GET)
+    accounting_report = build_accounting_report(gym, period_data)
     # =========================
     # CA du jour
     # =========================
@@ -908,6 +924,12 @@ def reports_dashboard(request):
         sales_values.append(float(m["total"]))
     context = {
         "section": section,
+        "selected_period": period_data["key"],
+        "date_from": period_data["date_from"],
+        "date_to": period_data["date_to"],
+        "report_period_label": period_data["label"],
+        "accounting_report": accounting_report,
+        "can_export_accounting": user_role in ["owner", "manager", "accountant"],
             # journalier
         "daily_revenue": daily_revenue,
         "daily_transactions": daily_transactions,
@@ -928,3 +950,36 @@ def reports_dashboard(request):
         }
 
     return render(request, "core/rapports.html", context)
+
+
+@login_required
+def accounting_report_export(request):
+    gym = getattr(request, "gym", None)
+    if not gym:
+        return redirect("core:select_gym")
+
+    user_role = getattr(request, "role", None)
+    if user_role not in ["owner", "manager", "accountant"]:
+        return HttpResponseForbidden("Acces non autorise")
+
+    export_format = request.GET.get("format", "xlsx").lower()
+    if export_format == "excel":
+        export_format = "xlsx"
+    if export_format not in ["csv", "xlsx"]:
+        return HttpResponseBadRequest("Format d'export non supporte.")
+
+    period_data = get_report_period(request.GET)
+    report = build_accounting_report(gym, period_data)
+
+    if export_format == "csv":
+        content = build_csv_export(report)
+        content_type = "text/csv; charset=utf-8"
+    else:
+        content = build_xlsx_export(report)
+        content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+    response = HttpResponse(content, content_type=content_type)
+    response["Content-Disposition"] = (
+        f'attachment; filename="{accounting_filename(gym, period_data, export_format)}"'
+    )
+    return response
