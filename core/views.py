@@ -585,13 +585,11 @@ def gym_dashboard(request, gym_id):
     if user_role == "coach":
         from coaching.models import Coach
 
-        coach = Coach.objects.filter(
-            gym=gym,
-            is_active=True,
-        ).filter(
-            Q(name__icontains=request.user.first_name) |
-            Q(user=request.user)
-        ).first()
+        coach_lookup = Q()
+        for value in [request.user.get_full_name(), request.user.first_name, getattr(request.user, "phone", "")]:
+            if value:
+                coach_lookup |= Q(name__icontains=value) | Q(phone=value)
+        coach = Coach.objects.filter(gym=gym, is_active=True).filter(coach_lookup).first() if coach_lookup else None
 
         if coach:
             my_members = coach.members.filter(is_active=True)
@@ -653,6 +651,7 @@ def gym_dashboard(request, gym_id):
         "all_products_count": 0,
         "inactive_products": 0,
         "stock_value_total": 0,
+        "stock_ok_count": 0,
         "low_stock_count": 0,
         "out_of_stock_count": 0,
         "stock_movements_period": 0,
@@ -660,11 +659,34 @@ def gym_dashboard(request, gym_id):
         "stock_out_period": 0,
         "top_value_products": [],
         "recent_stock_movements": [],
+        "stock_status_chart_labels": [],
+        "stock_status_chart_values": [],
+        "stock_value_chart_labels": [],
+        "stock_value_chart_values": [],
     }
     if "PRODUCTS" in active_modules:
         from products.kpis import build_product_kpis
 
         product_kpis = build_product_kpis(gym, period_data)
+
+    coaching_kpis = {
+        "total_coaches": 0,
+        "active_coaches": 0,
+        "inactive_coaches": 0,
+        "assigned_members_count": 0,
+        "unassigned_members_count": 0,
+        "average_members_per_coach": 0,
+        "new_coaches_period": 0,
+        "top_coaches": [],
+        "coaching_status_chart_labels": [],
+        "coaching_status_chart_values": [],
+        "coaching_workload_chart_labels": [],
+        "coaching_workload_chart_values": [],
+    }
+    if "COACHING" in active_modules:
+        from coaching.kpis import build_coaching_kpis
+
+        coaching_kpis = build_coaching_kpis(gym, period_data)
 
     total_maintenance_cost = machine_kpis["total_maintenance_cost"]
     total_revenue = monthly_revenue
@@ -733,6 +755,14 @@ def gym_dashboard(request, gym_id):
         "attendance_chart_values": _to_json(week_values),
         "sales_chart_labels": _to_json(sales_labels),
         "sales_chart_values": _to_json(sales_values),
+        "stock_status_chart_labels_json": _to_json(product_kpis["stock_status_chart_labels"]),
+        "stock_status_chart_values_json": _to_json(product_kpis["stock_status_chart_values"]),
+        "stock_value_chart_labels_json": _to_json(product_kpis["stock_value_chart_labels"]),
+        "stock_value_chart_values_json": _to_json(product_kpis["stock_value_chart_values"]),
+        "coaching_status_chart_labels_json": _to_json(coaching_kpis["coaching_status_chart_labels"]),
+        "coaching_status_chart_values_json": _to_json(coaching_kpis["coaching_status_chart_values"]),
+        "coaching_workload_chart_labels_json": _to_json(coaching_kpis["coaching_workload_chart_labels"]),
+        "coaching_workload_chart_values_json": _to_json(coaching_kpis["coaching_workload_chart_values"]),
         "recent_payments": recent_payments,
         "pending_count": pending_count,
         "pending_total": pending_total,
@@ -743,6 +773,7 @@ def gym_dashboard(request, gym_id):
     context.update(machine_kpis)
     context.update(rh_kpis)
     context.update(product_kpis)
+    context.update(coaching_kpis)
 
     return render(request, "core/dashboard_members.html", context)
 

@@ -264,7 +264,72 @@
     </div>
 
     <div class="row g-3 mb-4">
-        <div class="col-xl-3">
+        <div class="col-xl-4">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title">KPI produits</h5>
+                </div>
+                <div class="card-body">
+                    <div class="vstack gap-3">
+                        <div class="d-flex justify-content-between">
+                            <span>Produits actifs</span>
+                            <strong>{{ total_products|default:0 }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Valeur du stock</span>
+                            <strong>{{ stock_value_total|default:0|floatformat:0 }} USD</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Stock OK</span>
+                            <strong>{{ stock_ok_count|default:0 }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Stock bas</span>
+                            <strong>{{ low_stock_count|default:0 }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Rupture</span>
+                            <strong>{{ out_of_stock_count|default:0 }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Sorties {{ period_label_lower }}</span>
+                            <strong>{{ stock_out_period|default:0 }}</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-8">
+            <div class="card stretch stretch-full">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                    <h5 class="card-title mb-0">Graphique du stock</h5>
+                    <span class="badge bg-light text-dark">Valeur USD</span>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3 align-items-center">
+                        <div class="col-lg-4">
+                            <div class="member-analytics-chart compact">
+                                <canvas id="stockStatusChart"></canvas>
+                            </div>
+                        </div>
+                        <div class="col-lg-8">
+                            <div class="member-analytics-chart compact">
+                                <canvas id="stockValueChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between text-muted fs-12 mt-3 flex-wrap gap-2">
+                        <span>Entrées {{ period_label_lower }}: <strong>{{ stock_in_period|default:0 }}</strong></span>
+                        <span>Sorties {{ period_label_lower }}: <strong>{{ stock_out_period|default:0 }}</strong></span>
+                        <span>Mouvements: <strong>{{ stock_movements_period|default:0 }}</strong></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-xl-4">
             <div class="card stretch stretch-full">
                 <div class="card-header">
                     <h5 class="card-title">Repartition des abonnements</h5>
@@ -297,38 +362,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-xl-3">
-            <div class="card stretch stretch-full">
-                <div class="card-header">
-                    <h5 class="card-title">KPI produits</h5>
-                </div>
-                <div class="card-body">
-                    <div class="vstack gap-3">
-                        <div class="d-flex justify-content-between">
-                            <span>Produits actifs</span>
-                            <strong>{{ total_products|default:0 }}</strong>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <span>Valeur du stock</span>
-                            <strong>{{ stock_value_total|default:0|floatformat:0 }} USD</strong>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <span>Stock bas</span>
-                            <strong>{{ low_stock_count|default:0 }}</strong>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <span>Rupture</span>
-                            <strong>{{ out_of_stock_count|default:0 }}</strong>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <span>Sorties {{ period_label_lower }}</span>
-                            <strong>{{ stock_out_period|default:0 }}</strong>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-xl-3">
+        <div class="col-xl-4">
             <div class="card stretch stretch-full">
                 <div class="card-header">
                     <h5 class="card-title">Frequentation {{ period_label_lower }}</h5>
@@ -495,6 +529,65 @@
             </div>
         </div>
     </div>
+
+    <div class="row g-3 mt-1">
+        <div class="col-xl-4">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title">KPI coaching</h5>
+                </div>
+                <div class="card-body">
+                    <div class="vstack gap-3">
+                        <div class="d-flex justify-content-between">
+                            <span>Coaches actifs</span>
+                            <strong>{{ active_coaches|default:0 }} / {{ total_coaches|default:0 }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Membres assignes</span>
+                            <strong>{{ assigned_members_count|default:0 }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Membres sans coach</span>
+                            <strong>{{ unassigned_members_count|default:0 }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Moyenne / coach</span>
+                            <strong>{{ average_members_per_coach|default:0 }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Nouveaux {{ period_label_lower }}</span>
+                            <strong>{{ new_coaches_period|default:0 }}</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-8">
+            <div class="card stretch stretch-full">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                    <h5 class="card-title mb-0">Graphique coaching</h5>
+                    <span class="badge bg-light text-dark">Charge membres</span>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3 align-items-center">
+                        <div class="col-lg-4">
+                            <div class="member-analytics-chart compact">
+                                <canvas id="coachingStatusChart"></canvas>
+                            </div>
+                        </div>
+                        <div class="col-lg-8">
+                            <div class="member-analytics-chart compact">
+                                <canvas id="coachingWorkloadChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="fs-12 text-muted mt-3">
+                        Top coaches par nombre de membres assignes, toujours limite au gym courant.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
@@ -601,6 +694,93 @@ renderDoughnutChart(
     {{ plan_chart_values|default:"[]"|safe }},
     "Aucune formule"
 );
+
+renderDoughnutChart(
+    "stockStatusChart",
+    {{ stock_status_chart_labels_json|default:"[]"|safe }},
+    {{ stock_status_chart_values_json|default:"[]"|safe }},
+    "Aucun stock"
+);
+
+renderDoughnutChart(
+    "coachingStatusChart",
+    {{ coaching_status_chart_labels_json|default:"[]"|safe }},
+    {{ coaching_status_chart_values_json|default:"[]"|safe }},
+    "Aucun coach"
+);
+
+const coachingWorkloadCanvas = document.getElementById("coachingWorkloadChart");
+if (coachingWorkloadCanvas) {
+    new Chart(coachingWorkloadCanvas, {
+        type: "bar",
+        data: {
+            labels: {{ coaching_workload_chart_labels_json|default:"[]"|safe }},
+            datasets: [{
+                label: "Membres assignes",
+                data: {{ coaching_workload_chart_values_json|default:"[]"|safe }},
+                backgroundColor: "rgba(102, 16, 242, 0.72)",
+                borderColor: "#6610f2",
+                borderWidth: 1,
+                borderRadius: 10,
+                maxBarThickness: 34
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { grid: { display: false } },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: mutedGrid },
+                    ticks: { precision: 0 }
+                }
+            }
+        }
+    });
+}
+
+const stockValueCanvas = document.getElementById("stockValueChart");
+if (stockValueCanvas) {
+    new Chart(stockValueCanvas, {
+        type: "bar",
+        data: {
+            labels: {{ stock_value_chart_labels_json|default:"[]"|safe }},
+            datasets: [{
+                label: "Valeur stock",
+                data: {{ stock_value_chart_values_json|default:"[]"|safe }},
+                backgroundColor: "rgba(61, 199, 190, 0.78)",
+                borderColor: "#3dc7be",
+                borderWidth: 1,
+                borderRadius: 10,
+                maxBarThickness: 34
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: context => `${Number(context.raw || 0).toLocaleString("fr-FR")} USD`
+                    }
+                }
+            },
+            scales: {
+                x: { grid: { display: false } },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: mutedGrid },
+                    ticks: {
+                        callback: value => `${Number(value).toLocaleString("fr-FR")} USD`
+                    }
+                }
+            }
+        }
+    });
+}
 
 const memberGrowthCanvas = document.getElementById("memberGrowthChart");
 if (memberGrowthCanvas) {

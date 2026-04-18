@@ -93,8 +93,10 @@ class ProductsTenantTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "KPI produits")
+        self.assertContains(response, "Graphique du stock")
         self.assertContains(response, "Valeur du stock")
         self.assertContains(response, "1000 USD")
+        self.assertContains(response, "stockValueChart")
 
     def test_movement_cannot_target_other_gym_product(self):
         response = self.client.get(reverse("products:add_movement", args=[self.product_b.id]))

@@ -18,11 +18,11 @@
 
     <div class="page-header-right ms-auto">
         <div class="d-flex align-items-center gap-2 flex-wrap">
-            <a href="{% url 'coaching:update' coach.gym.id coach.id %}" class="btn btn-outline-secondary d-flex align-items-center gap-2">
+            <a href="{% url 'coaching:update' coach.id %}" class="btn btn-outline-secondary d-flex align-items-center gap-2">
                 <span class="material-icons" style="font-size:18px;">edit</span>
                 Modifier
             </a>
-            <a href="{% url 'coaching:list' coach.gym.id %}" class="btn btn-light d-flex align-items-center gap-2">
+            <a href="{% url 'coaching:list' %}" class="btn btn-light d-flex align-items-center gap-2">
                 <span class="material-icons" style="font-size:18px;">arrow_back</span>
                 Retour
             </a>
@@ -247,7 +247,7 @@
                                                     Retirer {{ member.first_name }} {{ member.last_name }} de {{ coach.name }} ?
                                                 </div>
                                                 <div class="modal-footer">
-                                                    <form method="post" action="{% url 'coaching:remove_member' coach.gym.id coach.id member.id %}">
+                                                    <form method="post" action="{% url 'coaching:remove_member' coach.id member.id %}">
                                                         {% csrf_token %}
                                                         <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
                                                         <button type="submit" class="btn btn-danger">Retirer</button>
@@ -286,7 +286,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
 
-            <form method="post" action="{% url 'coaching:assign_member' coach.gym.id coach.id %}">
+            <form method="post" action="{% url 'coaching:assign_member' coach.id %}">
                 {% csrf_token %}
                 <div class="modal-body">
                     <select name="member" class="form-select" required>
