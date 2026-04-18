@@ -17,9 +17,6 @@ class CustomLoginView(LoginView):
     template_name = 'compte/login.html'
     authentication_form = CustomAuthenticationForm
 
-    from compte.models import UserGymRole
-
-
     def get_success_url(self):
 
         user = self.request.user
@@ -28,13 +25,24 @@ class CustomLoginView(LoginView):
         if user.is_saas_admin:
             return reverse_lazy("admin:index")  # ou futur dashboard SaaS
 
-        # récupérer le rôle actif
+        # Owner organisationnel : pas besoin d'un role gym.
+        if user.owned_organization and user.owned_organization.is_active:
+            return reverse_lazy("core:dashboard_redirect")
+
+        # Employe interne : il doit avoir un role actif dans une salle active.
         role = UserGymRole.objects.filter(
             user=user,
-            is_active=True
+            is_active=True,
+            gym__is_active=True,
+            gym__organization__is_active=True,
         ).select_related("gym").first()
 
         if not role:
+            logout(self.request)
+            messages.error(
+                self.request,
+                "Aucun acces actif n'est associe a ces identifiants."
+            )
             return reverse_lazy("compte:login")
 
         return reverse_lazy("core:dashboard_redirect")

@@ -40,11 +40,13 @@ def modules_processor(request):
 
     # Cas Owner
     if getattr(request, 'is_owner', False) and request.organization:
-        gyms = request.organization.gyms.filter(is_active=True)
-        gym_modules = GymModule.objects.filter(
-            gym__in=gyms,
-            is_active=True
-        ).select_related('module')
+        if getattr(request, 'gym', None):
+            gym_modules = GymModule.objects.filter(
+                gym=request.gym,
+                is_active=True
+            ).select_related('module')
+        else:
+            gym_modules = []
 
     # Cas utilisateur normal (Manager, Cashier, etc.)
     elif getattr(request, 'gym', None):

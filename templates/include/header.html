@@ -30,15 +30,54 @@
             
             <!-- ==================== SÉLECTEUR DE GYM POUR OWNER ==================== -->
             {% if request.is_owner and request.owned_gyms %}
-            <div class="gym-selector">
-                <select id="gym_selector" class="form-select form-select-sm" style="min-width: 220px;">
+            <div class="dropdown owner-gym-switcher">
+                <button class="owner-gym-switcher__button" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <span class="owner-gym-switcher__icon material-icons">storefront</span>
+                    <span class="owner-gym-switcher__copy">
+                        <span class="owner-gym-switcher__eyebrow">Salle active</span>
+                        <span class="owner-gym-switcher__name">
+                            {{ request.gym.name|default:"Choisir une salle" }}
+                        </span>
+                    </span>
+                    <span class="owner-gym-switcher__chevron material-icons">expand_more</span>
+                </button>
+
+                <div class="dropdown-menu dropdown-menu-end owner-gym-switcher__menu">
+                    <div class="owner-gym-switcher__menu-header">
+                        <span class="owner-gym-switcher__eyebrow">Organisation</span>
+                        <strong>{{ request.organization.name }}</strong>
+                    </div>
+
                     {% for gym in request.owned_gyms %}
-                    <option value="{{ gym.id }}" 
-                            {% if request.gym and request.gym.id == gym.id %}selected{% endif %}>
-                        {{ gym.name }}
-                    </option>
+                        {% if request.gym and request.gym.id == gym.id %}
+                            <div class="owner-gym-switcher__item is-active">
+                                <span class="owner-gym-switcher__item-icon material-icons">check_circle</span>
+                                <span class="owner-gym-switcher__item-copy">
+                                    <strong>{{ gym.name }}</strong>
+                                    <small>Salle actuellement ouverte</small>
+                                </span>
+                            </div>
+                        {% else %}
+                            <form method="post" action="{% url 'core:switch_gym' gym.id %}" class="m-0">
+                                {% csrf_token %}
+                                <button type="submit" class="owner-gym-switcher__item">
+                                    <span class="owner-gym-switcher__item-icon material-icons">sync_alt</span>
+                                    <span class="owner-gym-switcher__item-copy">
+                                        <strong>{{ gym.name }}</strong>
+                                        <small>Basculer vers cette salle</small>
+                                    </span>
+                                </button>
+                            </form>
+                        {% endif %}
                     {% endfor %}
-                </select>
+
+                    <div class="owner-gym-switcher__footer">
+                        <a href="{% url 'core:select_gym' %}">
+                            Voir toutes les salles
+                            <span class="material-icons">arrow_forward</span>
+                        </a>
+                    </div>
+                </div>
             </div>
             {% endif %}
 
@@ -86,20 +125,3 @@
         </div>
     </div>
 </header>
-
-<!-- Script pour le sélecteur de gym -->
-{% if request.is_owner and request.owned_gyms %}
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const selector = document.getElementById('gym_selector');
-    if (selector) {
-        selector.addEventListener('change', function() {
-            const gymId = this.value;
-            if (gymId) {
-                window.location.href = "{% url 'core:switch_gym' 999 %}".replace('999', gymId);
-            }
-        });
-    }
-});
-</script>
-{% endif %}

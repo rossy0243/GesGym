@@ -38,8 +38,8 @@
                         {% else %}
                         <!-- Si pas de gym (cas de l'Owner sur vue organisation) -->
                         <li class="nxl-item" id="nav-dashboard-global">
-                            <a class="nxl-link" href="{% url 'core:switch_gym' org_id=request.organization.id %}">
-                                Vue globale
+                            <a class="nxl-link" href="{% url 'core:select_gym' %}">
+                                Choisir une salle
                             </a>
                         </li>
                         {% endif %}
