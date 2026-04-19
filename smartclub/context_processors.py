@@ -2,6 +2,7 @@
 from django.urls import NoReverseMatch, reverse
 
 from organizations.models import GymModule
+from .access_control import current_role, permission_flags
 
 
 def _safe_reverse(name):
@@ -109,8 +110,17 @@ def modules_processor(request):
         'COACHING': False, 'RH': False, 'WEBSITE': False, 'COMPTE': False, 'CORE': False,
     }
 
+    base_context = permission_flags(request)
+    base_context["current_role"] = current_role(request)
+    base_context["can_pos"] = base_context["can_pos_cashier"] or base_context["can_pos_history"]
+    base_context["can_rh"] = (
+        base_context["can_rh_employees"]
+        or base_context["can_rh_attendance"]
+        or base_context["can_rh_payroll"]
+    )
+
     if not request.user.is_authenticated:
-        return {'active_modules': [], **modules}
+        return {'active_modules': [], **modules, **base_context}
 
     # Cas Owner
     if getattr(request, 'is_owner', False) and request.organization:
@@ -152,6 +162,7 @@ def modules_processor(request):
         'module_website': modules['WEBSITE'],
         'module_compte': modules['COMPTE'],
         'module_core': modules['CORE'],
+        **base_context,
     }
 
     return context

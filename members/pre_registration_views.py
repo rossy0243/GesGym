@@ -8,6 +8,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from smartclub.access_control import MEMBER_ROLES, has_role
 from .forms import MemberPreRegistrationForm
 from .models import Member, MemberPreRegistration, MemberPreRegistrationLink
 
@@ -17,7 +18,7 @@ def _cleanup_expired_pre_registrations():
 
 
 def _member_management_allowed(request):
-    return request.role in ["owner", "manager"] and request.gym
+    return has_role(request, MEMBER_ROLES) and request.gym
 
 
 def _get_pre_registration_public_url(request, link):

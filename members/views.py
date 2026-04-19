@@ -13,6 +13,7 @@ from django.core.paginator import Paginator
 from django.urls import reverse
 import qrcode
 from access.models import AccessLog
+from smartclub.access_control import MEMBER_ADMIN_ROLES, MEMBER_ROLES, has_role
 from .forms import MemberCreationForm
 from .models import Member, MemberPreRegistration, MemberPreRegistrationLink
 from pos.models import Payment
@@ -27,7 +28,7 @@ def _cleanup_expired_pre_registrations():
 
 
 def _member_management_allowed(request):
-    return request.role in ["owner", "manager"] and request.gym
+    return has_role(request, MEMBER_ROLES) and request.gym
 
 
 def _get_pre_registration_public_url(request, link):
@@ -207,7 +208,7 @@ def member_list(request):
 @login_required
 def create_member(request):
 
-    if request.role not in ["owner", "manager"]:
+    if not _member_management_allowed(request):
         raise PermissionDenied
     
     if request.method == "POST":
@@ -242,10 +243,16 @@ def create_member(request):
     return redirect("members:member_list")
 
 #Qrcode
+@login_required
 def member_qr(request, uuid):
 
     if not uuid:
         return HttpResponse(status=404)
+
+    if not _member_management_allowed(request):
+        raise PermissionDenied
+
+    get_object_or_404(Member, qr_code=uuid, gym=request.gym)
     
     qr = qrcode.make(uuid)
 
@@ -261,7 +268,7 @@ def member_qr(request, uuid):
 
 @login_required
 def edit_member(request, member_id):
-    if request.role not in ["owner", "manager"]:
+    if not _member_management_allowed(request):
         raise PermissionDenied
 
     member = get_object_or_404(Member, id=member_id, gym=request.gym)
@@ -303,6 +310,9 @@ def edit_member(request, member_id):
 #DETAIL D'UN MEMBRE
 @login_required
 def member_detail(request, member_id):
+    if not _member_management_allowed(request):
+        raise PermissionDenied
+
     member = get_object_or_404(
         Member.objects.select_related("user"),
         id=member_id,
@@ -328,7 +338,8 @@ def member_detail(request, member_id):
         })
         
     access_logs = AccessLog.objects.filter(
-        member=member
+        member=member,
+        gym=request.gym,
     ).order_by("-check_in_time")[:5]
 
     access_data = []
@@ -373,7 +384,7 @@ def member_detail(request, member_id):
 @login_required
 def delete_member(request, member_id):
 
-    if request.role != "owner":
+    if not has_role(request, {"owner"}):
         raise PermissionDenied
 
     member = get_object_or_404(
@@ -391,7 +402,7 @@ def delete_member(request, member_id):
 
 @login_required
 def suspend_member(request, member_id):
-    if request.role not in ["owner", "manager"]:
+    if not has_role(request, MEMBER_ADMIN_ROLES):
         raise PermissionDenied
 
     member = get_object_or_404(Member, id=member_id, gym=request.gym)
@@ -413,7 +424,7 @@ def suspend_member(request, member_id):
 
 @login_required
 def reactivate_member(request, member_id):
-    if request.role not in ["owner", "manager"]:
+    if not has_role(request, MEMBER_ADMIN_ROLES):
         raise PermissionDenied
 
     member = get_object_or_404(Member, id=member_id, gym=request.gym)

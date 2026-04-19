@@ -13,7 +13,7 @@ from compte.models import UserGymRole
 from coaching.forms import CoachForm
 from coaching.models import CoachSpecialty
 from members.models import Member
-from organizations.models import Gym, Organization, SensitiveActivityLog
+from organizations.models import Gym, GymModule, Module, Organization, SensitiveActivityLog
 from pos.models import CashRegister, Payment
 
 
@@ -302,3 +302,90 @@ class AccountingReportExportTests(TestCase):
         self.assertTrue(CoachSpecialty.objects.filter(gym=self.gym_a, name="Crossfit").exists())
         form = CoachForm(gym=self.gym_a)
         self.assertIn(("Crossfit", "Crossfit"), form.fields["specialty"].choices)
+
+
+class RoleAccessMatrixTests(TestCase):
+    def setUp(self):
+        self.organization = Organization.objects.create(name="Matrix Org", slug="matrix-org")
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Matrix Gym",
+            slug="matrix-gym",
+            subdomain="matrix-gym",
+        )
+        self.other_gym = Gym.objects.create(
+            organization=self.organization,
+            name="Other Gym",
+            slug="other-gym",
+            subdomain="other-gym",
+        )
+        for code in ["POS", "ACCESS", "MEMBERS", "RH", "CORE"]:
+            module, _ = Module.objects.get_or_create(code=code, defaults={"name": code})
+            GymModule.objects.get_or_create(gym=self.gym, module=module, defaults={"is_active": True})
+
+        self.manager = User.objects.create_user(username="matrix-manager", password="pass")
+        UserGymRole.objects.create(user=self.manager, gym=self.gym, role="manager")
+        self.reception = User.objects.create_user(username="matrix-reception", password="pass")
+        UserGymRole.objects.create(user=self.reception, gym=self.gym, role="reception")
+        self.cashier = User.objects.create_user(username="matrix-cashier", password="pass")
+        UserGymRole.objects.create(user=self.cashier, gym=self.gym, role="cashier")
+
+    def test_cashier_home_redirects_to_pos_not_dashboard(self):
+        self.client.force_login(self.cashier)
+
+        response = self.client.get(reverse("core:dashboard_redirect"))
+
+        self.assertRedirects(
+            response,
+            reverse("pos:cashier_dashboard"),
+            fetch_redirect_response=False,
+        )
+
+    def test_cashier_cannot_open_dashboard_or_transaction_journal(self):
+        self.client.force_login(self.cashier)
+
+        dashboard_response = self.client.get(reverse("core:gym_dashboard", args=[self.gym.id]))
+        journal_response = self.client.get(reverse("pos:register_history"))
+        pos_response = self.client.get(reverse("pos:cashier_dashboard"))
+
+        self.assertEqual(dashboard_response.status_code, 403)
+        self.assertEqual(journal_response.status_code, 403)
+        self.assertEqual(pos_response.status_code, 200)
+
+    def test_reception_can_control_access_but_cannot_open_reports(self):
+        self.client.force_login(self.reception)
+
+        access_response = self.client.get(reverse("access:acces_dashboard"))
+        report_response = self.client.get(reverse("core:rapport"))
+
+        self.assertEqual(access_response.status_code, 200)
+        self.assertEqual(report_response.status_code, 403)
+
+    def test_manager_settings_excludes_organization_management(self):
+        self.client.force_login(self.manager)
+
+        response = self.client.get(reverse("core:settings"), {"tab": "organization"})
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        self.assertIn("Utilisateurs & roles", content)
+        self.assertNotIn("Gerer l'organisation", content)
+
+    def test_manager_cannot_create_employee_for_another_gym(self):
+        self.client.force_login(self.manager)
+
+        response = self.client.post(
+            reverse("core:settings"),
+            {
+                "action": "employee_create",
+                "first_name": "Bad",
+                "last_name": "Scope",
+                "email": "bad-scope@example.com",
+                "gym": self.other_gym.id,
+                "role": "cashier",
+                "is_active": "on",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(UserGymRole.objects.filter(user__email="bad-scope@example.com").exists())

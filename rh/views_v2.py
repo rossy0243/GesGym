@@ -10,7 +10,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from pos.services import record_expense
-from smartclub.decorators import module_required
+from smartclub.access_control import RH_ATTENDANCE_ROLES, RH_EMPLOYEE_ROLES, RH_PAYROLL_ROLES
+from smartclub.decorators import module_required, role_required
 
 from .forms import AttendanceForm, BulkAttendanceForm, EmployeeForm, PaymentForm
 from .kpis import available_months, build_rh_kpis, payroll_rows
@@ -42,6 +43,7 @@ def _validation_message(exc):
 
 @login_required
 @module_required("RH")
+@role_required(RH_EMPLOYEE_ROLES)
 def employee_list(request):
     gym = request.gym
     employees = Employee.objects.filter(gym=gym).order_by("name")
@@ -69,6 +71,7 @@ def employee_list(request):
 
 @login_required
 @module_required("RH")
+@role_required(RH_EMPLOYEE_ROLES)
 def employee_detail(request, employee_id):
     employee = get_object_or_404(Employee, id=employee_id, gym=request.gym)
     year, month = _parse_year_month(request)
@@ -114,6 +117,7 @@ def employee_detail(request, employee_id):
 
 @login_required
 @module_required("RH")
+@role_required(RH_EMPLOYEE_ROLES)
 def employee_create(request):
     gym = request.gym
 
@@ -137,6 +141,7 @@ def employee_create(request):
 
 @login_required
 @module_required("RH")
+@role_required(RH_EMPLOYEE_ROLES)
 def employee_update(request, employee_id):
     employee = get_object_or_404(Employee, id=employee_id, gym=request.gym)
 
@@ -163,6 +168,7 @@ def employee_update(request, employee_id):
 
 @login_required
 @module_required("RH")
+@role_required(RH_EMPLOYEE_ROLES)
 def employee_delete(request, employee_id):
     employee = get_object_or_404(Employee, id=employee_id, gym=request.gym)
 
@@ -181,6 +187,7 @@ def employee_delete(request, employee_id):
 
 @login_required
 @module_required("RH")
+@role_required(RH_ATTENDANCE_ROLES)
 def attendance_create(request):
     gym = request.gym
 
@@ -204,6 +211,7 @@ def attendance_create(request):
 
 @login_required
 @module_required("RH")
+@role_required(RH_ATTENDANCE_ROLES)
 def attendance_bulk(request):
     gym = request.gym
     active_employees = Employee.objects.filter(gym=gym, is_active=True).order_by("name")
@@ -244,6 +252,7 @@ def attendance_bulk(request):
 
 @login_required
 @module_required("RH")
+@role_required(RH_ATTENDANCE_ROLES)
 def attendance_list(request):
     gym = request.gym
     date_from = request.GET.get("date_from")
@@ -278,6 +287,7 @@ def attendance_list(request):
 
 @login_required
 @module_required("RH")
+@role_required(RH_PAYROLL_ROLES)
 def payroll_dashboard(request):
     gym = request.gym
     year, month = _parse_year_month(request)
@@ -301,6 +311,7 @@ def payroll_dashboard(request):
 
 @login_required
 @module_required("RH")
+@role_required(RH_PAYROLL_ROLES)
 def process_payment(request, employee_id, year, month):
     employee = get_object_or_404(Employee, id=employee_id, gym=request.gym)
     existing_payment = PaymentRecord.objects.filter(

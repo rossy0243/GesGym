@@ -9,19 +9,21 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
+from smartclub.access_control import SUBSCRIPTION_ROLES, has_role
+
 from .forms import MemberSubscriptionForm, SubscriptionPlanForm
 from .models import MemberSubscription, SubscriptionPlan
 
 
-PLAN_MANAGEMENT_ROLES = {"owner", "manager"}
-SUBSCRIPTION_MANAGEMENT_ROLES = {"owner", "manager", "reception", "cashier"}
+PLAN_MANAGEMENT_ROLES = SUBSCRIPTION_ROLES
+SUBSCRIPTION_MANAGEMENT_ROLES = SUBSCRIPTION_ROLES
 
 
 def _require_gym_role(request, allowed_roles):
     if not getattr(request, "gym", None):
         raise PermissionDenied
 
-    if getattr(request, "role", None) not in allowed_roles:
+    if not has_role(request, allowed_roles):
         raise PermissionDenied
 
 

@@ -32,6 +32,15 @@ from .accounting_reports import (
     get_report_period,
     get_report_section,
 )
+from smartclub.access_control import (
+    DASHBOARD_ROLES,
+    REPORT_ROLES,
+    SETTINGS_ORGANIZATION_ROLES,
+    SETTINGS_ROLES,
+    current_role,
+    has_role,
+    role_home_route,
+)
 
 
 PERIOD_LABELS = {
@@ -316,6 +325,8 @@ def dashboard_redirect(request):
         return redirect('core:select_gym')
 
     if getattr(request, 'gym', None):
+        if not has_role(request, DASHBOARD_ROLES):
+            return redirect(role_home_route(request))
         return redirect('core:gym_dashboard', gym_id=request.gym.id)
 
     return redirect('core:select_gym')
@@ -359,6 +370,10 @@ def select_gym(request):
         if gym:
             request.session['current_gym_id'] = gym.id
             request.session.modified = True
+            request.gym = gym
+            request.organization = gym.organization
+            if not has_role(request, DASHBOARD_ROLES):
+                return redirect(role_home_route(request))
             return redirect('core:gym_dashboard', gym_id=gym.id)
         messages.error(request, "Acces refuse a cette salle.")
         return redirect('core:select_gym')
@@ -400,10 +415,10 @@ def switch_gym(request, gym_id):
     return redirect('core:gym_dashboard', gym_id=gym.id)
 
 
-def _owner_settings_allowed(request):
+def _settings_allowed(request):
     return bool(
         request.user.is_authenticated
-        and getattr(request, "is_owner", False)
+        and has_role(request, SETTINGS_ROLES)
         and getattr(request, "organization", None)
     )
 
@@ -428,7 +443,7 @@ def _log_sensitive_action(request, action, target_type="", target_label="", meta
 
 @login_required
 def settings_dashboard(request):
-    if not _owner_settings_allowed(request):
+    if not _settings_allowed(request):
         return HttpResponseForbidden("Acces non autorise")
 
     organization = request.organization
@@ -436,15 +451,26 @@ def settings_dashboard(request):
     if not gym:
         return redirect("core:select_gym")
 
-    active_tab = request.GET.get("tab", "organization")
+    can_manage_organization = has_role(request, SETTINGS_ORGANIZATION_ROLES)
+    active_tab = request.GET.get("tab", "organization" if can_manage_organization else "employees")
+    if active_tab == "organization" and not can_manage_organization:
+        active_tab = "employees"
+
+    accessible_gyms = (
+        organization.gyms.filter(is_active=True).order_by("name")
+        if can_manage_organization
+        else Gym.objects.filter(id=gym.id, is_active=True)
+    )
     organization_form = OrganizationSettingsForm(instance=organization)
-    employee_form = InternalEmployeeForm(organization=organization)
+    employee_form = InternalEmployeeForm(organization=organization, gyms=accessible_gyms)
     specialty_form = CoachSpecialtyForm()
 
     if request.method == "POST":
         action = request.POST.get("action", "")
 
         if action == "organization":
+            if not can_manage_organization:
+                return HttpResponseForbidden("Seul l'Owner peut modifier l'organisation.")
             active_tab = "organization"
             organization_form = OrganizationSettingsForm(request.POST, request.FILES, instance=organization)
             if organization_form.is_valid():
@@ -460,7 +486,7 @@ def settings_dashboard(request):
 
         elif action == "employee_create":
             active_tab = "employees"
-            employee_form = InternalEmployeeForm(request.POST, organization=organization)
+            employee_form = InternalEmployeeForm(request.POST, organization=organization, gyms=accessible_gyms)
             if employee_form.is_valid():
                 selected_gym = employee_form.cleaned_data["gym"]
                 username = generate_username(
@@ -501,7 +527,7 @@ def settings_dashboard(request):
             role = get_object_or_404(
                 UserGymRole.objects.select_related("user", "gym"),
                 id=request.POST.get("role_id"),
-                gym__organization=organization,
+                gym__in=accessible_gyms,
             )
             if role.role == "owner":
                 return HttpResponseForbidden("Impossible de modifier un Owner ici.")
@@ -580,17 +606,16 @@ def settings_dashboard(request):
             return redirect("core:settings")
 
     employee_roles = (
-        UserGymRole.objects.filter(gym__organization=organization)
+        UserGymRole.objects.filter(gym__in=accessible_gyms)
         .exclude(role="owner")
         .select_related("user", "gym")
         .order_by("gym__name", "user__first_name", "user__last_name")
     )
     specialties = CoachSpecialty.objects.filter(gym=gym).order_by("name")
-    activity_logs = (
-        SensitiveActivityLog.objects.filter(organization=organization)
-        .select_related("actor", "gym")
-        .order_by("-created_at")[:50]
-    )
+    activity_logs_qs = SensitiveActivityLog.objects.filter(organization=organization)
+    if not can_manage_organization:
+        activity_logs_qs = activity_logs_qs.filter(gym=gym)
+    activity_logs = activity_logs_qs.select_related("actor", "gym").order_by("-created_at")[:50]
 
     context = {
         "organization": organization,
@@ -602,6 +627,7 @@ def settings_dashboard(request):
         "specialties": specialties,
         "activity_logs": activity_logs,
         "active_tab": active_tab,
+        "can_manage_organization": can_manage_organization,
         "nav_active": "parametres",
     }
     return render(request, "core/settings.html", context)
@@ -649,6 +675,9 @@ def gym_dashboard(request, gym_id):
         if not user_role_obj:
             return HttpResponseForbidden("Accès non autorisé")
         user_role = user_role_obj.role
+
+    if user_role not in DASHBOARD_ROLES:
+        return HttpResponseForbidden("Acces non autorise")
     
     today = now().date()
     view = request.GET.get("view", "dashboard")
@@ -1055,8 +1084,8 @@ def _legacy_reports_dashboard(request):
     if not gym:
         return redirect("core:select_gym")
 
-    user_role = getattr(request, "role", None)
-    if user_role not in ["owner", "manager", "accountant", "cashier"]:
+    user_role = current_role(request)
+    if not has_role(request, REPORT_ROLES):
         return HttpResponseForbidden("Acces non autorise")
 
     today = now().date()
@@ -1194,7 +1223,7 @@ def _legacy_reports_dashboard(request):
         "date_to": period_data["date_to"],
         "report_period_label": period_data["label"],
         "accounting_report": accounting_report,
-        "can_export_accounting": user_role in ["owner", "manager", "accountant"],
+        "can_export_accounting": user_role in REPORT_ROLES,
             # journalier
         "daily_revenue": daily_revenue,
         "daily_transactions": daily_transactions,
@@ -1223,8 +1252,8 @@ def reports_dashboard(request):
     if not gym:
         return redirect("core:select_gym")
 
-    user_role = getattr(request, "role", None)
-    if user_role not in ["owner", "manager", "accountant", "cashier"]:
+    user_role = current_role(request)
+    if not has_role(request, REPORT_ROLES):
         return HttpResponseForbidden("Acces non autorise")
 
     section = get_report_section(request.GET)
@@ -1305,7 +1334,7 @@ def reports_dashboard(request):
         "date_to": period_data["date_to"],
         "report_period_label": period_data["label"],
         "accounting_report": accounting_report,
-        "can_export_accounting": user_role in ["owner", "manager", "accountant"],
+        "can_export_accounting": user_role in REPORT_ROLES,
         "custom_report": custom_report,
         "daily_revenue": daily_revenue,
         "daily_transactions": daily_transactions,
@@ -1332,8 +1361,7 @@ def accounting_report_export(request):
     if not gym:
         return redirect("core:select_gym")
 
-    user_role = getattr(request, "role", None)
-    if user_role not in ["owner", "manager", "accountant"]:
+    if not has_role(request, REPORT_ROLES):
         return HttpResponseForbidden("Acces non autorise")
 
     export_format = request.GET.get("format", "xlsx").lower()

@@ -1,6 +1,8 @@
-# decorators.py
+from functools import wraps
+
 from django.shortcuts import render
-from django.core.exceptions import PermissionDenied
+
+from .access_control import has_role
 
 def module_required(module_code):
     """
@@ -8,6 +10,7 @@ def module_required(module_code):
     Usage: @module_required('MACHINES')
     """
     def decorator(view_func):
+        @wraps(view_func)
         def wrapper(request, *args, **kwargs):
             # Vérifier si request.gym existe (middleware)
             if not hasattr(request, 'gym') or not request.gym:
@@ -32,4 +35,22 @@ def module_required(module_code):
             
             return view_func(request, *args, **kwargs)
         return wrapper
+    return decorator
+
+
+def role_required(allowed_roles):
+    def decorator(view_func):
+        @wraps(view_func)
+        def wrapper(request, *args, **kwargs):
+            if not has_role(request, allowed_roles) or not getattr(request, "gym", None):
+                return render(
+                    request,
+                    "errors/module_inactive.html",
+                    {"error": "Acces non autorise pour votre role."},
+                    status=403,
+                )
+            return view_func(request, *args, **kwargs)
+
+        return wrapper
+
     return decorator

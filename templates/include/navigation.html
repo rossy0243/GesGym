@@ -14,6 +14,7 @@
                 <li class="nxl-item nxl-caption"><label>Navigation</label></li>
 
                 <!-- Tableau de bord -->
+                {% if can_dashboard %}
                 <li class="nxl-item nxl-hasmenu {% if nav_active == 'dashboard' %}active{% endif %}">
                     <a href="javascript:void(0);" class="nxl-link">
                         <span class="nxl-micon"><span class="material-icons">dashboard</span></span>
@@ -45,8 +46,9 @@
                         {% endif %}
                     </ul>
                 </li>
+                {% endif %}
 
-                {% if module_members %}
+                {% if module_members and can_members %}
                 <!-- Members -->
                 <li class="nxl-item nxl-hasmenu {% if nav_active == 'clients' %}active{% endif %}">
                     <a href="javascript:void(0);" class="nxl-link">
@@ -70,7 +72,7 @@
                 </li>
                 {% endif %}
 
-                {% if module_subscriptions %}
+                {% if module_subscriptions and can_subscriptions %}
                 <!-- Abonnements -->
                 <li class="nxl-item nxl-hasmenu {% if nav_active == 'abonnements' %}active{% endif %}">
                     <a href="javascript:void(0);" class="nxl-link">
@@ -86,7 +88,7 @@
                 </li>
                 {% endif %}
 
-                {% if module_pos %}
+                {% if module_pos and can_pos %}
                 <!-- Paiements -->
                 <li class="nxl-item nxl-hasmenu {% if nav_active == 'paiements' %}active{% endif %}">
                     <a href="javascript:void(0);" class="nxl-link">
@@ -95,16 +97,20 @@
                         <span class="nxl-arrow"><span class="material-icons">chevron_right</span></span>
                     </a>
                     <ul class="nxl-submenu">
+                        {% if can_pos_cashier %}
                         <li class="nxl-item" id="nav-paiements-caisse"><a class="nxl-link"
                                 href="{% url 'pos:cashier_dashboard' %}">Point de vente</a></li>
+                        {% endif %}
+                        {% if can_pos_history %}
                         <li class="nxl-item" id="nav-paiements-journal"><a class="nxl-link"
                                 href="{% url 'pos:register_history' %}">Journal des transactions</a></li>
+                        {% endif %}
 
                     </ul>
                 </li>
                 {% endif %}
 
-                {% if module_access %}
+                {% if module_access and can_access %}
                 <!-- Contrôle d'accès -->
                 <li class="nxl-item nxl-hasmenu {% if nav_active == 'acces' %}active{% endif %}">
                     <a href="javascript:void(0);" class="nxl-link">
@@ -122,7 +128,7 @@
                 </li>
                 {% endif %}
 
-                {% if module_core %}
+                {% if module_core and can_reports %}
                 <!-- Rapports -->
                 <li class="nxl-item nxl-hasmenu {% if nav_active == 'rapports' %}active{% endif %}">
                     <a href="javascript:void(0);" class="nxl-link">
@@ -140,7 +146,7 @@
                 </li>
                 {% endif %}
 
-                {% if module_coaching %}
+                {% if module_coaching and can_coaching %}
                 <!-- Coaching -->
                 <li class="nxl-item nxl-hasmenu {% if nav_active == 'coaching' %}active{% endif %}">
                     <a href="javascript:void(0);" class="nxl-link">
@@ -159,7 +165,7 @@
                 </li>
                 {% endif %}
 
-                {% if module_machines %}
+                {% if module_machines and can_machines %}
                 <!-- Machines -->
                 <li class="nxl-item nxl-hasmenu {% if nav_active == 'machines' %}active{% endif %}">
                     <a href="javascript:void(0);" class="nxl-link">
@@ -182,7 +188,7 @@
                 </li>
                 {% endif %}
 
-                {% if module_rh %}
+                {% if module_rh and can_rh %}
                 <!-- rh -->
                 <li class="nxl-item nxl-hasmenu {% if nav_active == 'rh' %}active{% endif %}">
                     <a href="javascript:void(0);" class="nxl-link">
@@ -191,27 +197,33 @@
                         <span class="nxl-arrow"><span class="material-icons">chevron_right</span></span>
                     </a>
                     <ul class="nxl-submenu">
+                        {% if can_rh_employees %}
                         <li class="nxl-item {% if nav_sub == 'employes' %}active{% endif %}">
                             <a class="nxl-link" href="{% url 'rh:list' %}">
                                 Employés
                             </a>
                         </li>
+                        {% endif %}
                         <!-- salaire -->
+                        {% if can_rh_attendance %}
                         <li class="nxl-item {% if nav_sub == 'presences' %}active{% endif %}">
                             <a class="nxl-link" href="{% url 'rh:attendance_bulk' %}">
                                 Enregistrer présences
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_rh_payroll %}
                         <li class="nxl-item {% if nav_sub == 'paie' %}active{% endif %}">
                             <a class="nxl-link" href="{% url 'rh:payroll_dashboard' %}">
                                 Paie
                             </a>
                         </li>
+                        {% endif %}
                     </ul>
                 </li>
                 {% endif %}
 
-                {% if module_products %}
+                {% if module_products and can_products %}
                 <!-- products -->
                 <li class="nxl-item nxl-hasmenu {% if nav_active == 'products' %}active{% endif %}">
                     <a href="javascript:void(0);" class="nxl-link">
@@ -240,6 +252,7 @@
                 {% endif %}
 
                 <!-- Paramètres -->
+                {% if can_settings %}
                 <li class="nxl-item nxl-hasmenu {% if nav_active == 'parametres' %}active{% endif %}">
                     <a href="javascript:void(0);" class="nxl-link">
                         <span class="nxl-micon"><span class="material-icons">settings</span></span>
@@ -247,19 +260,20 @@
                         <span class="nxl-arrow"><span class="material-icons">chevron_right</span></span>
                     </a>
                     <ul class="nxl-submenu">
-                        <!-- Gestion des utilisateurs (visible uniquement pour Owner) -->
-                        {% if user_has_owner_role %}
+                        <!-- Gestion des utilisateurs internes -->
                         <li class="nxl-item {% if nav_sub == 'users' %}active{% endif %}" id="nav-settings-users">
                             <a class="nxl-link" href="{% url 'core:settings' %}?tab=employees">
                                 <i class="fas fa-users"></i> Utilisateurs & rôles
                             </a>
                         </li>
+                        {% if can_settings_organization %}
                         <li class="nxl-item {% if nav_sub == 'create_user' %}active{% endif %}"
                             id="nav-settings-create-user">
                             <a class="nxl-link" href="{% url 'core:settings' %}?tab=organization">
                                 <i class="fas fa-building"></i> Organisation
                             </a>
                         </li>
+                        {% endif %}
                         <li class="nxl-item {% if nav_sub == 'coach_specialties' %}active{% endif %}">
                             <a class="nxl-link" href="{% url 'core:settings' %}?tab=specialties">
                                 <i class="fas fa-dumbbell"></i> SpÃ©cialitÃ©s coach
@@ -270,9 +284,9 @@
                                 <i class="fas fa-shield-alt"></i> Journal sensible
                             </a>
                         </li>
-                        {% endif %}
                     </ul>
                 </li>
+                {% endif %}
 
                 <li class="nxl-item nav-profil-link {% if nav_active == 'profile' %}active{% endif %}">
                     <a class="nxl-link" href="{% url 'compte:profile' %}">

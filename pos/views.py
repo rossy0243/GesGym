@@ -11,6 +11,8 @@ from django.utils import timezone
 from members.models import Member
 from products.models import Product
 from subscriptions.models import SubscriptionPlan
+from smartclub.access_control import POS_CASHIER_ROLES, POS_HISTORY_ROLES
+from smartclub.decorators import role_required
 
 from .models import CashRegister, ExchangeRate, Payment
 from .services import record_expense, record_product_sale, record_subscription_payment
@@ -28,6 +30,7 @@ def _validation_message(exc):
 
 
 @login_required
+@role_required(POS_CASHIER_ROLES)
 def search_members(request):
     query = request.GET.get("q", "")
     members = Member.objects.filter(gym=request.gym).filter(
@@ -51,6 +54,7 @@ def search_members(request):
 
 
 @login_required
+@role_required(POS_CASHIER_ROLES)
 def cashier_dashboard(request):
     gym = request.gym
     register = CashRegister.objects.filter(gym=gym, is_closed=False).first()
@@ -178,6 +182,7 @@ def cashier_dashboard(request):
 
 
 @login_required
+@role_required(POS_CASHIER_ROLES)
 def open_register(request):
     if request.method != "POST":
         return redirect("pos:cashier_dashboard")
@@ -219,6 +224,7 @@ def open_register(request):
 
 
 @login_required
+@role_required(POS_CASHIER_ROLES)
 def close_register(request, register_id):
     register = get_object_or_404(
         CashRegister,
@@ -264,6 +270,7 @@ def close_register(request, register_id):
 
 
 @login_required
+@role_required(POS_HISTORY_ROLES)
 def register_history(request):
     registers = CashRegister.objects.filter(gym=request.gym, is_closed=True)
 
@@ -319,6 +326,7 @@ def register_history(request):
 
 
 @login_required
+@role_required(POS_HISTORY_ROLES)
 def register_detail(request, register_id):
     register = get_object_or_404(CashRegister, id=register_id, gym=request.gym)
     payments = (

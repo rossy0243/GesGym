@@ -7,7 +7,8 @@ from django.db.models import Avg, Count, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 
 from pos.services import record_expense
-from smartclub.decorators import module_required
+from smartclub.access_control import MACHINE_ROLES
+from smartclub.decorators import module_required, role_required
 
 from .forms import MachineForm, MaintenanceLogForm
 from .kpis import (
@@ -26,6 +27,7 @@ def _validation_message(exc):
 
 @login_required
 @module_required("MACHINES")
+@role_required(MACHINE_ROLES)
 def machine_list(request):
     gym = request.gym
     machines = machines_queryset(gym).order_by("name")
@@ -50,6 +52,7 @@ def machine_list(request):
 
 @login_required
 @module_required("MACHINES")
+@role_required(MACHINE_ROLES)
 def machine_detail(request, machine_id):
     machine = get_object_or_404(Machine, id=machine_id, gym=request.gym)
     maintenance_logs = machine.maintenance_logs.all().order_by("-created_at")
@@ -65,6 +68,7 @@ def machine_detail(request, machine_id):
 
 @login_required
 @module_required("MACHINES")
+@role_required(MACHINE_ROLES)
 def machine_create(request):
     gym = request.gym
 
@@ -88,6 +92,7 @@ def machine_create(request):
 
 @login_required
 @module_required("MACHINES")
+@role_required(MACHINE_ROLES)
 def machine_update(request, machine_id):
     machine = get_object_or_404(Machine, id=machine_id, gym=request.gym)
 
@@ -114,6 +119,7 @@ def machine_update(request, machine_id):
 
 @login_required
 @module_required("MACHINES")
+@role_required(MACHINE_ROLES)
 def machine_delete(request, machine_id):
     machine = get_object_or_404(Machine, id=machine_id, gym=request.gym)
 
@@ -132,6 +138,7 @@ def machine_delete(request, machine_id):
 
 @login_required
 @module_required("MACHINES")
+@role_required(MACHINE_ROLES)
 def maintenance_log_create(request, machine_id):
     machine = get_object_or_404(Machine, id=machine_id, gym=request.gym)
 
@@ -192,6 +199,7 @@ def maintenance_log_create(request, machine_id):
 
 @login_required
 @module_required("MACHINES")
+@role_required(MACHINE_ROLES)
 def maintenance_list(request):
     gym = request.gym
     maintenances = maintenance_queryset(gym).order_by("-created_at")
@@ -218,6 +226,7 @@ def maintenance_list(request):
 
 @login_required
 @module_required("MACHINES")
+@role_required(MACHINE_ROLES)
 def maintenance_dashboard(request):
     gym = request.gym
     period_data = get_period_window(request.GET.get("period", "month"))
@@ -262,6 +271,7 @@ def maintenance_dashboard(request):
 
 @login_required
 @module_required("MACHINES")
+@role_required(MACHINE_ROLES)
 def maintenance_delete(request, maintenance_id):
     maintenance = get_object_or_404(
         MaintenanceLog,

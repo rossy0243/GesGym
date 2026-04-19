@@ -56,9 +56,11 @@
 </style>
 
 <div class="d-flex flex-wrap gap-2 mb-4">
+    {% if can_manage_organization %}
     <button type="button" class="btn btn-light settings-tab" data-tab-target="organization">
         <span class="material-icons me-1" style="font-size:18px;">business</span>Organisation
     </button>
+    {% endif %}
     <button type="button" class="btn btn-light settings-tab" data-tab-target="employees">
         <span class="material-icons me-1" style="font-size:18px;">badge</span>Utilisateurs & roles
     </button>
@@ -70,6 +72,7 @@
     </button>
 </div>
 
+{% if can_manage_organization %}
 <div id="settings-organization" class="settings-section">
     <div class="settings-card">
         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -123,6 +126,7 @@
         </div>
     </div>
 </div>
+{% endif %}
 
 <div id="settings-employees" class="settings-section">
     <div class="row g-3">
@@ -382,7 +386,7 @@
 {% block extra_js %}
 <script>
 document.addEventListener("DOMContentLoaded", function () {
-    const activeTab = "{{ active_tab|default:'organization' }}";
+    const activeTab = "{{ active_tab|default:'employees' }}";
     const sections = document.querySelectorAll(".settings-section");
     const buttons = document.querySelectorAll("[data-tab-target]");
 

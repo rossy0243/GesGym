@@ -85,8 +85,8 @@ class ProductsTenantTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Water A")
         self.assertNotContains(response, "Water B")
-        self.assertContains(response, "1000.00 USD")
-        self.assertNotContains(response, "6993.00 USD")
+        self.assertContains(response, "1000,00 USD")
+        self.assertNotContains(response, "6993,00 USD")
 
     def test_general_dashboard_includes_scoped_product_kpis(self):
         response = self.client.get(reverse("core:gym_dashboard", args=[self.gym_a.id]))

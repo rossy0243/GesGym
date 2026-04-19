@@ -5,7 +5,8 @@ from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 
 from members.models import Member
-from smartclub.decorators import module_required
+from smartclub.access_control import COACHING_ROLES
+from smartclub.decorators import module_required, role_required
 
 from .forms import CoachForm, CoachMemberForm
 from .kpis import build_coaching_kpis, coaches_queryset
@@ -18,6 +19,7 @@ def _validation_message(exc):
 
 @login_required
 @module_required("COACHING")
+@role_required(COACHING_ROLES)
 def coach_list(request):
     gym = request.gym
     coaches = coaches_queryset(gym).annotate(member_count=Count("members", distinct=True)).order_by("name")
@@ -48,6 +50,7 @@ def coach_list(request):
 
 @login_required
 @module_required("COACHING")
+@role_required(COACHING_ROLES)
 def coach_detail(request, coach_id):
     coach = get_object_or_404(Coach, id=coach_id, gym=request.gym)
     members = coach.members.filter(gym=request.gym, is_active=True).order_by("first_name", "last_name")
@@ -70,6 +73,7 @@ def coach_detail(request, coach_id):
 
 @login_required
 @module_required("COACHING")
+@role_required(COACHING_ROLES)
 def coach_create(request):
     gym = request.gym
 
@@ -93,6 +97,7 @@ def coach_create(request):
 
 @login_required
 @module_required("COACHING")
+@role_required(COACHING_ROLES)
 def coach_update(request, coach_id):
     coach = get_object_or_404(Coach, id=coach_id, gym=request.gym)
 
@@ -119,6 +124,7 @@ def coach_update(request, coach_id):
 
 @login_required
 @module_required("COACHING")
+@role_required(COACHING_ROLES)
 def coach_delete(request, coach_id):
     coach = get_object_or_404(Coach, id=coach_id, gym=request.gym)
 
@@ -137,6 +143,7 @@ def coach_delete(request, coach_id):
 
 @login_required
 @module_required("COACHING")
+@role_required(COACHING_ROLES)
 def assign_member(request, coach_id):
     coach = get_object_or_404(Coach, id=coach_id, gym=request.gym)
 
@@ -160,6 +167,7 @@ def assign_member(request, coach_id):
 
 @login_required
 @module_required("COACHING")
+@role_required(COACHING_ROLES)
 def remove_member(request, coach_id, member_id):
     coach = get_object_or_404(Coach, id=coach_id, gym=request.gym)
     member = get_object_or_404(Member, id=member_id, gym=request.gym)

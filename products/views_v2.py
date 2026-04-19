@@ -5,7 +5,8 @@ from django.db.models import Sum
 from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 
-from smartclub.decorators import module_required
+from smartclub.access_control import PRODUCT_ROLES
+from smartclub.decorators import module_required, role_required
 
 from .forms import ProductForm, StockMovementForm
 from .kpis import build_product_kpis, products_queryset, stock_value, movements_queryset
@@ -14,6 +15,7 @@ from .models import Product, StockMovement
 
 @login_required
 @module_required("PRODUCTS")
+@role_required(PRODUCT_ROLES)
 def product_list(request):
     gym = request.gym
     products = products_queryset(gym).order_by("name")
@@ -45,6 +47,7 @@ def product_list(request):
 
 @login_required
 @module_required("PRODUCTS")
+@role_required(PRODUCT_ROLES)
 def product_detail(request, product_id):
     product = get_object_or_404(Product, id=product_id, gym=request.gym)
     product.stock_value = stock_value(product)
@@ -64,6 +67,7 @@ def product_detail(request, product_id):
 
 @login_required
 @module_required("PRODUCTS")
+@role_required(PRODUCT_ROLES)
 def product_create(request):
     gym = request.gym
 
@@ -97,6 +101,7 @@ def product_create(request):
 
 @login_required
 @module_required("PRODUCTS")
+@role_required(PRODUCT_ROLES)
 def product_update(request, product_id):
     product = get_object_or_404(Product, id=product_id, gym=request.gym)
     previous_quantity = product.quantity
@@ -134,6 +139,7 @@ def product_update(request, product_id):
 
 @login_required
 @module_required("PRODUCTS")
+@role_required(PRODUCT_ROLES)
 def product_delete(request, product_id):
     product = get_object_or_404(Product, id=product_id, gym=request.gym)
 
@@ -152,6 +158,7 @@ def product_delete(request, product_id):
 
 @login_required
 @module_required("PRODUCTS")
+@role_required(PRODUCT_ROLES)
 def stock_movement_create(request, product_id):
     product = get_object_or_404(Product, id=product_id, gym=request.gym)
 
@@ -182,6 +189,7 @@ def stock_movement_create(request, product_id):
 
 @login_required
 @module_required("PRODUCTS")
+@role_required(PRODUCT_ROLES)
 def stock_movement_list(request):
     gym = request.gym
     movements = movements_queryset(gym).order_by("-created_at")
@@ -210,6 +218,7 @@ def stock_movement_list(request):
 
 @login_required
 @module_required("PRODUCTS")
+@role_required(PRODUCT_ROLES)
 def stock_dashboard(request):
     gym = request.gym
     kpis = build_product_kpis(gym)

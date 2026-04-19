@@ -7,6 +7,8 @@ from django.utils.timezone import localtime, now
 from django.views.decorators.http import require_POST
 
 from members.models import Member
+from smartclub.access_control import ACCESS_ROLES
+from smartclub.decorators import role_required
 from .models import AccessLog
 
 
@@ -99,6 +101,7 @@ def _serialize_log(log):
 
 #vue (scanner + pointage manuel)
 @login_required
+@role_required(ACCESS_ROLES)
 def acces_dashboard(request):
     gym = request.gym
     query = (request.GET.get("q") or "").strip()
@@ -166,6 +169,7 @@ def _legacy_member_access_unused(request, qr_code):
 
 
 @login_required
+@role_required(ACCESS_ROLES)
 def realtime_access(request):
     logs = AccessLog.objects.filter(
         gym=request.gym
@@ -175,6 +179,7 @@ def realtime_access(request):
 
 
 @login_required
+@role_required(ACCESS_ROLES)
 @require_POST
 def manual_access_entry(request, member_id):
     member = get_object_or_404(
@@ -200,6 +205,7 @@ def manual_access_entry(request, member_id):
 
 
 @login_required
+@role_required(ACCESS_ROLES)
 @require_POST
 def member_access(request, qr_code):
     member = get_object_or_404(

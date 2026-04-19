@@ -2,7 +2,7 @@ from django import forms
 
 from coaching.models import CoachSpecialty
 from compte.models import UserGymRole
-from organizations.models import Organization
+from organizations.models import Gym, Organization
 
 
 INTERNAL_ROLE_CHOICES = [
@@ -49,7 +49,7 @@ class InternalEmployeeForm(forms.Form):
         label="Email",
     )
     gym = forms.ModelChoiceField(
-        queryset=Organization.objects.none(),
+        queryset=Gym.objects.none(),
         widget=forms.Select(attrs={"class": "form-select"}),
         label="Gym",
     )
@@ -65,13 +65,14 @@ class InternalEmployeeForm(forms.Form):
         label="Actif",
     )
 
-    def __init__(self, *args, organization=None, **kwargs):
+    def __init__(self, *args, organization=None, gyms=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["gym"].queryset = (
-            organization.gyms.filter(is_active=True).order_by("name")
-            if organization
-            else Organization.objects.none()
-        )
+        if gyms is not None:
+            self.fields["gym"].queryset = gyms
+        elif organization:
+            self.fields["gym"].queryset = organization.gyms.filter(is_active=True).order_by("name")
+        else:
+            self.fields["gym"].queryset = Gym.objects.none()
 
     def clean_role(self):
         role = self.cleaned_data["role"]
