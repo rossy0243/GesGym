@@ -1,8 +1,8 @@
 from django.test import TestCase
 from django.urls import reverse
 
-from compte.models import User
-from organizations.models import Gym, Organization
+from compte.models import User, UserGymRole
+from organizations.models import Gym, GymModule, Module, Organization
 
 
 class OwnerLoginAndGymSwitchTests(TestCase):
@@ -196,3 +196,62 @@ class UserProfileTests(TestCase):
 
         response = self.client.get(reverse("compte:profile"))
         self.assertEqual(response.status_code, 200)
+
+
+class SuperAdminOwnerCreationTests(TestCase):
+    def setUp(self):
+        self.superuser = User.objects.create_superuser(
+            username="superadmin",
+            password="superpass123",
+            email="superadmin@example.com",
+        )
+        self.module_members, _ = Module.objects.get_or_create(code="MEMBERS", defaults={"name": "Membres"})
+        self.module_pos, _ = Module.objects.get_or_create(code="POS", defaults={"name": "Point de vente"})
+
+    def test_superadmin_can_create_owner_organization_gyms_and_modules(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(
+            reverse("admin:create_owner_view"),
+            {
+                "first_name": "Client",
+                "last_name": "Owner",
+                "email": "owner.client@example.com",
+                "organization_name": "Client Demo Admin",
+                "organization_slug": "client-demo-admin",
+                "organization_phone": "+243900111222",
+                "organization_email": "contact@client-demo.test",
+                "organization_address": "Kinshasa",
+                "gyms": "Gombe Premium\nLimete Express",
+                "modules": [self.module_members.id, self.module_pos.id],
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], reverse("admin:compte_user_changelist"))
+        organization = Organization.objects.get(slug="client-demo-admin")
+        owner = User.objects.get(email="owner.client@example.com")
+        self.assertEqual(owner.owned_organization, organization)
+        self.assertFalse(owner.is_staff)
+        self.assertTrue(owner.check_password("12345"))
+
+        gyms = Gym.objects.filter(organization=organization).order_by("name")
+        self.assertEqual(gyms.count(), 2)
+        self.assertEqual(UserGymRole.objects.filter(user=owner, role="owner", gym__in=gyms).count(), 2)
+        self.assertEqual(
+            GymModule.objects.filter(
+                gym__in=gyms,
+                module__code__in=["MEMBERS", "POS"],
+                is_active=True,
+            ).count(),
+            4,
+        )
+
+    def test_non_superuser_cannot_access_owner_creation_view(self):
+        staff = User.objects.create_user(username="staff", password="pass", is_staff=True)
+        self.client.force_login(staff)
+
+        response = self.client.get(reverse("admin:create_owner_view"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], reverse("admin:compte_user_changelist"))

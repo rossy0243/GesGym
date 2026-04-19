@@ -46,7 +46,8 @@ class Employee(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.name} - {self.role}"
+        gym_name = self.gym.name if self.gym_id else "Sans gym"
+        return f"{self.name} - {self.get_role_display()} - {gym_name}"
 
     def clean(self):
         super().clean()

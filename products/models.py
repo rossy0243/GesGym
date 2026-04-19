@@ -30,7 +30,8 @@ class Product(models.Model):
         ]
 
     def __str__(self):
-        return self.name
+        gym_name = self.gym.name if self.gym_id else "Sans gym"
+        return f"{self.name} - {gym_name}"
 
     def clean(self):
         super().clean()

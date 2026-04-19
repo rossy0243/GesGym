@@ -33,7 +33,8 @@ class Machine(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return self.name
+        gym_name = self.gym.name if self.gym_id else "Sans gym"
+        return f"{self.name} - {gym_name}"
 
 
 class MaintenanceLog(models.Model):

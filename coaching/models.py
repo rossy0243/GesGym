@@ -46,7 +46,8 @@ class CoachSpecialty(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return self.name
+        gym_name = self.gym.name if self.gym_id else "Sans gym"
+        return f"{self.name} - {gym_name}"
 
 
 class Coach(models.Model):

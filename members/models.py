@@ -145,7 +145,8 @@ class Member(models.Model):
         ordering = ["-created_at"]
 
     def __str__(self):
-        return f"{self.first_name} {self.last_name}"
+        gym_name = self.gym.name if self.gym_id else "Sans gym"
+        return f"{self.first_name} {self.last_name} - {gym_name}"
 
 
 class MemberPreRegistrationLink(models.Model):
