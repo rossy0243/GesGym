@@ -33,7 +33,7 @@ class GymMiddleware:
 
             # Récupérer tous les gyms actifs de son organisation
             request.owned_gyms = list(
-                user.owned_organization.gyms.filter(is_active=True)
+                user.owned_organization.gyms.filter(is_active=True).order_by("name")
             )
 
             # Définir le gym actuel (priorité à la session)
@@ -42,18 +42,23 @@ class GymMiddleware:
                 try:
                     request.gym = Gym.objects.get(
                         id=current_gym_id,
-                        organization=request.organization
+                        organization=request.organization,
+                        is_active=True,
                     )
                 except Gym.DoesNotExist:
-                    request.gym = request.owned_gyms[0] if request.owned_gyms else None
-            elif request.owned_gyms:
-                request.gym = request.owned_gyms[0]  # gym par défaut
+                    request.session.pop('current_gym_id', None)
+                    if len(request.owned_gyms) == 1:
+                        request.gym = request.owned_gyms[0]
+            elif len(request.owned_gyms) == 1:
+                request.gym = request.owned_gyms[0]
 
         # ====================== CAS UTILISATEUR NORMAL ======================
         else:
             role_entry = UserGymRole.objects.filter(
                 user=user,
-                is_active=True
+                is_active=True,
+                gym__is_active=True,
+                gym__organization__is_active=True,
             ).select_related('gym__organization').first()
 
             if role_entry:

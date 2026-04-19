@@ -1,47 +1,137 @@
 {% extends 'base.html' %}
+{% load static %}
+
+{% block page_titre %}Machine{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <div class="row justify-content-center">
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h3 class="mb-0">{{ title }}</h3>
-                </div>
-                <div class="card-body">
-                    <form method="post">
-                        {% csrf_token %}
-                        
-                        {% for field in form %}
-                        <div class="mb-3">
-                            <label for="{{ field.id_for_label }}" class="form-label">
-                                {{ field.label }}
-                            </label>
-                            {{ field }}
-                            {% if field.errors %}
-                            <div class="alert alert-danger mt-1">
-                                {{ field.errors }}
-                            </div>
-                            {% endif %}
-                            {% if field.help_text %}
-                            <small class="form-text text-muted">{{ field.help_text }}</small>
-                            {% endif %}
-                        </div>
-                        {% endfor %}
-                        
-                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                            <a href="{% if machine %}{% url 'machines:detail' gym.id machine.id %}{% else %}{% url 'machines:list' gym.id %}{% endif %}" 
-                               class="btn btn-secondary">
-                                Annuler
-                            </a>
-                            <button type="submit" class="btn btn-primary">
-                                {% if machine %}Modifier{% else %}Créer{% endif %}
-                            </button>
-                        </div>
-                    </form>
-                </div>
+
+<div class="page-header mb-4">
+    <div class="page-header-left d-flex align-items-center">
+        <div class="page-header-title d-flex align-items-center gap-2">
+            <span class="material-icons text-primary" style="font-size:28px;">precision_manufacturing</span>
+            <div>
+                <h5 class="mb-0">{{ title }}</h5>
+                <small class="text-muted">{{ gym.name }}</small>
             </div>
         </div>
     </div>
 </div>
+
+<style>
+.machine-form-card {
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+}
+
+.machine-form-header {
+    border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+    padding: 1.25rem 1.5rem 1rem;
+}
+
+.machine-form-body {
+    padding: 1.5rem;
+}
+
+.form-helper-box {
+    border-radius: 16px;
+    background: #f8fafc;
+    border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.field-errors {
+    color: #dc3545;
+    font-size: 0.875rem;
+    margin-top: 0.35rem;
+}
+
+.field-errors ul {
+    margin: 0;
+    padding-left: 1rem;
+}
+
+@media (max-width: 768px) {
+    .machine-form-body {
+        padding: 1rem;
+    }
+}
+</style>
+
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-7">
+        <div class="machine-form-card">
+            <div class="machine-form-header">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="d-flex align-items-center justify-content-center rounded-circle"
+                         style="width:56px; height:56px; background:#eef2ff; color:#3454d1;">
+                        <span class="material-icons" style="font-size:28px;">settings</span>
+                    </div>
+                    <div>
+                        <h4 class="mb-1">{{ title }}</h4>
+                        <small class="text-muted">
+                            {% if machine %}
+                                Modifie les informations de la machine sélectionnée.
+                            {% else %}
+                                Renseigne les informations pour enregistrer une nouvelle machine.
+                            {% endif %}
+                        </small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="machine-form-body">
+                <div class="form-helper-box p-3 mb-4">
+                    <div class="d-flex align-items-start gap-2">
+                        <span class="material-icons text-primary" style="font-size:20px;">info</span>
+                        <div class="small text-muted">
+                            Complète les informations de l’équipement pour faciliter le suivi du parc,
+                            de l’état de fonctionnement et des futures maintenances.
+                        </div>
+                    </div>
+                </div>
+
+                <form method="post">
+                    {% csrf_token %}
+
+                    {% for field in form %}
+                    <div class="mb-3">
+                        <label for="{{ field.id_for_label }}" class="form-label fw-semibold">
+                            {{ field.label }}
+                        </label>
+
+                        {{ field }}
+
+                        {% if field.errors %}
+                        <div class="field-errors">
+                            {{ field.errors }}
+                        </div>
+                        {% endif %}
+
+                        {% if field.help_text %}
+                        <small class="text-muted d-block mt-1">{{ field.help_text }}</small>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+
+                    <div class="d-flex justify-content-end gap-2 flex-wrap mt-4">
+                        <a href="{% if machine %}{% url 'machines:detail' machine.id %}{% else %}{% url 'machines:list' %}{% endif %}"
+                           class="btn btn-light d-flex align-items-center gap-2">
+                            <span class="material-icons" style="font-size:18px;">arrow_back</span>
+                            Annuler
+                        </a>
+
+                        <button type="submit" class="btn btn-primary d-flex align-items-center gap-2">
+                            <span class="material-icons" style="font-size:18px;">
+                                {% if machine %}save{% else %}add_circle{% endif %}
+                            </span>
+                            {% if machine %}Modifier{% else %}Créer{% endif %}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}

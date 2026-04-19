@@ -1,74 +1,421 @@
 {% extends "base.html" %}
+{% load static %}
+
+{% block page_titre %}Historique des caisses{% endblock %}
 
 {% block content %}
 
-<h4>Historique des caisses</h4>
+<!-- [ page-header ] start -->
+<div class="page-header mb-4">
+    <div class="page-header-left d-flex align-items-center">
+        <div class="page-header-title d-flex align-items-center gap-2">
+            <span class="material-icons text-primary" style="font-size:28px;">point_of_sale</span>
+            <div>
+                <h5 class="m-b-0 mb-0">Historique des caisses</h5>
+                <small class="text-muted">Suivi des ouvertures, fermetures et écarts de caisse</small>
+            </div>
+        </div>
+    </div>
 
-<div class="card mt-3">
+    <div class="page-header-right ms-auto">
+        <div class="d-flex align-items-center gap-2">
+            <a href="javascript:void(0);" onclick="window.print()" class="btn btn-light">
+                <span class="material-icons me-1" style="font-size:18px;">print</span>
+                Imprimer
+            </a>
+        </div>
+    </div>
+</div>
+<!-- [ page-header ] end -->
 
-<table class="table">
+<style>
+.register-history-card,
+.register-history-card .custom-card-action {
+    overflow: visible;
+}
 
-<thead>
+.stat-card {
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+    height: 100%;
+}
 
-<tr>
-<th>Session</th>
-<th>Ouverture</th>
-<th>Fermeture</th>
-<th>Caissier</th>
-<th>Total réel</th>
-<th>Différence</th>
-<th></th>
-</tr>
+.stat-card .icon-box {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(13, 110, 253, 0.08);
+    color: #0d6efd;
+    flex-shrink: 0;
+}
 
-</thead>
+.filter-card {
+    border-radius: 18px;
+}
 
-<tbody>
+.table thead th {
+    white-space: nowrap;
+}
 
-{% for r in registers %}
+.session-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    background: #f8fafc;
+    font-weight: 600;
+    color: #0f172a;
+}
 
-<tr>
+.amount-badge {
+    background: #f8fafc;
+    color: #0f172a;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    padding: 8px 12px;
+    border-radius: 999px;
+    font-weight: 600;
+    display: inline-block;
+}
 
-<td>{{ r.session_code }}</td>
+.table td, .table th {
+    vertical-align: middle;
+}
 
-<td>{{ r.opened_at|date:"d/m/Y H:i" }}</td>
+.empty-state-icon {
+    font-size: 64px;
+    color: #94a3b8;
+}
 
-<td>{{ r.closed_at|date:"d/m/Y H:i" }}</td>
+@media (max-width: 768px) {
+    .page-header {
+        flex-direction: column;
+        gap: 12px;
+        align-items: flex-start !important;
+    }
+}
+</style>
 
-<td>{{ r.opened_by }}</td>
+<!-- Cartes statistiques -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="stat-card p-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="icon-box">
+                    <span class="material-icons">receipt_long</span>
+                </div>
+                <div>
+                    <div class="fs-12 text-muted">Total sessions</div>
+                    <h4 class="mb-0">{{ registers|length }}</h4>
+                </div>
+            </div>
+        </div>
+    </div>
 
-<td>{{ r.closing_amount }} CDF</td>
+    <div class="col-md-3">
+        <div class="stat-card p-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="icon-box" style="background: rgba(25, 135, 84, 0.08); color:#198754;">
+                    <span class="material-icons">trending_up</span>
+                </div>
+                <div>
+                    <div class="fs-12 text-muted">Écarts positifs</div>
+                    <h4 class="mb-0">
+                        {% if positive_count %}{{ positive_count }}{% else %}0{% endif %}
+                    </h4>
+                </div>
+            </div>
+        </div>
+    </div>
 
-<td>
+    <div class="col-md-3">
+        <div class="stat-card p-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="icon-box" style="background: rgba(220, 53, 69, 0.08); color:#dc3545;">
+                    <span class="material-icons">trending_down</span>
+                </div>
+                <div>
+                    <div class="fs-12 text-muted">Écarts négatifs</div>
+                    <h4 class="mb-0">
+                        {% if negative_count %}{{ negative_count }}{% else %}0{% endif %}
+                    </h4>
+                </div>
+            </div>
+        </div>
+    </div>
 
-{% if r.difference > 0 %}
-<span class="text-success">+{{ r.difference }}</span>
-{% elif r.difference < 0 %}
-<span class="text-danger">{{ r.difference }}</span>
-{% else %}
-0
-{% endif %}
+    <div class="col-md-3">
+        <div class="stat-card p-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="icon-box" style="background: rgba(255, 193, 7, 0.12); color:#b78103;">
+                    <span class="material-icons">hourglass_top</span>
+                </div>
+                <div>
+                    <div class="fs-12 text-muted">Sessions en cours</div>
+                    <h4 class="mb-0">
+                        {% if open_count %}{{ open_count }}{% else %}0{% endif %}
+                    </h4>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
-</td>
+<!-- Filtres -->
+<form method="get" class="mb-4">
+    <div class="card filter-card">
+        <div class="card-body">
+            <div class="d-flex align-items-center gap-2 mb-3">
+                <span class="material-icons text-muted" style="font-size:20px;">filter_list</span>
+                <span class="fw-semibold small text-muted">Filtres avancés</span>
+            </div>
 
-<td>
+            <div class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label small text-muted d-flex align-items-center gap-1 mb-1">
+                        <span class="material-icons" style="font-size:16px;">search</span>Recherche
+                    </label>
+                    <div class="input-group">
+                        <span class="input-group-text">
+                            <span class="material-icons" style="font-size:18px;">search</span>
+                        </span>
+                        <input type="text"
+                               name="search"
+                               class="form-control"
+                               placeholder="Session, caissier..."
+                               value="{{ search }}">
+                    </div>
+                </div>
 
-<a href="{% url 'pos:register_detail' r.id %}"
-class="btn btn-sm btn-light">
+                <div class="col-md-2">
+                    <label class="form-label small text-muted d-flex align-items-center gap-1 mb-1">
+                        <span class="material-icons" style="font-size:16px;">toggle_on</span>Statut
+                    </label>
+                    <select name="status" class="form-select">
+                        <option value="">Tous</option>
+                        <option value="open" {% if status == "open" %}selected{% endif %}>En cours</option>
+                        <option value="closed" {% if status == "closed" %}selected{% endif %}>Fermées</option>
+                    </select>
+                </div>
 
-<span class="material-icons">visibility</span>
+                <div class="col-md-2">
+                    <label class="form-label small text-muted d-flex align-items-center gap-1 mb-1">
+                        <span class="material-icons" style="font-size:16px;">calendar_today</span>Du
+                    </label>
+                    <input type="date" name="date_from" class="form-control" value="{{ date_from }}">
+                </div>
 
-</a>
+                <div class="col-md-2">
+                    <label class="form-label small text-muted d-flex align-items-center gap-1 mb-1">
+                        <span class="material-icons" style="font-size:16px;">event</span>Au
+                    </label>
+                    <input type="date" name="date_to" class="form-control" value="{{ date_to }}">
+                </div>
 
-</td>
+                <div class="col-md-2">
+                    <label class="form-label small text-muted d-flex align-items-center gap-1 mb-1">
+                        <span class="material-icons" style="font-size:16px;">sort</span>Trier par
+                    </label>
+                    <select name="sort" class="form-select">
+                        <option value="recent" {% if sort == "recent" %}selected{% endif %}>Plus récentes</option>
+                        <option value="oldest" {% if sort == "oldest" %}selected{% endif %}>Plus anciennes</option>
+                        <option value="difference_desc" {% if sort == "difference_desc" %}selected{% endif %}>Écart décroissant</option>
+                        <option value="difference_asc" {% if sort == "difference_asc" %}selected{% endif %}>Écart croissant</option>
+                    </select>
+                </div>
 
-</tr>
+                <div class="col-md-1 d-grid">
+                    <button class="btn btn-primary">
+                        Filtrer
+                    </button>
+                </div>
+            </div>
 
-{% endfor %}
+            <div class="mt-3 d-flex gap-2">
+                <a href="{% url 'pos:register_history' %}" class="btn btn-light-brand">
+                    Réinitialiser
+                </a>
+            </div>
+        </div>
+    </div>
+</form>
 
-</tbody>
+<!-- Tableau -->
+<div class="card stretch stretch-full register-history-card">
+    <div class="card-header">
+        <h5 class="card-title d-flex align-items-center gap-2 mb-0">
+            <span class="material-icons" style="font-size:22px;">inventory_2</span>
+            Liste des sessions de caisse
+        </h5>
 
-</table>
+        <div class="card-header-action">
+            <div class="dropdown">
+                <a href="javascript:void(0);" class="avatar-text avatar-sm" data-bs-toggle="dropdown">
+                    <span class="material-icons" style="font-size:20px;">more_vert</span>
+                </a>
+                <div class="dropdown-menu dropdown-menu-end">
+                    <a href="javascript:void(0);" class="dropdown-item" onclick="window.print()">
+                        <span class="material-icons me-2" style="font-size:18px;">print</span>
+                        Imprimer
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
 
+    <div class="card-body custom-card-action p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Session</th>
+                        <th>Ouverture</th>
+                        <th>Fermeture</th>
+                        <th>Caissier</th>
+                        <th class="text-center">Fonds ouverture</th>
+                        <th class="text-center">Taux</th>
+                        <th class="text-center">Total réel</th>
+                        <th class="text-center">Différence</th>
+                        <th class="text-center">Statut</th>
+                        <th class="text-end">Action</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for r in registers %}
+                    <tr>
+                        <td>
+                            <span class="session-pill">
+                                <span class="material-icons text-primary" style="font-size:18px;">confirmation_number</span>
+                                {{ r.session_code }}
+                            </span>
+                        </td>
+
+                        <td>
+                            <div class="fw-semibold">{{ r.opened_at|date:"d/m/Y" }}</div>
+                            <small class="text-muted">{{ r.opened_at|date:"H:i" }}</small>
+                        </td>
+
+                        <td>
+                            {% if r.closed_at %}
+                                <div class="fw-semibold">{{ r.closed_at|date:"d/m/Y" }}</div>
+                                <small class="text-muted">{{ r.closed_at|date:"H:i" }}</small>
+                            {% else %}
+                                <span class="badge bg-warning text-dark px-3 py-2">En cours</span>
+                            {% endif %}
+                        </td>
+
+                        <td>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="material-icons text-secondary" style="font-size:22px;">person</span>
+                                <span>{{ r.opened_by }}</span>
+                            </div>
+                        </td>
+
+                        <td class="text-center">
+                            <span class="amount-badge">{{ r.opening_amount }} CDF</span>
+                        </td>
+
+                        <td class="text-center">
+                            <span class="badge bg-light text-dark px-3 py-2">
+                                1 USD = {{ r.exchange_rate }} CDF
+                            </span>
+                        </td>
+
+                        <td class="text-center">
+                            <span class="amount-badge">{{ r.closing_amount|default:"0" }} CDF</span>
+                        </td>
+
+                        <td class="text-center">
+                            {% if r.difference > 0 %}
+                                <span class="badge bg-success px-3 py-2">+{{ r.difference }} CDF</span>
+                            {% elif r.difference < 0 %}
+                                <span class="badge bg-danger px-3 py-2">{{ r.difference }} CDF</span>
+                            {% else %}
+                                <span class="badge bg-secondary px-3 py-2">0 CDF</span>
+                            {% endif %}
+                        </td>
+
+                        <td class="text-center">
+                            {% if r.closed_at %}
+                                <span class="badge bg-success-subtle text-success border px-3 py-2">Clôturée</span>
+                            {% else %}
+                                <span class="badge bg-warning-subtle text-warning border px-3 py-2">Ouverte</span>
+                            {% endif %}
+                        </td>
+
+                        <td class="text-end">
+                            <a href="{% url 'pos:register_detail' r.id %}" class="btn btn-sm btn-light">
+                                <span class="material-icons" style="font-size:18px;">visibility</span>
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="10" class="text-center py-5">
+                            <div class="d-flex flex-column align-items-center justify-content-center">
+                                <span class="material-icons empty-state-icon">receipt_long</span>
+                                <p class="mt-3 mb-1 fw-semibold text-muted">Aucune session de caisse trouvée</p>
+                                <small class="text-muted">Essaie de modifier les filtres ou d’enregistrer une nouvelle session</small>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card-footer">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <p class="fs-12 text-muted mb-0">
+                Total : {{ registers|length }} session{{ registers|length|pluralize }}
+            </p>
+
+            {% if page_obj %}
+            <ul class="pagination pagination-custom mb-0">
+                {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}&search={{ search }}&status={{ status }}&date_from={{ date_from }}&date_to={{ date_to }}&sort={{ sort }}">
+                        <span class="material-icons">chevron_left</span>
+                    </a>
+                </li>
+                {% else %}
+                <li class="page-item disabled">
+                    <a class="page-link"><span class="material-icons">chevron_left</span></a>
+                </li>
+                {% endif %}
+
+                {% for num in page_obj.paginator.page_range %}
+                    {% if page_obj.number == num %}
+                        <li class="page-item active"><a class="page-link">{{ num }}</a></li>
+                    {% else %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ num }}&search={{ search }}&status={{ status }}&date_from={{ date_from }}&date_to={{ date_to }}&sort={{ sort }}">{{ num }}</a>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+
+                {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.next_page_number }}&search={{ search }}&status={{ status }}&date_from={{ date_from }}&date_to={{ date_to }}&sort={{ sort }}">
+                        <span class="material-icons">chevron_right</span>
+                    </a>
+                </li>
+                {% else %}
+                <li class="page-item disabled">
+                    <a class="page-link"><span class="material-icons">chevron_right</span></a>
+                </li>
+                {% endif %}
+            </ul>
+            {% endif %}
+        </div>
+    </div>
 </div>
 
 {% endblock %}

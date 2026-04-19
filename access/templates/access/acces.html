@@ -4,100 +4,224 @@
 {% block page_titre %}Contrôle d'accès{% endblock %}
 
 {% block content %}
-<!-- Page Header -->
+
 <div class="page-header mb-4">
     <div class="page-header-left d-flex align-items-center">
-        <div class="page-header-title">
-            <h5 class="m-b-10">Contrôle d'accès - Scan par QR code</h5>
+        <div class="page-header-title d-flex align-items-center gap-2">
+            <span class="material-icons text-primary" style="font-size:28px;">qr_code_scanner</span>
+            <div>
+                <h5 class="mb-0">Contrôle d'accès</h5>
+                <small class="text-muted">Scan QR, pointage manuel et historique des accès</small>
+            </div>
         </div>
     </div>
+
     <div class="page-header-right ms-auto">
-        <div class="page-header-right-items">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
             <button class="btn btn-primary" onclick="openScannerModal()">
-                <span class="material-icons me-2" style="font-size: 18px;">photo_camera</span>Scanner un QR code
+                <span class="material-icons me-2" style="font-size:18px;">photo_camera</span>
+                Scanner un QR code
             </button>
         </div>
     </div>
 </div>
 
-<!-- SECTION SCANNEUR (onglet principal) -->
-<div id="scanSection" class="mx-2" style = "display: none;">
-    <div class="row mb-4">
+<style>
+.access-stat-card {
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+    height: 100%;
+}
+
+.access-stat-card .icon-box {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.section-card {
+    border-radius: 18px;
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+}
+
+.section-switcher .btn {
+    border-radius: 999px;
+}
+
+.badge-live {
+    background: rgba(25, 135, 84, 0.12);
+    color: #198754;
+    border: 1px solid rgba(25, 135, 84, 0.18);
+    padding: 8px 12px;
+    border-radius: 999px;
+    font-weight: 600;
+}
+
+.member-result-item {
+    transition: background-color .2s ease;
+}
+.member-result-item:hover {
+    background: #f8fafc;
+}
+
+.manual-member-avatar,
+.member-avatar-placeholder {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: #eef2f7;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #94a3b8;
+    flex-shrink: 0;
+}
+
+.empty-state-icon {
+    font-size: 64px;
+    color: #94a3b8;
+}
+
+.timeline-access-item:last-child {
+    border-bottom: none !important;
+}
+
+.quick-action {
+    position: fixed;
+    right: 20px;
+    bottom: 24px;
+    z-index: 1040;
+}
+.quick-action .btn {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    box-shadow: 0 10px 24px rgba(13, 110, 253, 0.25);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.scanner-shell {
+    border: 2px dashed rgba(148, 163, 184, 0.35);
+    border-radius: 18px;
+    padding: 20px;
+    background: #f8fafc;
+}
+
+.scanner-icon {
+    font-size: 56px;
+    color: #94a3b8;
+}
+
+.cards-row {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+    .page-header {
+        flex-direction: column;
+        gap: 12px;
+        align-items: flex-start !important;
+    }
+}
+</style>
+
+<div class="section-switcher d-flex flex-wrap gap-2 mb-4 mx-2">
+    <button type="button" class="btn btn-light" onclick="showSection('scan')">
+        <span class="material-icons me-1" style="font-size:18px;">qr_code_scanner</span>
+        Scan
+    </button>
+    <button type="button" class="btn btn-light" onclick="showSection('manual')">
+        <span class="material-icons me-1" style="font-size:18px;">edit_note</span>
+        Pointage manuel
+    </button>
+    <button type="button" class="btn btn-light" onclick="showSection('historique')">
+        <span class="material-icons me-1" style="font-size:18px;">history</span>
+        Historique
+    </button>
+</div>
+
+<!-- SECTION SCAN -->
+<div id="scanSection" class="mx-2" style="display:none;">
+    <div class="row g-3 mb-4">
         <div class="col-md-6">
-            <div class="card stat-card">
-                <div class="card-body">
-                    <div class="d-flex align-items-start justify-content-between mb-2">
-                        <div>
-                            <span class="fs-12 fw-medium text-muted">Entrées aujourd'hui</span>
-                            <h3 class="mb-0 fw-bold" id="todayEntries">{{ today_entries }}</h3>
-                        </div>
-                        <div class="stat-icon-box">
-                            <span class="material-icons" style="color: #3454d1;">groups</span>
-                        </div>
+            <div class="access-stat-card p-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="icon-box" style="background: rgba(13, 110, 253, 0.08); color:#0d6efd;">
+                        <span class="material-icons">groups</span>
+                    </div>
+                    <div>
+                        <div class="fs-12 text-muted">Entrées aujourd'hui</div>
+                        <h4 class="mb-0 fw-bold" id="todayEntries">{{ today_entries }}</h4>
                     </div>
                 </div>
             </div>
         </div>
+
         <div class="col-md-6">
-            <div class="card stat-card">
-                <div class="card-body">
-                    <div class="d-flex align-items-start justify-content-between mb-2">
-                        <div>
-                            <span class="fs-12 fw-medium text-muted">Refusés</span>
-                            <h3 class="mb-0 fw-bold" id="todayDenied">{{ today_denied }}</h3>
-                        </div>
-                        <div class="stat-icon-box">
-                            <span class="material-icons" style="color: #ef4444;">report_problem</span>
-                        </div>
+            <div class="access-stat-card p-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="icon-box" style="background: rgba(220, 53, 69, 0.08); color:#dc3545;">
+                        <span class="material-icons">report_problem</span>
+                    </div>
+                    <div>
+                        <div class="fs-12 text-muted">Refusés</div>
+                        <h4 class="mb-0 fw-bold" id="todayDenied">{{ today_denied }}</h4>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="row">
-        <div class="col-md-12">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">Derniers accès enregistrés</h5>
-                    <span class="badge-scan d-inline-flex align-items-center gap-1">
-                        <span class="material-icons" style="font-size: 16px;">wifi</span>En temps réel
-                    </span>
-                </div>
-                <div class="card-body">
-                    <div class="timeline" id="realtimeScans">
-                        <!-- Scans dynamiques -->
-                    </div>
-                </div>
-            </div>
+    <div class="card section-card">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h5 class="mb-0 d-flex align-items-center gap-2">
+                <span class="material-icons">bolt</span>
+                Derniers accès enregistrés
+            </h5>
+            <span class="badge-live d-inline-flex align-items-center gap-1">
+                <span class="material-icons" style="font-size:16px;">wifi</span>
+                En temps réel
+            </span>
+        </div>
+        <div class="card-body">
+            <div class="timeline" id="realtimeScans"></div>
         </div>
     </div>
 </div>
 
 <!-- SECTION POINTAGE MANUEL -->
-<div id="manuelSection" class="mx-2" style="display: none;">
-
-    <div class="row">
-
-        <!-- RECHERCHE -->
+<div id="manuelSection" class="mx-2" style="display:none;">
+    <div class="row g-3">
         <div class="col-md-6">
-            <div class="card">
-
+            <div class="card section-card">
                 <div class="card-header">
-                    <h5>Recherche manuelle</h5>
+                    <h5 class="mb-0 d-flex align-items-center gap-2">
+                        <span class="material-icons">search</span>
+                        Recherche manuelle
+                    </h5>
                 </div>
 
                 <div class="card-body">
-
                     <form method="get">
                         <input type="hidden" name="section" value="manual">
 
                         <div class="input-group mb-3">
-
                             <span class="input-group-text bg-white">
                                 <span class="material-icons">search</span>
                             </span>
-
                             <input
                                 type="text"
                                 class="form-control"
@@ -105,164 +229,222 @@
                                 value="{{ request.GET.q }}"
                                 placeholder="Nom, téléphone..."
                             >
-
                             <button class="btn btn-primary">
                                 Rechercher
                             </button>
-
                         </div>
-
                     </form>
 
-                    <div style="max-height:400px; overflow-y:auto">
-
+                    <div style="max-height:400px; overflow-y:auto;">
                         {% for m in members %}
-
                         <a href="?section=manual&q={{ request.GET.q }}&member={{ m.id }}"
-                           class="d-flex align-items-center p-2 border-bottom text-decoration-none">
-
-                            <img src="#"
-                                 width="40"
-                                 class="rounded-circle me-2">
+                           class="member-result-item d-flex align-items-center p-2 border-bottom text-decoration-none text-dark">
+                            {% if m.photo %}
+                                <img src="{{ m.photo.url }}" class="manual-member-avatar me-2" alt="Photo">
+                            {% else %}
+                                <span class="member-avatar-placeholder me-2">
+                                    <span class="material-icons">person</span>
+                                </span>
+                            {% endif %}
 
                             <div>
-
                                 <strong>{{ m.first_name }} {{ m.last_name }}</strong>
-
-                                <div class="text-muted small">
-                                    {{ m.phone }}
-                                </div>
-
+                                <div class="text-muted small">{{ m.phone }}</div>
                             </div>
-
                         </a>
-
                         {% empty %}
-
-                        <p class="text-muted">Aucun résultat</p>
-
+                        <div class="text-center py-4">
+                            <span class="material-icons empty-state-icon">person_search</span>
+                            <p class="mt-2 mb-0 text-muted">Aucun résultat</p>
+                        </div>
                         {% endfor %}
-
                     </div>
-
                 </div>
             </div>
         </div>
 
-        <!-- DETAILS -->
         <div class="col-md-6">
-
-            <div class="card">
-
+            <div class="card section-card">
                 <div class="card-header">
-                    <h5>Détails du client</h5>
+                    <h5 class="mb-0 d-flex align-items-center gap-2">
+                        <span class="material-icons">badge</span>
+                        Détails du client
+                    </h5>
                 </div>
 
                 <div class="card-body">
-
                     {% if selected_member %}
-
                     <div class="text-center">
-
-                        <img src="#"
-                             width="80"
-                             class="rounded-circle mb-2">
+                        {% if selected_member.photo %}
+                            <img src="{{ selected_member.photo.url }}"
+                                 width="80"
+                                 height="80"
+                                 class="rounded-circle mb-3"
+                                 style="object-fit:cover;"
+                                 alt="Photo membre">
+                        {% else %}
+                            <div class="member-avatar-placeholder mx-auto mb-3" style="width:80px;height:80px;">
+                                <span class="material-icons" style="font-size:32px;">person</span>
+                            </div>
+                        {% endif %}
 
                         <h5>{{ selected_member.first_name }} {{ selected_member.last_name }}</h5>
-
                         <p class="text-muted">{{ selected_member.phone }}</p>
 
-                        <span class="badge bg-success">
-                            {{ selected_member.computed_status }}
-                        </span>
+                        {% if selected_member.computed_status == "active" %}
+                            <span class="badge bg-success px-3 py-2 mb-3">Actif</span>
+                        {% elif selected_member.computed_status == "suspended" %}
+                            <span class="badge bg-warning text-dark px-3 py-2 mb-3">Suspendu</span>
+                        {% else %}
+                            <span class="badge bg-danger px-3 py-2 mb-3">{{ selected_member.computed_status }}</span>
+                        {% endif %}
 
-                        <button
-                        type="button"
-                        class="btn btn-success"
-                        onclick="manualEntry({{ selected_member.id }})">
-                        Enregistrer l'entrée
-                        </button>
-
+                        <div>
+                            <button
+                                type="button"
+                                class="btn btn-success d-inline-flex align-items-center gap-2"
+                                onclick="manualEntry({{ selected_member.id }})">
+                                <span class="material-icons" style="font-size:18px;">login</span>
+                                Enregistrer l'entrée
+                            </button>
+                        </div>
                     </div>
-
                     {% else %}
-
-                    <p class="text-muted text-center">
-                        Sélectionnez un client pour voir ses détails
-                    </p>
-
+                    <div class="text-center py-5">
+                        <span class="material-icons empty-state-icon">person_search</span>
+                        <p class="mt-2 mb-0 text-muted">
+                            Sélectionnez un client pour voir ses détails
+                        </p>
+                    </div>
                     {% endif %}
-
                 </div>
-
             </div>
-
         </div>
-
     </div>
-
 </div>
 
-<!-- SECTION HISTORIQUE DES ENTRÉES -->
-<div id="historiqueSection" class="mx-2" style="display: none;">
-    <div class="card">
+<!-- SECTION HISTORIQUE -->
+<div id="historiqueSection" class="mx-2" style="display:none;">
+    <div class="card section-card">
         <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-3">
-            <h5 class="mb-0">Historique complet des entrées</h5>
+            <h5 class="mb-0 d-flex align-items-center gap-2">
+                <span class="material-icons">history</span>
+                Historique complet des entrées
+            </h5>
+
             <div class="d-flex flex-wrap align-items-center gap-2">
-                <div class="input-group input-group-sm" style="max-width: 230px;">
+                <div class="input-group input-group-sm" style="max-width:230px;">
                     <span class="input-group-text bg-white">
-                        <span class="material-icons" style="font-size: 16px;">search</span>
+                        <span class="material-icons" style="font-size:16px;">search</span>
                     </span>
                     <input type="text" class="form-control" placeholder="Client, code..." id="filterHistoriqueSearch" oninput="renderHistorique()">
                 </div>
-                <input type="date" class="form-control form-control-sm" style="width: 150px;" id="filterHistoriqueDateFrom" onchange="renderHistorique()" placeholder="Du">
-                <input type="date" class="form-control form-control-sm" style="width: 150px;" id="filterHistoriqueDateTo" onchange="renderHistorique()" placeholder="Au">
-                <select class="form-select form-select-sm" style="width: auto;" id="filterHistoriqueStatut" onchange="renderHistorique()">
+
+                <input type="date" class="form-control form-control-sm" style="width:150px;" id="filterHistoriqueDateFrom" onchange="renderHistorique()">
+                <input type="date" class="form-control form-control-sm" style="width:150px;" id="filterHistoriqueDateTo" onchange="renderHistorique()">
+
+                <select class="form-select form-select-sm" style="width:auto;" id="filterHistoriqueStatut" onchange="renderHistorique()">
                     <option value="">Tous les statuts</option>
                     <option value="success">Autorisé</option>
                     <option value="denied">Refusé</option>
                 </select>
-                <select class="form-select form-select-sm" style="width: auto;" id="filterHistoriqueMethode" onchange="renderHistorique()">
+
+                <select class="form-select form-select-sm" style="width:auto;" id="filterHistoriqueMethode" onchange="renderHistorique()">
                     <option value="">Toutes les méthodes</option>
-                    <option value="QR code">QR code</option>
+                    <option value="QR Scanner">QR Scanner</option>
                     <option value="Manuel">Manuel</option>
                 </select>
-                <select class="form-select form-select-sm" style="width: auto;" id="filterHistoriqueAgent" onchange="renderHistorique()">
+
+                <select class="form-select form-select-sm" style="width:auto;" id="filterHistoriqueAgent" onchange="renderHistorique()">
                     <option value="">Tous les agents</option>
-                    <option value="Karim">Karim</option>
-                    <option value="Sophie">Sophie</option>
+                    {% for agent in history_agents %}
+                    <option value="{{ agent.id }}">{{ agent.get_full_name|default:agent.username }}</option>
+                    {% endfor %}
                 </select>
+
                 <button class="btn btn-sm btn-light-brand" onclick="exportHistorique()">
-                    <span class="material-icons me-2" style="font-size: 16px;">download</span>Exporter
+                    <span class="material-icons me-2" style="font-size:16px;">download</span>
+                    Exporter
                 </button>
             </div>
         </div>
+
         <div class="card-body">
-            <table class="table table-hover align-middle mb-0" id="historiqueTable">
-                <thead>
-                    <tr>
-                        <th>Date &amp; Heure</th>
-                        <th>Client</th>
-                        <th>Code membre</th>
-                        <th>Statut</th>
-                        <th>Méthode</th>
-                        <th>Agent</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="historiqueBody"></tbody>
-            </table>
-            <div class="d-flex justify-content-between align-items-center mt-3">
-                <span class="text-muted small" id="paginationInfo">1-10 sur 156 entrées</span>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" id="historiqueTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Date &amp; Heure</th>
+                            <th>Client</th>
+                            <th>Code membre</th>
+                            <th>Statut</th>
+                            <th>Méthode</th>
+                            <th>Agent</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historiqueBody">
+                        {% for log in history_logs %}
+                        <tr data-history-row
+                            data-search="{{ log.member.first_name }} {{ log.member.last_name }} {{ log.member.phone }} {{ log.member.qr_code }}"
+                            data-date="{{ log.check_in_time|date:'Y-m-d' }}"
+                            data-status="{% if log.access_granted %}success{% else %}denied{% endif %}"
+                            data-method="{{ log.device_used|default:'' }}"
+                            data-agent="{% if log.scanned_by_id %}{{ log.scanned_by_id }}{% endif %}">
+                            <td>
+                                <div class="fw-semibold">{{ log.check_in_time|date:"d/m/Y" }}</div>
+                                <small class="text-muted">{{ log.check_in_time|date:"H:i" }}</small>
+                            </td>
+                            <td>
+                                <div class="fw-semibold">{{ log.member.first_name }} {{ log.member.last_name }}</div>
+                                <small class="text-muted">{{ log.member.phone }}</small>
+                            </td>
+                            <td><code>{{ log.member.qr_code }}</code></td>
+                            <td>
+                                {% if log.access_granted %}
+                                    <span class="badge bg-success px-3 py-2">AutorisÃ©</span>
+                                {% else %}
+                                    <span class="badge bg-danger px-3 py-2">RefusÃ©</span>
+                                    {% if log.denial_reason %}
+                                        <small class="d-block text-muted mt-1">{{ log.denial_reason }}</small>
+                                    {% endif %}
+                                {% endif %}
+                            </td>
+                            <td>{{ log.device_used|default:"-" }}</td>
+                            <td>
+                                {% if log.scanned_by %}
+                                    {{ log.scanned_by.get_full_name|default:log.scanned_by.username }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge bg-light text-dark">Log #{{ log.id }}</span>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr data-empty-history>
+                            <td colspan="7" class="text-center py-5">
+                                <span class="material-icons empty-state-icon">history</span>
+                                <p class="mt-2 mb-0 text-muted">Aucun accÃ¨s enregistrÃ© pour ce gym</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
+                <span class="text-muted small" id="paginationInfo">{{ history_logs|length }} entree{{ history_logs|length|pluralize }}</span>
                 <div class="pagination-custom d-flex align-items-center gap-1">
                     <button class="btn btn-sm btn-light" onclick="prevPage()">
-                        <span class="material-icons" style="font-size: 18px;">chevron_left</span>
+                        <span class="material-icons" style="font-size:18px;">chevron_left</span>
                     </button>
                     <button class="btn btn-sm btn-primary">1</button>
                     <button class="btn btn-sm btn-light">2</button>
                     <button class="btn btn-sm btn-light">3</button>
                     <button class="btn btn-sm btn-light" onclick="nextPage()">
-                        <span class="material-icons" style="font-size: 18px;">chevron_right</span>
+                        <span class="material-icons" style="font-size:18px;">chevron_right</span>
                     </button>
                 </div>
             </div>
@@ -270,9 +452,6 @@
     </div>
 </div>
 
-
-
-<!-- Bouton d'action rapide (scan) -->
 <div class="quick-action">
     <button class="btn btn-primary" onclick="openScannerModal()">
         <span class="material-icons">photo_camera</span>
@@ -284,22 +463,28 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Scanner un QR code</h5>
+                <h5 class="modal-title d-flex align-items-center gap-2">
+                    <span class="material-icons">qr_code_scanner</span>
+                    Scanner un QR code
+                </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
             </div>
+
             <div class="modal-body">
-                <div class="scanner-container text-center">
+                <div class="scanner-shell text-center">
                     <div id="reader" style="width:100%; max-width:500px; margin:auto;">
                         <span class="material-icons scanner-icon">photo_camera</span>
                     </div>
                     <p class="mt-3 mb-3">Placez le QR code devant la caméra</p>
                     <div class="d-flex gap-2 justify-content-center flex-wrap">
-                        <button class="btn btn-outline-light">
-                            <span class="material-icons me-2" style="font-size: 18px;">upload</span>Upload image
+                        <button class="btn btn-outline-secondary" type="button">
+                            <span class="material-icons me-2" style="font-size:18px;">upload</span>
+                            Upload image
                         </button>
                     </div>
                 </div>
-                <div id="scanResult" style="display: none;" class="mt-4"></div>
+
+                <div id="scanResult" style="display:none;" class="mt-4"></div>
             </div>
         </div>
     </div>
@@ -311,10 +496,12 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title d-flex align-items-center gap-2">
-                    <span class="material-icons">credit_card</span>Carte membre recto-verso
+                    <span class="material-icons">credit_card</span>
+                    Carte membre recto-verso
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
             </div>
+
             <div class="modal-body text-center">
                 <div class="mb-3">
                     <select class="form-select form-select-sm d-inline-block w-auto" id="cardThemeQR" onchange="updateCardThemeQR()">
@@ -326,12 +513,15 @@
                 </div>
                 <div id="cardPreviewContainer" class="cards-row"></div>
             </div>
+
             <div class="modal-footer">
                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">
-                    <span class="material-icons me-2" style="font-size: 18px;">close</span>Fermer
+                    <span class="material-icons me-2" style="font-size:18px;">close</span>
+                    Fermer
                 </button>
                 <button type="button" class="btn btn-success" onclick="printMemberCard()">
-                    <span class="material-icons me-2">print</span>Imprimer la carte
+                    <span class="material-icons me-2">print</span>
+                    Imprimer la carte
                 </button>
             </div>
         </div>
@@ -343,21 +533,29 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Confirmer l'entrée</h5>
+                <h5 class="modal-title d-flex align-items-center gap-2">
+                    <span class="material-icons">check_circle</span>
+                    Confirmer l'entrée
+                </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
             </div>
+
             <div class="modal-body" id="confirmEntryBody"></div>
+
             <div class="modal-footer">
                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">
-                    <span class="material-icons me-2" style="font-size: 18px;">close</span>Annuler
+                    <span class="material-icons me-2" style="font-size:18px;">close</span>
+                    Annuler
                 </button>
                 <button type="button" class="btn btn-success" onclick="confirmManualEntry()">
-                    <span class="material-icons me-2">check_circle</span>Confirmer l'entrée
+                    <span class="material-icons me-2">check_circle</span>
+                    Confirmer l'entrée
                 </button>
             </div>
         </div>
     </div>
 </div>
+
 {% endblock %}
 
 {% block extra_js %}
@@ -368,38 +566,21 @@ window.STATIC_URLS = window.STATIC_URLS || {
     logo: "{% static 'avatar/logo_smartclub.png' %}"
 };
 </script>
+
 <script src="https://unpkg.com/html5-qrcode"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-<script src="{% static 'js/script_acces.js' %}"></script>
 
 <script>
 let html5QrCode = null;
 
 function openScannerModal() {
-
     const modal = new bootstrap.Modal(document.getElementById("scannerModal"));
     modal.show();
-
     setTimeout(startScanner, 500);
 }
 
-function startScanner() {
-
-    html5QrCode = new Html5Qrcode("reader");
-
-    html5QrCode.start(
-        { facingMode: "environment" },
-        {
-            fps: 10,
-            qrbox: 250
-        },
-        onScanSuccess
-    );
-}
-
-function stopScanner(){
-
-    if(html5QrCode){
+function stopScanner() {
+    if (html5QrCode) {
         html5QrCode.stop().then(() => {
             html5QrCode.clear();
             html5QrCode = null;
@@ -407,182 +588,325 @@ function stopScanner(){
             console.log("Erreur arrêt scanner", err);
         });
     }
-
 }
 
-function onScanSuccess(decodedText) {
+function legacyOnScanSuccess(decodedText) {
+    return onScanSuccess(decodedText);
 
     html5QrCode.stop();
 
     fetch(`/access/access/${decodedText}/`)
+        .then(res => res.json())
+        .then(data => {
+            let result = document.getElementById("scanResult");
+
+            result.innerHTML = `
+                <div class="alert ${data.access ? "alert-success" : "alert-danger"}">
+                    <h4>${data.member}</h4>
+                    <p>${data.access ? "Accès autorisé" : "Accès refusé"}</p>
+                    ${data.reason ? `<small>${data.reason}</small>` : ""}
+                </div>
+            `;
+
+            result.style.display = "block";
+
+            document.getElementById("todayEntries").innerText = data.stats.entries;
+            document.getElementById("todayDenied").innerText = data.stats.denied;
+        });
+}
+</script>
+
+<script>
+function showSection(section) {
+    const scan = document.getElementById("scanSection");
+    const manuel = document.getElementById("manuelSection");
+    const historique = document.getElementById("historiqueSection");
+
+    if (scan) scan.style.display = "none";
+    if (manuel) manuel.style.display = "none";
+    if (historique) historique.style.display = "none";
+
+    if (section === "scan" && scan) scan.style.display = "block";
+    if (section === "manual" && manuel) manuel.style.display = "block";
+    if (section === "historique" && historique) historique.style.display = "block";
+}
+</script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    let section = "{{ section|default:'scan' }}";
+    showSection(section);
+});
+</script>
+
+<script>
+function getCookie(name) {
+    let cookieValue = null;
+
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+
+    return cookieValue;
+}
+
+function manualEntry(memberId) {
+    fetch(`/access/access/manual/entry/${memberId}/`, {
+        method: "POST",
+        headers: {
+            "X-CSRFToken": getCookie("csrftoken"),
+            "Content-Type": "application/json"
+        }
+    })
     .then(res => res.json())
     .then(data => {
-
-        let result = document.getElementById("scanResult");
-
-        result.innerHTML = `
-            <div class="alert ${data.access ? "alert-success" : "alert-danger"}">
-
-                <h4>${data.member}</h4>
-
-                <p>
-                    ${data.access ? "Accès autorisé" : "Accès refusé"}
-                </p>
-
-                ${data.reason ? `<small>${data.reason}</small>` : ""}
-            </div>
-        `;
-
-        result.style.display = "block";
+        alert(
+            data.access
+                ? "Accès autorisé : " + data.member
+                : "Accès refusé : " + data.reason
+        );
 
         document.getElementById("todayEntries").innerText = data.stats.entries;
         document.getElementById("todayDenied").innerText = data.stats.denied;
+        loadRealtimeAccess();
+        prependHistoryLog(data.log);
+
+        history.pushState(null, "", "?section=scan");
+        showSection("scan");
+    });
+}
+</script>
+
+<script>
+function loadRealtimeAccess() {
+    fetch("/access/access/realtime/")
+        .then(res => res.json())
+        .then(data => {
+            let container = document.getElementById("realtimeScans");
+            container.innerHTML = "";
+
+            data.forEach(log => {
+                let color = log.status === "success" ? "success" : "danger";
+
+                container.innerHTML += `
+                    <div class="timeline-access-item d-flex justify-content-between border-bottom py-3">
+                        <div>
+                            <strong>${log.member}</strong><br>
+                            <small class="text-muted">${log.method}</small>
+                        </div>
+                        <div class="text-${color}">
+                            ${log.time}
+                        </div>
+                    </div>
+                `;
+            });
+        });
+}
+
+setInterval(loadRealtimeAccess, 5000);
+
+document.addEventListener("DOMContentLoaded", function () {
+    loadRealtimeAccess();
+});
+</script>
+
+<script>
+function showScanResult(data) {
+    const result = document.getElementById("scanResult");
+    if (!result) return;
+
+    result.innerHTML = `
+        <div class="alert ${data.access ? "alert-success" : "alert-danger"}">
+            <h4>${data.member}</h4>
+            <p>${data.access ? "Acces autorise" : "Acces refuse"}</p>
+            ${data.reason ? `<small>${data.reason}</small>` : ""}
+        </div>
+    `;
+    result.style.display = "block";
+}
+
+function startScanner() {
+    if (typeof Html5Qrcode === "undefined") {
+        showScanResult({
+            access: false,
+            member: "Scanner indisponible",
+            reason: "La librairie de scan QR n'a pas pu etre chargee."
+        });
+        return;
+    }
+
+    html5QrCode = new Html5Qrcode("reader");
+    html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 250 },
+        onScanSuccess
+    ).catch(() => {
+        showScanResult({
+            access: false,
+            member: "Camera indisponible",
+            reason: "Impossible de demarrer la camera sur cet appareil."
+        });
     });
 }
 
-</script>
-<script>
+function onScanSuccess(decodedText) {
+    if (html5QrCode) {
+        html5QrCode.stop();
+    }
 
-function showSection(section){
-
-const scan = document.getElementById("scanSection")
-const manuel = document.getElementById("manuelSection")
-const historique = document.getElementById("historiqueSection")
-
-if(scan) scan.style.display = "none"
-if(manuel) manuel.style.display = "none"
-if(historique) historique.style.display = "none"
-
-if(section === "scan"){
-if(scan) scan.style.display = "block"
+    fetch(`/access/access/${decodedText}/`, {
+        method: "POST",
+        headers: {
+            "X-CSRFToken": getCookie("csrftoken"),
+            "X-Requested-With": "XMLHttpRequest"
+        }
+    })
+        .then(res => {
+            if (!res.ok) throw new Error("Invalid QR code");
+            return res.json();
+        })
+        .then(data => {
+            showScanResult(data);
+            document.getElementById("todayEntries").innerText = data.stats.entries;
+            document.getElementById("todayDenied").innerText = data.stats.denied;
+            loadRealtimeAccess();
+            prependHistoryLog(data.log);
+        })
+        .catch(() => {
+            showScanResult({
+                access: false,
+                member: "QR code invalide",
+                reason: "Ce QR code ne correspond pas a un membre de ce gym."
+            });
+        });
 }
 
-if(section === "manual"){
-if(manuel) manuel.style.display = "block"
+function renderHistorique() {
+    const search = (document.getElementById("filterHistoriqueSearch")?.value || "").toLowerCase().trim();
+    const dateFrom = document.getElementById("filterHistoriqueDateFrom")?.value || "";
+    const dateTo = document.getElementById("filterHistoriqueDateTo")?.value || "";
+    const status = document.getElementById("filterHistoriqueStatut")?.value || "";
+    const method = document.getElementById("filterHistoriqueMethode")?.value || "";
+    const agent = document.getElementById("filterHistoriqueAgent")?.value || "";
+    let visibleCount = 0;
+
+    document.querySelectorAll("[data-history-row]").forEach(row => {
+        const rowSearch = (row.dataset.search || "").toLowerCase();
+        const rowDate = row.dataset.date || "";
+        const matchesSearch = !search || rowSearch.includes(search);
+        const matchesDateFrom = !dateFrom || rowDate >= dateFrom;
+        const matchesDateTo = !dateTo || rowDate <= dateTo;
+        const matchesStatus = !status || row.dataset.status === status;
+        const matchesMethod = !method || row.dataset.method === method;
+        const matchesAgent = !agent || row.dataset.agent === agent;
+        const isVisible = matchesSearch && matchesDateFrom && matchesDateTo && matchesStatus && matchesMethod && matchesAgent;
+
+        row.style.display = isVisible ? "" : "none";
+        if (isVisible) visibleCount += 1;
+    });
+
+    const paginationInfo = document.getElementById("paginationInfo");
+    if (paginationInfo) {
+        paginationInfo.innerText = `${visibleCount} entree${visibleCount > 1 ? "s" : ""}`;
+    }
 }
 
-if(section === "historique"){
-if(historique) historique.style.display = "block"
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 }
 
+function ensureAgentFilterOption(log) {
+    const filter = document.getElementById("filterHistoriqueAgent");
+    if (!filter || !log?.agent_id || filter.querySelector(`option[value="${log.agent_id}"]`)) return;
+
+    const option = document.createElement("option");
+    option.value = log.agent_id;
+    option.textContent = log.agent || "Agent";
+    filter.appendChild(option);
 }
 
-</script>
-<script>
+function buildHistoryRow(log) {
+    const statusBadge = log.status === "success"
+        ? `<span class="badge bg-success px-3 py-2">Autorise</span>`
+        : `<span class="badge bg-danger px-3 py-2">Refuse</span>${log.reason ? `<small class="d-block text-muted mt-1">${escapeHtml(log.reason)}</small>` : ""}`;
 
-document.addEventListener("DOMContentLoaded", function(){
-
-let section = "{{ section|default:'scan' }}"
-
-showSection(section)
-
-})
-
-</script>
-<script>
-function getCookie(name) {
-
-let cookieValue = null;
-
-if (document.cookie && document.cookie !== '') {
-
-const cookies = document.cookie.split(';');
-
-for (let i = 0; i < cookies.length; i++) {
-
-const cookie = cookies[i].trim();
-
-if (cookie.substring(0, name.length + 1) === (name + '=')) {
-
-cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-
-break;
-
+    return `
+        <tr data-history-row
+            data-search="${escapeHtml(`${log.member} ${log.phone} ${log.qr_code}`)}"
+            data-date="${escapeHtml(log.date_iso)}"
+            data-status="${escapeHtml(log.status)}"
+            data-method="${escapeHtml(log.method)}"
+            data-agent="${escapeHtml(log.agent_id)}">
+            <td>
+                <div class="fw-semibold">${escapeHtml(log.date)}</div>
+                <small class="text-muted">${escapeHtml(log.time)}</small>
+            </td>
+            <td>
+                <div class="fw-semibold">${escapeHtml(log.member)}</div>
+                <small class="text-muted">${escapeHtml(log.phone)}</small>
+            </td>
+            <td><code>${escapeHtml(log.qr_code)}</code></td>
+            <td>${statusBadge}</td>
+            <td>${escapeHtml(log.method)}</td>
+            <td>${escapeHtml(log.agent)}</td>
+            <td><span class="badge bg-light text-dark">Log #${escapeHtml(log.id)}</span></td>
+        </tr>
+    `;
 }
 
+function prependHistoryLog(log) {
+    if (!log) return;
+
+    const body = document.getElementById("historiqueBody");
+    if (!body) return;
+
+    document.querySelector("[data-empty-history]")?.remove();
+    ensureAgentFilterOption(log);
+    body.insertAdjacentHTML("afterbegin", buildHistoryRow(log));
+    renderHistorique();
 }
 
+function exportHistorique() {
+    const rows = Array.from(document.querySelectorAll("[data-history-row]"))
+        .filter(row => row.style.display !== "none");
+    const lines = [["Date", "Client", "Code membre", "Statut", "Methode", "Agent", "Reference"]];
+
+    rows.forEach(row => {
+        const cells = Array.from(row.querySelectorAll("td")).map(cell => `"${cell.innerText.replace(/"/g, '""').trim()}"`);
+        lines.push(cells);
+    });
+
+    const blob = new Blob([lines.map(line => line.join(",")).join("\n")], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "historique-access.csv";
+    link.click();
+    URL.revokeObjectURL(link.href);
 }
 
-return cookieValue;
+function prevPage() {}
+function nextPage() {}
 
-}
+document.addEventListener("DOMContentLoaded", function () {
+    renderHistorique();
 
-function manualEntry(memberId){
-
-fetch(`/access/access/manual/entry/${memberId}/`,{
-method:"POST",
-headers:{
-"X-CSRFToken":getCookie("csrftoken"),
-"Content-Type":"application/json"
-}
-})
-.then(res=>res.json())
-.then(data=>{
-
-alert(
-data.access ?
-"Accès autorisé : " + data.member :
-"Accès refusé : " + data.reason
-)
-
-document.getElementById("todayEntries").innerText = data.stats.entries
-document.getElementById("todayDenied").innerText = data.stats.denied
-
-history.pushState(null, "", "?section=scan")
-
-showSection("scan")
-
-})
-}
-</script>
-<script>
-function loadRealtimeAccess(){
-
-fetch("/access/access/realtime/")
-.then(res=>res.json())
-.then(data=>{
-
-let container = document.getElementById("realtimeScans")
-
-container.innerHTML = ""
-
-data.forEach(log => {
-
-let color = log.status === "success" ? "success" : "danger"
-
-container.innerHTML += `
-
-<div class="d-flex justify-content-between border-bottom py-2">
-
-<div>
-<strong>${log.member}</strong>
-<br>
-<small>${log.method}</small>
-</div>
-
-<div class="text-${color}">
-${log.time}
-</div>
-
-</div>
-
-`
-
-})
-
-})
-
-}
-
-setInterval(loadRealtimeAccess, 5000)
-
-document.addEventListener("DOMContentLoaded", function(){
-
-loadRealtimeAccess()
-
-})
+    const scannerModal = document.getElementById("scannerModal");
+    scannerModal?.addEventListener("hidden.bs.modal", stopScanner);
+});
 </script>
 
 {% endblock %}
-

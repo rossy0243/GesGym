@@ -1,0 +1,884 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block page_titre %}{% if context_view == "analytics" %}Analytics membres{% else %}Tableau de bord{% endif %}{% endblock %}
+
+{% block content %}
+<style>
+.member-analytics-chart {
+    position: relative;
+    height: 245px;
+}
+
+.member-analytics-chart.compact {
+    height: 210px;
+}
+
+.member-analytics-chart canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.peak-hour-card {
+    border: 1px solid rgba(52, 84, 209, 0.14);
+    border-radius: 16px;
+    background: linear-gradient(135deg, rgba(52, 84, 209, 0.08), rgba(23, 198, 102, 0.08));
+    padding: 14px;
+}
+
+.peak-hour-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 14px;
+    background: rgba(52, 84, 209, 0.12);
+    color: #3454d1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+</style>
+
+<div class="page-header">
+    <div class="page-header-left d-flex align-items-center">
+        <div class="page-header-title">
+            <h5 class="m-b-10">{% if context_view == "analytics" %}Vue analytique membres{% else %}Tableau de bord{% endif %}</h5>
+            <div class="fs-12 text-muted">{{ gym.name }} - {{ period_label }} : {{ period_range_label }}</div>
+        </div>
+    </div>
+    <div class="page-header-right ms-auto">
+        <div class="page-header-right-items">
+            <form method="get" class="d-flex align-items-center gap-2">
+                <input type="hidden" name="view" value="{{ context_view }}">
+                <label for="period" class="fs-12 text-muted mb-0">Periode</label>
+                <select class="form-select form-select-sm" id="period" name="period" onchange="this.form.submit()">
+                    <option value="day" {% if selected_period == "day" %}selected{% endif %}>Jour</option>
+                    <option value="week" {% if selected_period == "week" %}selected{% endif %}>Semaine</option>
+                    <option value="month" {% if selected_period == "month" %}selected{% endif %}>Mois</option>
+                    <option value="year" {% if selected_period == "year" %}selected{% endif %}>Annee</option>
+                </select>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="main-content">
+    <div class="row g-3 mb-4">
+        <div class="col-xxl-2 col-md-4 col-sm-6">
+            <div class="card stretch stretch-full stat-card">
+                <div class="card-body">
+                    <span class="fs-12 fw-medium text-muted">Membres actifs</span>
+                    <h3 class="mb-2 fw-bold">{{ active_members }}</h3>
+                    <div class="fs-12 text-muted">{{ active_member_rate }}% du portefeuille</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xxl-2 col-md-4 col-sm-6">
+            <div class="card stretch stretch-full stat-card">
+                <div class="card-body">
+                    <span class="fs-12 fw-medium text-muted">Nouveaux membres</span>
+                    <h3 class="mb-2 fw-bold">{{ new_members_period }}</h3>
+                    <span class="badge bg-soft-{{ new_members_trend.badge_class }} text-{{ new_members_trend.badge_class }}">{{ new_members_trend.display }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-xxl-2 col-md-4 col-sm-6">
+            <div class="card stretch stretch-full stat-card">
+                <div class="card-body">
+                    <span class="fs-12 fw-medium text-muted">Renouvellements</span>
+                    <h3 class="mb-2 fw-bold">{{ renewals_period }}</h3>
+                    <span class="badge bg-soft-{{ renewals_trend.badge_class }} text-{{ renewals_trend.badge_class }}">{{ renewals_trend.display }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-xxl-2 col-md-4 col-sm-6">
+            <div class="card stretch stretch-full stat-card">
+                <div class="card-body">
+                    <span class="fs-12 fw-medium text-muted">Expirations {{ period_label_lower }}</span>
+                    <h3 class="mb-2 fw-bold">{{ expirations_period }}</h3>
+                    <span class="badge bg-soft-{{ expirations_trend.badge_class }} text-{{ expirations_trend.badge_class }}">{{ expirations_trend.display }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-xxl-2 col-md-4 col-sm-6">
+            <div class="card stretch stretch-full stat-card">
+                <div class="card-body">
+                    <span class="fs-12 fw-medium text-muted">Visites {{ period_label_lower }}</span>
+                    <h3 class="mb-2 fw-bold">{{ visits_period }}</h3>
+                    <span class="badge bg-soft-{{ visits_trend.badge_class }} text-{{ visits_trend.badge_class }}">{{ visits_trend.display }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-xxl-2 col-md-4 col-sm-6">
+            <div class="card stretch stretch-full stat-card">
+                <div class="card-body">
+                    <span class="fs-12 fw-medium text-muted">Revenus {{ period_label_lower }}</span>
+                    <h3 class="mb-2 fw-bold">{{ period_revenue|floatformat:0 }} CDF</h3>
+                    <span class="badge bg-soft-{{ revenue_trend.badge_class }} text-{{ revenue_trend.badge_class }}">{{ revenue_trend.display }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-lg-3 col-md-6">
+            <div class="card stretch stretch-full">
+                <div class="card-body">
+                    <div class="fs-12 text-muted">Total membres</div>
+                    <div class="fs-3 fw-bold">{{ total_members }}</div>
+                    <div class="fs-12 text-muted">Actifs {{ active_members }} - Expires {{ expired_members }} - Suspendus {{ suspended_members }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6">
+            <div class="card stretch stretch-full">
+                <div class="card-body">
+                    <div class="fs-12 text-muted">Visiteurs uniques</div>
+                    <div class="fs-3 fw-bold">{{ unique_visitors_period }}</div>
+                    <div class="fs-12 text-muted">Engagement {{ engagement_rate }}%</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6">
+            <div class="card stretch stretch-full">
+                <div class="card-body">
+                    <div class="fs-12 text-muted">Moyenne journalière</div>
+                    <div class="fs-3 fw-bold">{{ average_daily_visits }}</div>
+                    <div class="fs-12 text-muted">visites sur {{ period_days }} jour{{ period_days|pluralize }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6">
+            <div class="card stretch stretch-full">
+                <div class="card-body">
+                    <div class="fs-12 text-muted">Acces refuses</div>
+                    <div class="fs-3 fw-bold">{{ denied_period }}</div>
+                    <div class="fs-12 text-muted">Aujourd'hui: {{ denied_today }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-xl-3">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title">Portefeuille membres</h5>
+                </div>
+                <div class="card-body">
+                    <div class="member-analytics-chart compact">
+                        <canvas id="memberStatusChart"></canvas>
+                    </div>
+                    <div class="d-flex justify-content-between text-muted fs-12 mt-3">
+                        <span>Actifs {{ active_members }}</span>
+                        <span>Expires {{ expired_members }}</span>
+                        <span>Suspendus {{ suspended_members }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title">Inscriptions {{ period_label_lower }}</h5>
+                </div>
+                <div class="card-body">
+                    <div class="member-analytics-chart compact">
+                        <canvas id="memberGrowthChart"></canvas>
+                    </div>
+                    <div class="fs-12 text-muted mt-3">Nouveaux membres sur la periode: <strong>{{ new_members_period }}</strong></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title">KPI RH</h5>
+                </div>
+                <div class="card-body">
+                    <div class="vstack gap-3">
+                        <div class="d-flex justify-content-between">
+                            <span>Employes actifs</span>
+                            <strong>{{ active_employees|default:0 }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Presence aujourd'hui</span>
+                            <strong>{{ attendance_today_rate|default:0 }}%</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Presence {{ period_label_lower }}</span>
+                            <strong>{{ attendance_period_rate|default:0 }}%</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Paie en attente</span>
+                            <strong>{{ monthly_payroll_pending|default:0|floatformat:0 }} CDF</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Payee {{ period_label_lower }}</span>
+                            <strong>{{ salary_paid_period|default:0|floatformat:0 }} CDF</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title">Formules actives</h5>
+                </div>
+                <div class="card-body">
+                    <div class="member-analytics-chart compact">
+                        <canvas id="planDistributionChart"></canvas>
+                    </div>
+                    <div class="fs-12 text-muted mt-3">Abonnements actifs: <strong>{{ total_subscriptions }}</strong></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-xl-8">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title">Evolution des revenus</h5>
+                </div>
+                <div class="card-body">
+                    <div class="member-analytics-chart">
+                        <canvas id="monthlyRevenueChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-4">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title">Alertes membres</h5>
+                </div>
+                <div class="card-body">
+                    <div class="vstack gap-3">
+                        <div class="d-flex justify-content-between">
+                            <span>Expire dans 7 jours</span>
+                            <strong>{{ expiry_7_days }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Expire dans 3 jours</span>
+                            <strong>{{ expiry_3_days }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Expire demain</span>
+                            <strong>{{ expiry_1_day }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Expire sous 15 jours</span>
+                            <strong>{{ expiry_soon }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Paiements en attente</span>
+                            <strong>{{ pending_count }} / {{ pending_total|floatformat:0 }} CDF</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-xl-4">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title">KPI produits</h5>
+                </div>
+                <div class="card-body">
+                    <div class="vstack gap-3">
+                        <div class="d-flex justify-content-between">
+                            <span>Produits actifs</span>
+                            <strong>{{ total_products|default:0 }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Valeur du stock</span>
+                            <strong>{{ stock_value_total|default:0|floatformat:0 }} USD</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Stock OK</span>
+                            <strong>{{ stock_ok_count|default:0 }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Stock bas</span>
+                            <strong>{{ low_stock_count|default:0 }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Rupture</span>
+                            <strong>{{ out_of_stock_count|default:0 }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Sorties {{ period_label_lower }}</span>
+                            <strong>{{ stock_out_period|default:0 }}</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-8">
+            <div class="card stretch stretch-full">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                    <h5 class="card-title mb-0">Graphique du stock</h5>
+                    <span class="badge bg-light text-dark">Valeur USD</span>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3 align-items-center">
+                        <div class="col-lg-4">
+                            <div class="member-analytics-chart compact">
+                                <canvas id="stockStatusChart"></canvas>
+                            </div>
+                        </div>
+                        <div class="col-lg-8">
+                            <div class="member-analytics-chart compact">
+                                <canvas id="stockValueChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between text-muted fs-12 mt-3 flex-wrap gap-2">
+                        <span>Entrées {{ period_label_lower }}: <strong>{{ stock_in_period|default:0 }}</strong></span>
+                        <span>Sorties {{ period_label_lower }}: <strong>{{ stock_out_period|default:0 }}</strong></span>
+                        <span>Mouvements: <strong>{{ stock_movements_period|default:0 }}</strong></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-xl-4">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title">Repartition des abonnements</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Formule</th>
+                                    <th>Nombre</th>
+                                    <th>%</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for plan in plans_stats %}
+                                <tr>
+                                    <td>{{ plan.plan__name|default:"Sans nom" }}</td>
+                                    <td>{{ plan.total }}</td>
+                                    <td>{% widthratio plan.total total_subscriptions 100 %}%</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted">Aucune formule active</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-4">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title">Frequentation {{ period_label_lower }}</h5>
+                </div>
+                <div class="card-body">
+                    <div class="peak-hour-card mb-4">
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="peak-hour-icon">
+                                <span class="material-icons">query_stats</span>
+                            </div>
+                            <div>
+                                <div class="fs-12 text-muted">Heure de pointe</div>
+                                <div class="fs-4 fw-bold text-dark">{{ peak_hour.label }}</div>
+                                {% if peak_hour.has_data %}
+                                <div class="fs-12 text-muted">{{ peak_hour.count }} passage{{ peak_hour.count|pluralize }} autorise{{ peak_hour.count|pluralize }} sur la periode</div>
+                                {% else %}
+                                <div class="fs-12 text-muted">Aucun passage autorise sur la periode</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="member-analytics-chart compact mb-4">
+                        <canvas id="attendanceTrendChart"></canvas>
+                    </div>
+                    <div class="vstack gap-3">
+                        {% for row in attendance_rows %}
+                        <div class="d-flex justify-content-between align-items-center gap-3">
+                            <span>{{ row.label }}</span>
+                            <div class="flex-grow-1">
+                                <div class="progress" style="height: 8px;">
+                                    <div class="progress-bar bg-primary" style="width: {{ row.percent }}%"></div>
+                                </div>
+                            </div>
+                            <strong>{{ row.count }}</strong>
+                        </div>
+                        {% empty %}
+                        <div class="text-muted text-center">Aucune donnée de fréquentation</div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-4">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title">Derniers accès</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Membre</th>
+                                    <th>Statut</th>
+                                    <th>Heure</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for access in recent_access %}
+                                <tr>
+                                    <td>{{ access.member.first_name }} {{ access.member.last_name }}</td>
+                                    <td>
+                                        {% if access.access_granted %}
+                                        <span class="badge bg-success">Autorise</span>
+                                        {% else %}
+                                        <span class="badge bg-danger">Refuse</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ access.check_in_time|date:"d/m H:i" }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted">Aucun accès récent</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-xl-4">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title">Derniers paiements</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Membre</th>
+                                    <th>Montant</th>
+                                    <th>Methode</th>
+                                    <th>Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for payment in recent_payments %}
+                                <tr>
+                                    <td>{% if payment.member %}{{ payment.member.first_name }} {{ payment.member.last_name }}{% else %}Décaissement{% endif %}</td>
+                                    <td>{{ payment.amount_cdf|floatformat:0 }} CDF</td>
+                                    <td>{{ payment.get_method_display }}</td>
+                                    <td>{{ payment.created_at|date:"d/m H:i" }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted">Aucun paiement récent</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-4">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title">KPI machines</h5>
+                </div>
+                <div class="card-body">
+                    <div class="vstack gap-3">
+                        <div class="d-flex justify-content-between">
+                            <span>Disponibilite du parc</span>
+                            <strong>{{ availability_rate|default:0 }}%</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Machines OK</span>
+                            <strong>{{ machines_ok|default:0 }} / {{ total_machines|default:0 }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>A surveiller</span>
+                            <strong>{{ attention_count|default:0 }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Maintenances {{ period_label_lower }}</span>
+                            <strong>{{ period_maintenances|default:0 }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Cout maintenance</span>
+                            <strong>{{ period_maintenance_cost|default:0|floatformat:0 }} CDF</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-4">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title">Lecture KPI members</h5>
+                </div>
+                <div class="card-body">
+                    <div class="vstack gap-3">
+                        <div class="d-flex justify-content-between">
+                            <span>Nouveaux inscrits ce mois</span>
+                            <strong>{{ new_members_month }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Entrées aujourd'hui</span>
+                            <strong>{{ today_checkins }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Heure de pointe</span>
+                            <strong>{{ peak_hour.label }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Abonnements actifs</span>
+                            <strong>{{ total_subscriptions }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Revenu du mois</span>
+                            <strong>{{ monthly_revenue|floatformat:0 }} CDF</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Taille du vivier actif</span>
+                            <strong>{{ active_members }} membres</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mt-1">
+        <div class="col-xl-4">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title">KPI coaching</h5>
+                </div>
+                <div class="card-body">
+                    <div class="vstack gap-3">
+                        <div class="d-flex justify-content-between">
+                            <span>Coaches actifs</span>
+                            <strong>{{ active_coaches|default:0 }} / {{ total_coaches|default:0 }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Membres assignes</span>
+                            <strong>{{ assigned_members_count|default:0 }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Membres sans coach</span>
+                            <strong>{{ unassigned_members_count|default:0 }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Moyenne / coach</span>
+                            <strong>{{ average_members_per_coach|default:0 }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Nouveaux {{ period_label_lower }}</span>
+                            <strong>{{ new_coaches_period|default:0 }}</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-8">
+            <div class="card stretch stretch-full">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                    <h5 class="card-title mb-0">Graphique coaching</h5>
+                    <span class="badge bg-light text-dark">Charge membres</span>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3 align-items-center">
+                        <div class="col-lg-4">
+                            <div class="member-analytics-chart compact">
+                                <canvas id="coachingStatusChart"></canvas>
+                            </div>
+                        </div>
+                        <div class="col-lg-8">
+                            <div class="member-analytics-chart compact">
+                                <canvas id="coachingWorkloadChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="fs-12 text-muted mt-3">
+                        Top coaches par nombre de membres assignes, toujours limite au gym courant.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+const chartColors = ["#3454d1", "#17c666", "#ffa21d", "#3dc7be", "#ea4d4d", "#64748b", "#6610f2"];
+const mutedGrid = "rgba(100, 116, 139, 0.12)";
+
+Chart.defaults.font.family = "Inter, sans-serif";
+Chart.defaults.color = "#64748b";
+
+function normalizeDoughnutData(labels, values, emptyLabel) {
+    const numericValues = values.map(value => Number(value || 0));
+    const total = numericValues.reduce((sum, value) => sum + value, 0);
+    if (!numericValues.length || total === 0) {
+        return {
+            labels: [emptyLabel],
+            values: [1],
+            colors: ["#e5e7eb"]
+        };
+    }
+    return {
+        labels,
+        values: numericValues,
+        colors: chartColors
+    };
+}
+
+function lineOptions(formatTick) {
+    return {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: false
+            }
+        },
+        scales: {
+            x: {
+                grid: {
+                    display: false
+                }
+            },
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    precision: 0,
+                    callback: formatTick || undefined
+                },
+                grid: {
+                    color: mutedGrid
+                }
+            }
+        }
+    };
+}
+
+function renderDoughnutChart(canvasId, labels, values, emptyLabel) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+
+    const data = normalizeDoughnutData(labels, values, emptyLabel);
+    new Chart(canvas, {
+        type: "doughnut",
+        data: {
+            labels: data.labels,
+            datasets: [{
+                data: data.values,
+                backgroundColor: data.colors,
+                borderColor: "#ffffff",
+                borderWidth: 4,
+                hoverOffset: 8
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: "68%",
+            plugins: {
+                legend: {
+                    position: "bottom",
+                    labels: {
+                        usePointStyle: true,
+                        boxWidth: 8,
+                        padding: 14
+                    }
+                }
+            }
+        }
+    });
+}
+
+renderDoughnutChart(
+    "memberStatusChart",
+    {{ status_chart_labels|default:"[]"|safe }},
+    {{ status_chart_values|default:"[]"|safe }},
+    "Aucun membre"
+);
+
+renderDoughnutChart(
+    "planDistributionChart",
+    {{ plan_chart_labels|default:"[]"|safe }},
+    {{ plan_chart_values|default:"[]"|safe }},
+    "Aucune formule"
+);
+
+renderDoughnutChart(
+    "stockStatusChart",
+    {{ stock_status_chart_labels_json|default:"[]"|safe }},
+    {{ stock_status_chart_values_json|default:"[]"|safe }},
+    "Aucun stock"
+);
+
+renderDoughnutChart(
+    "coachingStatusChart",
+    {{ coaching_status_chart_labels_json|default:"[]"|safe }},
+    {{ coaching_status_chart_values_json|default:"[]"|safe }},
+    "Aucun coach"
+);
+
+const coachingWorkloadCanvas = document.getElementById("coachingWorkloadChart");
+if (coachingWorkloadCanvas) {
+    new Chart(coachingWorkloadCanvas, {
+        type: "bar",
+        data: {
+            labels: {{ coaching_workload_chart_labels_json|default:"[]"|safe }},
+            datasets: [{
+                label: "Membres assignes",
+                data: {{ coaching_workload_chart_values_json|default:"[]"|safe }},
+                backgroundColor: "rgba(102, 16, 242, 0.72)",
+                borderColor: "#6610f2",
+                borderWidth: 1,
+                borderRadius: 10,
+                maxBarThickness: 34
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { grid: { display: false } },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: mutedGrid },
+                    ticks: { precision: 0 }
+                }
+            }
+        }
+    });
+}
+
+const stockValueCanvas = document.getElementById("stockValueChart");
+if (stockValueCanvas) {
+    new Chart(stockValueCanvas, {
+        type: "bar",
+        data: {
+            labels: {{ stock_value_chart_labels_json|default:"[]"|safe }},
+            datasets: [{
+                label: "Valeur stock",
+                data: {{ stock_value_chart_values_json|default:"[]"|safe }},
+                backgroundColor: "rgba(61, 199, 190, 0.78)",
+                borderColor: "#3dc7be",
+                borderWidth: 1,
+                borderRadius: 10,
+                maxBarThickness: 34
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: context => `${Number(context.raw || 0).toLocaleString("fr-FR")} USD`
+                    }
+                }
+            },
+            scales: {
+                x: { grid: { display: false } },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: mutedGrid },
+                    ticks: {
+                        callback: value => `${Number(value).toLocaleString("fr-FR")} USD`
+                    }
+                }
+            }
+        }
+    });
+}
+
+const memberGrowthCanvas = document.getElementById("memberGrowthChart");
+if (memberGrowthCanvas) {
+    new Chart(memberGrowthCanvas, {
+        type: "bar",
+        data: {
+            labels: {{ member_growth_labels|default:"[]"|safe }},
+            datasets: [{
+                label: "Nouveaux membres",
+                data: {{ member_growth_values|default:"[]"|safe }},
+                backgroundColor: "rgba(52, 84, 209, 0.78)",
+                borderRadius: 10,
+                maxBarThickness: 42
+            }]
+        },
+        options: lineOptions()
+    });
+}
+
+const attendanceCanvas = document.getElementById("attendanceTrendChart");
+if (attendanceCanvas) {
+    new Chart(attendanceCanvas, {
+        type: "line",
+        data: {
+            labels: {{ attendance_chart_labels|default:"[]"|safe }},
+            datasets: [{
+                label: "Visites",
+                data: {{ attendance_chart_values|default:"[]"|safe }},
+                borderColor: "#17c666",
+                backgroundColor: "rgba(23, 198, 102, 0.12)",
+                fill: true,
+                tension: 0.35,
+                pointRadius: 3,
+                pointBackgroundColor: "#17c666"
+            }]
+        },
+        options: lineOptions()
+    });
+}
+
+const revenueCanvas = document.getElementById("monthlyRevenueChart");
+if (revenueCanvas) {
+    new Chart(revenueCanvas, {
+        type: "line",
+        data: {
+            labels: {{ sales_chart_labels|default:"[]"|safe }},
+            datasets: [{
+                label: "Revenus",
+                data: {{ sales_chart_values|default:"[]"|safe }},
+                borderColor: "#0d6efd",
+                backgroundColor: "rgba(13, 110, 253, 0.12)",
+                fill: true,
+                tension: 0.3,
+                pointRadius: 3,
+                pointBackgroundColor: "#0d6efd"
+            }]
+        },
+        options: lineOptions(value => `${Number(value).toLocaleString("fr-FR")} CDF`)
+    });
+}
+</script>
+{% endblock %}

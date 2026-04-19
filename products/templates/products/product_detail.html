@@ -5,13 +5,13 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1>{{ product.name }}</h1>
         <div>
-            <a href="{% url 'products:add_movement' product.gym.id product.id %}" class="btn btn-success">
+            <a href="{% url 'products:add_movement' product.id %}" class="btn btn-success">
                 <i class="fas fa-exchange-alt"></i> Mouvement de stock
             </a>
-            <a href="{% url 'products:update' product.gym.id product.id %}" class="btn btn-outline-secondary">
+            <a href="{% url 'products:update' product.id %}" class="btn btn-outline-secondary">
                 <i class="fas fa-edit"></i> Modifier
             </a>
-            <a href="{% url 'products:list' product.gym.id %}" class="btn btn-secondary">
+            <a href="{% url 'products:list' %}" class="btn btn-secondary">
                 <i class="fas fa-arrow-left"></i> Retour
             </a>
         </div>
@@ -25,13 +25,13 @@
                     <h5 class="mb-0">Informations</h5>
                 </div>
                 <div class="card-body">
-                    <p><strong>Prix:</strong> {{ product.price }} €</p>
+                    <p><strong>Prix:</strong> {{ product.price }} USD</p>
                     <p><strong>Stock actuel:</strong> 
                         <span class="{% if product.quantity == 0 %}text-danger{% elif product.quantity <= 5 %}text-warning{% else %}text-success{% endif %} fw-bold">
                             {{ product.quantity }}
                         </span>
                     </p>
-                    <p><strong>Valeur du stock:</strong> {{ product.price|floatformat:2|add:product.quantity|floatformat:2 }} €</p>
+                    <p><strong>Valeur du stock:</strong> {{ product.stock_value|floatformat:2 }} USD</p>
                     <p><strong>Statut:</strong> 
                         <span class="badge {% if product.is_active %}bg-success{% else %}bg-secondary{% endif %}">
                             {% if product.is_active %}Actif{% else %}Inactif{% endif %}
@@ -51,7 +51,7 @@
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">Historique des mouvements</h5>
-                    <a href="{% url 'products:add_movement' product.gym.id product.id %}" class="btn btn-primary btn-sm">
+                    <a href="{% url 'products:add_movement' product.id %}" class="btn btn-primary btn-sm">
                         <i class="fas fa-plus"></i> Ajouter un mouvement
                     </a>
                 </div>

@@ -5,10 +5,10 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1>{{ employee.name }}</h1>
         <div>
-            <a href="{% url 'rh:update' employee.gym.id employee.id %}" class="btn btn-outline-secondary">
+            <a href="{% url 'rh:update' employee.id %}" class="btn btn-outline-secondary">
                 <i class="fas fa-edit"></i> Modifier
             </a>
-            <a href="{% url 'rh:list' employee.gym.id %}" class="btn btn-secondary">
+            <a href="{% url 'rh:list' %}" class="btn btn-secondary">
                 <i class="fas fa-arrow-left"></i> Retour
             </a>
         </div>
@@ -24,7 +24,7 @@
                 <div class="card-body">
                     <p><strong>Rôle:</strong> {{ employee.get_role_display }}</p>
                     <p><strong>Téléphone:</strong> {{ employee.phone|default:"Non renseigné" }}</p>
-                    <p><strong>Salaire journalier:</strong> {{ employee.daily_salary }} €</p>
+                    <p><strong>Salaire journalier:</strong> {{ employee.daily_salary }} CDF</p>
                     <p><strong>Statut:</strong> 
                         <span class="badge {% if employee.is_active %}bg-success{% else %}bg-secondary{% endif %}">
                             {% if employee.is_active %}Actif{% else %}Inactif{% endif %}
@@ -66,7 +66,7 @@
                     <div class="alert {% if is_paid %}alert-success{% else %}alert-info{% endif %}">
                         <h5>Résumé du mois</h5>
                         <p><strong>Jours présents:</strong> {{ present_days }}</p>
-                        <p><strong>Salaire mensuel:</strong> {{ monthly_salary }} €</p>
+                        <p><strong>Salaire mensuel:</strong> {{ monthly_salary }} CDF</p>
                         <p><strong>Statut:</strong> 
                             {% if is_paid %}
                             <span class="badge bg-success">Payé</span>
@@ -75,7 +75,7 @@
                             {% endif %}
                         </p>
                         {% if not is_paid and monthly_salary > 0 %}
-                        <a href="{% url 'rh:process_payment' employee.gym.id employee.id year month %}" class="btn btn-success">
+                        <a href="{% url 'rh:process_payment' employee.id year month %}" class="btn btn-success">
                             <i class="fas fa-money-bill"></i> Procéder au paiement
                         </a>
                         {% endif %}
@@ -146,7 +146,7 @@
                                 <tr>
                                     <td>{{ payment.get_month_display }} {{ payment.year }}</td>
                                     <td>{{ payment.present_days }}</td>
-                                    <td>{{ payment.amount }} €</td>
+                                    <td>{{ payment.amount }} CDF</td>
                                     <td>{{ payment.payment_date|date:"d/m/Y" }}</td>
                                 </tr>
                                 {% endfor %}

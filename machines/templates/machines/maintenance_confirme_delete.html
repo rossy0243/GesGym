@@ -15,13 +15,13 @@
                     <p><strong>Date:</strong> {{ maintenance.created_at|date:"d/m/Y H:i" }}</p>
                     <p><strong>Description:</strong> {{ maintenance.description|truncatewords:20 }}</p>
                     {% if maintenance.cost %}
-                    <p><strong>Coût:</strong> {{ maintenance.cost }} €</p>
+                    <p><strong>Coût:</strong> {{ maintenance.cost }} CDF</p>
                     {% endif %}
                     
                     <form method="post">
                         {% csrf_token %}
                         <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                            <a href="{% url 'machines:detail' maintenance.machine.gym.id maintenance.machine.id %}" 
+                            <a href="{% url 'machines:detail' maintenance.machine.id %}"
                                class="btn btn-secondary">
                                 Annuler
                             </a>

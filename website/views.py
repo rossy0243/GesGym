@@ -2,6 +2,10 @@ from django.shortcuts import render
 from organizations.models import Gym
 
 
+def landing(request):
+    return render(request, "compte/accueil.html")
+
+
 def gym_home(request):
     """
     Page publique du gym basée sur le sous-domaine

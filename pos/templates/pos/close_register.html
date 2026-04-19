@@ -1,68 +1,186 @@
 {% extends "base.html" %}
+{% load static %}
+
+{% block page_titre %}Clôture de caisse{% endblock %}
 
 {% block content %}
 
-<div class="container mt-4">
+<div class="page-header mb-4">
+    <div class="page-header-left d-flex align-items-center">
+        <div class="page-header-title d-flex align-items-center gap-2">
+            <span class="material-icons text-danger" style="font-size:28px;">lock</span>
+            <div>
+                <h5 class="mb-0">Clôture de caisse</h5>
+                <small class="text-muted">Validation finale de la session {{ register.session_code }}</small>
+            </div>
+        </div>
+    </div>
 
-<h4>Clôture de caisse</h4>
-
-<div class="card mt-3">
-<div class="card-body">
-
-<h5 class="mb-3">
-Session {{ register.session_code }}
-</h5>
-
-<div class="row text-center mb-4">
-
-<div class="col-md-4">
-<h6 class="text-success">Entrées</h6>
-<h4>{{ entries }} CDF</h4>
+    <div class="page-header-right ms-auto">
+        <div class="d-flex align-items-center gap-2">
+            <a href="{% url 'pos:cashier_dashboard' %}" class="btn btn-light">
+                <span class="material-icons me-1" style="font-size:18px;">arrow_back</span>
+                Retour
+            </a>
+        </div>
+    </div>
 </div>
 
-<div class="col-md-4">
-<h6 class="text-danger">Sorties</h6>
-<h4>{{ exits }} CDF</h4>
+<style>
+.close-register-card {
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+}
+
+.close-stat-card {
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+    height: 100%;
+}
+
+.close-stat-card .icon-box {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.amount-display {
+    background: #f8fafc;
+    color: #0f172a;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    padding: 10px 14px;
+    border-radius: 999px;
+    font-weight: 700;
+    display: inline-block;
+}
+
+.warning-box {
+    border-radius: 16px;
+}
+</style>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="close-stat-card p-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="icon-box" style="background: rgba(13, 110, 253, 0.08); color:#0d6efd;">
+                    <span class="material-icons">account_balance_wallet</span>
+                </div>
+                <div>
+                    <div class="fs-12 text-muted">Fonds ouverture</div>
+                    <h4 class="mb-0">{{ register.opening_amount }} CDF</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="close-stat-card p-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="icon-box" style="background: rgba(25, 135, 84, 0.08); color:#198754;">
+                    <span class="material-icons">trending_up</span>
+                </div>
+                <div>
+                    <div class="fs-12 text-muted">Entrées</div>
+                    <h4 class="mb-0">{{ entries }} CDF</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="close-stat-card p-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="icon-box" style="background: rgba(220, 53, 69, 0.08); color:#dc3545;">
+                    <span class="material-icons">trending_down</span>
+                </div>
+                <div>
+                    <div class="fs-12 text-muted">Sorties</div>
+                    <h4 class="mb-0">{{ exits }} CDF</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="close-stat-card p-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="icon-box" style="background: rgba(255, 193, 7, 0.12); color:#b78103;">
+                    <span class="material-icons">payments</span>
+                </div>
+                <div>
+                    <div class="fs-12 text-muted">Total attendu</div>
+                    <h4 class="mb-0">{{ expected_total }} CDF</h4>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
-<div class="col-md-4">
-<h6>Total attendu</h6>
-<h4>{{ expected_total }} CDF</h4>
-</div>
+<div class="card close-register-card">
+    <div class="card-header">
+        <h5 class="card-title d-flex align-items-center gap-2 mb-0">
+            <span class="material-icons" style="font-size:22px;">receipt_long</span>
+            Session {{ register.session_code }}
+        </h5>
+    </div>
 
-</div>
+    <div class="card-body">
+        <div class="alert alert-light border d-flex align-items-center gap-2 warning-box mb-4">
+            <span class="material-icons">currency_exchange</span>
+            <div>
+                Taux de session : <strong>1 USD = {{ register.exchange_rate }} CDF</strong>
+            </div>
+        </div>
 
-<form method="POST">
+        <div class="alert alert-warning d-flex align-items-start gap-2 warning-box mb-4">
+            <span class="material-icons mt-1">warning</span>
+            <div>
+                <strong>Vérification avant clôture</strong><br>
+                Assure-toi que le montant réel en caisse correspond bien au contenu physique disponible avant de valider la fermeture.
+            </div>
+        </div>
 
-{% csrf_token %}
+        <form method="POST">
+            {% csrf_token %}
 
-<label class="form-label">
-Montant réel en caisse
-</label>
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Montant réel en caisse</label>
+                <input type="number"
+                       name="real_amount"
+                       class="form-control form-control-lg"
+                       min="0"
+                       step="0.01"
+                       required>
+                <small class="text-muted">Saisis le montant physique réellement trouvé en caisse.</small>
+            </div>
 
-<input type="number"
-       name="real_amount"
-       class="form-control"
-       required>
+            <div class="mb-4">
+                <div class="small text-muted mb-2">Total attendu</div>
+                <span class="amount-display">{{ expected_total }} CDF</span>
+            </div>
 
-<div class="mt-3">
+            <div class="d-flex flex-wrap gap-2">
+                <button class="btn btn-danger d-flex align-items-center gap-2">
+                    <span class="material-icons" style="font-size:18px;">lock</span>
+                    Fermer la caisse
+                </button>
 
-<button class="btn btn-danger">
-Fermer la caisse
-</button>
-
-<a href="{% url 'pos:cashier_dashboard' %}"
-   class="btn btn-light">
-Annuler
-</a>
-
-</div>
-
-</form>
-
-</div>
-</div>
-
+                <a href="{% url 'pos:cashier_dashboard' %}" class="btn btn-light d-flex align-items-center gap-2">
+                    <span class="material-icons" style="font-size:18px;">close</span>
+                    Annuler
+                </a>
+            </div>
+        </form>
+    </div>
 </div>
 
 {% endblock %}

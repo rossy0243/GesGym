@@ -61,7 +61,7 @@ def machine_create(request):
             machine.gym = gym
             machine.save()
             messages.success(request, f'Machine "{machine.name}" créée avec succès!')
-            return redirect('machines:detail', gym_id=gym.id, machine_id=machine.id)
+            return redirect('machines:detail', machine_id=machine.id)
     else:
         form = MachineForm()
     
@@ -225,3 +225,18 @@ def maintenance_delete(request, gym_id, maintenance_id):
         'maintenance': maintenance,
     }
     return render(request, 'machines/maintenance_confirm_delete.html', context)
+
+
+# Compatibility layer: the URLConf uses views_v2 directly, and these aliases keep
+# any older imports of machines.views on the corrected multi-tenant implementation.
+from .views_v2 import (  # noqa: E402,F401
+    machine_create,
+    machine_delete,
+    machine_detail,
+    machine_list,
+    machine_update,
+    maintenance_dashboard,
+    maintenance_delete,
+    maintenance_list,
+    maintenance_log_create,
+)

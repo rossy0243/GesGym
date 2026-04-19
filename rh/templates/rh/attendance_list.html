@@ -5,10 +5,10 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1>Présences - {{ gym.name }}</h1>
         <div>
-            <a href="{% url 'rh:attendance_bulk' gym.id %}" class="btn btn-primary">
+            <a href="{% url 'rh:attendance_bulk' %}" class="btn btn-primary">
                 <i class="fas fa-check-square"></i> Enregistrement groupé
             </a>
-            <a href="{% url 'rh:attendance_create' gym.id %}" class="btn btn-outline-primary">
+            <a href="{% url 'rh:attendance_create' %}" class="btn btn-outline-primary">
                 <i class="fas fa-plus"></i> Enregistrement individuel
             </a>
         </div>
@@ -40,7 +40,7 @@
                 <div class="col-md-3 d-flex align-items-end">
                     <button type="submit" class="btn btn-secondary">Filtrer</button>
                     {% if date_from or date_to or selected_employee %}
-                    <a href="{% url 'rh:attendance_list' gym.id %}" class="btn btn-link">Réinitialiser</a>
+                    <a href="{% url 'rh:attendance_list' %}" class="btn btn-link">Réinitialiser</a>
                     {% endif %}
                 </div>
             </form>

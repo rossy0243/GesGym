@@ -1,5 +1,5 @@
 #members/views.py
-from datetime import timedelta
+from datetime import date, timedelta
 from io import BytesIO
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
@@ -8,17 +8,33 @@ from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import redirect
-from django.db.models import Q
+from django.db.models import Q, Exists, OuterRef
 from django.core.paginator import Paginator
+from django.urls import reverse
 import qrcode
 from access.models import AccessLog
+from smartclub.access_control import MEMBER_ADMIN_ROLES, MEMBER_ROLES, has_role
 from .forms import MemberCreationForm
-from .models import Member
+from .models import Member, MemberPreRegistration, MemberPreRegistrationLink
 from pos.models import Payment
-from subscriptions.models import SubscriptionPlan
+from subscriptions.models import MemberSubscription, SubscriptionPlan
 
 
 #######   MEMBRE  ######
+
+
+def _cleanup_expired_pre_registrations():
+    MemberPreRegistration.delete_expired_pending()
+
+
+def _member_management_allowed(request):
+    return has_role(request, MEMBER_ROLES) and request.gym
+
+
+def _get_pre_registration_public_url(request, link):
+    return request.build_absolute_uri(
+        reverse("members:public_pre_registration", args=[link.token])
+    )
 
 #######   liste  ######
 @login_required
@@ -28,18 +44,42 @@ def member_list(request):
     """
 
     # 🔐 sécurité rôles
-    if request.role not in ["owner", "manager"]:
+    if not _member_management_allowed(request):
         raise PermissionDenied
 
+    _cleanup_expired_pre_registrations()
     gym = request.gym
     today = timezone.now().date()
     limit = today + timedelta(days=7)
+    active_subscription_exists = MemberSubscription.objects.filter(
+        member=OuterRef("pk"),
+        is_active=True,
+        end_date__gte=today,
+        is_paused=False,
+    )
+    expiring_subscription_exists = MemberSubscription.objects.filter(
+        member=OuterRef("pk"),
+        is_active=True,
+        end_date__range=(today, limit),
+        is_paused=False,
+    )
+    any_access_exists = AccessLog.objects.filter(member=OuterRef("pk"))
+    recent_access_exists = AccessLog.objects.filter(
+        member=OuterRef("pk"),
+        check_in_time__date__gte=today - timedelta(days=30),
+    )
 
     # 🔥 base queryset optimisée
     members = (
         Member.objects
         .filter(gym=gym)
         .select_related("user")
+        .annotate(
+            has_active_subscription=Exists(active_subscription_exists),
+            has_expiring_subscription=Exists(expiring_subscription_exists),
+            has_any_access=Exists(any_access_exists),
+            has_recent_access=Exists(recent_access_exists),
+        )
     )
 
     # =====================
@@ -49,6 +89,10 @@ def member_list(request):
     search = request.GET.get("search")
     status = request.GET.get("status")
     plan = request.GET.get("plan")
+    access_filter = request.GET.get("access")
+    created_from = request.GET.get("created_from")
+    created_to = request.GET.get("created_to")
+    sort = request.GET.get("sort", "newest")
 
     # 🔍 Recherche
     if search:
@@ -56,30 +100,25 @@ def member_list(request):
             Q(first_name__icontains=search) |
             Q(last_name__icontains=search) |
             Q(phone__icontains=search) |
-            Q(email__icontains=search)
+            Q(email__icontains=search) |
+            Q(user__username__icontains=search)
         )
 
     # 📊 Statut
     if status == "active":
-        members = members.filter(
-            subscriptions__is_active=True,
-            subscriptions__end_date__gte=today
-        ).distinct()
+        members = members.filter(has_active_subscription=True)
 
     elif status == "expired":
         # Membres dont l'abonnement actif est expiré
         members = members.filter(
-            ~Q(subscriptions__is_active=True, subscriptions__end_date__gte=today)
-        ).distinct()
+            has_active_subscription=False
+        ).exclude(status="suspended")
 
     elif status == "suspended":
         members = members.filter(status="suspended")
 
     elif status == "expiring":
-        members = members.filter(
-            subscriptions__is_active=True,
-            subscriptions__end_date__range=(today, limit)
-        ).distinct()
+        members = members.filter(has_expiring_subscription=True)
 
     # 💳 Plan
     if plan:
@@ -89,7 +128,34 @@ def member_list(request):
         ).distinct()
 
     # 🔽 tri par défaut (important UX)
-    members = members.order_by("-created_at")
+    if access_filter == "recent":
+        members = members.filter(has_recent_access=True)
+    elif access_filter == "never":
+        members = members.filter(has_any_access=False)
+
+    if created_from:
+        try:
+            members = members.filter(created_at__date__gte=date.fromisoformat(created_from))
+        except ValueError:
+            created_from = ""
+
+    if created_to:
+        try:
+            members = members.filter(created_at__date__lte=date.fromisoformat(created_to))
+        except ValueError:
+            created_to = ""
+
+    sort_options = {
+        "newest": ["-created_at"],
+        "oldest": ["created_at"],
+        "name_asc": ["first_name", "last_name"],
+        "name_desc": ["-first_name", "-last_name"],
+        "expiry_asc": ["subscriptions__end_date", "-created_at"],
+        "expiry_desc": ["-subscriptions__end_date", "-created_at"],
+        "last_access": ["-access_logs__check_in_time", "-created_at"],
+    }
+    sort = sort if sort in sort_options else "newest"
+    members = members.order_by(*sort_options[sort]).distinct()
 
     # =====================
     # 📄 PAGINATION
@@ -109,6 +175,13 @@ def member_list(request):
     )
     # AJOUT IMPORTANT : On passe le formulaire au template
     form = MemberCreationForm()
+    pre_registration_link, _ = MemberPreRegistrationLink.objects.get_or_create(gym=gym)
+    pre_registration_url = _get_pre_registration_public_url(request, pre_registration_link)
+    pending_pre_registrations_count = MemberPreRegistration.objects.filter(
+        gym=gym,
+        status=MemberPreRegistration.STATUS_PENDING,
+        expires_at__gt=timezone.now(),
+    ).count()
 
     context = {
         "page_obj": page_obj,
@@ -118,8 +191,14 @@ def member_list(request):
         "search": search or "",
         "status": status or "",
         "plan_selected": plan or "",
-        
+        "access_filter": access_filter or "",
+        "created_from": created_from or "",
+        "created_to": created_to or "",
+        "sort_selected": sort,
         "form" : form,
+        "pre_registration_link": pre_registration_link,
+        "pre_registration_url": pre_registration_url,
+        "pending_pre_registrations_count": pending_pre_registrations_count,
     }
 
     return render(request, "members/member_list.html", context)
@@ -129,7 +208,7 @@ def member_list(request):
 @login_required
 def create_member(request):
 
-    if request.role not in ["owner", "manager"]:
+    if not _member_management_allowed(request):
         raise PermissionDenied
     
     if request.method == "POST":
@@ -164,10 +243,16 @@ def create_member(request):
     return redirect("members:member_list")
 
 #Qrcode
+@login_required
 def member_qr(request, uuid):
 
     if not uuid:
         return HttpResponse(status=404)
+
+    if not _member_management_allowed(request):
+        raise PermissionDenied
+
+    get_object_or_404(Member, qr_code=uuid, gym=request.gym)
     
     qr = qrcode.make(uuid)
 
@@ -183,7 +268,7 @@ def member_qr(request, uuid):
 
 @login_required
 def edit_member(request, member_id):
-    if request.role not in ["admin", "manager"]:
+    if not _member_management_allowed(request):
         raise PermissionDenied
 
     member = get_object_or_404(Member, id=member_id, gym=request.gym)
@@ -225,12 +310,16 @@ def edit_member(request, member_id):
 #DETAIL D'UN MEMBRE
 @login_required
 def member_detail(request, member_id):
+    if not _member_management_allowed(request):
+        raise PermissionDenied
+
     member = get_object_or_404(
         Member.objects.select_related("user"),
         id=member_id,
         gym=request.gym
     )
     subscription = member.active_subscription
+    organization = request.gym.organization if request.gym else None
     
     payments = Payment.objects.filter(
         member=member, gym = request.gym
@@ -241,13 +330,16 @@ def member_detail(request, member_id):
     for p in payments:
         payments_data.append({
             "date": p.created_at.strftime("%d/%m/%Y"),
-            "amount": float(p.amount),
+            "amount": float(p.amount_cdf),
+            "original_amount": float(p.amount),
+            "original_currency": p.currency,
             "method": p.method,
             "status": p.status
         })
         
     access_logs = AccessLog.objects.filter(
-        member=member
+        member=member,
+        gym=request.gym,
     ).order_by("-check_in_time")[:5]
 
     access_data = []
@@ -262,6 +354,9 @@ def member_detail(request, member_id):
     data = {
         "id": member.id,
         "photo_url": member.photo.url if member.photo else None,
+        "organization_name": organization.name if organization else "",
+        "organization_logo_url": organization.logo.url if organization and organization.logo else "",
+        "gym_name": request.gym.name if request.gym else "",
         "username": member.user.username if member.user else "Non défini",
         "first_name": member.first_name,
         "last_name": member.last_name,
@@ -289,7 +384,7 @@ def member_detail(request, member_id):
 @login_required
 def delete_member(request, member_id):
 
-    if request.role != "admin":
+    if not has_role(request, {"owner"}):
         raise PermissionDenied
 
     member = get_object_or_404(
@@ -307,7 +402,7 @@ def delete_member(request, member_id):
 
 @login_required
 def suspend_member(request, member_id):
-    if request.role not in ["admin", "manager"]:
+    if not has_role(request, MEMBER_ADMIN_ROLES):
         raise PermissionDenied
 
     member = get_object_or_404(Member, id=member_id, gym=request.gym)
@@ -321,7 +416,6 @@ def suspend_member(request, member_id):
     if active_sub and not active_sub.is_paused:
         active_sub.is_paused = True
         active_sub.paused_at = timezone.now()
-        active_sub.pause_reason = "Suspension manuelle"
         active_sub.save()
 
     messages.warning(request, f"{member.first_name} {member.last_name} a été suspendu. Son abonnement est en pause.")
@@ -330,7 +424,7 @@ def suspend_member(request, member_id):
 
 @login_required
 def reactivate_member(request, member_id):
-    if request.role not in ["admin", "manager"]:
+    if not has_role(request, MEMBER_ADMIN_ROLES):
         raise PermissionDenied
 
     member = get_object_or_404(Member, id=member_id, gym=request.gym)

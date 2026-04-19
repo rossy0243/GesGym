@@ -11,7 +11,7 @@
                 <div class="card-body">
                     <p>Êtes-vous sûr de vouloir désactiver le produit suivant ?</p>
                     <p><strong>Nom:</strong> {{ product.name }}</p>
-                    <p><strong>Prix:</strong> {{ product.price }} €</p>
+                    <p><strong>Prix:</strong> {{ product.price }} USD</p>
                     <p><strong>Stock:</strong> {{ product.quantity }}</p>
                     
                     <div class="alert alert-warning">
@@ -22,7 +22,7 @@
                     <form method="post">
                         {% csrf_token %}
                         <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                            <a href="{% url 'products:detail' product.gym.id product.id %}" class="btn btn-secondary">
+                            <a href="{% url 'products:detail' product.id %}" class="btn btn-secondary">
                                 Annuler
                             </a>
                             <button type="submit" class="btn btn-danger">

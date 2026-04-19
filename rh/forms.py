@@ -17,9 +17,15 @@ class EmployeeForm(forms.ModelForm):
             'name': 'Nom',
             'role': 'Rôle',
             'phone': 'Téléphone',
-            'daily_salary': 'Salaire journalier (€)',
+            'daily_salary': 'Salaire journalier (CDF)',
             'is_active': 'Actif',
         }
+
+    def clean_daily_salary(self):
+        daily_salary = self.cleaned_data.get('daily_salary')
+        if daily_salary is not None and daily_salary < 0:
+            raise forms.ValidationError("Le salaire journalier ne peut pas etre negatif.")
+        return daily_salary
 
 class AttendanceForm(forms.ModelForm):
     class Meta:

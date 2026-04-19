@@ -13,7 +13,7 @@
                         <h5>Employé: {{ employee.name }}</h5>
                         <p><strong>Mois:</strong> {{ month_name }} {{ year }}</p>
                         <p><strong>Jours présents:</strong> {{ present_days }}</p>
-                        <p><strong>Salaire à payer:</strong> {{ salary }} €</p>
+                        <p><strong>Salaire à payer:</strong> {{ salary }} CDF</p>
                     </div>
                     
                     <form method="post">
@@ -37,7 +37,7 @@
                         {% endfor %}
                         
                         <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                            <a href="{% url 'rh:payroll_dashboard' employee.gym.id %}" class="btn btn-secondary">
+                            <a href="{% url 'rh:payroll_dashboard' %}" class="btn btn-secondary">
                                 Annuler
                             </a>
                             <button type="submit" class="btn btn-success">

@@ -1,5 +1,6 @@
 #rh/models.py
 from django.db import models
+from django.core.exceptions import ValidationError
 from django.utils import timezone
 from organizations.models import Gym
 from decimal import Decimal
@@ -45,7 +46,17 @@ class Employee(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.name} - {self.role}"
+        gym_name = self.gym.name if self.gym_id else "Sans gym"
+        return f"{self.name} - {self.get_role_display()} - {gym_name}"
+
+    def clean(self):
+        super().clean()
+        if self.daily_salary is not None and self.daily_salary < 0:
+            raise ValidationError({"daily_salary": "Le salaire journalier ne peut pas etre negatif."})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
     
     def calculate_monthly_salary(self, year, month):
         """Calcule le salaire mensuel basé sur les présences"""
@@ -158,6 +169,17 @@ class Attendance(models.Model):
     def __str__(self):
         return f"{self.employee} - {self.date} - {self.get_status_display()}"
 
+    def clean(self):
+        super().clean()
+        if self.employee_id and not self.gym_id:
+            self.gym = self.employee.gym
+        if self.employee_id and self.gym_id and self.employee.gym_id != self.gym_id:
+            raise ValidationError({"employee": "L'employe doit appartenir au gym de la presence."})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
 
 class PaymentRecord(models.Model):
     """
@@ -205,6 +227,14 @@ class PaymentRecord(models.Model):
     notes = models.TextField(blank=True)
     
     is_paid = models.BooleanField(default=True)
+
+    pos_payment = models.OneToOneField(
+        "pos.Payment",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="salary_record"
+    )
     
     created_at = models.DateTimeField(auto_now_add=True)
     
@@ -213,7 +243,29 @@ class PaymentRecord(models.Model):
         ordering = ['-year', '-month']
     
     def __str__(self):
-        return f"{self.employee.name} - {self.month}/{self.year} - {self.amount}€"
+        return f"{self.employee.name} - {self.month}/{self.year} - {self.amount} CDF"
+
+    def clean(self):
+        super().clean()
+        if self.employee_id and not self.gym_id:
+            self.gym = self.employee.gym
+        if self.employee_id and self.gym_id and self.employee.gym_id != self.gym_id:
+            raise ValidationError({"employee": "L'employe doit appartenir au gym du paiement."})
+        if self.month is not None and (self.month < 1 or self.month > 12):
+            raise ValidationError({"month": "Le mois doit etre compris entre 1 et 12."})
+        if self.amount is not None and self.amount < 0:
+            raise ValidationError({"amount": "Le montant ne peut pas etre negatif."})
+        if self.present_days is not None and self.present_days < 0:
+            raise ValidationError({"present_days": "Le nombre de jours presents ne peut pas etre negatif."})
+        if self.pos_payment_id:
+            if self.pos_payment.gym_id != self.gym_id:
+                raise ValidationError({"pos_payment": "Le paiement POS doit appartenir au meme gym."})
+            if self.pos_payment.type != "out" or self.pos_payment.category != "salary":
+                raise ValidationError({"pos_payment": "Le paiement POS doit etre une sortie de type salaire."})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
     
     def get_month_display(self):
         """Retourne le nom du mois"""

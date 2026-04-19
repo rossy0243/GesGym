@@ -6,10 +6,10 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1>Tableau de bord des salaires - {{ gym.name }}</h1>
         <div>
-            <a href="{% url 'rh:attendance_bulk' gym.id %}" class="btn btn-primary">
+            <a href="{% url 'rh:attendance_bulk' %}" class="btn btn-primary">
                 <i class="fas fa-check-square"></i> Enregistrer présences
             </a>
-            <a href="{% url 'rh:list' gym.id %}" class="btn btn-secondary">
+            <a href="{% url 'rh:list' %}" class="btn btn-secondary">
                 <i class="fas fa-users"></i> Employés
             </a>
         </div>
@@ -47,7 +47,42 @@
     <!-- Résumé -->
     <div class="alert alert-info">
         <h5>Résumé pour {{ month_name }} {{ year }}</h5>
-        <p class="mb-0">Total des salaires à payer: <strong>{{ total_salaries }} €</strong></p>
+        <p class="mb-0">Total des salaires à payer: <strong>{{ total_salaries }} CDF</strong></p>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="text-muted small">Employes actifs</div>
+                    <h3 class="mb-0">{{ active_employees }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="text-muted small">Masse salariale</div>
+                    <h3 class="mb-0">{{ total_salaries|floatformat:0 }} CDF</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="text-muted small">Deja paye</div>
+                    <h3 class="mb-0">{{ paid_salaries|floatformat:0 }} CDF</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="text-muted small">Reste a payer</div>
+                    <h3 class="mb-0">{{ pending_salaries|floatformat:0 }} CDF</h3>
+                </div>
+            </div>
+        </div>
     </div>
     
     <!-- Tableau des salaires -->
@@ -75,8 +110,8 @@
                             <td>{{ data.employee.name }}</td>
                             <td>{{ data.employee.get_role_display }}</td>
                             <td>{{ data.present_days }}</td>
-                            <td>{{ data.employee.daily_salary }} €</td>
-                            <td><strong>{{ data.salary }} €</strong></td>
+                            <td>{{ data.employee.daily_salary }} CDF</td>
+                            <td><strong>{{ data.salary }} CDF</strong></td>
                             <td>
                                 {% if data.is_paid %}
                                 <span class="badge bg-success">Payé</span>
@@ -86,12 +121,12 @@
                             </td>
                             <td>
                                 {% if not data.is_paid and data.salary > 0 %}
-                                <a href="{% url 'rh:process_payment' gym.id data.employee.id year month %}" 
+                                <a href="{% url 'rh:process_payment' data.employee.id year month %}"
                                    class="btn btn-success btn-sm">
                                     <i class="fas fa-money-bill"></i> Payer
                                 </a>
                                 {% endif %}
-                                <a href="{% url 'rh:detail' gym.id data.employee.id %}?year={{ year }}&month={{ month }}" 
+                                <a href="{% url 'rh:detail' data.employee.id %}?year={{ year }}&month={{ month }}"
                                    class="btn btn-info btn-sm">
                                     <i class="fas fa-eye"></i> Détail
                                 </a>

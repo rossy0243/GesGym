@@ -15,13 +15,65 @@
         <div class="page-header-right-items">
             <div class="d-flex gap-2">
                 
-                <button class="btn btn-sm btn-primary" type="button" href="javascript:void(0)" data-bs-toggle="modal" data-bs-target="#addFormuleModal" >
+                <button class="btn btn-sm btn-primary" id="newFormuleBtn" type="button" data-bs-toggle="modal" data-bs-target="#addFormuleModal" >
                     <span class="material-icons me-2" style="font-size: 18px;">add</span>Nouvelle formule
                 </button>
             </div>
         </div>
     </div>
 </div>
+
+<div class="row g-3 mx-2 mb-4">
+    <div class="col-lg-3 col-md-6">
+        <div class="card stretch stretch-full">
+            <div class="card-body">
+                <div class="fs-12 text-muted">Formules actives</div>
+                <div class="fs-3 fw-bold">{{ active_plans_count }}</div>
+                <div class="fs-12 text-muted">{{ plans|length }} formule{{ plans|length|pluralize }} au total</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="card stretch stretch-full">
+            <div class="card-body">
+                <div class="fs-12 text-muted">Abonnements actifs</div>
+                <div class="fs-3 fw-bold">{{ active_subscriptions_count }}</div>
+                <div class="fs-12 text-muted">Membres couverts aujourd'hui</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="card stretch stretch-full">
+            <div class="card-body">
+                <div class="fs-12 text-muted">Echeances 7 jours</div>
+                <div class="fs-3 fw-bold">{{ expiring_7_count }}</div>
+                <div class="fs-12 text-muted">{{ expiring_30_count }} dans les 30 jours</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="card stretch stretch-full">
+            <div class="card-body">
+                <div class="fs-12 text-muted">Renouvellement auto</div>
+                <div class="fs-3 fw-bold">{{ auto_renew_count }}</div>
+                <div class="fs-12 text-muted">{{ expired_active_count }} abonnement{{ expired_active_count|pluralize }} actif{{ expired_active_count|pluralize }} expire{{ expired_active_count|pluralize }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<ul class="nav nav-tabs mx-2 mb-3" id="subscriptionTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="formules-tab" data-bs-toggle="tab" data-bs-target="#formules" type="button" role="tab">
+            Formules
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="renouvellements-tab" data-bs-toggle="tab" data-bs-target="#renouvellements" type="button" role="tab">
+            Renouvellements
+        </button>
+    </li>
+</ul>
 
 <!-- Contenu des onglets -->
 <div class="tab-content" id="subscriptionTabsContent">
@@ -70,11 +122,16 @@
 
 
                             <h2 class="fw-bold mb-3">
-                            {{ plan.price }} CDF
+                            {{ plan.price }} USD
                             <small class="fs-6 fw-normal text-muted">
                             / {{ plan.duration_days }} j
                             </small>
                             </h2>
+
+                            <div class="d-flex justify-content-between align-items-center bg-light rounded-3 px-3 py-2 mb-3">
+                                <span class="text-muted">Membres actifs</span>
+                                <strong>{{ plan.active_members_count }}</strong>
+                            </div>
 
 
                             {% if plan.description %}
@@ -111,9 +168,7 @@
 
                             <a href="#" 
                             class="btn btn-sm btn-outline-primary btn-edit-plan"
-                            data-plan-id="{{ plan.id }}"
-                            data-bs-toggle="modal" 
-                            data-bs-target="#addFormuleModal">
+                            data-plan-id="{{ plan.id }}">
                                 <span class="material-icons me-1" style="font-size:16px;">edit</span>
                                 Éditer
                             </a>
@@ -272,6 +327,112 @@
                         <h5 class="card-title">Renouvellements automatiques</h5>
                     </div>
                     <div class="card-body">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Membres en renouvellement auto</span>
+                            <span class="fw-bold">{{ auto_renew_count }} / {{ active_subscriptions_count }}</span>
+                        </div>
+                        <div class="progress mb-3" style="height: 8px;">
+                            {% widthratio auto_renew_count active_subscriptions_count 100 as auto_renew_percent %}
+                            <div class="progress-bar bg-success" style="width: {{ auto_renew_percent|default:0 }}%"></div>
+                        </div>
+                        <div class="alert-card p-3 d-flex align-items-center">
+                            <span class="material-icons text-primary me-2">info</span>
+                            {{ expiring_30_count }} abonnement{{ expiring_30_count|pluralize }} arrive{{ expiring_30_count|pluralize }} a echeance dans les 30 prochains jours.
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title">Echeances a venir</h5>
+                    </div>
+                    <div class="card-body">
+                        <ul class="list-group">
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span><span class="material-icons text-warning me-2" style="font-size: 18px;">today</span>Dans 7 jours</span>
+                                <span class="badge bg-warning rounded-pill">{{ expiring_7_count }} abonnement{{ expiring_7_count|pluralize }}</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span><span class="material-icons text-primary me-2" style="font-size: 18px;">calendar_month</span>Dans 30 jours</span>
+                                <span class="badge bg-primary rounded-pill">{{ expiring_30_count }} abonnement{{ expiring_30_count|pluralize }}</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span><span class="material-icons text-danger me-2" style="font-size: 18px;">warning</span>Actifs deja expires</span>
+                                <span class="badge bg-danger rounded-pill">{{ expired_active_count }}</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mx-2 mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title">Prochains renouvellements</h5>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Membre</th>
+                                        <th>Formule actuelle</th>
+                                        <th>Date echeance</th>
+                                        <th>Montant</th>
+                                        <th>Mode</th>
+                                        <th>Statut</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for subscription in upcoming_renewals %}
+                                    <tr>
+                                        <td>{{ subscription.member.first_name }} {{ subscription.member.last_name }}</td>
+                                        <td>{{ subscription.plan.name|default:"Sans formule" }}</td>
+                                        <td>{{ subscription.end_date|date:"d/m/Y" }}</td>
+                                        <td>{% if subscription.plan %}{{ subscription.plan.price|floatformat:0 }} USD{% else %}-{% endif %}</td>
+                                        <td>
+                                            {% if subscription.auto_renew %}
+                                                <span class="badge bg-soft-success text-success">Auto</span>
+                                            {% else %}
+                                                <span class="badge bg-soft-warning text-warning">Manuel</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if subscription.is_paused %}
+                                                <span class="badge bg-warning text-dark">En pause</span>
+                                            {% else %}
+                                                <span class="badge bg-info">A venir</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% empty %}
+                                    <tr>
+                                        <td colspan="6" class="text-center text-muted py-4">Aucun renouvellement a venir.</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% comment %}
+    <!-- Ancien mock conserve comme reference, mais non rendu pour eviter les donnees fictives en V1. -->
+    <!-- Onglet RENOUVELLEMENTS mock conserve hors navigation -->
+    <div class="tab-pane fade" id="renouvellements-mock" role="tabpanel">
+        <div class="row mx-2">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title">Renouvellements automatiques</h5>
+                    </div>
+                    <div class="card-body">
                         <div class="mb-4">
                             <div class="d-flex justify-content-between mb-2">
                                 <span>Abonnés avec renouvellement auto</span>
@@ -415,6 +576,8 @@
     </div>
 </div>
 
+{% endcomment %}
+
 <!-- MODAL Nouvelle / Modifier formule -->
 <div class="modal fade" id="addFormuleModal" tabindex="-1">
     <div class="modal-dialog">
@@ -437,7 +600,7 @@
                     </div>
                     <div class="row">
                         <div class="col-md-6 mb-3">
-                            <label class="form-label">Prix (CDF)</label>
+                            <label class="form-label">Prix (USD)</label>
                             {{ form.price|default:"" }}
                         </div>
                     </div>
@@ -555,22 +718,39 @@
 
 {% block extra_js %}
 <script>
+const createPlanUrl = "{% url 'subscriptions:create_subscription_plan' %}";
+const formuleForm = document.getElementById('newFormuleForm');
+const formuleModalEl = document.getElementById('addFormuleModal');
+const formuleModalTitle = document.getElementById('addFormuleModalTitle');
+const formuleSubmitBtn = document.getElementById('addFormuleBtn');
+const formuleModal = bootstrap.Modal.getOrCreateInstance(formuleModalEl);
+
+document.getElementById('newFormuleBtn')?.addEventListener('click', function() {
+    formuleModalTitle.textContent = "Creer une nouvelle formule";
+    formuleSubmitBtn.textContent = "Creer la formule";
+    formuleForm.action = createPlanUrl;
+    formuleForm.reset();
+    document.getElementById('formuleId').value = "";
+    document.getElementById('id_is_active').checked = true;
+});
 // === OUVRIR LE MODAL D'ÉDITION ===
 document.querySelectorAll('.btn-edit-plan').forEach(btn => {
     btn.addEventListener('click', function(e) {
         e.preventDefault();
         const planId = this.dataset.planId;
+        const editPlanUrl = `/subscriptions/subscription-plans/edit/${planId}/`;
 
-        const modal = new bootstrap.Modal(document.getElementById('addFormuleModal'));
-        modal.show();
+        formuleModal.show();
 
         // Charger les données du plan
-        fetch(`/subscriptions/subscription-plans/edit/${planId}/`)
+        fetch(editPlanUrl)
             .then(response => response.json())
             .then(data => {
                 // Remplir le formulaire
                 document.getElementById('addFormuleModalTitle').textContent = "Modifier la formule";
                 document.getElementById('addFormuleBtn').textContent = "Enregistrer les modifications";
+                formuleForm.action = editPlanUrl;
+                document.getElementById('formuleId').value = data.id || "";
 
                 // Remplir les champs
                 document.getElementById('id_name').value = data.name || "";
@@ -604,18 +784,14 @@ document.addEventListener('submit', function(e) {
                 'X-Requested-With': 'XMLHttpRequest'
             }
         })
-        .then(response => {
-            if (!response.ok) {
-                return response.text().then(text => {
-                    throw new Error(text.substring(0, 200));
-                });
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (data.success) {
+        .then(response => response.json().then(data => ({
+            ok: response.ok,
+            data: data
+        })))
+        .then(({ ok, data }) => {
+            if (ok && data.success) {
                 alert(data.message || "Modifié avec succès !");
-                bootstrap.Modal.getInstance(document.getElementById('addFormuleModal')).hide();
+                formuleModal.hide();
                 location.reload();
             } else {
                 let errorMsg = "Erreurs :\n";
@@ -634,6 +810,15 @@ document.addEventListener('submit', function(e) {
             alert("Erreur lors de la sauvegarde :\n" + error.message);
         });
     }
+});
+
+formuleModalEl?.addEventListener('hidden.bs.modal', function() {
+    if (document.querySelector('.modal.show')) return;
+
+    document.body.classList.remove('modal-open');
+    document.body.style.removeProperty('overflow');
+    document.body.style.removeProperty('padding-right');
+    document.querySelectorAll('.modal-backdrop').forEach(backdrop => backdrop.remove());
 });
 </script>
 

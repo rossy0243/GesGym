@@ -1,6 +1,7 @@
-from datetime import timedelta, timezone
+from datetime import timedelta
 
 from django.db import models
+from django.utils import timezone
 from members.models import Member
 from organizations.models import Gym
 from django.core.exceptions import ValidationError
@@ -91,18 +92,37 @@ class MemberSubscription(models.Model):
         - un seul abonnement actif par membre
         """
 
-        if self.start_date >= self.end_date:
+        if self.member_id and not self.gym_id:
+            self.gym = self.member.gym
+
+        if self.member_id and self.gym_id and self.member.gym_id != self.gym_id:
+            raise ValidationError("Le membre n'appartient pas au gym de cet abonnement.")
+
+        if self.plan_id and self.gym_id and self.plan.gym_id != self.gym_id:
+            raise ValidationError("La formule n'appartient pas au gym de cet abonnement.")
+
+        if self.member_id and self.plan_id and self.member.gym_id != self.plan.gym_id:
+            raise ValidationError("Le membre et la formule doivent appartenir au meme gym.")
+
+        if self.start_date and self.end_date and self.start_date >= self.end_date:
             raise ValidationError("La date de fin doit être après la date de début.")
 
-        if self.is_active:
+        if self.is_active and self.member_id and self.gym_id and not getattr(self, "_skip_active_collision_validation", False):
             exists = MemberSubscription.objects.filter(
                 member=self.member,
+                gym=self.gym,
                 is_active=True
             ).exclude(pk=self.pk).exists()
 
             if exists:
                 raise ValidationError("Ce membre a déjà un abonnement actif.")
             
+    def save(self, *args, **kwargs):
+        if self.member_id and not self.gym_id:
+            self.gym = self.member.gym
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
     def resume_subscription(self):
         """Reprend l'abonnement après une pause"""
         if self.is_paused and self.paused_at:

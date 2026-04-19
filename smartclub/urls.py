@@ -19,9 +19,13 @@ from django.contrib import admin
 from django.urls import include, path
 from django.conf import settings
 from django.conf.urls.static import static
+from django.views.generic import RedirectView
+from website.views import landing
 
 
 urlpatterns = [
+    path('', landing, name='landing'),
+    path('login/', RedirectView.as_view(pattern_name='compte:login', permanent=False), name='login'),
     path('admin/', admin.site.urls),
     path('compte/', include('compte.urls')),
     path('members/', include('members.urls')),
@@ -32,7 +36,7 @@ urlpatterns = [
     path("machines/", include("machines.urls")),
     path('rh/', include('rh.urls')),
     path('products/', include('products.urls')),
-    path('', include('core.urls')),  # dashboard ici
+    path('', include('core.urls')),
 ]
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

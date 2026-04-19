@@ -13,10 +13,22 @@ class ProductForm(forms.ModelForm):
         }
         labels = {
             'name': 'Nom',
-            'price': 'Prix (€)',
+            'price': 'Prix (USD)',
             'quantity': 'Quantité initiale',
             'is_active': 'Actif',
         }
+
+    def clean_price(self):
+        price = self.cleaned_data.get('price')
+        if price is not None and price < 0:
+            raise forms.ValidationError("Le prix ne peut pas etre negatif.")
+        return price
+
+    def clean_quantity(self):
+        quantity = self.cleaned_data.get('quantity')
+        if quantity is not None and quantity < 0:
+            raise forms.ValidationError("La quantite ne peut pas etre negative.")
+        return quantity
 
 class StockMovementForm(forms.ModelForm):
     class Meta:
@@ -32,3 +44,9 @@ class StockMovementForm(forms.ModelForm):
             'movement_type': 'Type de mouvement',
             'reason': 'Raison',
         }
+
+    def clean_quantity(self):
+        quantity = self.cleaned_data.get('quantity')
+        if quantity is not None and quantity <= 0:
+            raise forms.ValidationError("La quantite doit etre superieure a zero.")
+        return quantity

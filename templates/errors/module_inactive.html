@@ -1,13 +1,19 @@
-<!-- templates/errors/module_inactive.html -->
 {% extends 'base.html' %}
 
 {% block content %}
 <div class="container mt-5">
     <div class="alert alert-warning">
-        <h4>Module désactivé</h4>
-        <p>Le module <strong>{{ module_code }}</strong> n'est pas actif pour la salle <strong>{{ gym.name }}</strong>.</p>
-        <p>Veuillez contacter l'administrateur de l'organisation.</p>
-        <a href="{% url 'dashboard' gym.id %}" class="btn btn-primary">Retour au dashboard</a>
+        <h4>Acces indisponible</h4>
+        {% if error %}
+        <p>{{ error }}</p>
+        {% else %}
+        <p>
+            Le module <strong>{{ module_code }}</strong> n'est pas actif{% if gym %}
+            pour la salle <strong>{{ gym.name }}</strong>{% endif %}.
+        </p>
+        <p>Veuillez contacter le proprietaire de l'organisation.</p>
+        {% endif %}
+        <a href="{% url 'core:dashboard_redirect' %}" class="btn btn-primary">Retour a l'accueil</a>
     </div>
 </div>
 {% endblock %}

@@ -1,6 +1,6 @@
 # subscriptions/urls.py
 from django.urls import path
-from .views import create_plan, create_plan, create_subscription, delete_plan, delete_plan, edit_plan, plan_list
+from .views import create_plan, create_subscription, delete_plan, edit_plan, plan_list
 
 app_name = 'subscriptions'
 

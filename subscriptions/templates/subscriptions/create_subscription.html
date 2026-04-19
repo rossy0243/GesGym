@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+
+{% block page_titre %}Nouvel abonnement{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4">
+    <div class="page-header-left d-flex align-items-center">
+        <div class="page-header-title">
+            <h5 class="m-b-10">Nouvel abonnement membre</h5>
+        </div>
+    </div>
+</div>
+
+<div class="row mx-2">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title">Attribuer une formule</h5>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    {{ form.non_field_errors }}
+
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ form.member.id_for_label }}">Membre</label>
+                        {{ form.member }}
+                        {{ form.member.errors }}
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ form.plan.id_for_label }}">Formule</label>
+                        {{ form.plan }}
+                        {{ form.plan.errors }}
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ form.start_date.id_for_label }}">Date de debut</label>
+                        {{ form.start_date }}
+                        {{ form.start_date.errors }}
+                    </div>
+
+                    <div class="form-check mb-4">
+                        {{ form.auto_renew }}
+                        <label class="form-check-label" for="{{ form.auto_renew.id_for_label }}">Renouvellement automatique</label>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">Enregistrer</button>
+                        <a href="{% url 'subscriptions:subscription_plan_list' %}" class="btn btn-light">Annuler</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

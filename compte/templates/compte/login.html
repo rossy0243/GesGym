@@ -1,33 +1,39 @@
 {% load static %}
 <!DOCTYPE html>
 <html lang="fr">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SmartClub Pro · Connexion</title>
   <!-- Tailwind CSS + Google Font Inter + Font Awesome + SweetAlert2 -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap"
+    rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-  <script src="{% static 'js/script_connexion.js' %}"></script>
   <style>
-    body { font-family: 'Inter', sans-serif; background-color: #f9fafb; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f9fafb;
+    }
   </style>
 </head>
+
 <body class="min-h-screen flex items-center justify-center p-4">
 
   <div class="w-full max-w-md">
     <!-- Carte principale -->
     <div class="bg-white rounded-3xl shadow-xl p-6 sm:p-8 relative mt-8">
-      
+
       <!-- Logo texte : SmartClub orange / Pro bleu (plus de logo SVG) -->
       <div class="text-center mb-2">
         <h1 class="text-3xl font-extrabold">
           <span class="text-[#FF8C00]">SmartClub</span>
           <span class="text-[#004e92]">Pro</span>
         </h1>
-        
+
       </div>
 
       <!-- Conteneur des formulaires (un seul visible à la fois) -->
@@ -35,68 +41,82 @@
         <!-- Formulaire de connexion (visible par défaut) -->
         <div id="login-form" class="form-step">
           <h2 class="text-xl font-semibold text-center mb-4">Connexion</h2>
-          <form action="{% url 'compte:login' %}" method="post">
-            {% csrf_token %}
-            {% if form.errors %}
-              <div class="mb-4 p-3 bg-red-100 text-red-700 rounded-xl text-sm">
-                {% for field in form %}
-                  {% for error in field.errors %}
-                    <p>{{ error }}</p>
-                  {% endfor %}
-                {% endfor %}
-                {% for error in form.non_field_errors %}
-                  <p>{{ error }}</p>
-                {% endfor %}
-              </div>
-            {% endif %}
-          <div class="space-y-4">
-            <div>
-              {{ form.username }}
-            </div>
-            <div>
-              {{ form.password }}
-            </div>
-            <div class="flex items-center justify-between text-sm">
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" class="rounded border-gray-300 text-[#004e92] focus:ring-[#004e92]" checked>
-                <span class="text-gray-600">Se souvenir de moi</span>
-              </label>
-              <a href="#" id="forgot-password-link" class="text-[#004e92] hover:underline">Mot de passe oublié ?</a>
-            </div>
-            <button id="login-btn" type="submit" class="w-full bg-[#004e92] hover:bg-[#003a6e] text-white font-semibold py-3 rounded-xl transition">
-              Se connecter
-            </button>
-          </div>
-          </form>
+            <!-- Supprime cette balise form mal placée -->
+  <form action="{% url 'compte:login' %}" method="post" id="login-form-element">
+    {% csrf_token %}
+    
+    {% if form.errors %}
+      <div class="mb-4 p-3 bg-red-100 text-red-700 rounded-xl text-sm">
+        {% for field in form %}
+          {% for error in field.errors %}
+            <p>{{ error }}</p>
+          {% endfor %}
+        {% endfor %}
+        {% for error in form.non_field_errors %}
+          <p>{{ error }}</p>
+        {% endfor %}
+      </div>
+    {% endif %}
+    
+    <div class="space-y-4">
+      <div>
+        {{ form.username }}
+      </div>
+      <div>
+        {{ form.password }}
+      </div>
+      <div class="flex items-center justify-between text-sm">
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" class="rounded border-gray-300 text-[#004e92] focus:ring-[#004e92]" checked>
+          <span class="text-gray-600">Se souvenir de moi</span>
+        </label>
+        <a href="#" id="forgot-password-link" class="text-[#004e92] hover:underline">Mot de passe oublié ?</a>
+      </div>
+      <button id="login-btn" type="submit" class="w-full bg-[#004e92] hover:bg-[#003a6e] text-white font-semibold py-3 rounded-xl transition">
+        Se connecter
+      </button>
+    </div>
+  </form>
 
           <!-- Séparateur "ou" -->
           <div class="relative my-6">
-            <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-gray-300"></div></div>
+            <div class="absolute inset-0 flex items-center">
+              <div class="w-full border-t border-gray-300"></div>
+            </div>
             <div class="relative flex justify-center text-sm"><span class="px-2 bg-white text-gray-400">ou</span></div>
           </div>
 
           <!-- Icônes sociales (simulées) -->
           <div class="flex gap-3 justify-center">
-            <a href="#" class="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-600 hover:bg-gray-200 transition"><i class="fab fa-facebook-f"></i></a>
-            <a href="#" class="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-600 hover:bg-gray-200 transition"><i class="fab fa-twitter"></i></a>
-            <a href="#" class="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-600 hover:bg-gray-200 transition"><i class="fab fa-github"></i></a>
+            <a href="#"
+              class="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-600 hover:bg-gray-200 transition"><i
+                class="fab fa-facebook-f"></i></a>
+            <a href="#"
+              class="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-600 hover:bg-gray-200 transition"><i
+                class="fab fa-twitter"></i></a>
+            <a href="#"
+              class="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-600 hover:bg-gray-200 transition"><i
+                class="fab fa-github"></i></a>
           </div>
 
-          
+
         </div>
 
         <!-- Formulaire 2FA (caché initialement) -->
         <div id="2fa-form" class="form-step hidden">
           <h2 class="text-xl font-semibold text-center mb-4">Double authentification</h2>
-          <p class="text-sm text-gray-500 text-center mb-4">Saisissez le code à 6 chiffres généré par Google Authenticator.</p>
+          <p class="text-sm text-gray-500 text-center mb-4">Saisissez le code à 6 chiffres généré par Google
+            Authenticator.</p>
           <div class="space-y-4">
             <input type="text" id="2fa-code" placeholder="Code à 6 chiffres" maxlength="6" inputmode="numeric"
               class="w-full px-4 py-3 border border-gray-300 rounded-xl text-center text-lg tracking-widest focus:outline-none focus:ring-2 focus:ring-[#004e92]">
-            <button id="verify-2fa-btn" class="w-full bg-[#004e92] hover:bg-[#003a6e] text-white font-semibold py-3 rounded-xl transition">
+            <button id="verify-2fa-btn"
+              class="w-full bg-[#004e92] hover:bg-[#003a6e] text-white font-semibold py-3 rounded-xl transition">
               Vérifier
             </button>
             <p class="text-center">
-              <a href="#" id="back-to-login-from-2fa" class="text-sm text-gray-500 hover:text-gray-700">← Retour à la connexion</a>
+              <a href="#" id="back-to-login-from-2fa" class="text-sm text-gray-500 hover:text-gray-700">← Retour à la
+                connexion</a>
             </p>
           </div>
         </div>
@@ -108,11 +128,13 @@
           <div class="space-y-4">
             <input type="email" id="forgot-identifier" placeholder="Email" value="test@demo.com"
               class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#004e92]">
-            <button id="send-reset-code-btn" class="w-full bg-[#004e92] hover:bg-[#003a6e] text-white font-semibold py-3 rounded-xl transition">
+            <button id="send-reset-code-btn"
+              class="w-full bg-[#004e92] hover:bg-[#003a6e] text-white font-semibold py-3 rounded-xl transition">
               Envoyer le code
             </button>
             <p class="text-center">
-              <a href="#" id="back-to-login-from-forgot" class="text-sm text-gray-500 hover:text-gray-700">← Retour à la connexion</a>
+              <a href="#" id="back-to-login-from-forgot" class="text-sm text-gray-500 hover:text-gray-700">← Retour à la
+                connexion</a>
             </p>
           </div>
           <div id="forgot-message" class="text-sm text-center mt-2"></div>
@@ -129,11 +151,13 @@
               class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#004e92]">
             <input type="password" id="confirm-password" placeholder="Confirmer le mot de passe"
               class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#004e92]">
-            <button id="reset-password-btn" class="w-full bg-[#004e92] hover:bg-[#003a6e] text-white font-semibold py-3 rounded-xl transition">
+            <button id="reset-password-btn"
+              class="w-full bg-[#004e92] hover:bg-[#003a6e] text-white font-semibold py-3 rounded-xl transition">
               Réinitialiser
             </button>
             <p class="text-center">
-              <a href="#" id="back-to-login-from-reset" class="text-sm text-gray-500 hover:text-gray-700">← Retour à la connexion</a>
+              <a href="#" id="back-to-login-from-reset" class="text-sm text-gray-500 hover:text-gray-700">← Retour à la
+                connexion</a>
             </p>
           </div>
           <div id="reset-message" class="text-sm text-center mt-2"></div>
@@ -142,4 +166,5 @@
     </div>
   </div>
 </body>
+
 </html>

@@ -15,6 +15,17 @@
     <div class="page-header-right ms-auto">
         <div class="page-header-right-items">
             <div class="d-flex align-items-center gap-2">
+                <button type="button" class="btn btn-light" data-bs-toggle="modal" data-bs-target="#preRegistrationLinkModal">
+                    <span class="material-icons me-2" style="font-size:18px;">link</span>
+                    <span>Lien de preinscription</span>
+                </button>
+                <a href="{% url 'members:pre_registration_list' %}" class="btn btn-light">
+                    <span class="material-icons me-2" style="font-size:18px;">how_to_reg</span>
+                    <span>Preinscriptions</span>
+                    {% if pending_pre_registrations_count %}
+                        <span class="badge bg-warning text-dark ms-1">{{ pending_pre_registrations_count }}</span>
+                    {% endif %}
+                </a>
                 <a href="javascript:void(0);" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addMemberModal">
                     <span class="material-icons me-2" style="font-size:18px;">person_add</span>
                     <span>Nouveau Membre</span>
@@ -24,6 +35,62 @@
     </div>
 </div>
 <!-- [ page-header ] end -->
+
+<div class="modal fade" id="preRegistrationLinkModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <span class="material-icons me-2">link</span>
+                    Lien de preinscription
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted">
+                    Ce lien est propre a {{ request.gym.name }}. Les demandes non confirmees
+                    sont supprimees automatiquement apres 7 jours.
+                </p>
+                <label class="form-label">Lien public</label>
+                <div class="input-group">
+                    <input type="text" id="preRegistrationUrl" class="form-control" value="{{ pre_registration_url }}" readonly>
+                    <button class="btn btn-primary" type="button" onclick="copyPreRegistrationLink()">
+                        Copier
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.members-list-card,
+.members-list-card .custom-card-action {
+    overflow: visible;
+}
+
+.members-list-card .members-list-table-wrapper {
+    position: relative;
+}
+
+.members-list-card .member-action-dropdown .dropdown-menu {
+    z-index: 1085;
+    min-width: 10.5rem;
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    box-shadow: 0 16px 36px rgba(15, 23, 42, 0.18);
+}
+
+.members-list-card .dropdown-row-active > td {
+    position: relative;
+    z-index: 30;
+}
+
+@media (min-width: 992px) {
+    .members-list-card .members-list-table-wrapper {
+        overflow: visible;
+    }
+}
+</style>
 
 <!-- Vue principale : Liste des membres (contenu aligné sur une même largeur) -->
 <div id="membersListView" class="px-0 mx-2">
@@ -69,6 +136,22 @@ value="{{ search }}"
 
 <!-- Statut -->
 
+<div class="col-md-2">
+
+<label class="form-label small text-muted d-flex align-items-center gap-1 mb-1">
+<span class="material-icons" style="font-size:16px;">verified_user</span>Statut
+</label>
+
+<select class="form-select" name="status">
+<option value="">Tous</option>
+<option value="active" {% if status == "active" %}selected{% endif %}>Actifs</option>
+<option value="expired" {% if status == "expired" %}selected{% endif %}>Expirés</option>
+<option value="suspended" {% if status == "suspended" %}selected{% endif %}>Suspendus</option>
+<option value="expiring" {% if status == "expiring" %}selected{% endif %}>Expiration proche</option>
+</select>
+
+</div>
+
 
 
 <!-- Formule -->
@@ -110,6 +193,50 @@ Réinitialiser
 
 </div>
 
+<div class="row align-items-end g-3 mt-1">
+
+<div class="col-md-3">
+<label class="form-label small text-muted d-flex align-items-center gap-1 mb-1">
+<span class="material-icons" style="font-size:16px;">login</span>Accès
+</label>
+<select class="form-select" name="access">
+<option value="">Tous</option>
+<option value="recent" {% if access_filter == "recent" %}selected{% endif %}>Passés sur 30 jours</option>
+<option value="never" {% if access_filter == "never" %}selected{% endif %}>Jamais venus</option>
+</select>
+</div>
+
+<div class="col-md-2">
+<label class="form-label small text-muted d-flex align-items-center gap-1 mb-1">
+<span class="material-icons" style="font-size:16px;">calendar_today</span>Inscrit du
+</label>
+<input type="date" class="form-control" name="created_from" value="{{ created_from }}">
+</div>
+
+<div class="col-md-2">
+<label class="form-label small text-muted d-flex align-items-center gap-1 mb-1">
+<span class="material-icons" style="font-size:16px;">event</span>au
+</label>
+<input type="date" class="form-control" name="created_to" value="{{ created_to }}">
+</div>
+
+<div class="col-md-3">
+<label class="form-label small text-muted d-flex align-items-center gap-1 mb-1">
+<span class="material-icons" style="font-size:16px;">sort</span>Trier par
+</label>
+<select class="form-select" name="sort">
+<option value="newest" {% if sort_selected == "newest" %}selected{% endif %}>Plus récents</option>
+<option value="oldest" {% if sort_selected == "oldest" %}selected{% endif %}>Plus anciens</option>
+<option value="name_asc" {% if sort_selected == "name_asc" %}selected{% endif %}>Nom A à Z</option>
+<option value="name_desc" {% if sort_selected == "name_desc" %}selected{% endif %}>Nom Z à A</option>
+<option value="expiry_asc" {% if sort_selected == "expiry_asc" %}selected{% endif %}>Expiration proche</option>
+<option value="expiry_desc" {% if sort_selected == "expiry_desc" %}selected{% endif %}>Expiration lointaine</option>
+<option value="last_access" {% if sort_selected == "last_access" %}selected{% endif %}>Dernier accès</option>
+</select>
+</div>
+
+</div>
+
 </div>
 
 </div>
@@ -121,7 +248,7 @@ Réinitialiser
 
 
 <!-- Liste des membres -->
-<div class="card stretch stretch-full">
+<div class="card stretch stretch-full members-list-card">
     <div class="card-header">
         <h5 class="card-title d-flex align-items-center gap-2 mb-0">
             <span class="material-icons" style="font-size:22px;">format_list_bulleted</span>
@@ -145,7 +272,7 @@ Réinitialiser
     </div>
 
     <div class="card-body custom-card-action p-0">
-        <div class="table-responsive position-relative">
+        <div class="table-responsive position-relative members-list-table-wrapper">
             <table class="table table-hover mb-0 align-middle">
                 <thead class="table-light">
                     <tr>
@@ -218,8 +345,12 @@ Réinitialiser
 
                         <!-- Actions -->
                         <td class="text-end">
-                            <div class="dropdown">
-                                <button class="btn btn-sm btn-light dropdown-toggle" data-bs-toggle="dropdown">
+                            <div class="dropdown member-action-dropdown">
+                                <button class="btn btn-sm btn-light dropdown-toggle"
+                                        data-bs-toggle="dropdown"
+                                        data-bs-boundary="viewport"
+                                        data-bs-offset="0,8"
+                                        aria-expanded="false">
                                     <span class="material-icons">more_vert</span>
                                 </button>
                                 <div class="dropdown-menu dropdown-menu-end">
@@ -230,7 +361,7 @@ Réinitialiser
                                     <a onclick="openEditMemberModal({{ member.id }})" class="dropdown-item">
                                         <span class="material-icons me-2">edit</span>Modifier
                                     </a>
-                                    {% if request.role == "admin" %}
+                                    {% if request.role == "owner" %}
                                     <div class="dropdown-divider"></div>
                                     <a href="#" onclick="if(confirm('Supprimer ce membre ?')) { document.getElementById('delete-form-{{ member.id }}').submit(); }" 
                                        class="dropdown-item text-danger">
@@ -270,7 +401,7 @@ Réinitialiser
                 <!-- Pagination identique à la tienne -->
                 {% if page_obj.has_previous %}
                 <li class="page-item">
-                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}&search={{ search }}&status={{ status }}&plan={{ plan_selected }}">
+                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}&search={{ search }}&status={{ status }}&plan={{ plan_selected }}&access={{ access_filter }}&created_from={{ created_from }}&created_to={{ created_to }}&sort={{ sort_selected }}">
                         <span class="material-icons">chevron_left</span>
                     </a>
                 </li>
@@ -283,14 +414,14 @@ Réinitialiser
                         <li class="page-item active"><a class="page-link">{{ num }}</a></li>
                     {% else %}
                         <li class="page-item">
-                            <a class="page-link" href="?page={{ num }}&search={{ search }}&status={{ status }}&plan={{ plan_selected }}">{{ num }}</a>
+                            <a class="page-link" href="?page={{ num }}&search={{ search }}&status={{ status }}&plan={{ plan_selected }}&access={{ access_filter }}&created_from={{ created_from }}&created_to={{ created_to }}&sort={{ sort_selected }}">{{ num }}</a>
                         </li>
                     {% endif %}
                 {% endfor %}
 
                 {% if page_obj.has_next %}
                 <li class="page-item">
-                    <a class="page-link" href="?page={{ page_obj.next_page_number }}">
+                    <a class="page-link" href="?page={{ page_obj.next_page_number }}&search={{ search }}&status={{ status }}&plan={{ plan_selected }}&access={{ access_filter }}&created_from={{ created_from }}&created_to={{ created_to }}&sort={{ sort_selected }}">
                         <span class="material-icons">chevron_right</span>
                     </a>
                 </li>
@@ -640,6 +771,19 @@ Réinitialiser
                                 <span class="material-icons" style="font-size:18px;">download</span> Télécharger QR Code
                             </button>
                         </div>
+                        <div class="member-card-preview-wrapper p-3 rounded-3 mt-4" style="background:#f3f6f9;">
+                            <div class="d-flex align-items-center justify-content-between mb-2">
+                                <h6 class="d-flex align-items-center gap-2 mb-0">
+                                    <span class="material-icons" style="font-size:18px;">badge</span>
+                                    Carte membre
+                                </h6>
+                                <button class="btn btn-sm btn-outline-primary" onclick="downloadMemberCard()">
+                                    <span class="material-icons" style="font-size:18px;">download</span> Télécharger la carte
+                                </button>
+                            </div>
+                            <canvas id="memberCardPreview" width="502" height="325" class="w-100 rounded-3" style="max-width:502px;"></canvas>
+                            <small class="text-muted d-block mt-2">Format carte 85 x 55 mm, avec logo organisation, infos membre et QR code.</small>
+                        </div>
                         <div class="mt-4">
                             <h6 class="d-flex align-items-center gap-2">
                                 <span class="material-icons" style="font-size:18px;">description</span>
@@ -709,10 +853,53 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         toast.show();
     });
+
+    const actionDropdownToggles = document.querySelectorAll('.member-action-dropdown [data-bs-toggle="dropdown"]');
+    actionDropdownToggles.forEach(function (toggleEl) {
+        bootstrap.Dropdown.getOrCreateInstance(toggleEl, {
+            boundary: document.body,
+            popperConfig: function (defaultConfig) {
+                defaultConfig.strategy = "fixed";
+                defaultConfig.modifiers = defaultConfig.modifiers || [];
+                defaultConfig.modifiers.push({
+                    name: "preventOverflow",
+                    options: {
+                        boundary: document.body,
+                        padding: 12
+                    }
+                });
+                return defaultConfig;
+            }
+        });
+    });
+
+    document.addEventListener('shown.bs.dropdown', function (event) {
+        const actionDropdown = event.target.closest('.member-action-dropdown');
+        if (!actionDropdown) return;
+        const row = actionDropdown.closest('tr');
+        if (row) row.classList.add('dropdown-row-active');
+    });
+
+    document.addEventListener('hidden.bs.dropdown', function (event) {
+        const actionDropdown = event.target.closest('.member-action-dropdown');
+        if (!actionDropdown) return;
+        const row = actionDropdown.closest('tr');
+        if (row) row.classList.remove('dropdown-row-active');
+    });
 });
+
+function copyPreRegistrationLink() {
+    const input = document.getElementById("preRegistrationUrl");
+    if (!input) return;
+    input.select();
+    input.setSelectionRange(0, 99999);
+    navigator.clipboard.writeText(input.value).catch(() => document.execCommand("copy"));
+}
 </script>
 
 <script>
+const DEFAULT_ORG_LOGO_URL = "{% static 'avatar/logo_smartclub.png' %}";
+
 function openMemberModal(memberId) {
     fetch(`/members/${memberId}/`)
         .then(response => {
@@ -775,7 +962,7 @@ function openMemberModal(memberId) {
             document.getElementById("viewExpiryDate").innerText = data.expiration_date || "-";
 
             // === PAIEMENTS ===
-            document.getElementById("viewPrice").innerText = (data.price || 0) + " CDF";
+            document.getElementById("viewPrice").innerText = (data.price || 0) + " USD";
             document.getElementById("viewPaid").innerText = (data.paid || 0) + " CDF";
             document.getElementById("viewRemaining").innerText = (data.remaining || 0) + " CDF";
 
@@ -798,6 +985,7 @@ function openMemberModal(memberId) {
             });
             currentMemberId = data.id;
             currentMemberStatus = data.status;
+            currentMemberData = data;
             // Remplir le tableau des accès
             let accessTable = document.getElementById("accessHistory");
             accessTable.innerHTML = "";
@@ -817,6 +1005,7 @@ function openMemberModal(memberId) {
             
             });
             updateStatusButton();
+            renderMemberCardPreview(data);
             // Ouvrir le modal
             const modal = new bootstrap.Modal(document.getElementById('viewMemberModal'));
             modal.show();
@@ -858,6 +1047,212 @@ function downloadQRCode() {
 
 
 // === OUVRIR MODAL D'ÉDITION ===
+function renderQRCodeCanvas(canvas, value, width) {
+    return new Promise((resolve, reject) => {
+        QRCode.toCanvas(canvas, value || "-", {
+            width: width,
+            margin: 1,
+            color: {
+                dark: "#111827",
+                light: "#ffffff"
+            }
+        }, error => error ? reject(error) : resolve(canvas));
+    });
+}
+
+function loadCanvasImage(src) {
+    return new Promise(resolve => {
+        if (!src) {
+            resolve(null);
+            return;
+        }
+        const image = new Image();
+        image.crossOrigin = "anonymous";
+        image.onload = () => resolve(image);
+        image.onerror = () => resolve(null);
+        image.src = src;
+    });
+}
+
+function drawRoundRect(ctx, x, y, width, height, radius) {
+    const r = Math.min(radius, width / 2, height / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + width, y, x + width, y + height, r);
+    ctx.arcTo(x + width, y + height, x, y + height, r);
+    ctx.arcTo(x, y + height, x, y, r);
+    ctx.arcTo(x, y, x + width, y, r);
+    ctx.closePath();
+}
+
+function drawContainedImage(ctx, image, x, y, width, height) {
+    if (!image) return;
+    const ratio = Math.min(width / image.width, height / image.height);
+    const drawWidth = image.width * ratio;
+    const drawHeight = image.height * ratio;
+    ctx.drawImage(image, x + (width - drawWidth) / 2, y + (height - drawHeight) / 2, drawWidth, drawHeight);
+}
+
+function drawMemberInitials(ctx, member, x, y, size) {
+    const initials = `${member.first_name || ""} ${member.last_name || ""}`
+        .trim()
+        .split(/\s+/)
+        .slice(0, 2)
+        .map(part => part[0] || "")
+        .join("")
+        .toUpperCase() || "M";
+    ctx.fillStyle = "#e0f2fe";
+    drawRoundRect(ctx, x, y, size, size, size / 2);
+    ctx.fill();
+    ctx.fillStyle = "#075985";
+    ctx.font = `700 ${Math.round(size * 0.35)}px Arial`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(initials, x + size / 2, y + size / 2);
+}
+
+async function drawMemberCard(canvas, member, scale = 1) {
+    const ctx = canvas.getContext("2d");
+    const width = canvas.width;
+    const height = canvas.height;
+    const s = scale;
+    const logoUrl = member.organization_logo_url || DEFAULT_ORG_LOGO_URL;
+    const [logo, photo] = await Promise.all([
+        loadCanvasImage(logoUrl),
+        loadCanvasImage(member.photo_url)
+    ]);
+
+    ctx.clearRect(0, 0, width, height);
+
+    ctx.fillStyle = "#f8fafc";
+    drawRoundRect(ctx, 0, 0, width, height, 36 * s);
+    ctx.fill();
+
+    ctx.strokeStyle = "#dbe3ea";
+    ctx.lineWidth = 2 * s;
+    ctx.stroke();
+
+    const accent = ctx.createLinearGradient(width * 0.66, 0, width, height);
+    accent.addColorStop(0, "#042f2e");
+    accent.addColorStop(0.55, "#0f766e");
+    accent.addColorStop(1, "#f59e0b");
+    ctx.fillStyle = accent;
+    drawRoundRect(ctx, 666 * s, 0, 338 * s, 650 * s, 36 * s);
+    ctx.fill();
+
+    ctx.globalAlpha = 0.11;
+    ctx.fillStyle = "#0f766e";
+    ctx.beginPath();
+    ctx.arc(154 * s, 580 * s, 210 * s, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    ctx.fillStyle = "#ffffff";
+    drawRoundRect(ctx, 48 * s, 44 * s, 176 * s, 84 * s, 20 * s);
+    ctx.fill();
+    drawContainedImage(ctx, logo, 68 * s, 62 * s, 136 * s, 48 * s);
+
+    ctx.fillStyle = "#0f172a";
+    ctx.font = `700 ${26 * s}px Arial`;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText((member.organization_name || "Organisation").toUpperCase(), 252 * s, 76 * s);
+    ctx.font = `600 ${15 * s}px Arial`;
+    ctx.fillStyle = "#64748b";
+    ctx.fillText("CARTE MEMBRE", 252 * s, 106 * s);
+
+    if (photo) {
+        ctx.save();
+        drawRoundRect(ctx, 58 * s, 186 * s, 156 * s, 156 * s, 34 * s);
+        ctx.clip();
+        ctx.drawImage(photo, 58 * s, 186 * s, 156 * s, 156 * s);
+        ctx.restore();
+    } else {
+        drawMemberInitials(ctx, member, 58 * s, 186 * s, 156 * s);
+    }
+
+    const fullName = `${member.first_name || ""} ${member.last_name || ""}`.trim() || "Membre";
+    ctx.fillStyle = "#0f172a";
+    ctx.font = `700 ${38 * s}px Arial`;
+    ctx.fillText(fullName, 252 * s, 220 * s);
+
+    ctx.fillStyle = "#ffffff";
+    drawRoundRect(ctx, 252 * s, 252 * s, 344 * s, 58 * s, 18 * s);
+    ctx.fill();
+    ctx.fillStyle = "#64748b";
+    ctx.font = `600 ${13 * s}px Arial`;
+    ctx.fillText("USERNAME", 274 * s, 276 * s);
+    ctx.fillStyle = "#0f172a";
+    ctx.font = `700 ${21 * s}px Arial`;
+    ctx.fillText(member.username || "-", 274 * s, 300 * s);
+
+    ctx.fillStyle = "#ffffff";
+    drawRoundRect(ctx, 252 * s, 330 * s, 344 * s, 58 * s, 18 * s);
+    ctx.fill();
+    ctx.fillStyle = "#64748b";
+    ctx.font = `700 ${13 * s}px Arial`;
+    ctx.textAlign = "left";
+    ctx.fillText("TELEPHONE", 274 * s, 354 * s);
+    ctx.fillStyle = "#0f172a";
+    ctx.font = `700 ${21 * s}px Arial`;
+    ctx.fillText(member.phone || "-", 274 * s, 378 * s);
+
+    ctx.fillStyle = "#0f766e";
+    drawRoundRect(ctx, 58 * s, 388 * s, 538 * s, 76 * s, 24 * s);
+    ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.font = `700 ${18 * s}px Arial`;
+    ctx.textAlign = "left";
+    ctx.fillText(`ID MEMBRE #${member.id || "-"}`, 86 * s, 432 * s);
+
+    const qrCanvas = document.createElement("canvas");
+    qrCanvas.width = 224 * s;
+    qrCanvas.height = 224 * s;
+    await renderQRCodeCanvas(qrCanvas, member.qr_code, 224 * s);
+
+    ctx.fillStyle = "#ffffff";
+    drawRoundRect(ctx, 724 * s, 150 * s, 232 * s, 232 * s, 30 * s);
+    ctx.fill();
+    ctx.drawImage(qrCanvas, 728 * s, 154 * s, 224 * s, 224 * s);
+
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#ffffff";
+    ctx.font = `700 ${20 * s}px Arial`;
+    ctx.fillText("SCAN ACCES", 840 * s, 424 * s);
+    ctx.font = `500 ${13 * s}px Arial`;
+    ctx.fillStyle = "rgba(255,255,255,0.76)";
+    ctx.fillText("QR personnel du membre", 840 * s, 452 * s);
+
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#64748b";
+    ctx.font = `600 ${13 * s}px Arial`;
+    ctx.fillText("Carte valable selon les droits actifs du membre dans le systeme.", 58 * s, 586 * s);
+}
+
+async function renderMemberCardPreview(member) {
+    const canvas = document.getElementById("memberCardPreview");
+    if (!canvas || !member) return;
+    await drawMemberCard(canvas, member, 0.5);
+}
+
+async function downloadMemberCard() {
+    if (!currentMemberData) {
+        alert("Aucun membre sélectionné.");
+        return;
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = 1004;
+    canvas.height = 650;
+    await drawMemberCard(canvas, currentMemberData, 1);
+
+    const fullName = `${currentMemberData.first_name || ""}_${currentMemberData.last_name || ""}`.replace(/\s+/g, "_");
+    const link = document.createElement("a");
+    link.download = `carte_membre_${fullName || currentMemberData.id}.png`;
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+}
+
 function openEditMemberModal(memberId) {
     fetch(`/members/edit/${memberId}/`)
         .then(response => response.json())
@@ -924,6 +1319,7 @@ function saveEditedMember() {
 <script>
 let currentMemberId = null;
 let currentMemberStatus = null;
+let currentMemberData = null;
 function toggleMemberStatus() {
     if (!currentMemberId) return;
 

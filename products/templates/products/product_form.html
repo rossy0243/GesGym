@@ -27,7 +27,7 @@
                         {% endfor %}
                         
                         <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                            <a href="{% if product %}{% url 'products:detail' gym.id product.id %}{% else %}{% url 'products:list' gym.id %}{% endif %}" 
+                            <a href="{% if product %}{% url 'products:detail' product.id %}{% else %}{% url 'products:list' %}{% endif %}"
                                class="btn btn-secondary">
                                 Annuler
                             </a>

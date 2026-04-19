@@ -1,5 +1,209 @@
 {% load static %}
+<style>
+.owner-gym-switcher {
+    position: relative;
+}
 
+.nxl-navigation-toggle .nav-toggle-button {
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.nxl-navigation-toggle .nav-toggle-button .material-icons {
+    font-size: 24px;
+}
+
+.owner-gym-switcher__button {
+    min-width: 235px;
+    height: 50px;
+    padding: 0 14px;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 16px;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    transition: all .2s ease;
+}
+
+.owner-gym-switcher__button:hover {
+    border-color: rgba(52, 84, 209, 0.22);
+    box-shadow: 0 12px 24px rgba(52, 84, 209, 0.10);
+    transform: translateY(-1px);
+}
+
+.owner-gym-switcher__icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #eef2ff 0%, #e0f2fe 100%);
+    color: #3454d1;
+    font-size: 21px;
+    flex-shrink: 0;
+}
+
+.owner-gym-switcher__copy {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    min-width: 0;
+    line-height: 1.15;
+}
+
+.owner-gym-switcher__eyebrow {
+    font-size: .68rem;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+}
+
+.owner-gym-switcher__name {
+    max-width: 135px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: .93rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.owner-gym-switcher__chevron {
+    margin-left: auto;
+    color: #64748b;
+    font-size: 20px;
+}
+
+.owner-gym-switcher__menu {
+    width: 320px;
+    padding: 8px;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 18px;
+    background: #ffffff;
+    box-shadow: 0 18px 36px rgba(15, 23, 42, 0.10);
+}
+
+.owner-gym-switcher__menu-header {
+    padding: 10px 12px 12px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+    margin-bottom: 6px;
+}
+
+.owner-gym-switcher__menu-header strong {
+    display: block;
+    font-size: .95rem;
+    color: #0f172a;
+    margin-top: 2px;
+}
+
+.owner-gym-switcher__item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 12px;
+    border: none;
+    background: transparent;
+    border-radius: 14px;
+    text-align: left;
+    transition: background .18s ease, transform .18s ease;
+}
+
+.owner-gym-switcher__item:hover {
+    background: #f8fafc;
+    transform: translateX(2px);
+}
+
+.owner-gym-switcher__item.is-active {
+    background: rgba(16, 185, 129, 0.09);
+}
+
+.owner-gym-switcher__item-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #f8fafc;
+    color: #3454d1;
+    font-size: 19px;
+    flex-shrink: 0;
+}
+
+.owner-gym-switcher__item.is-active .owner-gym-switcher__item-icon {
+    background: rgba(16, 185, 129, 0.12);
+    color: #059669;
+}
+
+.owner-gym-switcher__item-copy {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.owner-gym-switcher__item-copy strong {
+    font-size: .92rem;
+    color: #0f172a;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.owner-gym-switcher__item-copy small {
+    color: #64748b;
+    font-size: .79rem;
+}
+
+.owner-gym-switcher__footer {
+    margin-top: 6px;
+    padding: 10px 12px 4px;
+    border-top: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.owner-gym-switcher__footer a {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    text-decoration: none;
+    color: #3454d1;
+    font-weight: 700;
+    font-size: .88rem;
+}
+
+.owner-gym-switcher__footer .material-icons {
+    font-size: 18px;
+}
+
+@media (max-width: 991.98px) {
+    .owner-gym-switcher__button {
+        min-width: 210px;
+        height: 46px;
+        padding: 0 12px;
+    }
+
+    .owner-gym-switcher__name {
+        max-width: 110px;
+    }
+
+    .owner-gym-switcher__menu {
+        width: 290px;
+    }
+}
+</style>
 <header class="nxl-header">
     <div class="header-wrapper">
         <div class="header-left d-flex align-items-center gap-4">
@@ -11,17 +215,29 @@
                 </div>
             </a>
             <div class="nxl-navigation-toggle">
-                <a href="javascript:void(0);" id="menu-mini-button" onclick="toggleNavigation()">
+                <button type="button" id="menu-mini-button" class="nav-toggle-button" data-nav-toggle aria-controls="mainNav" aria-label="Reduire le menu lateral">
                     <span class="material-icons">menu_open</span>
-                </a>
-                <a href="javascript:void(0);" id="menu-expend-button" style="display: none;" onclick="toggleNavigation()">
+                </button>
+                <button type="button" id="menu-expend-button" class="nav-toggle-button" data-nav-toggle style="display: none;" aria-controls="mainNav" aria-label="Etendre le menu lateral">
                     <span class="material-icons">menu</span>
-                </a>
+                </button>
             </div>
             <div class="page-header">
                 <ul class="breadcrumb">
-                    <li class="breadcrumb-item"><a href="#">Accueil</a></li>
-                    <li class="breadcrumb-item active">{{ page_title|default:"Tableau de bord" }}</li>
+                    {% if breadcrumbs %}
+                        {% for item in breadcrumbs %}
+                            {% if forloop.last or not item.url %}
+                                <li class="breadcrumb-item active">{{ item.label }}</li>
+                            {% else %}
+                                <li class="breadcrumb-item">
+                                    <a href="{{ item.url }}">{{ item.label }}</a>
+                                </li>
+                            {% endif %}
+                        {% endfor %}
+                    {% else %}
+                        <li class="breadcrumb-item"><a href="{% url 'core:dashboard_redirect' %}">Accueil</a></li>
+                        <li class="breadcrumb-item active">{{ page_title|default:"Tableau de bord" }}</li>
+                    {% endif %}
                 </ul>
             </div>
         </div>
@@ -30,15 +246,54 @@
             
             <!-- ==================== SÉLECTEUR DE GYM POUR OWNER ==================== -->
             {% if request.is_owner and request.owned_gyms %}
-            <div class="gym-selector">
-                <select id="gym_selector" class="form-select form-select-sm" style="min-width: 220px;">
+            <div class="dropdown owner-gym-switcher">
+                <button class="owner-gym-switcher__button" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <span class="owner-gym-switcher__icon material-icons">storefront</span>
+                    <span class="owner-gym-switcher__copy">
+                        <span class="owner-gym-switcher__eyebrow">Salle active</span>
+                        <span class="owner-gym-switcher__name">
+                            {{ request.gym.name|default:"Choisir une salle" }}
+                        </span>
+                    </span>
+                    <span class="owner-gym-switcher__chevron material-icons">expand_more</span>
+                </button>
+
+                <div class="dropdown-menu dropdown-menu-end owner-gym-switcher__menu">
+                    <div class="owner-gym-switcher__menu-header">
+                        <span class="owner-gym-switcher__eyebrow">Organisation</span>
+                        <strong>{{ request.organization.name }}</strong>
+                    </div>
+
                     {% for gym in request.owned_gyms %}
-                    <option value="{{ gym.id }}" 
-                            {% if request.gym and request.gym.id == gym.id %}selected{% endif %}>
-                        {{ gym.name }}
-                    </option>
+                        {% if request.gym and request.gym.id == gym.id %}
+                            <div class="owner-gym-switcher__item is-active">
+                                <span class="owner-gym-switcher__item-icon material-icons">check_circle</span>
+                                <span class="owner-gym-switcher__item-copy">
+                                    <strong>{{ gym.name }}</strong>
+                                    <small>Salle actuellement ouverte</small>
+                                </span>
+                            </div>
+                        {% else %}
+                            <form method="post" action="{% url 'core:switch_gym' gym.id %}" class="m-0">
+                                {% csrf_token %}
+                                <button type="submit" class="owner-gym-switcher__item">
+                                    <span class="owner-gym-switcher__item-icon material-icons">sync_alt</span>
+                                    <span class="owner-gym-switcher__item-copy">
+                                        <strong>{{ gym.name }}</strong>
+                                        <small>Basculer vers cette salle</small>
+                                    </span>
+                                </button>
+                            </form>
+                        {% endif %}
                     {% endfor %}
-                </select>
+
+                    <div class="owner-gym-switcher__footer">
+                        <a href="{% url 'core:select_gym' %}">
+                            Voir toutes les salles
+                            <span class="material-icons">arrow_forward</span>
+                        </a>
+                    </div>
+                </div>
             </div>
             {% endif %}
 
@@ -77,6 +332,11 @@
                         </div>
                     </div>
                     <div class="dropdown-divider"></div>
+                    <a href="{% url 'compte:profile' %}" class="dropdown-item">
+                        <span class="material-icons">account_circle</span>
+                        Mon profil
+                    </a>
+                    <div class="dropdown-divider"></div>
                     <a href="{% url 'compte:logout' %}" class="dropdown-item">
                         <span class="material-icons">logout</span>
                         Déconnexion
@@ -86,20 +346,3 @@
         </div>
     </div>
 </header>
-
-<!-- Script pour le sélecteur de gym -->
-{% if request.is_owner and request.owned_gyms %}
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const selector = document.getElementById('gym_selector');
-    if (selector) {
-        selector.addEventListener('change', function() {
-            const gymId = this.value;
-            if (gymId) {
-                window.location.href = "{% url 'core:switch_gym' 999 %}".replace('999', gymId);
-            }
-        });
-    }
-});
-</script>
-{% endif %}

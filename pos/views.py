@@ -1,221 +1,236 @@
-from datetime import timedelta
-from django.utils import timezone
 from decimal import Decimal
+
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
+from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.contrib.auth.decorators import login_required
+from django.utils import timezone
+
 from members.models import Member
-from subscriptions.models import MemberSubscription, SubscriptionPlan
-from .models import CashRegister, Payment
-from django.db.models import Q, Sum
-from django.contrib import messages
+from products.models import Product
+from subscriptions.models import SubscriptionPlan
+from smartclub.access_control import POS_CASHIER_ROLES, POS_HISTORY_ROLES
+from smartclub.decorators import role_required
 
-    
+from .models import CashRegister, ExchangeRate, Payment
+from .services import record_expense, record_product_sale, record_subscription_payment
+
+
+def _to_decimal(value, field_label):
+    try:
+        return Decimal(str(value or "0"))
+    except Exception as exc:
+        raise ValidationError(f"{field_label} invalide.") from exc
+
+
+def _validation_message(exc):
+    return exc.messages[0] if getattr(exc, "messages", None) else str(exc)
+
+
 @login_required
+@role_required(POS_CASHIER_ROLES)
 def search_members(request):
-
     query = request.GET.get("q", "")
-
-    members = Member.objects.filter(
-        gym=request.gym
-    ).filter(
-        Q(first_name__icontains=query) |
-        Q(last_name__icontains=query) |
-        Q(phone__icontains=query)
+    members = Member.objects.filter(gym=request.gym).filter(
+        Q(first_name__icontains=query)
+        | Q(last_name__icontains=query)
+        | Q(phone__icontains=query)
     )[:10]
 
-    data = []
-
-    for m in members:
-        data.append({
-            "id": m.id,
-            "name": f"{m.first_name} {m.last_name}",
-            "phone": m.phone,
-            "status": m.computed_status,
-            "photo": m.photo.url if m.photo else "/static/avatar/1.png"
-        })
+    data = [
+        {
+            "id": member.id,
+            "name": f"{member.first_name} {member.last_name}",
+            "phone": member.phone,
+            "status": member.computed_status,
+            "photo": member.photo.url if member.photo else "/static/avatar/1.png",
+        }
+        for member in members
+    ]
 
     return JsonResponse({"members": data})
 
-#APPLICATION DE LA CAISSE
 
-#vue du dashboard de la caisse
 @login_required
+@role_required(POS_CASHIER_ROLES)
 def cashier_dashboard(request):
-    
     gym = request.gym
-    register = CashRegister.objects.filter(
-        gym=gym,
-        is_closed=False
-    ).first()
+    register = CashRegister.objects.filter(gym=gym, is_closed=False).first()
 
     if request.method == "POST":
-
         if not register:
             messages.error(request, "Aucune caisse ouverte.")
             return redirect("pos:cashier_dashboard")
 
-        transaction_type = request.POST.get("type", "in")
-
-        amount = request.POST.get("amount")
-        method = request.POST.get("method", "cash")
-
-        # ----------------------
-        # DECAISSEMENT
-        # ----------------------
-        if transaction_type == "out":
-
-            Payment.objects.create(
-                gym=gym,
-                cash_register=register,
-                amount=amount,
-                method="cash",
-                type="out",
-                status="success"
+        if not register.exchange_rate:
+            messages.error(
+                request,
+                "Cette session de caisse n'a pas de taux USD-CDF. Fermez-la puis ouvrez une nouvelle session.",
             )
-
-            messages.success(request, "Décaissement enregistré.")
-
             return redirect("pos:cashier_dashboard")
 
-        # ----------------------
-        # ENCAISSEMENT
-        # ----------------------
+        transaction_type = request.POST.get("type", "in")
+        method = request.POST.get("method", "cash")
 
-        member_id = request.POST.get("member")
-        plan_id = request.POST.get("plan")
+        if transaction_type == "out":
+            try:
+                amount_cdf = _to_decimal(request.POST.get("amount"), "Montant")
+                if amount_cdf <= 0:
+                    raise ValidationError("Le montant doit etre superieur a zero.")
 
-        member = get_object_or_404(Member, id=member_id, gym=gym)
-        plan = get_object_or_404(SubscriptionPlan, id=plan_id, gym=gym)
-
-        MemberSubscription.objects.filter(
-            member=member,
-            is_active=True
-        ).update(is_active=False)
-
-        start = timezone.now().date()
-        end = start + timedelta(days=plan.duration_days)
-
-        subscription = MemberSubscription.objects.create(
-            gym=gym,
-            member=member,
-            plan=plan,
-            start_date=start,
-            end_date=end,
-            is_active=True
-        )
-        
-        amount = Decimal(request.POST.get("amount"))
-        currency = request.POST.get("currency", "CDF")
-        exchange_rate = request.POST.get("exchange_rate")
-
-        if currency == "USD":
-            if not exchange_rate:
-                messages.error(request, "Le taux de change est requis pour les paiements en USD.")
+                record_expense(
+                    gym=gym,
+                    amount_cdf=amount_cdf,
+                    method="cash",
+                    category="expense",
+                    description=request.POST.get("description") or "Decaissement",
+                    created_by=request.user,
+                    source_app="pos",
+                    source_model="ManualExpense",
+                )
+            except ValidationError as exc:
+                messages.error(request, _validation_message(exc))
                 return redirect("pos:cashier_dashboard")
-            exchange_rate = Decimal(exchange_rate)
-        else:
-            exchange_rate = None
 
-        Payment.objects.create(
-            gym=gym,
-            member=member,
-            subscription=subscription,
-            cash_register=register,
-            amount=plan.price,
-            currency=currency,
-            exchange_rate=exchange_rate,
-            method=method,
-            type="in",
-            status="success"
-        )
+            messages.success(request, "Decaissement enregistre.")
+            return redirect("pos:cashier_dashboard")
 
-        messages.success(request, f"Paiement de {amount} {currency} enregistré avec succès.")
+        sale_type = request.POST.get("sale_type", "subscription")
+        currency = request.POST.get("currency", "USD")
+        if currency not in {"USD", "CDF"}:
+            messages.error(request, "Devise invalide.")
+            return redirect("pos:cashier_dashboard")
+
+        try:
+            if sale_type == "product":
+                product = get_object_or_404(
+                    Product,
+                    id=request.POST.get("product"),
+                    gym=gym,
+                    is_active=True,
+                )
+                payment = record_product_sale(
+                    gym=gym,
+                    product=product,
+                    quantity=request.POST.get("quantity"),
+                    currency=currency,
+                    method=method,
+                    created_by=request.user,
+                )
+                messages.success(
+                    request,
+                    f"Vente produit enregistree: {payment.amount} {payment.currency}.",
+                )
+            else:
+                member = get_object_or_404(Member, id=request.POST.get("member"), gym=gym)
+                plan = get_object_or_404(SubscriptionPlan, id=request.POST.get("plan"), gym=gym)
+                subscription, payment = record_subscription_payment(
+                    gym=gym,
+                    member=member,
+                    plan=plan,
+                    currency=currency,
+                    method=method,
+                    created_by=request.user,
+                )
+                messages.success(
+                    request,
+                    f"Paiement abonnement enregistre: {payment.amount} {payment.currency}.",
+                )
+        except ValidationError as exc:
+            messages.error(request, _validation_message(exc))
+            return redirect("pos:cashier_dashboard")
 
         return redirect("pos:cashier_dashboard")
 
     members = Member.objects.filter(gym=gym)
+    plans = SubscriptionPlan.objects.filter(gym=gym, is_active=True)
+    products = Product.objects.filter(gym=gym, is_active=True, quantity__gt=0).order_by("name")
+    latest_exchange_rate = ExchangeRate.objects.filter(gym=gym).order_by("-date", "-created_at").first()
 
-    plans = SubscriptionPlan.objects.filter(
-        gym=gym,
-        is_active=True
-    )
     if register:
-
-        payments = Payment.objects.filter(
-            gym=gym,
-            cash_register=register
-        ).select_related("member","subscription").order_by("-created_at")[:20]
-
-        entries_today = Payment.objects.filter(
-            gym=gym,
-            cash_register=register,
-            type="in",
-            status="success"
-        ).aggregate(total=Sum("amount"))["total"] or 0
-
-        exits_today = Payment.objects.filter(
-            gym=gym,
-            cash_register=register,
-            type="out",
-            status="success"
-        ).aggregate(total=Sum("amount"))["total"] or 0
-
-        cash_total = entries_today - exits_today
-
+        payments = (
+            Payment.objects.filter(gym=gym, cash_register=register)
+            .select_related("member", "subscription", "subscription__plan", "product")
+            .order_by("-created_at")[:20]
+        )
+        entries_today = register.total_entries()
+        exits_today = register.total_exits()
+        cash_total = register.expected_total()
     else:
-
         payments = []
         entries_today = 0
         exits_today = 0
         cash_total = 0
-    return render(request, "pos/cashier.html", {
-        "members": members,
-        "plans": plans,
-        "payments": payments,
-        "register": register,
-        "today_total": cash_total,
-        "today_entries": entries_today,
-        "today_exits": exits_today,
-        
-    })
+
+    return render(
+        request,
+        "pos/cashier.html",
+        {
+            "members": members,
+            "plans": plans,
+            "products": products,
+            "payments": payments,
+            "register": register,
+            "today_total": cash_total,
+            "today_entries": entries_today,
+            "today_exits": exits_today,
+            "latest_exchange_rate": latest_exchange_rate,
+        },
+    )
 
 
-#vue ouverture de la caisse
 @login_required
+@role_required(POS_CASHIER_ROLES)
 def open_register(request):
-
     if request.method != "POST":
         return redirect("pos:cashier_dashboard")
 
-    existing = CashRegister.objects.filter(
-        gym=request.gym,
-        is_closed=False
-    ).first()
-
+    existing = CashRegister.objects.filter(gym=request.gym, is_closed=False).first()
     if existing:
-        messages.warning(request, "Une caisse est déjà ouverte.")
+        messages.warning(request, "Une caisse est deja ouverte.")
         return redirect("pos:cashier_dashboard")
 
-    CashRegister.objects.create(
-        gym=request.gym,
-        opened_by=request.user
-    )
+    try:
+        opening_amount = _to_decimal(request.POST.get("opening_amount"), "Fonds d'ouverture")
+        exchange_rate = _to_decimal(request.POST.get("exchange_rate"), "Taux USD-CDF")
+        if opening_amount < 0:
+            raise ValidationError("Le fonds d'ouverture ne peut pas etre negatif.")
+        if exchange_rate <= 0:
+            raise ValidationError("Le taux USD-CDF doit etre superieur a zero.")
+    except ValidationError as exc:
+        messages.error(request, _validation_message(exc))
+        return redirect("pos:cashier_dashboard")
 
-    messages.success(request, "Caisse ouverte avec succès.")
+    try:
+        ExchangeRate.objects.update_or_create(
+            gym=request.gym,
+            date=timezone.localdate(),
+            defaults={"rate": exchange_rate},
+        )
+        CashRegister.objects.create(
+            gym=request.gym,
+            opened_by=request.user,
+            opening_amount=opening_amount,
+            exchange_rate=exchange_rate,
+        )
+    except ValidationError as exc:
+        messages.error(request, _validation_message(exc))
+        return redirect("pos:cashier_dashboard")
 
+    messages.success(request, "Caisse ouverte avec succes.")
     return redirect("pos:cashier_dashboard")
 
 
-#vue fermeture de la caisse
 @login_required
+@role_required(POS_CASHIER_ROLES)
 def close_register(request, register_id):
-
     register = get_object_or_404(
         CashRegister,
         id=register_id,
         gym=request.gym,
-        is_closed=False
+        is_closed=False,
     )
 
     entries = register.total_entries()
@@ -223,10 +238,15 @@ def close_register(request, register_id):
     expected_total = register.expected_total()
 
     if request.method == "POST":
+        try:
+            real_amount = _to_decimal(request.POST.get("real_amount"), "Montant reel")
+            if real_amount < 0:
+                raise ValidationError("Le montant reel ne peut pas etre negatif.")
+        except ValidationError as exc:
+            messages.error(request, _validation_message(exc))
+            return redirect("pos:close_register", register_id=register.id)
 
-        real_amount = Decimal(request.POST.get("real_amount"))
         difference = real_amount - expected_total
-
         register.closing_amount = real_amount
         register.closed_by = request.user
         register.closed_at = timezone.now()
@@ -234,48 +254,92 @@ def close_register(request, register_id):
         register.difference = difference
         register.save()
 
-        messages.success(
-            request,
-            f"Caisse fermée. Différence : {difference} CDF"
-        )
-
+        messages.success(request, f"Caisse fermee. Difference : {difference} CDF")
         return redirect("pos:cashier_dashboard")
 
-    return render(request, "pos/close_register.html", {
-        "register": register,
-        "expected_total": expected_total,
-        "entries": entries,
-        "exits": exits
-    })
-
-#vue historique des caisses
-@login_required
-def register_history(request):
-
-    registers = CashRegister.objects.filter(
-        gym=request.gym,
-        is_closed=True
-    ).order_by("-closed_at")
-
-    return render(request, "pos/register_history.html", {
-        "registers": registers
-    })
-
-#vue détail d'une session de caisse
-@login_required
-def register_detail(request, register_id):
-
-    register = get_object_or_404(
-        CashRegister,
-        id=register_id,
-        gym=request.gym
+    return render(
+        request,
+        "pos/close_register.html",
+        {
+            "register": register,
+            "expected_total": expected_total,
+            "entries": entries,
+            "exits": exits,
+        },
     )
 
-    payments = Payment.objects.filter(
-        cash_register=register
-    ).select_related("member", "subscription")
 
-    return render(request, "pos/register_detail.html", {
-        "register": register,
-        "payments": payments
-    })
+@login_required
+@role_required(POS_HISTORY_ROLES)
+def register_history(request):
+    registers = CashRegister.objects.filter(gym=request.gym, is_closed=True)
+
+    search = request.GET.get("search", "").strip()
+    status = request.GET.get("status", "").strip()
+    date_from = request.GET.get("date_from", "").strip()
+    date_to = request.GET.get("date_to", "").strip()
+    sort = request.GET.get("sort", "recent").strip()
+
+    if status == "open":
+        registers = CashRegister.objects.filter(gym=request.gym, is_closed=False)
+    elif status == "closed":
+        registers = registers.filter(is_closed=True)
+
+    if search:
+        registers = registers.filter(
+            Q(session_code__icontains=search)
+            | Q(opened_by__username__icontains=search)
+            | Q(opened_by__first_name__icontains=search)
+            | Q(opened_by__last_name__icontains=search)
+        )
+
+    if date_from:
+        registers = registers.filter(opened_at__date__gte=date_from)
+    if date_to:
+        registers = registers.filter(opened_at__date__lte=date_to)
+
+    if sort == "oldest":
+        registers = registers.order_by("closed_at")
+    elif sort == "difference_desc":
+        registers = registers.order_by("-difference", "-closed_at")
+    elif sort == "difference_asc":
+        registers = registers.order_by("difference", "-closed_at")
+    else:
+        registers = registers.order_by("-closed_at")
+
+    all_registers = CashRegister.objects.filter(gym=request.gym)
+    return render(
+        request,
+        "pos/register_history.html",
+        {
+            "registers": registers,
+            "search": search,
+            "status": status,
+            "date_from": date_from,
+            "date_to": date_to,
+            "sort": sort,
+            "positive_count": all_registers.filter(difference__gt=0).count(),
+            "negative_count": all_registers.filter(difference__lt=0).count(),
+            "open_count": all_registers.filter(is_closed=False).count(),
+        },
+    )
+
+
+@login_required
+@role_required(POS_HISTORY_ROLES)
+def register_detail(request, register_id):
+    register = get_object_or_404(CashRegister, id=register_id, gym=request.gym)
+    payments = (
+        Payment.objects.filter(gym=request.gym, cash_register=register)
+        .select_related("member", "subscription", "subscription__plan", "product")
+        .order_by("-created_at")
+    )
+
+    return render(
+        request,
+        "pos/register_detail.html",
+        {
+            "register": register,
+            "payments": payments,
+        },
+    )

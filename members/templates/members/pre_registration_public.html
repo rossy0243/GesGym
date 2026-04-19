@@ -1,0 +1,211 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Preinscription - {{ gym.name }}</title>
+    <link rel="stylesheet" type="text/css" href="{% static 'css/bootstrap.min.css' %}">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    <style>
+        body {
+            min-height: 100vh;
+            background:
+                radial-gradient(circle at top left, rgba(255, 140, 0, 0.22), transparent 34%),
+                radial-gradient(circle at bottom right, rgba(0, 78, 146, 0.20), transparent 38%),
+                linear-gradient(135deg, #f8fafc 0%, #eef5ff 100%);
+            color: #0f172a;
+        }
+        .pre-registration-shell {
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            padding: 32px 16px;
+        }
+        .pre-registration-card {
+            width: min(960px, 100%);
+            overflow: hidden;
+            border: 0;
+            border-radius: 32px;
+            background: rgba(255, 255, 255, 0.92);
+            box-shadow: 0 28px 80px rgba(15, 23, 42, 0.16);
+        }
+        .pre-registration-hero {
+            height: 100%;
+            padding: 34px;
+            background: linear-gradient(145deg, #0f172a 0%, #004e92 64%, #ff8c00 145%);
+            color: #fff;
+        }
+        .pre-registration-hero-logo {
+            width: 72px;
+            height: 72px;
+            display: grid;
+            place-items: center;
+            border-radius: 24px;
+            background: rgba(255, 255, 255, 0.13);
+            margin-bottom: 28px;
+        }
+        .pre-registration-hero-logo img {
+            max-width: 56px;
+            max-height: 56px;
+            object-fit: contain;
+        }
+        .pre-registration-kicker {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.12);
+            padding: 8px 12px;
+            font-size: 0.78rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .pre-registration-hero h1 {
+            font-size: clamp(2rem, 4vw, 3.4rem);
+            font-weight: 900;
+            letter-spacing: -0.05em;
+            margin: 18px 0 14px;
+        }
+        .pre-registration-hero p {
+            color: rgba(255, 255, 255, 0.78);
+            font-size: 1rem;
+            line-height: 1.65;
+        }
+        .pre-registration-body {
+            padding: 34px;
+        }
+        .pre-registration-body h2 {
+            font-weight: 900;
+            letter-spacing: -0.03em;
+        }
+        .form-control {
+            border-radius: 14px;
+            border: 1px solid #dbe3ea;
+            padding: 0.82rem 1rem;
+        }
+        .form-control:focus {
+            border-color: #004e92;
+            box-shadow: 0 0 0 0.2rem rgba(0, 78, 146, 0.12);
+        }
+        .pre-registration-submit {
+            border: 0;
+            border-radius: 16px;
+            background: #0f172a;
+            color: #fff;
+            font-weight: 900;
+            padding: 0.92rem 1rem;
+        }
+        .pre-registration-submit:hover {
+            background: #ff8c00;
+            color: #fff;
+        }
+        .pre-registration-success {
+            border: 1px solid rgba(22, 163, 74, 0.2);
+            border-radius: 24px;
+            background: #f0fdf4;
+            color: #166534;
+            padding: 24px;
+        }
+    </style>
+</head>
+<body>
+    <main class="pre-registration-shell">
+        <div class="pre-registration-card">
+            <div class="row g-0">
+                <div class="col-lg-5">
+                    <aside class="pre-registration-hero">
+                        <div class="pre-registration-hero-logo">
+                            {% if organization.logo %}
+                                <img src="{{ organization.logo.url }}" alt="{{ organization.name }}">
+                            {% else %}
+                                <span class="material-icons" style="font-size:42px;">fitness_center</span>
+                            {% endif %}
+                        </div>
+                        <span class="pre-registration-kicker">
+                            <span class="material-icons" style="font-size:16px;">verified</span>
+                            {{ organization.name }}
+                        </span>
+                        <h1>Preinscription membre</h1>
+                        <p>
+                            Remplissez ce formulaire pour demander votre inscription chez
+                            <strong>{{ gym.name }}</strong>. L'equipe confirmera votre fiche depuis le systeme.
+                        </p>
+                        <p class="mb-0">
+                            Votre demande reste valable pendant <strong>7 jours</strong>.
+                            Passe ce delai, elle sera automatiquement supprimee si elle n'est pas confirmee.
+                        </p>
+                    </aside>
+                </div>
+                <div class="col-lg-7">
+                    <section class="pre-registration-body">
+                        {% if saved_pre_registration %}
+                            <div class="pre-registration-success">
+                                <div class="d-flex align-items-start gap-3">
+                                    <span class="material-icons" style="font-size:36px;">check_circle</span>
+                                    <div>
+                                        <h2 class="h4 mb-2">Demande envoyee</h2>
+                                        <p class="mb-2">
+                                            Merci {{ saved_pre_registration.first_name }}.
+                                            Votre preinscription est bien en attente de confirmation.
+                                        </p>
+                                        <p class="mb-0">
+                                            Validite jusqu'au
+                                            <strong>{{ saved_pre_registration.expires_at|date:"d/m/Y H:i" }}</strong>.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        {% else %}
+                            <h2 class="mb-2">Vos informations</h2>
+                            <p class="text-muted mb-4">
+                                Ces donnees servent uniquement a preparer votre fiche membre.
+                            </p>
+
+                            <form method="post" novalidate>
+                                {% csrf_token %}
+                                {% if form.non_field_errors %}
+                                    <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                                {% endif %}
+
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label">Prenom <span class="text-danger">*</span></label>
+                                        {{ form.first_name }}
+                                        {% for error in form.first_name.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Nom <span class="text-danger">*</span></label>
+                                        {{ form.last_name }}
+                                        {% for error in form.last_name.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Telephone <span class="text-danger">*</span></label>
+                                        {{ form.phone }}
+                                        {% for error in form.phone.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Email</label>
+                                        {{ form.email }}
+                                        {% for error in form.email.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label">Adresse</label>
+                                        {{ form.address }}
+                                        {% for error in form.address.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                                    </div>
+                                </div>
+
+                                <button type="submit" class="btn pre-registration-submit w-100 mt-4">
+                                    Envoyer ma preinscription
+                                </button>
+                            </form>
+                        {% endif %}
+                    </section>
+                </div>
+            </div>
+        </div>
+    </main>
+</body>
+</html>

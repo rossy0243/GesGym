@@ -1,106 +1,410 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.hashers import make_password
 from django.shortcuts import get_object_or_404, redirect, render
-from django.http import HttpResponseForbidden
-from django.db.models import Q, Count, Sum
-from django.db.models.functions import ExtractMonth, TruncDate
+from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseForbidden
+from django.views.decorators.http import require_POST
+from django.db.models import Q, Count, Sum, Exists, OuterRef
+from django.db.models.functions import ExtractHour, ExtractMonth, TruncDate
 from django.utils.timezone import now
 from datetime import timedelta
 import calendar
+import json
 from access.models import AccessLog
 from compte.models import UserGymRole
+from compte.models import User
+from compte.utils import generate_username
+from coaching.models import CoachSpecialty
+from organizations.models import SensitiveActivityLog
+from .forms import CoachSpecialtyForm, InternalEmployeeForm, OrganizationSettingsForm
 from members.models import Member
-from organizations.models import Gym, GymModule, Organization
+from organizations.models import Gym, GymModule
 from pos.models import Payment
 from subscriptions.models import MemberSubscription
+from .accounting_reports import (
+    accounting_filename,
+    build_accounting_report,
+    build_csv_export,
+    build_custom_csv_export,
+    build_custom_report,
+    build_custom_xlsx_export,
+    build_xlsx_export,
+    get_report_period,
+    get_report_section,
+)
+from smartclub.access_control import (
+    DASHBOARD_ROLES,
+    REPORT_ROLES,
+    SETTINGS_ORGANIZATION_ROLES,
+    SETTINGS_ROLES,
+    current_role,
+    has_role,
+    role_home_route,
+)
+
+
+PERIOD_LABELS = {
+    "day": "Jour",
+    "week": "Semaine",
+    "month": "Mois",
+    "year": "Année",
+}
+
+MONTH_LABELS = ["", "Jan", "Fev", "Mar", "Avr", "Mai", "Juin", "Juil", "Aout", "Sep", "Oct", "Nov", "Dec"]
+
+
+def _to_json(value):
+    return json.dumps(value, ensure_ascii=False)
+
+
+def _get_period_window(period_key, reference_date):
+    period_key = period_key if period_key in PERIOD_LABELS else "month"
+
+    if period_key == "day":
+        start_date = end_date = reference_date
+    elif period_key == "week":
+        start_date = reference_date - timedelta(days=reference_date.weekday())
+        end_date = start_date + timedelta(days=6)
+    elif period_key == "year":
+        start_date = reference_date.replace(month=1, day=1)
+        end_date = reference_date.replace(month=12, day=31)
+    else:
+        start_date = reference_date.replace(day=1)
+        if start_date.month == 12:
+            next_month = start_date.replace(year=start_date.year + 1, month=1, day=1)
+        else:
+            next_month = start_date.replace(month=start_date.month + 1, day=1)
+        end_date = next_month - timedelta(days=1)
+
+    period_days = (end_date - start_date).days + 1
+    previous_end = start_date - timedelta(days=1)
+    previous_start = previous_end - timedelta(days=period_days - 1)
+
+    return {
+        "key": period_key,
+        "label": PERIOD_LABELS[period_key],
+        "start_date": start_date,
+        "end_date": end_date,
+        "previous_start": previous_start,
+        "previous_end": previous_end,
+        "days": period_days,
+    }
+
+
+def _format_period_range(start_date, end_date):
+    if start_date == end_date:
+        return start_date.strftime("%d/%m/%Y")
+    return f"{start_date.strftime('%d/%m/%Y')} - {end_date.strftime('%d/%m/%Y')}"
+
+
+def _build_trend(current_value, previous_value):
+    delta = current_value - previous_value
+    if previous_value:
+        percent = round((delta / previous_value) * 100, 1)
+    elif current_value:
+        percent = 100.0
+    else:
+        percent = 0.0
+
+    if delta > 0:
+        direction = "up"
+        badge_class = "success"
+        prefix = "+"
+    elif delta < 0:
+        direction = "down"
+        badge_class = "danger"
+        prefix = ""
+    else:
+        direction = "flat"
+        badge_class = "secondary"
+        prefix = ""
+
+    return {
+        "delta": delta,
+        "percent": percent,
+        "direction": direction,
+        "badge_class": badge_class,
+        "display": f"{prefix}{percent:.1f}%",
+    }
+
+
+def _format_hour_range(hour):
+    end_hour = (hour + 1) % 24
+    return f"{hour:02d}h-{end_hour:02d}h"
+
+
+def _build_peak_hour(access_logs):
+    peak = (
+        access_logs.filter(access_granted=True)
+        .annotate(hour=ExtractHour("check_in_time"))
+        .values("hour")
+        .annotate(count=Count("id"))
+        .order_by("-count", "hour")
+        .first()
+    )
+
+    if not peak or peak["hour"] is None:
+        return {
+            "label": "Aucune donnee",
+            "count": 0,
+            "has_data": False,
+        }
+
+    hour = int(peak["hour"])
+    return {
+        "label": _format_hour_range(hour),
+        "count": peak["count"],
+        "has_data": True,
+    }
+
+
+def _build_attendance_rows(gym, period_data):
+    access_logs = AccessLog.objects.filter(
+        gym=gym,
+        access_granted=True,
+        check_in_time__date__range=(period_data["start_date"], period_data["end_date"]),
+    )
+    period_key = period_data["key"]
+    rows = []
+
+    if period_key == "day":
+        counts_by_slot = {}
+        for hour in access_logs.values_list("check_in_time__hour", flat=True):
+            slot_start = (hour // 4) * 4
+            counts_by_slot[slot_start] = counts_by_slot.get(slot_start, 0) + 1
+
+        for slot_start in range(0, 24, 4):
+            slot_end = slot_start + 3
+            label = f"{slot_start:02d}h-{slot_end:02d}h"
+            rows.append({"label": label, "count": counts_by_slot.get(slot_start, 0)})
+
+    elif period_key == "week":
+        counts_by_day = {
+            item["day"]: item["count"]
+            for item in access_logs.annotate(day=TruncDate("check_in_time"))
+            .values("day")
+            .annotate(count=Count("id"))
+        }
+        weekdays = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
+        for index in range(7):
+            current_day = period_data["start_date"] + timedelta(days=index)
+            rows.append({"label": weekdays[index], "count": counts_by_day.get(current_day, 0)})
+
+    elif period_key == "month":
+        counts_by_day = {
+            item["day"]: item["count"]
+            for item in access_logs.annotate(day=TruncDate("check_in_time"))
+            .values("day")
+            .annotate(count=Count("id"))
+        }
+        week_start = period_data["start_date"]
+        week_index = 1
+        while week_start <= period_data["end_date"]:
+            week_end = min(week_start + timedelta(days=6), period_data["end_date"])
+            total = 0
+            current_day = week_start
+            while current_day <= week_end:
+                total += counts_by_day.get(current_day, 0)
+                current_day += timedelta(days=1)
+            rows.append({"label": f"Semaine {week_index}", "count": total})
+            week_start = week_end + timedelta(days=1)
+            week_index += 1
+
+    else:
+        counts_by_month = {
+            item["month"]: item["count"]
+            for item in access_logs.annotate(month=ExtractMonth("check_in_time"))
+            .values("month")
+            .annotate(count=Count("id"))
+        }
+        for month_number in range(1, 13):
+            rows.append({
+                "label": calendar.month_abbr[month_number],
+                "count": counts_by_month.get(month_number, 0),
+            })
+
+    max_count = max((row["count"] for row in rows), default=0)
+    for row in rows:
+        row["percent"] = round((row["count"] / max_count) * 100, 1) if max_count else 0
+
+    return rows
+
+
+def _build_member_growth_rows(members_qs, period_data):
+    created_members = members_qs.filter(
+        created_at__date__range=(period_data["start_date"], period_data["end_date"])
+    )
+    period_key = period_data["key"]
+    rows = []
+
+    if period_key == "day":
+        counts_by_slot = {}
+        for hour in created_members.values_list("created_at__hour", flat=True):
+            slot_start = (hour // 4) * 4
+            counts_by_slot[slot_start] = counts_by_slot.get(slot_start, 0) + 1
+
+        for slot_start in range(0, 24, 4):
+            slot_end = slot_start + 3
+            rows.append({
+                "label": f"{slot_start:02d}h-{slot_end:02d}h",
+                "count": counts_by_slot.get(slot_start, 0),
+            })
+
+    elif period_key == "week":
+        counts_by_day = {
+            item["day"]: item["count"]
+            for item in created_members.annotate(day=TruncDate("created_at"))
+            .values("day")
+            .annotate(count=Count("id"))
+        }
+        weekdays = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
+        for index in range(7):
+            current_day = period_data["start_date"] + timedelta(days=index)
+            rows.append({"label": weekdays[index], "count": counts_by_day.get(current_day, 0)})
+
+    elif period_key == "month":
+        counts_by_day = {
+            item["day"]: item["count"]
+            for item in created_members.annotate(day=TruncDate("created_at"))
+            .values("day")
+            .annotate(count=Count("id"))
+        }
+        week_start = period_data["start_date"]
+        week_index = 1
+        while week_start <= period_data["end_date"]:
+            week_end = min(week_start + timedelta(days=6), period_data["end_date"])
+            total = 0
+            current_day = week_start
+            while current_day <= week_end:
+                total += counts_by_day.get(current_day, 0)
+                current_day += timedelta(days=1)
+            rows.append({"label": f"Semaine {week_index}", "count": total})
+            week_start = week_end + timedelta(days=1)
+            week_index += 1
+
+    else:
+        counts_by_month = {
+            item["month"]: item["count"]
+            for item in created_members.annotate(month=ExtractMonth("created_at"))
+            .values("month")
+            .annotate(count=Count("id"))
+        }
+        for month_number in range(1, 13):
+            rows.append({
+                "label": MONTH_LABELS[month_number],
+                "count": counts_by_month.get(month_number, 0),
+            })
+
+    return rows
 
 
 @login_required
 def dashboard_redirect(request):
-    """Redirige vers le bon dashboard après connexion"""
-    
+    """Redirige vers le bon dashboard apres connexion."""
     if not request.user.is_authenticated:
         return redirect('login')
 
-    # === CAS OWNER ===
-    if hasattr(request, 'is_owner') and request.is_owner:
-        # Si l'Owner a plusieurs gyms → on le redirige vers la sélection
-        if len(getattr(request, 'owned_gyms', [])) > 1:
-            return redirect('core:select_gym')
-        
-        # Si l'Owner n'a qu'un seul gym → on va directement sur son dashboard
-        elif len(getattr(request, 'owned_gyms', [])) == 1:
-            gym = request.owned_gyms[0]
+    if getattr(request, 'is_owner', False):
+        owned_gyms = list(getattr(request, 'owned_gyms', []))
+        current_gym_id = request.session.get('current_gym_id')
+
+        if len(owned_gyms) == 1:
+            gym = owned_gyms[0]
             request.session['current_gym_id'] = gym.id
             return redirect('core:gym_dashboard', gym_id=gym.id)
-        
-        # Fallback
-        else:
+
+        if len(owned_gyms) > 1:
+            current_gym = next(
+                (gym for gym in owned_gyms if str(gym.id) == str(current_gym_id)),
+                None,
+            )
+            if current_gym:
+                return redirect('core:gym_dashboard', gym_id=current_gym.id)
             return redirect('core:select_gym')
 
-    # === CAS UTILISATEUR NORMAL (Manager, Coach, etc.) ===
-    if hasattr(request, 'gym') and request.gym:
+        return redirect('core:select_gym')
+
+    if getattr(request, 'gym', None):
+        if not has_role(request, DASHBOARD_ROLES):
+            return redirect(role_home_route(request))
         return redirect('core:gym_dashboard', gym_id=request.gym.id)
 
-    # Fallback général
     return redirect('core:select_gym')
 
 @login_required
 def select_gym(request):
-    """Page pour sélectionner un gym (Owner avec plusieurs gyms)"""
-    
-    # Récupérer tous les gyms accessibles
-    if hasattr(request, 'is_owner') and request.is_owner:
-        gyms = request.owned_gyms if hasattr(request, 'owned_gyms') else []
+    """Page de selection d'une salle accessible."""
+    if getattr(request, 'is_owner', False):
+        gyms = Gym.objects.filter(
+            organization=request.organization,
+            is_active=True,
+        )
     else:
         gyms = Gym.objects.filter(
             user_roles__user=request.user,
-            user_roles__is_active=True
+            user_roles__is_active=True,
+            is_active=True,
+            organization__is_active=True,
         )
-    
+
+    gyms = (
+        gyms.annotate(
+            members_count=Count("members", distinct=True),
+            machines_count=Count("machines", distinct=True),
+            coaches_count=Count("coaches", distinct=True),
+        )
+        .select_related("organization")
+        .distinct()
+        .order_by("name")
+    )
+
     if request.method == 'POST':
         gym_id = request.POST.get('gym_id')
-        gym = get_object_or_404(Gym, id=gym_id)
-        
-        # Vérifier l'accès
-        if gym in gyms or (request.user.is_superuser):
-            request.session['current_gym_id'] = gym_id
-            return redirect('core:gym_dashboard', gym_id=gym_id)
-    
+        gym = gyms.filter(id=gym_id).first()
+        if request.user.is_superuser and not gym:
+            gym = Gym.objects.filter(
+                id=gym_id,
+                is_active=True,
+                organization__is_active=True,
+            ).first()
+        if gym:
+            request.session['current_gym_id'] = gym.id
+            request.session.modified = True
+            request.gym = gym
+            request.organization = gym.organization
+            if not has_role(request, DASHBOARD_ROLES):
+                return redirect(role_home_route(request))
+            return redirect('core:gym_dashboard', gym_id=gym.id)
+        messages.error(request, "Acces refuse a cette salle.")
+        return redirect('core:select_gym')
+
     context = {
         'gyms': gyms,
     }
     return render(request, 'core/select_gym.html', context)
 
 @login_required
+@require_POST
 def switch_gym(request, gym_id):
     """
-    Permet à un Owner de changer de gym actif.
-    Version robuste avec vérifications de sécurité.
+    Permet a un Owner de changer de salle active.
+    Le changement est volontairement limite au POST + CSRF.
     """
-    user = request.user
-
-    # Vérification 1 : L'utilisateur doit être Owner
-    if not getattr(user, 'is_owner', False) or not user.owned_organization:
+    if not getattr(request, 'is_owner', False) or not getattr(request, 'organization', None):
         messages.error(request, "Vous n'avez pas le droit de changer de gym.")
         return redirect('core:dashboard_redirect')
 
-    # Vérification 2 : Le gym doit appartenir à son organisation
-    gym = get_object_or_404(
-        Gym,
+    gym = Gym.objects.filter(
         id=gym_id,
-        organization=user.owned_organization,
-        is_active=True
-    )
-
-    # Vérification 3 : Optionnel - Vérifier que l'utilisateur a bien accès à ce gym
-    if gym not in request.owned_gyms:   # si tu as la propriété owned_gyms dans le middleware
-        messages.error(request, "Accès refusé à ce gym.")
+        organization=request.organization,
+        is_active=True,
+    ).first()
+    if not gym:
+        messages.error(request, "Acces refuse a ce gym.")
         return redirect('core:select_gym')
 
-    # Tout est OK → on change le gym actif en session
     request.session['current_gym_id'] = gym.id
-    request.session.modified = True  # Force la sauvegarde de la session
+    request.session.modified = True
 
     messages.success(
         request, 
@@ -108,8 +412,226 @@ def switch_gym(request, gym_id):
         extra_tags='safe'
     )
 
-    # Redirection vers le dashboard du gym
     return redirect('core:gym_dashboard', gym_id=gym.id)
+
+
+def _settings_allowed(request):
+    return bool(
+        request.user.is_authenticated
+        and has_role(request, SETTINGS_ROLES)
+        and getattr(request, "organization", None)
+    )
+
+
+def _log_sensitive_action(request, action, target_type="", target_label="", metadata=None, gym=None):
+    if not getattr(request, "organization", None):
+        return
+
+    SensitiveActivityLog.objects.create(
+        organization=request.organization,
+        gym=gym or getattr(request, "gym", None),
+        actor=request.user if request.user.is_authenticated else None,
+        action=action,
+        target_type=target_type,
+        target_label=target_label,
+        metadata={
+            "ip": request.META.get("REMOTE_ADDR", ""),
+            **(metadata or {}),
+        },
+    )
+
+
+@login_required
+def settings_dashboard(request):
+    if not _settings_allowed(request):
+        return HttpResponseForbidden("Acces non autorise")
+
+    organization = request.organization
+    gym = request.gym
+    if not gym:
+        return redirect("core:select_gym")
+
+    can_manage_organization = has_role(request, SETTINGS_ORGANIZATION_ROLES)
+    active_tab = request.GET.get("tab", "organization" if can_manage_organization else "employees")
+    if active_tab == "organization" and not can_manage_organization:
+        active_tab = "employees"
+
+    accessible_gyms = (
+        organization.gyms.filter(is_active=True).order_by("name")
+        if can_manage_organization
+        else Gym.objects.filter(id=gym.id, is_active=True)
+    )
+    organization_form = OrganizationSettingsForm(instance=organization)
+    employee_form = InternalEmployeeForm(organization=organization, gyms=accessible_gyms)
+    specialty_form = CoachSpecialtyForm()
+
+    if request.method == "POST":
+        action = request.POST.get("action", "")
+
+        if action == "organization":
+            if not can_manage_organization:
+                return HttpResponseForbidden("Seul l'Owner peut modifier l'organisation.")
+            active_tab = "organization"
+            organization_form = OrganizationSettingsForm(request.POST, request.FILES, instance=organization)
+            if organization_form.is_valid():
+                organization_form.save()
+                _log_sensitive_action(
+                    request,
+                    "organization.updated",
+                    "Organization",
+                    organization.name,
+                )
+                messages.success(request, "Informations de l'organisation mises a jour.")
+                return redirect("core:settings")
+
+        elif action == "employee_create":
+            active_tab = "employees"
+            employee_form = InternalEmployeeForm(request.POST, organization=organization, gyms=accessible_gyms)
+            if employee_form.is_valid():
+                selected_gym = employee_form.cleaned_data["gym"]
+                username = generate_username(
+                    employee_form.cleaned_data["first_name"],
+                    employee_form.cleaned_data["last_name"],
+                )
+                employee = User.objects.create(
+                    username=username,
+                    first_name=employee_form.cleaned_data["first_name"],
+                    last_name=employee_form.cleaned_data["last_name"],
+                    email=employee_form.cleaned_data["email"],
+                    password=make_password("12345"),
+                    is_active=employee_form.cleaned_data["is_active"],
+                    is_staff=False,
+                )
+                role = UserGymRole.objects.create(
+                    user=employee,
+                    gym=selected_gym,
+                    role=employee_form.cleaned_data["role"],
+                    is_active=employee_form.cleaned_data["is_active"],
+                )
+                _log_sensitive_action(
+                    request,
+                    "employee.created",
+                    "UserGymRole",
+                    f"{employee.username} - {role.get_role_display()} ({selected_gym.name})",
+                    metadata={"role": role.role, "employee_id": employee.id},
+                    gym=selected_gym,
+                )
+                messages.success(
+                    request,
+                    f"Employe cree : {username}. Mot de passe par defaut : 12345",
+                )
+                return redirect("core:settings")
+
+        elif action in ["employee_activate", "employee_deactivate", "employee_reset_password"]:
+            active_tab = "employees"
+            role = get_object_or_404(
+                UserGymRole.objects.select_related("user", "gym"),
+                id=request.POST.get("role_id"),
+                gym__in=accessible_gyms,
+            )
+            if role.role == "owner":
+                return HttpResponseForbidden("Impossible de modifier un Owner ici.")
+
+            if action == "employee_reset_password":
+                role.user.password = make_password("12345")
+                role.user.save(update_fields=["password"])
+                _log_sensitive_action(
+                    request,
+                    "employee.password_reset",
+                    "User",
+                    role.user.username,
+                    metadata={"employee_id": role.user_id},
+                    gym=role.gym,
+                )
+                messages.success(request, f"Mot de passe reinitialise pour {role.user.username} : 12345")
+                return redirect("core:settings")
+
+            if role.user_id == request.user.id:
+                messages.error(request, "Vous ne pouvez pas vous desactiver vous-meme.")
+                return redirect("core:settings")
+
+            should_activate = action == "employee_activate"
+            role.is_active = should_activate
+            role.save(update_fields=["is_active"])
+            role.user.is_active = should_activate
+            role.user.save(update_fields=["is_active"])
+            _log_sensitive_action(
+                request,
+                "employee.activated" if should_activate else "employee.deactivated",
+                "UserGymRole",
+                role.user.username,
+                metadata={"employee_id": role.user_id, "role": role.role},
+                gym=role.gym,
+            )
+            status_label = "active" if should_activate else "desactive"
+            messages.success(request, f"Employe {role.user.username} {status_label}.")
+            return redirect("core:settings")
+
+        elif action == "specialty_create":
+            active_tab = "specialties"
+            specialty_form = CoachSpecialtyForm(request.POST)
+            if specialty_form.is_valid():
+                name = specialty_form.cleaned_data["name"].strip()
+                specialty, created = CoachSpecialty.objects.get_or_create(
+                    gym=gym,
+                    name=name,
+                    defaults={"is_active": True},
+                )
+                if not created and not specialty.is_active:
+                    specialty.is_active = True
+                    specialty.save(update_fields=["is_active"])
+                _log_sensitive_action(
+                    request,
+                    "coach_specialty.created" if created else "coach_specialty.reactivated",
+                    "CoachSpecialty",
+                    specialty.name,
+                    gym=gym,
+                )
+                messages.success(request, f"Specialite coach enregistree : {specialty.name}")
+                return redirect("core:settings")
+
+        elif action in ["specialty_activate", "specialty_deactivate"]:
+            active_tab = "specialties"
+            specialty = get_object_or_404(CoachSpecialty, id=request.POST.get("specialty_id"), gym=gym)
+            specialty.is_active = action == "specialty_activate"
+            specialty.save(update_fields=["is_active"])
+            _log_sensitive_action(
+                request,
+                "coach_specialty.activated" if specialty.is_active else "coach_specialty.deactivated",
+                "CoachSpecialty",
+                specialty.name,
+                gym=gym,
+            )
+            messages.success(request, f"Specialite {specialty.name} mise a jour.")
+            return redirect("core:settings")
+
+    employee_roles = (
+        UserGymRole.objects.filter(gym__in=accessible_gyms)
+        .exclude(role="owner")
+        .select_related("user", "gym")
+        .order_by("gym__name", "user__first_name", "user__last_name")
+    )
+    specialties = CoachSpecialty.objects.filter(gym=gym).order_by("name")
+    activity_logs_qs = SensitiveActivityLog.objects.filter(organization=organization)
+    if not can_manage_organization:
+        activity_logs_qs = activity_logs_qs.filter(gym=gym)
+    activity_logs = activity_logs_qs.select_related("actor", "gym").order_by("-created_at")[:50]
+
+    context = {
+        "organization": organization,
+        "gym": gym,
+        "organization_form": organization_form,
+        "employee_form": employee_form,
+        "specialty_form": specialty_form,
+        "employee_roles": employee_roles,
+        "specialties": specialties,
+        "activity_logs": activity_logs,
+        "active_tab": active_tab,
+        "can_manage_organization": can_manage_organization,
+        "nav_active": "parametres",
+    }
+    return render(request, "core/settings.html", context)
+
 
 @login_required
 def gym_dashboard(request, gym_id):
@@ -153,9 +675,13 @@ def gym_dashboard(request, gym_id):
         if not user_role_obj:
             return HttpResponseForbidden("Accès non autorisé")
         user_role = user_role_obj.role
+
+    if user_role not in DASHBOARD_ROLES:
+        return HttpResponseForbidden("Acces non autorise")
     
     today = now().date()
     view = request.GET.get("view", "dashboard")
+    period_data = _get_period_window(request.GET.get("period", "month"), today)
     
     # Récupérer les modules actifs
     active_modules = GymModule.objects.filter(
@@ -163,345 +689,421 @@ def gym_dashboard(request, gym_id):
         is_active=True
     ).values_list('module__code', flat=True)
 
-    # ======================
-    # MEMBRES
-    # ======================
-
-    total_members = Member.objects.filter(gym=gym).count()
-
-    active_members = Member.objects.filter(
-        gym=gym,
-        subscriptions__is_active=True
-    ).distinct().count()
-
-    expired_members = Member.objects.filter(
-        gym=gym
-    ).filter(
-        Q(subscriptions__is_active=False) | Q(subscriptions__isnull=True)
-    ).distinct().count()
-
-    # nouveaux ce mois
     current_month = today.month
     current_year = today.year
 
-    new_members_month = Member.objects.filter(
-        gym=gym,
-        created_at__year=current_year,
-        created_at__month=current_month
-    ).count()
-
-    # ======================
-    # REVENUS (selon rôle)
-    # ======================
-    
-    daily_revenue = 0
-    monthly_revenue = 0
-    
-    # Seuls owner, manager et accountant voient les revenus
-    if user_role in ['owner', 'manager', 'accountant']:
-        payments_today = Payment.objects.filter(
-            gym=gym,
-            created_at__date=today
-        )
-        daily_revenue = payments_today.aggregate(total=Sum("amount"))["total"] or 0
-
-        monthly_revenue = Payment.objects.filter(
-            gym=gym,
-            created_at__year=current_year,
-            created_at__month=current_month
-        ).aggregate(total=Sum("amount"))["total"] or 0
-
-    # ... le reste de votre code reste identique ...
-    # (je garde la suite identique à votre code existant)
-    
-    # ======================
-    # ACCES (selon rôle)
-    # ======================
-    
-    today_checkins = 0
-    if user_role in ['owner', 'manager', 'reception']:
-        today_checkins = AccessLog.objects.filter(
-            member__gym=gym,
-            check_in_time__date=today,
-            access_granted=True
-        ).count()
-
-    # ======================
-    # EXPIRATIONS
-    # ======================
-
-    expiry_soon = MemberSubscription.objects.filter(
+    members_qs = Member.objects.filter(gym=gym)
+    active_subscriptions_qs = MemberSubscription.objects.filter(
         member__gym=gym,
+        is_active=True,
         end_date__gte=today,
-        end_date__lte=today + timedelta(days=15)
-    ).count()
-    
-    # ======================
-    # REPARTITION FORMULES
-    # ======================
-
-    plans_stats = MemberSubscription.objects.filter(
-        member__gym=gym,
-        is_active=True
-    ).values(
-        "plan__name"
-    ).annotate(
-        total=Count("id")
-    ).order_by("-total")
-
-    total_subscriptions = MemberSubscription.objects.filter(
-        member__gym=gym,
-        is_active=True
-    ).count()
-
-    # ======================
-    # FREQUENTATION SEMAINE
-    # ======================
-
-    start_week = today - timedelta(days=today.weekday())
-
-    days = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"]
-
-    attendance_qs = AccessLog.objects.filter(
-        member__gym=gym,
-        check_in_time__gte=start_week,
-        access_granted=True
-    ).annotate(
-        day=TruncDate("check_in_time")
-    ).values("day").annotate(
-        count=Count("id")
+        is_paused=False,
     )
 
-    attendance_map = {a["day"]: a["count"] for a in attendance_qs}
+    total_members = members_qs.count()
+    active_members = members_qs.filter(
+        status="active",
+        subscriptions__in=active_subscriptions_qs,
+    ).distinct().count()
+    suspended_members = members_qs.filter(status="suspended").count()
+    expired_members = max(total_members - active_members - suspended_members, 0)
+    active_member_rate = round((active_members / total_members) * 100, 1) if total_members else 0
 
-    attendance_week = []
+    new_members_month = members_qs.filter(
+        created_at__year=current_year,
+        created_at__month=current_month,
+    ).count()
+    new_members_period = members_qs.filter(
+        created_at__date__range=(period_data["start_date"], period_data["end_date"])
+    ).count()
+    new_members_previous = members_qs.filter(
+        created_at__date__range=(period_data["previous_start"], period_data["previous_end"])
+    ).count()
 
-    for i in range(7):
-        day = start_week + timedelta(days=i)
-        attendance_week.append({
-            "day": days[i],
-            "count": attendance_map.get(day, 0)
-        })
+    subscriptions_in_period = MemberSubscription.objects.filter(
+        member__gym=gym,
+        start_date__range=(period_data["start_date"], period_data["end_date"]),
+    )
+    subscriptions_previous_period = MemberSubscription.objects.filter(
+        member__gym=gym,
+        start_date__range=(period_data["previous_start"], period_data["previous_end"]),
+    )
+    previous_subscription_exists = MemberSubscription.objects.filter(
+        member=OuterRef("member"),
+        start_date__lt=OuterRef("start_date"),
+    )
+    renewals_period = subscriptions_in_period.annotate(
+        has_previous=Exists(previous_subscription_exists)
+    ).filter(has_previous=True).count()
+    renewals_previous = subscriptions_previous_period.annotate(
+        has_previous=Exists(previous_subscription_exists)
+    ).filter(has_previous=True).count()
 
-    # ======================
-    # DERNIERS PAIEMENTS (selon rôle)
-    # ======================
-
-    recent_payments = []
-    if user_role in ['owner', 'manager', 'accountant', 'cashier']:
-        recent_payments = Payment.objects.filter(
-            gym=gym
-        ).select_related(
-            "member"
-        ).order_by("-created_at")[:5]
-    
-    # ======================
-    # ALERTES EXPIRATION
-    # ======================
-
+    expirations_period = MemberSubscription.objects.filter(
+        member__gym=gym,
+        end_date__range=(period_data["start_date"], period_data["end_date"]),
+    ).count()
+    expirations_previous = MemberSubscription.objects.filter(
+        member__gym=gym,
+        end_date__range=(period_data["previous_start"], period_data["previous_end"]),
+    ).count()
+    expiry_soon = MemberSubscription.objects.filter(
+        member__gym=gym,
+        is_active=True,
+        end_date__gte=today,
+        end_date__lte=today + timedelta(days=15),
+    ).count()
     expiry_7_days = MemberSubscription.objects.filter(
         member__gym=gym,
         end_date=today + timedelta(days=7),
-        is_active=True
+        is_active=True,
     ).count()
-
     expiry_3_days = MemberSubscription.objects.filter(
         member__gym=gym,
         end_date=today + timedelta(days=3),
-        is_active=True
+        is_active=True,
     ).count()
-
     expiry_1_day = MemberSubscription.objects.filter(
         member__gym=gym,
         end_date=today + timedelta(days=1),
-        is_active=True
+        is_active=True,
     ).count()
 
-    # ======================
-    # PAIEMENTS EN ATTENTE (selon rôle)
-    # ======================
+    access_period_qs = AccessLog.objects.filter(
+        gym=gym,
+        check_in_time__date__range=(period_data["start_date"], period_data["end_date"]),
+    )
+    access_previous_qs = AccessLog.objects.filter(
+        gym=gym,
+        check_in_time__date__range=(period_data["previous_start"], period_data["previous_end"]),
+    )
+    visits_period = access_period_qs.filter(access_granted=True).count()
+    visits_previous = access_previous_qs.filter(access_granted=True).count()
+    unique_visitors_period = access_period_qs.filter(
+        access_granted=True
+    ).values("member_id").distinct().count()
+    denied_period = access_period_qs.filter(access_granted=False).count()
+    today_checkins = AccessLog.objects.filter(
+        gym=gym,
+        check_in_time__date=today,
+        access_granted=True,
+    ).count()
+    denied_today = AccessLog.objects.filter(
+        gym=gym,
+        check_in_time__date=today,
+        access_granted=False,
+    ).count()
+    engagement_rate = round((unique_visitors_period / active_members) * 100, 1) if active_members else 0
+    average_daily_visits = round(visits_period / period_data["days"], 1) if period_data["days"] else 0
+    peak_hour = _build_peak_hour(access_period_qs)
+    attendance_rows = _build_attendance_rows(gym, period_data)
+    week_labels = [row["label"] for row in attendance_rows]
+    week_values = [row["count"] for row in attendance_rows]
+    member_growth_rows = _build_member_growth_rows(members_qs, period_data)
+    member_growth_labels = [row["label"] for row in member_growth_rows]
+    member_growth_values = [row["count"] for row in member_growth_rows]
 
-    pending_count = 0
-    pending_total = 0
-    
-    if user_role in ['owner', 'manager', 'accountant', 'cashier']:
-        pending_payments = Payment.objects.filter(
-            gym=gym,
-            status="pending"
-        )
-        pending_count = pending_payments.count()
-        pending_total = pending_payments.aggregate(total=Sum("amount"))["total"] or 0
-
-    # ======================
-    # DERNIERS ACCES (selon rôle)
-    # ======================
-
-    recent_access = []
-    if user_role in ['owner', 'manager', 'reception']:
-        recent_access = AccessLog.objects.filter(
-            member__gym=gym
-        ).select_related(
-            "member"
-        ).order_by("-check_in_time")[:5]
-    
-    # ======================
-    # FREQUENTATION SEMAINE (graph)
-    # ======================
-
-    week_labels = []
-    week_values = []
-
-    for day in attendance_week:
-        week_labels.append(day["day"])
-        week_values.append(day["count"])
-
-    # ======================
-    # REVENUS PAR MOIS (graph)
-    # ======================
-
+    daily_revenue = 0
+    monthly_revenue = 0
+    period_revenue = 0
+    previous_period_revenue = 0
     sales_labels = []
     sales_values = []
-    
-    if user_role in ['owner', 'manager', 'accountant']:
-        monthly_sales = Payment.objects.filter(
+    if user_role in ["owner", "manager", "accountant", "cashier"]:
+        successful_incoming_payments = Payment.objects.filter(
             gym=gym,
+            status="success",
+            type="in",
+        )
+        daily_revenue = successful_incoming_payments.filter(
+            created_at__date=today
+        ).aggregate(total=Sum("amount_cdf"))["total"] or 0
+        monthly_revenue = successful_incoming_payments.filter(
+            created_at__year=current_year,
+            created_at__month=current_month,
+        ).aggregate(total=Sum("amount_cdf"))["total"] or 0
+        period_revenue = successful_incoming_payments.filter(
+            created_at__date__range=(period_data["start_date"], period_data["end_date"])
+        ).aggregate(total=Sum("amount_cdf"))["total"] or 0
+        previous_period_revenue = successful_incoming_payments.filter(
+            created_at__date__range=(period_data["previous_start"], period_data["previous_end"])
+        ).aggregate(total=Sum("amount_cdf"))["total"] or 0
+
+        monthly_sales = successful_incoming_payments.filter(
             created_at__year=current_year
         ).annotate(
             month=ExtractMonth("created_at")
         ).values("month").annotate(
-            total=Sum("amount")
+            total=Sum("amount_cdf")
         ).order_by("month")
 
-        for m in monthly_sales:
-            sales_labels.append(calendar.month_abbr[m["month"]])
-            sales_values.append(float(m["total"]))
+        for item in monthly_sales:
+            sales_labels.append(calendar.month_abbr[item["month"]])
+            sales_values.append(float(item["total"]))
 
-    # ======================
-    # REPARTITION ABONNEMENTS (graph)
-    # ======================
+    new_members_trend = _build_trend(new_members_period, new_members_previous)
+    renewals_trend = _build_trend(renewals_period, renewals_previous)
+    visits_trend = _build_trend(visits_period, visits_previous)
+    revenue_trend = _build_trend(period_revenue, previous_period_revenue)
+    expirations_trend = _build_trend(expirations_period, expirations_previous)
 
-    plan_labels = []
-    plan_values = []
+    plans_stats = MemberSubscription.objects.filter(
+        member__gym=gym,
+        is_active=True,
+        end_date__gte=today,
+    ).values("plan__name").annotate(total=Count("id")).order_by("-total")
+    total_subscriptions = MemberSubscription.objects.filter(
+        member__gym=gym,
+        is_active=True,
+        end_date__gte=today,
+    ).count()
+    plan_labels = [plan["plan__name"] or "Sans nom" for plan in plans_stats]
+    plan_values = [plan["total"] for plan in plans_stats]
+    status_chart_labels = ["Actifs", "Expires", "Suspendus"]
+    status_chart_values = [active_members, expired_members, suspended_members]
 
-    for p in plans_stats:
-        plan_labels.append(p["plan__name"])
-        plan_values.append(p["total"])
+    recent_payments = []
+    if user_role in ["owner", "manager", "accountant", "cashier"]:
+        recent_payments = Payment.objects.filter(gym=gym).select_related("member").order_by("-created_at")[:5]
 
-    # ======================
-    # DONNÉES SPÉCIFIQUES PAR RÔLE
-    # ======================
-    
-    # Pour Coach : récupérer ses membres
+    pending_count = 0
+    pending_total = 0
+    if user_role in ["owner", "manager", "accountant", "cashier"]:
+        pending_payments = Payment.objects.filter(
+            gym=gym,
+            status="pending",
+        )
+        pending_count = pending_payments.count()
+        pending_total = pending_payments.aggregate(total=Sum("amount_cdf"))["total"] or 0
+
+    recent_access = []
+    if user_role in ["owner", "manager", "reception"]:
+        recent_access = AccessLog.objects.filter(gym=gym).select_related("member").order_by("-check_in_time")[:5]
+
     my_members = []
     coach_name = None
-    if user_role == 'coach':
+    if user_role == "coach":
         from coaching.models import Coach
-        coach = Coach.objects.filter(
-            gym=gym, 
-            is_active=True
-        ).filter(
-            Q(name__icontains=request.user.first_name) | 
-            Q(user=request.user)
-        ).first()
-        
+
+        coach_lookup = Q()
+        for value in [request.user.get_full_name(), request.user.first_name, getattr(request.user, "phone", "")]:
+            if value:
+                coach_lookup |= Q(name__icontains=value) | Q(phone=value)
+        coach = Coach.objects.filter(gym=gym, is_active=True).filter(coach_lookup).first() if coach_lookup else None
+
         if coach:
             my_members = coach.members.filter(is_active=True)
             coach_name = coach.name
         else:
             coach_name = request.user.first_name
-    
-    # Pour Reception : récupérer les checkins du jour
-    checkins_today = today_checkins if user_role == 'reception' else 0
-    
-    # Pour Cashier : récupérer les ventes du jour
-    sales_today = daily_revenue if user_role == 'cashier' else 0
-    
-    # Pour Accountant : récupérer les totaux
-    total_maintenance_cost = 0
+
+    checkins_today = today_checkins if user_role == "reception" else 0
+    sales_today = daily_revenue if user_role == "cashier" else 0
+
+    machine_kpis = {
+        "total_machines": 0,
+        "machines_ok": 0,
+        "machines_maintenance": 0,
+        "machines_broken": 0,
+        "machines_ok_percent": 0,
+        "machines_maintenance_percent": 0,
+        "machines_broken_percent": 0,
+        "availability_rate": 0,
+        "attention_count": 0,
+        "total_maintenances": 0,
+        "total_maintenance_cost": 0,
+        "period_maintenances": 0,
+        "period_maintenance_cost": 0,
+        "monthly_maintenance_cost": 0,
+        "average_maintenance_cost": 0,
+        "top_costly_machine": "-",
+    }
+    if "MACHINES" in active_modules:
+        from machines.kpis import build_machine_kpis
+
+        machine_kpis = build_machine_kpis(gym, period_data)
+
+    rh_kpis = {
+        "total_employees": 0,
+        "active_employees": 0,
+        "inactive_employees": 0,
+        "attendance_today_present": 0,
+        "attendance_today_absent": 0,
+        "attendance_today_rate": 0,
+        "attendance_period_present": 0,
+        "attendance_period_absent": 0,
+        "attendance_period_rate": 0,
+        "monthly_payroll": 0,
+        "monthly_payroll_paid": 0,
+        "monthly_payroll_pending": 0,
+        "monthly_payroll_pending_count": 0,
+        "salary_paid_period": 0,
+        "salary_payments_period": 0,
+        "employee_role_breakdown": [],
+    }
+    if "RH" in active_modules:
+        from rh.kpis import build_rh_kpis
+
+        rh_kpis = build_rh_kpis(gym, period_data)
+
+    product_kpis = {
+        "total_products": 0,
+        "all_products_count": 0,
+        "inactive_products": 0,
+        "stock_value_total": 0,
+        "stock_ok_count": 0,
+        "low_stock_count": 0,
+        "out_of_stock_count": 0,
+        "stock_movements_period": 0,
+        "stock_in_period": 0,
+        "stock_out_period": 0,
+        "top_value_products": [],
+        "recent_stock_movements": [],
+        "stock_status_chart_labels": [],
+        "stock_status_chart_values": [],
+        "stock_value_chart_labels": [],
+        "stock_value_chart_values": [],
+    }
+    if "PRODUCTS" in active_modules:
+        from products.kpis import build_product_kpis
+
+        product_kpis = build_product_kpis(gym, period_data)
+
+    coaching_kpis = {
+        "total_coaches": 0,
+        "active_coaches": 0,
+        "inactive_coaches": 0,
+        "assigned_members_count": 0,
+        "unassigned_members_count": 0,
+        "average_members_per_coach": 0,
+        "new_coaches_period": 0,
+        "top_coaches": [],
+        "coaching_status_chart_labels": [],
+        "coaching_status_chart_values": [],
+        "coaching_workload_chart_labels": [],
+        "coaching_workload_chart_values": [],
+    }
+    if "COACHING" in active_modules:
+        from coaching.kpis import build_coaching_kpis
+
+        coaching_kpis = build_coaching_kpis(gym, period_data)
+
+    total_maintenance_cost = machine_kpis["total_maintenance_cost"]
     total_revenue = monthly_revenue
-    if user_role == 'accountant' and 'MACHINES' in active_modules:
-        from machines.models import MaintenanceLog
-        total_maintenance_cost = MaintenanceLog.objects.filter(
-            machine__gym=gym
-        ).aggregate(total=Sum('cost'))['total'] or 0
 
     context = {
-        # Modules et infos générales
         "active_modules": active_modules,
         "gym": gym,
         "organization": gym.organization,
         "context_view": view,
         "user_role": user_role,
         "is_owner": is_owner,
-        
-        # Données spécifiques par rôle
         "my_members": my_members,
         "coach_name": coach_name,
         "checkins_today": checkins_today,
         "sales_today": sales_today,
         "total_maintenance_cost": total_maintenance_cost,
         "total_revenue": total_revenue,
-        
-        # Membres
+        "selected_period": period_data["key"],
+        "period_label": period_data["label"],
+        "period_label_lower": period_data["label"].lower(),
+        "period_range_label": _format_period_range(period_data["start_date"], period_data["end_date"]),
+        "period_days": period_data["days"],
         "total_members": total_members,
         "active_members": active_members,
+        "active_member_rate": active_member_rate,
         "expired_members": expired_members,
+        "suspended_members": suspended_members,
         "new_members_month": new_members_month,
-
-        # Revenus
+        "new_members_period": new_members_period,
+        "renewals_period": renewals_period,
+        "expirations_period": expirations_period,
+        "unique_visitors_period": unique_visitors_period,
+        "engagement_rate": engagement_rate,
+        "average_daily_visits": average_daily_visits,
+        "peak_hour": peak_hour,
+        "new_members_trend": new_members_trend,
+        "renewals_trend": renewals_trend,
+        "visits_trend": visits_trend,
+        "revenue_trend": revenue_trend,
+        "expirations_trend": expirations_trend,
         "daily_revenue": daily_revenue,
         "monthly_revenue": monthly_revenue,
-
-        # Accès
+        "period_revenue": period_revenue,
         "today_checkins": today_checkins,
-
-        # Expirations
+        "visits_period": visits_period,
+        "denied_period": denied_period,
+        "denied_today": denied_today,
         "expiry_soon": expiry_soon,
         "expiry_7_days": expiry_7_days,
         "expiry_3_days": expiry_3_days,
         "expiry_1_day": expiry_1_day,
-
-        # Abonnements
         "plans_stats": plans_stats,
         "total_subscriptions": total_subscriptions,
         "plan_labels": plan_labels,
         "plan_values": plan_values,
-
-        # Fréquentation
-        "attendance_week": attendance_week,
+        "attendance_rows": attendance_rows,
         "week_labels": week_labels,
         "week_values": week_values,
-
-        # Paiements
+        "member_growth_rows": member_growth_rows,
+        "status_chart_labels": _to_json(status_chart_labels),
+        "status_chart_values": _to_json(status_chart_values),
+        "member_growth_labels": _to_json(member_growth_labels),
+        "member_growth_values": _to_json(member_growth_values),
+        "plan_chart_labels": _to_json(plan_labels),
+        "plan_chart_values": _to_json(plan_values),
+        "attendance_chart_labels": _to_json(week_labels),
+        "attendance_chart_values": _to_json(week_values),
+        "sales_chart_labels": _to_json(sales_labels),
+        "sales_chart_values": _to_json(sales_values),
+        "stock_status_chart_labels_json": _to_json(product_kpis["stock_status_chart_labels"]),
+        "stock_status_chart_values_json": _to_json(product_kpis["stock_status_chart_values"]),
+        "stock_value_chart_labels_json": _to_json(product_kpis["stock_value_chart_labels"]),
+        "stock_value_chart_values_json": _to_json(product_kpis["stock_value_chart_values"]),
+        "coaching_status_chart_labels_json": _to_json(coaching_kpis["coaching_status_chart_labels"]),
+        "coaching_status_chart_values_json": _to_json(coaching_kpis["coaching_status_chart_values"]),
+        "coaching_workload_chart_labels_json": _to_json(coaching_kpis["coaching_workload_chart_labels"]),
+        "coaching_workload_chart_values_json": _to_json(coaching_kpis["coaching_workload_chart_values"]),
         "recent_payments": recent_payments,
         "pending_count": pending_count,
         "pending_total": pending_total,
-
-        # Accès récents
         "recent_access": recent_access,
-        
-        # Graphiques
         "sales_labels": sales_labels,
         "sales_values": sales_values,
     }
+    context.update(machine_kpis)
+    context.update(rh_kpis)
+    context.update(product_kpis)
+    context.update(coaching_kpis)
 
-    return render(request, "core/dashboard.html", context)
+    return render(request, "core/dashboard_members.html", context)
 
 @login_required
-def reports_dashboard(request):
-    gym = request.gym
+def _legacy_reports_dashboard(request):
+    gym = getattr(request, "gym", None)
+    if not gym:
+        return redirect("core:select_gym")
+
+    user_role = current_role(request)
+    if not has_role(request, REPORT_ROLES):
+        return HttpResponseForbidden("Acces non autorise")
+
     today = now().date()
     section = request.GET.get("section", "journalier")
+    period_data = get_report_period(request.GET)
+    accounting_report = build_accounting_report(gym, period_data)
     # =========================
     # CA du jour
     # =========================
     payments_today = Payment.objects.filter(
         gym=gym,
-        created_at__date=today
+        created_at__date=today,
+        status="success",
+        type="in",
     )
 
     daily_revenue = payments_today.aggregate(
-        total=Sum("amount")
+        total=Sum("amount_cdf")
     )["total"] or 0
 
     daily_transactions = payments_today.count()
@@ -547,11 +1149,13 @@ def reports_dashboard(request):
     payments_month = Payment.objects.filter(
         gym=gym,
         created_at__year=current_year,
-        created_at__month=current_month
+        created_at__month=current_month,
+        status="success",
+        type="in",
     )
 
     monthly_revenue = payments_month.aggregate(
-        total=Sum("amount")
+        total=Sum("amount_cdf")
     )["total"] or 0
 
     monthly_transactions = payments_month.count()
@@ -588,17 +1192,22 @@ def reports_dashboard(request):
         ).values(
             "plan__name"
         ).annotate(
-            subscriptions=Count("id"),
-            revenue=Sum("payments__amount")
+            subscriptions=Count("id", distinct=True),
+            revenue=Sum(
+                "payments__amount_cdf",
+                filter=Q(payments__status="success", payments__type="in")
+            )
         ).order_by("-revenue")
     
     monthly_sales = Payment.objects.filter(
         gym=gym,
-        created_at__year=current_year
+        created_at__year=current_year,
+        status="success",
+        type="in",
         ).annotate(
             month=ExtractMonth("created_at")
         ).values("month").annotate(
-            total=Sum("amount")
+            total=Sum("amount_cdf")
         ).order_by("month")
     
     sales_labels = []
@@ -609,6 +1218,12 @@ def reports_dashboard(request):
         sales_values.append(float(m["total"]))
     context = {
         "section": section,
+        "selected_period": period_data["key"],
+        "date_from": period_data["date_from"],
+        "date_to": period_data["date_to"],
+        "report_period_label": period_data["label"],
+        "accounting_report": accounting_report,
+        "can_export_accounting": user_role in REPORT_ROLES,
             # journalier
         "daily_revenue": daily_revenue,
         "daily_transactions": daily_transactions,
@@ -632,96 +1247,159 @@ def reports_dashboard(request):
 
 
 @login_required
-def organization_dashboard(request, org_id):
-    """Dashboard pour le role Owner - Vue consolidée avec grille des gyms"""
-    
-    # Vérifier que l'utilisateur est bien Owner de cette organisation
-    if not hasattr(request, 'is_owner') or not request.is_owner:
-        return HttpResponseForbidden("Seul un Owner peut accéder à ce dashboard")
-    
-    if request.user.owned_organization_id != org_id:
-        return HttpResponseForbidden("Vous n'êtes pas propriétaire de cette organisation")
-    
-    from datetime import timedelta
-    from django.utils.timezone import now
-    from members.models import Member
-    from machines.models import Machine
-    from coaching.models import Coach
-    from subscriptions.models import MemberSubscription
-    
-    organization = get_object_or_404(Organization, id=org_id)
-    gyms = organization.gyms.filter(is_active=True)
-    
-    today = now().date()
-    
-    # Récupérer les données pour chaque gym
-    gyms_data = []
-    total_members = 0
-    total_machines = 0
-    total_maintenance_cost = 0
-    
-    for gym in gyms:
-        # Machines
-        machines = Machine.objects.filter(gym=gym)
-        machines_ok = machines.filter(status='ok').count()
-        machines_maintenance = machines.filter(status='maintenance').count()
-        machines_broken = machines.filter(status='broken').count()
-        machines_total = machines.count()
-        
-        # Pourcentage
-        machines_ok_percent = (machines_ok / machines_total * 100) if machines_total > 0 else 0
-        machines_maintenance_percent = (machines_maintenance / machines_total * 100) if machines_total > 0 else 0
-        machines_broken_percent = (machines_broken / machines_total * 100) if machines_total > 0 else 0
-        
-        # Membres
-        members_count = Member.objects.filter(gym=gym, is_active=True).count()
-        
-        # Coachs
-        coaches_count = Coach.objects.filter(gym=gym, is_active=True).count()
-        
-        # Abonnements expirant bientôt
-        expiry_soon = MemberSubscription.objects.filter(
-            member__gym=gym,
-            end_date__gte=today,
-            end_date__lte=today + timedelta(days=15),
-            is_active=True
-        ).count()
-        
-        # Coût maintenance
-        from machines.models import MaintenanceLog
-        gym_maintenance_cost = MaintenanceLog.objects.filter(
-            machine__gym=gym
-        ).aggregate(total=Sum('cost'))['total'] or 0
-        
-        gyms_data.append({
-            'id': gym.id,
-            'name': gym.name,
-            'machines': machines_total,
-            'machines_ok': machines_ok,
-            'machines_maintenance': machines_maintenance,
-            'machines_broken': machines_broken,
-            'machines_ok_percent': round(machines_ok_percent, 1),
-            'machines_maintenance_percent': round(machines_maintenance_percent, 1),
-            'machines_broken_percent': round(machines_broken_percent, 1),
-            'members': members_count,
-            'coaches': coaches_count,
-            'expiry_soon': expiry_soon,
-            'maintenance_cost': gym_maintenance_cost,
-        })
-        
-        total_members += members_count
-        total_machines += machines_total
-        total_maintenance_cost += gym_maintenance_cost
-    
-    context = {
-        'organization': organization,
-        'gyms': gyms,
-        'gyms_data': gyms_data,
-        'total_gyms': gyms.count(),
-        'members_total': total_members,
-        'machines_total': total_machines,
-        'maintenance_cost_total': total_maintenance_cost,
-        'user_role': 'owner',
-        'nav_active': 'dashboard',
+def reports_dashboard(request):
+    gym = getattr(request, "gym", None)
+    if not gym:
+        return redirect("core:select_gym")
+
+    user_role = current_role(request)
+    if not has_role(request, REPORT_ROLES):
+        return HttpResponseForbidden("Acces non autorise")
+
+    section = get_report_section(request.GET)
+    default_period_by_section = {
+        "journalier": "today",
+        "mensuel": "month",
+        "personnalise": "custom",
     }
-    return render(request, 'core/organization_dashboard.html', context)
+    period_data = get_report_period(
+        request.GET,
+        default_period=default_period_by_section.get(section, "month"),
+    )
+    accounting_report = build_accounting_report(gym, period_data)
+
+    payments_period = Payment.objects.filter(
+        gym=gym,
+        created_at__date__range=(period_data["start_date"], period_data["end_date"]),
+        status="success",
+    )
+    incoming_period = payments_period.filter(type="in")
+
+    daily_revenue = incoming_period.aggregate(total=Sum("amount_cdf"))["total"] or 0
+    daily_transactions = payments_period.count()
+    daily_new_clients = Member.objects.filter(
+        gym=gym,
+        created_at__date__range=(period_data["start_date"], period_data["end_date"]),
+    ).count()
+    daily_visits = AccessLog.objects.filter(
+        gym=gym,
+        check_in_time__date__range=(period_data["start_date"], period_data["end_date"]),
+        access_granted=True,
+    ).count()
+    denied_access = AccessLog.objects.filter(
+        gym=gym,
+        check_in_time__date__range=(period_data["start_date"], period_data["end_date"]),
+        access_granted=False,
+    ).count()
+    transactions = payments_period.select_related("member", "cash_register").order_by("-created_at")[:50]
+
+    monthly_revenue = daily_revenue
+    monthly_transactions = daily_transactions
+    monthly_new_members = daily_new_clients
+    monthly_renewals = MemberSubscription.objects.filter(
+        member__gym=gym,
+        start_date__range=(period_data["start_date"], period_data["end_date"]),
+    ).count()
+    monthly_visits = daily_visits
+
+    plans_stats = MemberSubscription.objects.filter(
+        member__gym=gym,
+        start_date__range=(period_data["start_date"], period_data["end_date"]),
+    ).values("plan__name").annotate(
+        subscriptions=Count("id", distinct=True),
+        revenue=Sum(
+            "payments__amount_cdf",
+            filter=Q(payments__status="success", payments__type="in"),
+        ),
+    ).order_by("-revenue")
+
+    monthly_sales = incoming_period.annotate(
+        month=ExtractMonth("created_at")
+    ).values("month").annotate(
+        total=Sum("amount_cdf")
+    ).order_by("month")
+
+    sales_labels = []
+    sales_values = []
+    for item in monthly_sales:
+        sales_labels.append(calendar.month_abbr[item["month"]])
+        sales_values.append(float(item["total"]))
+
+    custom_report = build_custom_report(gym, request.GET, period_data, limit=50)
+
+    context = {
+        "section": section,
+        "selected_period": period_data["key"],
+        "date_from": period_data["date_from"],
+        "date_to": period_data["date_to"],
+        "report_period_label": period_data["label"],
+        "accounting_report": accounting_report,
+        "can_export_accounting": user_role in REPORT_ROLES,
+        "custom_report": custom_report,
+        "daily_revenue": daily_revenue,
+        "daily_transactions": daily_transactions,
+        "daily_new_clients": daily_new_clients,
+        "daily_visits": daily_visits,
+        "denied_access": denied_access,
+        "transactions": transactions,
+        "monthly_revenue": monthly_revenue,
+        "monthly_new_members": monthly_new_members,
+        "monthly_renewals": monthly_renewals,
+        "monthly_visits": monthly_visits,
+        "plans_stats": plans_stats,
+        "sales_labels": sales_labels,
+        "sales_values": sales_values,
+        "monthly_transactions": monthly_transactions,
+    }
+
+    return render(request, "core/rapports.html", context)
+
+
+@login_required
+def accounting_report_export(request):
+    gym = getattr(request, "gym", None)
+    if not gym:
+        return redirect("core:select_gym")
+
+    if not has_role(request, REPORT_ROLES):
+        return HttpResponseForbidden("Acces non autorise")
+
+    export_format = request.GET.get("format", "xlsx").lower()
+    if export_format == "excel":
+        export_format = "xlsx"
+    if export_format not in ["csv", "xlsx"]:
+        return HttpResponseBadRequest("Format d'export non supporte.")
+
+    section = get_report_section(request.GET)
+    default_period = "custom" if section == "personnalise" else "month"
+    period_data = get_report_period(request.GET, default_period=default_period)
+
+    if section == "personnalise":
+        custom_report = build_custom_report(gym, request.GET, period_data)
+        if export_format == "csv":
+            content = build_custom_csv_export(custom_report)
+            content_type = "text/csv; charset=utf-8"
+        else:
+            content = build_custom_xlsx_export(custom_report)
+            content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+        response = HttpResponse(content, content_type=content_type)
+        response["Content-Disposition"] = (
+            f'attachment; filename="{accounting_filename(gym, period_data, export_format)}"'
+        )
+        return response
+
+    report = build_accounting_report(gym, period_data)
+
+    if export_format == "csv":
+        content = build_csv_export(report)
+        content_type = "text/csv; charset=utf-8"
+    else:
+        content = build_xlsx_export(report)
+        content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+    response = HttpResponse(content, content_type=content_type)
+    response["Content-Disposition"] = (
+        f'attachment; filename="{accounting_filename(gym, period_data, export_format)}"'
+    )
+    return response

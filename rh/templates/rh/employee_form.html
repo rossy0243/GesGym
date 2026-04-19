@@ -30,7 +30,7 @@
                         {% endfor %}
                         
                         <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                            <a href="{% if employee %}{% url 'rh:detail' gym.id employee.id %}{% else %}{% url 'rh:list' gym.id %}{% endif %}" 
+                            <a href="{% if employee %}{% url 'rh:detail' employee.id %}{% else %}{% url 'rh:list' %}{% endif %}"
                                class="btn btn-secondary">
                                 Annuler
                             </a>

@@ -4,9 +4,44 @@
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1>Employés - {{ gym.name }}</h1>
-        <a href="{% url 'rh:create' gym.id %}" class="btn btn-primary">
+        <a href="{% url 'rh:create' %}" class="btn btn-primary">
             <i class="fas fa-plus"></i> Ajouter un employé
         </a>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="text-muted small">Employes actifs</div>
+                    <h3 class="mb-0">{{ active_employees }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="text-muted small">Presence aujourd'hui</div>
+                    <h3 class="mb-0">{{ attendance_today_rate }}%</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="text-muted small">Masse salariale mois</div>
+                    <h3 class="mb-0">{{ monthly_payroll|floatformat:0 }} CDF</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="text-muted small">Paie en attente</div>
+                    <h3 class="mb-0">{{ monthly_payroll_pending|floatformat:0 }} CDF</h3>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Filtres -->
@@ -35,7 +70,7 @@
                 <div class="col-md-2 d-flex align-items-end">
                     <button type="submit" class="btn btn-secondary">Filtrer</button>
                     {% if role_filter or active_filter %}
-                    <a href="{% url 'rh:list' gym.id %}" class="btn btn-link">Réinitialiser</a>
+                    <a href="{% url 'rh:list' %}" class="btn btn-link">Réinitialiser</a>
                     {% endif %}
                 </div>
             </form>
@@ -57,15 +92,15 @@
                     
                     <p class="card-text">
                         <strong>Rôle:</strong> {{ employee.get_role_display }}<br>
-                        <strong>Salaire journalier:</strong> {{ employee.daily_salary }} €<br>
+                        <strong>Salaire journalier:</strong> {{ employee.daily_salary }} CDF<br>
                         <strong>Téléphone:</strong> {{ employee.phone|default:"Non renseigné" }}
                     </p>
                     
                     <div class="mt-3">
-                        <a href="{% url 'rh:detail' gym.id employee.id %}" class="btn btn-sm btn-outline-primary">
+                        <a href="{% url 'rh:detail' employee.id %}" class="btn btn-sm btn-outline-primary">
                             <i class="fas fa-eye"></i> Détails
                         </a>
-                        <a href="{% url 'rh:update' gym.id employee.id %}" class="btn btn-sm btn-outline-secondary">
+                        <a href="{% url 'rh:update' employee.id %}" class="btn btn-sm btn-outline-secondary">
                             <i class="fas fa-edit"></i> Modifier
                         </a>
                         {% if employee.is_active %}
@@ -91,7 +126,7 @@
                         Êtes-vous sûr de vouloir désactiver l'employé "{{ employee.name }}" ?
                     </div>
                     <div class="modal-footer">
-                        <form method="post" action="{% url 'rh:delete' gym.id employee.id %}">
+                        <form method="post" action="{% url 'rh:delete' employee.id %}">
                             {% csrf_token %}
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
                             <button type="submit" class="btn btn-danger">Désactiver</button>
@@ -105,7 +140,7 @@
         {% empty %}
         <div class="col-12">
             <div class="alert alert-info">
-                Aucun employé trouvé. <a href="{% url 'rh:create' gym.id %}">Ajoutez votre premier employé</a>
+                Aucun employé trouvé. <a href="{% url 'rh:create' %}">Ajoutez votre premier employé</a>
             </div>
         </div>
         {% endfor %}

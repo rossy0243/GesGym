@@ -353,7 +353,7 @@ def process_payment(request, gym_id, employee_id, year, month):
             payment.present_days = present_days
             payment.save()
             
-            messages.success(request, f'Paiement de {salary}€ enregistré pour {employee.name}')
+            messages.success(request, f'Paiement de {salary} CDF enregistré pour {employee.name}')
             return redirect('rh:payroll_dashboard', gym_id=gym_id)
     else:
         initial = {
@@ -371,3 +371,19 @@ def process_payment(request, gym_id, employee_id, year, month):
         'form': form,
     }
     return render(request, 'rh/payment_form.html', context)
+
+
+# Compatibility layer: URLs and older imports keep using rh.views, while the
+# corrected implementation lives in views_v2 and scopes every query to request.gym.
+from .views_v2 import (  # noqa: E402,F401
+    attendance_bulk,
+    attendance_create,
+    attendance_list,
+    employee_create,
+    employee_delete,
+    employee_detail,
+    employee_list,
+    employee_update,
+    payroll_dashboard,
+    process_payment,
+)

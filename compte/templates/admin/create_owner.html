@@ -1,82 +1,76 @@
-<!-- templates/admin/create_owner.html -->
 {% extends "admin/base_site.html" %}
 
 {% block content %}
-<div class="container mt-4">
-    <h1>Créer un propriétaire (Owner)</h1>
-    
-    <div class="card mt-4">
-        <div class="card-body">
-            <form method="post">
-                {% csrf_token %}
-                
-                <div class="form-group mb-3">
-                    <label for="first_name">Prénom *</label>
-                    <input type="text" name="first_name" id="first_name" 
-                           class="form-control" required>
-                </div>
-                
-                <div class="form-group mb-3">
-                    <label for="last_name">Nom *</label>
-                    <input type="text" name="last_name" id="last_name" 
-                           class="form-control" required>
-                </div>
-                
-                <div class="form-group mb-3">
-                    <label for="email">Email</label>
-                    <input type="email" name="email" id="email" 
-                           class="form-control">
-                    <small class="text-muted">Optionnel</small>
-                </div>
-                
-                <div class="form-group mb-3">
-                    <label for="organization">Organisation *</label>
-                    <select name="organization" id="organization" class="form-control" required>
-                        <option value="">Sélectionner une organisation</option>
-                        {% for org in organizations %}
-                        <option value="{{ org.id }}">{{ org.name }}</option>
-                        {% endfor %}
-                    </select>
-                    <small class="text-muted">
-                        L'Owner aura accès à TOUS les gyms de cette organisation
-                    </small>
-                </div>
-                
-                <div class="alert alert-info">
-                    <strong>📋 Résumé :</strong>
-                    <ul class="mb-0 mt-2">
-                        <li>Username généré automatiquement : <strong>prénom.nom</strong></li>
-                        <li>Mot de passe par défaut : <code>12345</code></li>
-                        <li>L'Owner pourra se connecter à l'admin Django</li>
-                        <li>L'Owner aura accès à <strong>TOUS les gyms</strong> de son organisation</li>
-                        <li>L'Owner pourra gérer les utilisateurs de tous ses gyms</li>
-                    </ul>
-                </div>
-                
-                <div class="alert alert-warning">
-                    <strong>⚠️ Important :</strong>
-                    <p class="mb-0">Seul un Superuser peut créer un Owner. Cette action est irréversible.</p>
-                </div>
-                
-                <div class="mt-4">
-                    <button type="submit" class="btn btn-primary">Créer le Owner</button>
-                    <a href="{% url 'admin:compte_user_changelist' %}" class="btn btn-secondary">Annuler</a>
-                </div>
-            </form>
+<div id="content-main">
+    <h1>Creer un Owner + organisation + gyms</h1>
+    <p class="help">
+        Ce formulaire cree un client SaaS complet pour la V1 : organisation, Owner, gyms,
+        roles Owner et modules actifs.
+    </p>
+
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+
+        <fieldset class="module aligned">
+            <h2>Owner</h2>
+            <div class="form-row">{{ form.first_name.errors }}{{ form.first_name.label_tag }}{{ form.first_name }}</div>
+            <div class="form-row">{{ form.last_name.errors }}{{ form.last_name.label_tag }}{{ form.last_name }}</div>
+            <div class="form-row">{{ form.email.errors }}{{ form.email.label_tag }}{{ form.email }}</div>
+            <p class="help">Username genere automatiquement. Mot de passe par defaut : <strong>12345</strong>.</p>
+        </fieldset>
+
+        <fieldset class="module aligned">
+            <h2>Organisation</h2>
+            <div class="form-row">{{ form.organization.errors }}{{ form.organization.label_tag }}{{ form.organization }}</div>
+            <p class="help">{{ form.organization.help_text }}</p>
+            <div class="form-row">{{ form.organization_name.errors }}{{ form.organization_name.label_tag }}{{ form.organization_name }}</div>
+            <div class="form-row">{{ form.organization_slug.errors }}{{ form.organization_slug.label_tag }}{{ form.organization_slug }}</div>
+            <div class="form-row">{{ form.organization_phone.errors }}{{ form.organization_phone.label_tag }}{{ form.organization_phone }}</div>
+            <div class="form-row">{{ form.organization_email.errors }}{{ form.organization_email.label_tag }}{{ form.organization_email }}</div>
+            <div class="form-row">{{ form.organization_address.errors }}{{ form.organization_address.label_tag }}{{ form.organization_address }}</div>
+        </fieldset>
+
+        <fieldset class="module aligned">
+            <h2>Gyms</h2>
+            <div class="form-row">{{ form.gyms.errors }}{{ form.gyms.label_tag }}{{ form.gyms }}</div>
+            <p class="help">Un gym par ligne. Les slugs et subdomains seront generes automatiquement.</p>
+        </fieldset>
+
+        <fieldset class="module">
+            <h2>Modules a activer</h2>
+            {{ form.modules.errors }}
+            <div class="checkbox-grid">
+                {{ form.modules }}
+            </div>
+        </fieldset>
+
+        <div class="submit-row">
+            <input type="submit" class="default" value="Creer le client">
+            <a class="button cancel-link" href="{% url 'admin:compte_user_changelist' %}">Annuler</a>
         </div>
-    </div>
+    </form>
 </div>
 
 <style>
-    .form-control {
-        width: 100%;
-        padding: 8px 12px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
+    #content-main input[type="text"],
+    #content-main input[type="email"],
+    #content-main select,
+    #content-main textarea {
+        min-width: 420px;
+        max-width: 760px;
     }
-    .form-control:focus {
-        border-color: #004e92;
-        outline: none;
+
+    .checkbox-grid ul {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 8px 16px;
+        margin-left: 0;
+        padding-left: 0;
+    }
+
+    .checkbox-grid li {
+        list-style: none;
     }
 </style>
 {% endblock %}

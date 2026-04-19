@@ -4,7 +4,7 @@
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1>Mouvements de stock - {{ gym.name }}</h1>
-        <a href="{% url 'products:stock_dashboard' gym.id %}" class="btn btn-info">
+        <a href="{% url 'products:stock_dashboard' %}" class="btn btn-info">
             <i class="fas fa-chart-line"></i> Dashboard
         </a>
     </div>
@@ -38,7 +38,7 @@
                 <div class="col-md-4 d-flex align-items-end">
                     <button type="submit" class="btn btn-secondary">Filtrer</button>
                     {% if selected_product or selected_type %}
-                    <a href="{% url 'products:movement_list' gym.id %}" class="btn btn-link">Réinitialiser</a>
+                    <a href="{% url 'products:movement_list' %}" class="btn btn-link">Réinitialiser</a>
                     {% endif %}
                 </div>
             </form>
@@ -63,7 +63,7 @@
                             <tr>
                                 <td>{{ movement.created_at|date:"d/m/Y H:i" }}</td>
                                 <td>
-                                    <a href="{% url 'products:detail' gym.id movement.product.id %}">
+                                    <a href="{% url 'products:detail' movement.product.id %}">
                                         {{ movement.product.name }}
                                     </a>
                                 </td>

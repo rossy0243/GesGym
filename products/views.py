@@ -220,3 +220,17 @@ def stock_dashboard(request, gym_id):
         'recent_movements': recent_movements,
     }
     return render(request, 'products/stock_dashboard.html', context)
+
+
+# Compatibility layer: products.views remains the import target while the
+# corrected implementation in views_v2 scopes every query to request.gym.
+from .views_v2 import (  # noqa: E402,F401
+    product_create,
+    product_delete,
+    product_detail,
+    product_list,
+    product_update,
+    stock_dashboard,
+    stock_movement_create,
+    stock_movement_list,
+)
