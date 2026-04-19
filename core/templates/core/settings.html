@@ -10,7 +10,7 @@
         <div class="page-header-title d-flex align-items-center gap-2">
             <span class="material-icons text-primary" style="font-size:28px;">settings</span>
             <div>
-                <h5 class="mb-0">Parametres V1</h5>
+                <h5 class="mb-0">Parametres</h5>
                 <small class="text-muted">{{ organization.name }} - {{ gym.name }}</small>
             </div>
         </div>
@@ -20,18 +20,32 @@
 <style>
 .settings-card {
     border: 1px solid rgba(148, 163, 184, 0.16);
-    border-radius: 18px;
-    background: #fff;
-    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.04);
+    border-radius: 22px;
+    background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
+    overflow: hidden;
+}
+
+.settings-card .card-header {
+    padding: 1.1rem 1.25rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(8px);
+}
+
+.settings-card .card-body {
+    padding: 1.25rem;
 }
 
 .settings-tab {
     border-radius: 999px;
+    padding-inline: 1rem;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
 }
 
 .settings-muted-box {
     border: 1px solid rgba(148, 163, 184, 0.16);
-    border-radius: 16px;
+    border-radius: 18px;
     background: #f8fafc;
 }
 
@@ -41,6 +55,7 @@
     border-radius: 18px;
     object-fit: cover;
     background: #eef2ff;
+    border: 1px solid rgba(148, 163, 184, 0.14);
 }
 
 .field-errors,
@@ -52,6 +67,104 @@
 
 .errorlist {
     padding-left: 1rem;
+    margin-bottom: 0;
+}
+
+.settings-scroll-area {
+    max-height: 520px;
+    overflow-y: auto;
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
+
+.settings-scroll-area::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.settings-scroll-area::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.45);
+    border-radius: 999px;
+}
+
+.settings-scroll-area::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.settings-scroll-area thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #f8fafc !important;
+    box-shadow: inset 0 -1px 0 rgba(148, 163, 184, 0.12);
+}
+
+.settings-form-scroll {
+    max-height: 520px;
+    overflow-y: auto;
+    padding-right: 4px;
+    scrollbar-width: thin;
+}
+
+.settings-form-scroll::-webkit-scrollbar {
+    width: 8px;
+}
+
+.settings-form-scroll::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.45);
+    border-radius: 999px;
+}
+
+.settings-empty {
+    padding: 3rem 1rem;
+    text-align: center;
+    color: #64748b;
+}
+
+.settings-empty .material-icons {
+    font-size: 52px;
+    color: #94a3b8;
+    margin-bottom: 10px;
+}
+
+.table td,
+.table th {
+    vertical-align: middle;
+}
+
+.settings-badge-soft {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    background: #f8fafc;
+    border: 1px solid rgba(148, 163, 184, 0.12);
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #334155;
+}
+
+.settings-section {
+    animation: fadeSection .18s ease;
+}
+
+@keyframes fadeSection {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@media (max-width: 991.98px) {
+    .settings-scroll-area,
+    .settings-form-scroll {
+        max-height: 420px;
+    }
 }
 </style>
 
@@ -85,44 +198,46 @@
             {% endif %}
         </div>
         <div class="card-body">
-            <form method="post" enctype="multipart/form-data">
-                {% csrf_token %}
-                <input type="hidden" name="action" value="organization">
+            <div class="settings-form-scroll">
+                <form method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="organization">
 
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold">{{ organization_form.name.label }}</label>
-                        {{ organization_form.name }}
-                        {{ organization_form.name.errors }}
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">{{ organization_form.name.label }}</label>
+                            {{ organization_form.name }}
+                            {{ organization_form.name.errors }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">{{ organization_form.logo.label }}</label>
+                            {{ organization_form.logo }}
+                            {{ organization_form.logo.errors }}
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label fw-semibold">{{ organization_form.address.label }}</label>
+                            {{ organization_form.address }}
+                            {{ organization_form.address.errors }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">{{ organization_form.phone.label }}</label>
+                            {{ organization_form.phone }}
+                            {{ organization_form.phone.errors }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">{{ organization_form.email.label }}</label>
+                            {{ organization_form.email }}
+                            {{ organization_form.email.errors }}
+                        </div>
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold">{{ organization_form.logo.label }}</label>
-                        {{ organization_form.logo }}
-                        {{ organization_form.logo.errors }}
-                    </div>
-                    <div class="col-md-12">
-                        <label class="form-label fw-semibold">{{ organization_form.address.label }}</label>
-                        {{ organization_form.address }}
-                        {{ organization_form.address.errors }}
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold">{{ organization_form.phone.label }}</label>
-                        {{ organization_form.phone }}
-                        {{ organization_form.phone.errors }}
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold">{{ organization_form.email.label }}</label>
-                        {{ organization_form.email }}
-                        {{ organization_form.email.errors }}
-                    </div>
-                </div>
 
-                <div class="d-flex justify-content-end mt-4">
-                    <button type="submit" class="btn btn-primary">
-                        <span class="material-icons me-2" style="font-size:18px;">save</span>Enregistrer
-                    </button>
-                </div>
-            </form>
+                    <div class="d-flex justify-content-end mt-4">
+                        <button type="submit" class="btn btn-primary">
+                            <span class="material-icons me-2" style="font-size:18px;">save</span>Enregistrer
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 </div>
@@ -137,36 +252,38 @@
                     <small class="text-muted">Generation automatique du username et mot de passe par defaut.</small>
                 </div>
                 <div class="card-body">
-                    <div class="settings-muted-box p-3 mb-3">
-                        <div class="small text-muted">
-                            Le role Owner n'est pas disponible ici. Ce formulaire ne cree pas un membre.
-                            Mot de passe par defaut : <code>12345</code>.
-                        </div>
-                    </div>
-
-                    <form method="post">
-                        {% csrf_token %}
-                        <input type="hidden" name="action" value="employee_create">
-
-                        {% for field in employee_form %}
-                        <div class="mb-3">
-                            {% if field.field.widget.input_type == "checkbox" %}
-                            <div class="form-check">
-                                {{ field }}
-                                <label class="form-check-label fw-semibold">{{ field.label }}</label>
+                    <div class="settings-form-scroll">
+                        <div class="settings-muted-box p-3 mb-3">
+                            <div class="small text-muted">
+                                Le role Owner n'est pas disponible ici. Ce formulaire ne cree pas un membre.
+                                Mot de passe par defaut : <code>12345</code>.
                             </div>
-                            {% else %}
-                            <label class="form-label fw-semibold">{{ field.label }}</label>
-                            {{ field }}
-                            {% endif %}
-                            {{ field.errors }}
                         </div>
-                        {% endfor %}
 
-                        <button type="submit" class="btn btn-primary w-100">
-                            <span class="material-icons me-2" style="font-size:18px;">person_add</span>Creer l'employe
-                        </button>
-                    </form>
+                        <form method="post">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="employee_create">
+
+                            {% for field in employee_form %}
+                            <div class="mb-3">
+                                {% if field.field.widget.input_type == "checkbox" %}
+                                <div class="form-check">
+                                    {{ field }}
+                                    <label class="form-check-label fw-semibold">{{ field.label }}</label>
+                                </div>
+                                {% else %}
+                                <label class="form-label fw-semibold">{{ field.label }}</label>
+                                {{ field }}
+                                {% endif %}
+                                {{ field.errors }}
+                            </div>
+                            {% endfor %}
+
+                            <button type="submit" class="btn btn-primary w-100">
+                                <span class="material-icons me-2" style="font-size:18px;">person_add</span>Creer l'employe
+                            </button>
+                        </form>
+                    </div>
                 </div>
             </div>
         </div>
@@ -178,7 +295,7 @@
                     <small class="text-muted">Activation/desactivation = restriction d'acces au site.</small>
                 </div>
                 <div class="card-body p-0">
-                    <div class="table-responsive">
+                    <div class="table-responsive settings-scroll-area">
                         <table class="table table-hover align-middle mb-0">
                             <thead class="table-light">
                                 <tr>
@@ -244,8 +361,11 @@
                                 </tr>
                                 {% empty %}
                                 <tr>
-                                    <td colspan="6" class="text-center py-5 text-muted">
-                                        Aucun employe interne cree pour cette organisation.
+                                    <td colspan="6">
+                                        <div class="settings-empty">
+                                            <span class="material-icons">badge</span>
+                                            <div>Aucun employe interne cree pour cette organisation.</div>
+                                        </div>
                                     </td>
                                 </tr>
                                 {% endfor %}
@@ -267,18 +387,20 @@
                     <small class="text-muted">Liste utilisee dans le formulaire de creation des coaches.</small>
                 </div>
                 <div class="card-body">
-                    <form method="post">
-                        {% csrf_token %}
-                        <input type="hidden" name="action" value="specialty_create">
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">{{ specialty_form.name.label }}</label>
-                            {{ specialty_form.name }}
-                            {{ specialty_form.name.errors }}
-                        </div>
-                        <button type="submit" class="btn btn-primary w-100">
-                            <span class="material-icons me-2" style="font-size:18px;">add</span>Ajouter
-                        </button>
-                    </form>
+                    <div class="settings-form-scroll">
+                        <form method="post">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="specialty_create">
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">{{ specialty_form.name.label }}</label>
+                                {{ specialty_form.name }}
+                                {{ specialty_form.name.errors }}
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100">
+                                <span class="material-icons me-2" style="font-size:18px;">add</span>Ajouter
+                            </button>
+                        </form>
+                    </div>
                 </div>
             </div>
         </div>
@@ -290,7 +412,7 @@
                     <small class="text-muted">Desactiver une specialite la retire des nouveaux formulaires sans modifier les anciens coaches.</small>
                 </div>
                 <div class="card-body p-0">
-                    <div class="table-responsive">
+                    <div class="table-responsive settings-scroll-area">
                         <table class="table table-hover align-middle mb-0">
                             <thead class="table-light">
                                 <tr>
@@ -323,8 +445,11 @@
                                 </tr>
                                 {% empty %}
                                 <tr>
-                                    <td colspan="3" class="text-center py-5 text-muted">
-                                        Aucune specialite creee pour ce gym.
+                                    <td colspan="3">
+                                        <div class="settings-empty">
+                                            <span class="material-icons">sports</span>
+                                            <div>Aucune specialite creee pour ce gym.</div>
+                                        </div>
                                     </td>
                                 </tr>
                                 {% endfor %}
@@ -344,7 +469,7 @@
             <small class="text-muted">Dernieres actions sensibles realisees dans l'organisation.</small>
         </div>
         <div class="card-body p-0">
-            <div class="table-responsive">
+            <div class="table-responsive settings-scroll-area">
                 <table class="table table-hover align-middle mb-0">
                     <thead class="table-light">
                         <tr>
@@ -369,8 +494,11 @@
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="5" class="text-center py-5 text-muted">
-                                Aucune activite sensible enregistree pour le moment.
+                            <td colspan="5">
+                                <div class="settings-empty">
+                                    <span class="material-icons">shield</span>
+                                    <div>Aucune activite sensible enregistree pour le moment.</div>
+                                </div>
                             </td>
                         </tr>
                         {% endfor %}
@@ -394,10 +522,12 @@ document.addEventListener("DOMContentLoaded", function () {
         sections.forEach(section => {
             section.style.display = section.id === "settings-" + tab ? "block" : "none";
         });
+
         buttons.forEach(button => {
             button.classList.toggle("btn-primary", button.dataset.tabTarget === tab);
             button.classList.toggle("btn-light", button.dataset.tabTarget !== tab);
         });
+
         const url = new URL(window.location.href);
         url.searchParams.set("tab", tab);
         window.history.replaceState({}, "", url.toString());

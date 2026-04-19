@@ -4,205 +4,740 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SmartClub Pro | Salle de sport premium</title>
-  <!-- Tailwind + Inter + Font Awesome + SweetAlert2 -->
+  <title>SmartClub Pro | Logiciel de gestion pour salles de sport</title>
+
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-  <!-- Styles personnalisés -->
   <link rel="stylesheet" href="{% static 'css/style_accueil.css' %}">
 
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #ffffff;
+      color: #0f172a;
+    }
+
+    .container-premium {
+      max-width: 1280px;
+    }
+
+    .gradient-text {
+      background: linear-gradient(135deg, #004e92 0%, #2563eb 45%, #FF8C00 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-premium {
+      position: relative;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at top right, rgba(37, 99, 235, 0.10), transparent 28%),
+        radial-gradient(circle at bottom left, rgba(255, 140, 0, 0.08), transparent 30%),
+        linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+    }
+
+    .hero-premium::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
+      background-size: 32px 32px;
+      mask-image: linear-gradient(to bottom, rgba(0,0,0,0.24), transparent 70%);
+      pointer-events: none;
+    }
+
+    .premium-card {
+      background: rgba(255,255,255,0.88);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(148, 163, 184, 0.14);
+      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06);
+    }
+
+    .soft-card {
+      background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
+    }
+
+    .section-kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: .45rem;
+      padding: .45rem .85rem;
+      border-radius: 999px;
+      background: #eef4ff;
+      color: #004e92;
+      font-size: .78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+
+    .pack-card {
+      position: relative;
+      overflow: hidden;
+      border-radius: 28px;
+      transition: transform .25s ease, box-shadow .25s ease;
+    }
+
+    .pack-card:hover {
+      transform: translateY(-4px);
+    }
+
+    .pack-club {
+      background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      box-shadow: 0 16px 32px rgba(15, 23, 42, 0.06);
+    }
+
+    .pack-premium {
+      background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+      border: 1px solid rgba(37, 99, 235, 0.18);
+      box-shadow: 0 24px 44px rgba(37, 99, 235, 0.12);
+    }
+
+    .pack-premium::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 6px;
+      background: linear-gradient(180deg, #004e92 0%, #2563eb 55%, #FF8C00 100%);
+    }
+
+    .metric-chip {
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      background: #ffffff;
+      box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
+    }
+
+    .faq-item {
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+      box-shadow: 0 10px 22px rgba(15, 23, 42, 0.04);
+      border-radius: 24px;
+      overflow: hidden;
+    }
+
+    .faq-button {
+      width: 100%;
+      text-align: left;
+      padding: 1.25rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      font-weight: 700;
+      color: #0f172a;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+    }
+
+    .faq-button:hover {
+      background: rgba(248, 250, 252, 0.7);
+    }
+
+    .faq-icon {
+      transition: transform .2s ease;
+      color: #64748b;
+      flex-shrink: 0;
+    }
+
+    .faq-item.active .faq-icon {
+      transform: rotate(180deg);
+      color: #004e92;
+    }
+
+    .faq-content {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height .25s ease;
+    }
+
+    .faq-content-inner {
+      padding: 0 1.5rem 1.35rem;
+      color: #64748b;
+      line-height: 1.7;
+    }
+
+    .cta-panel {
+      background:
+        radial-gradient(circle at top right, rgba(255,255,255,0.10), transparent 30%),
+        linear-gradient(135deg, #004e92 0%, #0f3f73 50%, #0b2f57 100%);
+      box-shadow: 0 20px 40px rgba(15, 23, 42, 0.16);
+    }
+
+    .footer-dark {
+      background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
+    }
+
+    .pricing-mini-card {
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+      box-shadow: 0 10px 20px rgba(15, 23, 42, 0.04);
+    }
+  </style>
 </head>
-<body class="bg-white text-gray-800 antialiased">
+<body class="antialiased">
 
   <!-- HEADER -->
-  <header class="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-100 shadow-sm">
-    <div class="container mx-auto px-6 lg:px-8 py-3 flex items-center justify-between flex-wrap gap-4">
-      <!-- Logo texte uniquement -->
+  <header class="sticky top-0 z-50 bg-white/85 backdrop-blur-md border-b border-slate-100 shadow-sm">
+    <div class="container-premium mx-auto px-6 lg:px-8 py-3 flex items-center justify-between flex-wrap gap-4">
       <div class="flex items-center gap-2">
         <span class="text-2xl font-extrabold italic tracking-tight">
           <span class="text-[#FF8C00]">SmartClub</span><span class="text-[#007BFF]">Pro</span>
         </span>
       </div>
 
-      <!-- Navigation desktop -->
       <nav class="hidden md:flex gap-8 text-sm font-semibold text-gray-700">
         <a href="#accueil" class="hover:text-[#FF8C00] transition">Accueil</a>
-        <a href="#services" class="hover:text-[#FF8C00] transition">Services</a>
-        <a href="#tarifs" class="hover:text-[#FF8C00] transition">Tarifs</a>
+        <a href="#solution" class="hover:text-[#FF8C00] transition">Solution</a>
+        <a href="#modules" class="hover:text-[#FF8C00] transition">Modules</a>
+        <a href="#formules" class="hover:text-[#FF8C00] transition">Formules</a>
+        <a href="#faq" class="hover:text-[#FF8C00] transition">FAQ</a>
         <a href="#contact" class="hover:text-[#FF8C00] transition">Contact</a>
       </nav>
 
-      <!-- Boutons desktop (cachés sur mobile) -->
       <div class="hidden md:flex gap-3">
-        <a href="{% url 'compte:login' %}" id="loginBtn" class="px-5 py-2.5 text-sm font-semibold text-[#004e92] border-2 border-[#004e92] rounded-full hover:bg-[#004e92] hover:text-white transition-all">Connexion</a>
-        <a href="#" id="registerBtn" class="px-5 py-2.5 text-sm font-semibold bg-gradient-to-r from-[#FF8C00] to-orange-600 text-white rounded-full shadow-lg shadow-orange-200 hover:shadow-xl transition">Inscription</a>
+        <a href="{% url 'compte:login' %}" class="px-5 py-2.5 text-sm font-semibold text-[#004e92] border-2 border-[#004e92] rounded-full hover:bg-[#004e92] hover:text-white transition-all">
+          Connexion
+        </a>
+        <a href="#" id="registerBtn" class="px-5 py-2.5 text-sm font-semibold bg-gradient-to-r from-[#FF8C00] to-orange-600 text-white rounded-full shadow-lg shadow-orange-200 hover:shadow-xl transition">
+          Demander une démo
+        </a>
       </div>
 
-      <!-- Hamburger mobile -->
       <button id="menu-btn" class="block md:hidden text-2xl text-gray-700 focus:outline-none">
         <i class="fas fa-bars"></i>
       </button>
     </div>
 
-    <!-- Mobile navigation avec boutons d'authentification -->
     <div id="mobile-menu" class="mobile-menu md:hidden bg-white border-t border-gray-100 px-6">
       <nav class="flex flex-col py-4 space-y-3 text-sm font-semibold text-gray-700">
         <a href="#accueil" class="hover:text-[#FF8C00] transition">Accueil</a>
-        <a href="#services" class="hover:text-[#FF8C00] transition">Services</a>
-        <a href="#tarifs" class="hover:text-[#FF8C00] transition">Tarifs</a>
+        <a href="#solution" class="hover:text-[#FF8C00] transition">Solution</a>
+        <a href="#modules" class="hover:text-[#FF8C00] transition">Modules</a>
+        <a href="#formules" class="hover:text-[#FF8C00] transition">Formules</a>
+        <a href="#faq" class="hover:text-[#FF8C00] transition">FAQ</a>
         <a href="#contact" class="hover:text-[#FF8C00] transition">Contact</a>
-        
-        <!-- Boutons d'authentification dans le menu mobile - CORRIGÉ -->
+
         <div class="mobile-auth-buttons space-y-2">
-          <a href="{% url 'compte:login' %}" id="mobileLoginBtn" class="px-5 py-2.5 text-sm font-semibold text-[#004e92] border-2 border-[#004e92] rounded-full hover:bg-[#004e92] hover:text-white transition-all block text-center">Connexion</a>
-          <a href="#" id="mobileRegisterBtn" class="px-5 py-2.5 text-sm font-semibold bg-gradient-to-r from-[#FF8C00] to-orange-600 text-white rounded-full shadow-lg shadow-orange-200 hover:shadow-xl transition block text-center">Inscription</a>
+          <a href="{% url 'compte:login' %}" class="px-5 py-2.5 text-sm font-semibold text-[#004e92] border-2 border-[#004e92] rounded-full hover:bg-[#004e92] hover:text-white transition-all block text-center">
+            Connexion
+          </a>
+          <a href="#" id="mobileRegisterBtn" class="px-5 py-2.5 text-sm font-semibold bg-gradient-to-r from-[#FF8C00] to-orange-600 text-white rounded-full shadow-lg shadow-orange-200 hover:shadow-xl transition block text-center">
+            Demander une démo
+          </a>
         </div>
       </nav>
     </div>
   </header>
 
-  <!-- HERO (simplifié) -->
-  <section id="accueil" class="relative overflow-hidden bg-gradient-to-br from-blue-50 to-white py-16 lg:py-24">
-    <div class="container mx-auto px-6 lg:px-8">
-      <div class="grid lg:grid-cols-2 gap-12 items-center">
-        <div class="text-center lg:text-left animate-on-scroll animate-fade-left">
-          <h1 class="text-4xl md:text-5xl lg:text-6xl font-extrabold leading-tight mb-6">
-            <span class="gradient-text">Dépassez vos limites</span><br>
-            <span class="text-gray-900">dans un cadre exceptionnel</span>
+  <!-- HERO -->
+  <section id="accueil" class="hero-premium py-20 lg:py-28">
+    <div class="container-premium mx-auto px-6 lg:px-8 relative">
+      <div class="grid lg:grid-cols-2 gap-14 items-center">
+        <div class="text-center lg:text-left">
+          <span class="section-kicker mb-5">Logiciel métier pour clubs de sport</span>
+
+          <h1 class="text-4xl md:text-5xl lg:text-6xl font-extrabold leading-tight mb-6 tracking-tight">
+            <span class="gradient-text">Le logiciel de gestion conçu</span><br>
+            <span class="text-gray-900">pour piloter un club avec méthode</span>
           </h1>
-          <p class="text-lg md:text-xl text-gray-600 mb-8 max-w-2xl mx-auto lg:mx-0">
-            Équipements dernier cri, coachs diplômés, cours collectifs illimités et une ambiance motivante.
+
+          <p class="text-lg md:text-xl text-gray-600 mb-8 max-w-2xl mx-auto lg:mx-0 leading-relaxed">
+            SmartClub Pro centralise les opérations essentielles d’une salle de sport dans une seule plateforme : membres, abonnements, caisse, rapports, contrôle d’accès et coaching, avec une structure claire pour les clubs qui veulent mieux encadrer leur activité.
+          </p>
+
+          <div class="flex flex-wrap gap-3 justify-center lg:justify-start mb-8">
+            <span class="metric-chip px-4 py-2 rounded-full text-sm font-semibold text-gray-700">2 formules claires</span>
+            <span class="metric-chip px-4 py-2 rounded-full text-sm font-semibold text-gray-700">Tarification par site actif</span>
+            <span class="metric-chip px-4 py-2 rounded-full text-sm font-semibold text-gray-700">Pensé pour l’exploitation réelle</span>
+          </div>
+
+          <div class="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
+            <a href="#" class="px-6 py-3.5 bg-[#004e92] text-white font-bold rounded-full hover:bg-[#003a6e] transition shadow-lg">
+              Demander une démo
+            </a>
+            <a href="#formules" class="px-6 py-3.5 border-2 border-[#004e92] text-[#004e92] font-bold rounded-full hover:bg-[#004e92] hover:text-white transition">
+              Voir les formules
+            </a>
+          </div>
+
+          <p class="mt-6 text-sm text-gray-500">
+            Une plateforme claire pour mieux encadrer les opérations quotidiennes d’un club.
           </p>
         </div>
-        <div class="relative order-first lg:order-last animate-on-scroll animate-fade-right">
-          <img src="https://images.unsplash.com/photo-1534438327276-14e5300c3a48?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80" alt="Salle de sport" class="rounded-3xl shadow-2xl object-cover w-full h-auto border-8 border-white/50">
-          <div class="absolute -bottom-6 -left-6 bg-white p-4 rounded-2xl shadow-xl hidden md:flex items-center gap-3">
-            <i class="fas fa-star text-yellow-400 text-2xl"></i>
-            <div><span class="font-bold text-xl">4.9</span><span class="text-gray-500">/5 · 1200+ avis</span></div>
+
+        <div class="relative">
+          <div class="premium-card rounded-[32px] p-5 lg:p-6">
+            <img src="https://images.unsplash.com/photo-1534438327276-14e5300c3a48?ixlib=rb-4.0.3&auto=format&fit=crop&w=900&q=80" alt="Gestion de salle de sport" class="rounded-[24px] object-cover w-full h-auto">
+
+            <div class="grid grid-cols-2 gap-4 mt-5">
+              <div class="pricing-mini-card rounded-2xl p-4">
+                <p class="text-sm text-gray-500 mb-1">Pack Club</p>
+                <p class="text-2xl font-extrabold text-gray-900">45$</p>
+                <p class="text-sm text-gray-500">/ site / mois</p>
+              </div>
+              <div class="pricing-mini-card rounded-2xl p-4">
+                <p class="text-sm text-gray-500 mb-1">Pack Premium</p>
+                <p class="text-2xl font-extrabold text-gray-900">55$</p>
+                <p class="text-sm text-gray-500">/ site / mois</p>
+              </div>
+            </div>
+          </div>
+
+          
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- POURQUOI -->
+  <section id="solution" class="py-24 bg-white">
+    <div class="container-premium mx-auto px-6 lg:px-8">
+      <div class="max-w-3xl mx-auto text-center mb-16">
+        <span class="section-kicker mb-4">Pourquoi SmartClub Pro</span>
+        <h2 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">
+          Une structure claire pour des opérations<br>qui ne doivent plus être approximatives
+        </h2>
+        <p class="text-lg text-gray-600 leading-relaxed">
+          Un club ne se pilote pas en empilant des outils. Il faut relier correctement les opérations qui structurent réellement l’activité.
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+        <div class="soft-card rounded-3xl p-8">
+          <div class="w-14 h-14 bg-blue-100 rounded-2xl flex items-center justify-center mb-5 text-[#004e92] text-2xl">
+            <i class="fas fa-layer-group"></i>
+          </div>
+          <h3 class="text-xl font-bold mb-3">Une logique métier solide</h3>
+          <p class="text-gray-500">Les membres, abonnements, paiements, accès et rapports fonctionnent ensemble dans un cadre cohérent.</p>
+        </div>
+
+        <div class="soft-card rounded-3xl p-8">
+          <div class="w-14 h-14 bg-orange-100 rounded-2xl flex items-center justify-center mb-5 text-[#FF8C00] text-2xl">
+            <i class="fas fa-cash-register"></i>
+          </div>
+          <h3 class="text-xl font-bold mb-3">Une caisse réellement centrale</h3>
+          <p class="text-gray-500">Les flux financiers sont mieux suivis, ce qui fiabilise les abonnements, les accès et les rapports.</p>
+        </div>
+
+        <div class="soft-card rounded-3xl p-8">
+          <div class="w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center mb-5 text-green-600 text-2xl">
+            <i class="fas fa-columns"></i>
+          </div>
+          <h3 class="text-xl font-bold mb-3">Deux formules lisibles</h3>
+          <p class="text-gray-500">L’offre reste simple à comprendre, sans étages inutiles ni complexité commerciale.</p>
+        </div>
+
+        <div class="soft-card rounded-3xl p-8">
+          <div class="w-14 h-14 bg-purple-100 rounded-2xl flex items-center justify-center mb-5 text-purple-600 text-2xl">
+            <i class="fas fa-building"></i>
+          </div>
+          <h3 class="text-xl font-bold mb-3">Une logique juste par site actif</h3>
+          <p class="text-gray-500">Chaque site actif bénéficie du pack choisi, avec une lecture budgétaire simple et naturelle.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- MODULES -->
+  <section id="modules" class="py-24 bg-slate-50">
+    <div class="container-premium mx-auto px-6 lg:px-8">
+      <div class="max-w-3xl mx-auto text-center mb-16">
+        <span class="section-kicker mb-4">Un seul outil</span>
+        <h2 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">
+          Un environnement unique pour piloter l’essentiel
+        </h2>
+        <p class="text-lg text-gray-600">
+          SmartClub Pro réunit les briques qui structurent réellement l’exploitation d’un club, du coeur opérationnel aux besoins plus avancés.
+        </p>
+        <p class="text-base text-gray-500 max-w-3xl mx-auto text-center mt-4">
+          Le Pack Club couvre le coeur de l’exploitation. Le Pack Premium ajoute les dimensions plus avancées liées au stock, aux équipes et aux équipements.
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+        <div class="soft-card rounded-3xl p-8">
+          <div class="w-14 h-14 bg-blue-100 rounded-2xl flex items-center justify-center mb-5 text-[#004e92] text-2xl"><i class="fas fa-users"></i></div>
+          <h3 class="text-xl font-bold mb-3">Gestion des membres</h3>
+          <p class="text-gray-500">Centralisez les profils adhérents et les informations nécessaires au suivi quotidien.</p>
+        </div>
+
+        <div class="soft-card rounded-3xl p-8">
+          <div class="w-14 h-14 bg-orange-100 rounded-2xl flex items-center justify-center mb-5 text-[#FF8C00] text-2xl"><i class="fas fa-id-card"></i></div>
+          <h3 class="text-xl font-bold mb-3">Gestion des abonnements</h3>
+          <p class="text-gray-500">Suivez les formules, périodes, renouvellements et statuts avec plus de rigueur.</p>
+        </div>
+
+        <div class="soft-card rounded-3xl p-8">
+          <div class="w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center mb-5 text-green-600 text-2xl"><i class="fas fa-money-bill-wave"></i></div>
+          <h3 class="text-xl font-bold mb-3">Caisse / paiements</h3>
+          <p class="text-gray-500">Enregistrez les flux financiers qui structurent réellement l’activité du club.</p>
+        </div>
+
+        <div class="soft-card rounded-3xl p-8">
+          <div class="w-14 h-14 bg-purple-100 rounded-2xl flex items-center justify-center mb-5 text-purple-600 text-2xl"><i class="fas fa-chart-bar"></i></div>
+          <h3 class="text-xl font-bold mb-3">Rapports</h3>
+          <p class="text-gray-500">Pilotez le club à partir de données réellement issues des opérations enregistrées.</p>
+        </div>
+
+        <div class="soft-card rounded-3xl p-8">
+          <div class="w-14 h-14 bg-pink-100 rounded-2xl flex items-center justify-center mb-5 text-pink-600 text-2xl"><i class="fas fa-qrcode"></i></div>
+          <h3 class="text-xl font-bold mb-3">Contrôle d’accès</h3>
+          <p class="text-gray-500">Faites dépendre l’accès du membre de sa situation réelle d’abonnement et de paiement.</p>
+        </div>
+
+        <div class="soft-card rounded-3xl p-8">
+          <div class="w-14 h-14 bg-indigo-100 rounded-2xl flex items-center justify-center mb-5 text-indigo-600 text-2xl"><i class="fas fa-user-check"></i></div>
+          <h3 class="text-xl font-bold mb-3">Coaching</h3>
+          <p class="text-gray-500">Ajoutez une couche d’exploitation utile pour mieux structurer l’accompagnement sportif.</p>
+        </div>
+
+        <div class="soft-card rounded-3xl p-8">
+          <div class="w-14 h-14 bg-yellow-100 rounded-2xl flex items-center justify-center mb-5 text-yellow-600 text-2xl"><i class="fas fa-boxes-stacked"></i></div>
+          <h3 class="text-xl font-bold mb-3">Produits / stock</h3>
+          <p class="text-gray-500">Suivez les produits vendus, les niveaux de stock et les mouvements liés à l’activité commerciale du club.</p>
+        </div>
+
+        <div class="soft-card rounded-3xl p-8">
+          <div class="w-14 h-14 bg-cyan-100 rounded-2xl flex items-center justify-center mb-5 text-cyan-600 text-2xl"><i class="fas fa-user-tie"></i></div>
+          <h3 class="text-xl font-bold mb-3">RH / employés</h3>
+          <p class="text-gray-500">Structurez les informations liées à votre équipe et encadrez plus clairement l’organisation interne du club.</p>
+        </div>
+
+        <div class="soft-card rounded-3xl p-8">
+          <div class="w-14 h-14 bg-red-100 rounded-2xl flex items-center justify-center mb-5 text-red-600 text-2xl"><i class="fas fa-dumbbell"></i></div>
+          <h3 class="text-xl font-bold mb-3">Machines / équipements</h3>
+          <p class="text-gray-500">Gardez une vue claire sur les équipements du club et leur suivi dans le temps.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PACKS -->
+  <section id="formules" class="py-24 bg-white">
+    <div class="container-premium mx-auto px-6 lg:px-8">
+      <div class="max-w-3xl mx-auto text-center mb-16">
+        <span class="section-kicker mb-4">Nos formules</span>
+        <h2 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">
+          Deux offres nettes pour équiper le club au bon niveau
+        </h2>
+        <p class="text-lg text-gray-600">
+          L’une couvre l’exploitation essentielle. L’autre ajoute des capacités avancées pour les structures plus organisées.
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-6xl mx-auto">
+        <!-- Pack Club -->
+        <div class="pack-card pack-club p-8 md:p-10">
+          <div class="flex items-center justify-between mb-6">
+            <div>
+              <h3 class="text-2xl font-bold">Pack Club</h3>
+              <p class="text-gray-500 mt-1">Le socle opérationnel d’un club</p>
+            </div>
+            <div class="text-right">
+              <p class="text-4xl font-extrabold text-gray-900">45$</p>
+              <p class="text-sm text-gray-500">/ site / mois</p>
+            </div>
+          </div>
+
+          <ul class="space-y-3 mb-8 text-gray-600">
+            <li><i class="fas fa-check text-green-500 mr-2"></i> Membres</li>
+            <li><i class="fas fa-check text-green-500 mr-2"></i> Abonnements</li>
+            <li><i class="fas fa-check text-green-500 mr-2"></i> Caisse / paiements</li>
+            <li><i class="fas fa-check text-green-500 mr-2"></i> Rapports</li>
+            <li><i class="fas fa-check text-green-500 mr-2"></i> Contrôle d’accès</li>
+            <li><i class="fas fa-check text-green-500 mr-2"></i> Coaching</li>
+          </ul>
+
+          <div class="border-t border-slate-200 pt-6 mb-8">
+            <p class="text-gray-600 leading-relaxed">
+              Le Pack Club permet de structurer l’exploitation quotidienne autour du coeur du club : adhérents, abonnements, paiements, accès, coaching et pilotage.
+            </p>
+          </div>
+
+          <a href="#" class="block text-center bg-white border-2 border-[#004e92] text-[#004e92] hover:bg-[#004e92] hover:text-white font-bold py-3.5 rounded-full transition">
+            Choisir le Pack Club
+          </a>
+        </div>
+
+        <!-- Pack Premium -->
+        <div class="pack-card pack-premium p-8 md:p-10">
+          <div class="inline-flex mb-5 px-4 py-1.5 rounded-full bg-blue-100 text-[#004e92] text-xs font-bold tracking-wide uppercase">
+            Structure avancée
+          </div>
+
+          <div class="flex items-center justify-between mb-6">
+            <div>
+              <h3 class="text-2xl font-bold">Pack Premium</h3>
+              <p class="text-gray-500 mt-1">Le Pack Club, renforcé pour aller plus loin</p>
+            </div>
+            <div class="text-right">
+              <p class="text-4xl font-extrabold text-gray-900">55$</p>
+              <p class="text-sm text-gray-500">/ site / mois</p>
+            </div>
+          </div>
+
+          <ul class="space-y-3 mb-8 text-gray-600">
+            <li><i class="fas fa-check text-green-500 mr-2"></i> Tout le Pack Club</li>
+            <li><i class="fas fa-check text-green-500 mr-2"></i> Produits / stock</li>
+            <li><i class="fas fa-check text-green-500 mr-2"></i> RH / employés</li>
+            <li><i class="fas fa-check text-green-500 mr-2"></i> Machines / équipements</li>
+          </ul>
+
+          <div class="border-t border-slate-200 pt-6 mb-8">
+            <p class="text-gray-600 leading-relaxed">
+              Le Pack Premium ajoute des capacités d’exploitation plus avancées pour les structures qui veulent encadrer aussi les ressources internes, les équipements et les flux liés aux produits.
+            </p>
+          </div>
+
+          <a href="#" class="block text-center bg-[#004e92] text-white hover:bg-[#003a6e] font-bold py-3.5 rounded-full transition shadow-lg">
+            Choisir le Pack Premium
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TARIFICATION -->
+  <section class="py-24 bg-slate-50">
+    <div class="container-premium mx-auto px-6 lg:px-8">
+      <div class="grid lg:grid-cols-2 gap-12 items-start">
+        <div>
+          <span class="section-kicker mb-4">Tarification</span>
+          <h2 class="text-3xl md:text-4xl font-bold mt-2 mb-6 tracking-tight">
+            Une tarification claire par site actif
+          </h2>
+          <p class="text-gray-600 mb-8 text-lg leading-relaxed">
+            Le prix mensuel dépend du pack choisi et du nombre de sites actifs équipés. Chaque site actif bénéficie du pack retenu.
+          </p>
+
+          <div class="space-y-4">
+            <div class="soft-card rounded-2xl p-5">
+              <p class="font-semibold text-gray-900">1 site en Pack Club</p>
+              <p class="text-gray-500">1 × 45$ = <strong class="text-gray-900">45$ / mois</strong></p>
+            </div>
+            <div class="soft-card rounded-2xl p-5">
+              <p class="font-semibold text-gray-900">2 sites en Pack Club</p>
+              <p class="text-gray-500">2 × 45$ = <strong class="text-gray-900">90$ / mois</strong></p>
+            </div>
+            <div class="soft-card rounded-2xl p-5">
+              <p class="font-semibold text-gray-900">3 sites en Pack Premium</p>
+              <p class="text-gray-500">3 × 55$ = <strong class="text-gray-900">165$ / mois</strong></p>
+            </div>
+          </div>
+        </div>
+
+        <div class="premium-card rounded-[28px] p-8">
+          <h3 class="text-2xl font-bold mb-6">Pourquoi ce modèle est juste</h3>
+          <div class="space-y-6 text-gray-600">
+            <div>
+              <h4 class="font-bold text-gray-900 mb-1">Chaque site actif est réellement équipé</h4>
+              <p>Le prix suit donc le déploiement réel de la solution dans votre organisation.</p>
+            </div>
+            <div>
+              <h4 class="font-bold text-gray-900 mb-1">Le budget reste lisible</h4>
+              <p>Vous savez immédiatement comment la formule s’applique à votre structure.</p>
+            </div>
+            <div>
+              <h4 class="font-bold text-gray-900 mb-1">La croissance se gère simplement</h4>
+              <p>Quand un nouveau site entre dans votre périmètre, la logique reste claire et naturelle.</p>
+            </div>
           </div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- SERVICES (inchangé) -->
-  <section id="services" class="py-24 bg-white">
-    <div class="container mx-auto px-6 lg:px-8">
-      <h2 class="text-3xl md:text-4xl font-bold text-center mb-4 animate-on-scroll animate-fade-up">Tout ce qu'il faut pour <span class="gradient-text">progresser</span></h2>
-      <p class="text-center text-gray-600 max-w-2xl mx-auto mb-16 text-lg animate-on-scroll animate-fade-up">Une offre complète adaptée à tous les niveaux et objectifs.</p>
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-        <!-- 6 cartes service -->
-        <div class="bg-gray-50 p-8 rounded-3xl border border-gray-100 hover:shadow-xl transition hover:-translate-y-2 animate-on-scroll animate-fade-up delay-1">
-          <div class="w-14 h-14 bg-blue-100 rounded-2xl flex items-center justify-center mb-5 text-[#004e92] text-2xl"><i class="fas fa-dumbbell"></i></div>
-          <h3 class="text-xl font-bold mb-3">Équipement haut de gamme</h3>
-          <p class="text-gray-500">Machines de musculation, cardio, poids libres et zone fonctionnelle.</p>
+  <!-- POUR QUELS CLUBS -->
+  <section class="py-24 bg-white">
+    <div class="container-premium mx-auto px-6 lg:px-8">
+      <div class="max-w-3xl mx-auto text-center mb-16">
+        <span class="section-kicker mb-4">Pour quels clubs ?</span>
+        <h2 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">
+          Une solution pensée pour des opérateurs de clubs
+        </h2>
+        <p class="text-lg text-gray-600">
+          SmartClub Pro s’adresse aux structures qui veulent mieux encadrer leurs opérations sans multiplier les outils ni alourdir leur gestion.
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+        <div class="soft-card rounded-3xl p-8">
+          <h3 class="font-bold text-xl mb-3">Propriétaires de salles</h3>
+          <p class="text-gray-500">Pour mieux structurer le fonctionnement global du club.</p>
         </div>
-        <div class="bg-gray-50 p-8 rounded-3xl border border-gray-100 hover:shadow-xl transition hover:-translate-y-2 animate-on-scroll animate-fade-up delay-2">
-          <div class="w-14 h-14 bg-orange-100 rounded-2xl flex items-center justify-center mb-5 text-[#FF8C00] text-2xl"><i class="fas fa-users"></i></div>
-          <h3 class="text-xl font-bold mb-3">Cours collectifs</h3>
-          <p class="text-gray-500">Yoga, Crossfit, BodyPump, Zumba, cycling… +30 cours/semaine.</p>
+        <div class="soft-card rounded-3xl p-8">
+          <h3 class="font-bold text-xl mb-3">Gérants de clubs</h3>
+          <p class="text-gray-500">Pour centraliser les opérations essentielles dans un seul outil.</p>
         </div>
-        <div class="bg-gray-50 p-8 rounded-3xl border border-gray-100 hover:shadow-xl transition hover:-translate-y-2 animate-on-scroll animate-fade-up delay-3">
-          <div class="w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center mb-5 text-green-600 text-2xl"><i class="fas fa-user-check"></i></div>
-          <h3 class="text-xl font-bold mb-3">Coaching personnel</h3>
-          <p class="text-gray-500">Suivi individuel, programmes sur mesure et nutrition.</p>
+        <div class="soft-card rounded-3xl p-8">
+          <h3 class="font-bold text-xl mb-3">Responsables d’exploitation</h3>
+          <p class="text-gray-500">Pour fiabiliser les membres, paiements, accès et rapports.</p>
         </div>
-        <div class="bg-gray-50 p-8 rounded-3xl border border-gray-100 hover:shadow-xl transition hover:-translate-y-2 animate-on-scroll animate-fade-up delay-4">
-          <div class="w-14 h-14 bg-purple-100 rounded-2xl flex items-center justify-center mb-5 text-purple-600 text-2xl"><i class="fas fa-clock"></i></div>
-          <h3 class="text-xl font-bold mb-3">Horaires étendus</h3>
-          <p class="text-gray-500">6h-23h en semaine, 8h-20h le week-end.</p>
-        </div>
-        <div class="bg-gray-50 p-8 rounded-3xl border border-gray-100 hover:shadow-xl transition hover:-translate-y-2 animate-on-scroll animate-fade-up delay-5">
-          <div class="w-14 h-14 bg-pink-100 rounded-2xl flex items-center justify-center mb-5 text-pink-600 text-2xl"><i class="fas fa-spa"></i></div>
-          <h3 class="text-xl font-bold mb-3">Espace bien-être</h3>
-          <p class="text-gray-500">Sauna, hammam, vestiaires sécurisés.</p>
-        </div>
-        <div class="bg-gray-50 p-8 rounded-3xl border border-gray-100 hover:shadow-xl transition hover:-translate-y-2 animate-on-scroll animate-fade-up delay-1">
-          <div class="w-14 h-14 bg-indigo-100 rounded-2xl flex items-center justify-center mb-5 text-indigo-600 text-2xl"><i class="fas fa-wifi"></i></div>
-          <h3 class="text-xl font-bold mb-3">Espace détente & wifi</h3>
-          <p class="text-gray-500">Coin lounge, wifi haut débit.</p>
+        <div class="soft-card rounded-3xl p-8">
+          <h3 class="font-bold text-xl mb-3">Structures avec un ou plusieurs sites</h3>
+          <p class="text-gray-500">Pour déployer une méthode cohérente site par site.</p>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- SECTION COURS COLLECTIFS -->
-  <section class="py-20 bg-gradient-to-r from-blue-50 to-indigo-50">
-    <div class="container mx-auto px-6 lg:px-8">
-      <div class="grid lg:grid-cols-2 gap-12 items-center">
-        <div class="animate-on-scroll animate-fade-left">
-          <span class="text-sm font-bold text-[#FF8C00] uppercase tracking-wider">Cours collectifs</span>
-          <h2 class="text-3xl md:text-4xl font-bold mt-2 mb-6">L'énergie du groupe <br>pour vous dépasser</h2>
-          <p class="text-gray-600 mb-8">Que vous soyez débutant ou confirmé, nos cours collectifs offrent une expérience motivante et encadrée.</p>
-          <ul class="space-y-4">
-            <li class="flex items-start gap-3"><i class="fas fa-check-circle text-green-500 mt-1"></i><span><strong>+30 cours/semaine</strong> – horaires flexibles</span></li>
-            <li class="flex items-start gap-3"><i class="fas fa-check-circle text-green-500 mt-1"></i><span><strong>Inclus dans tous les abonnements</strong> sans supplément</span></li>
-          </ul>
+  <!-- BENEFICES -->
+  <section class="py-24 bg-slate-50">
+    <div class="container-premium mx-auto px-6 lg:px-8">
+      <div class="max-w-3xl mx-auto text-center mb-16">
+        <span class="section-kicker mb-4">Bénéfices concrets</span>
+        <h2 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">
+          Une plateforme pensée pour mieux exploiter, mieux lire, mieux piloter
+        </h2>
+        <p class="text-lg text-gray-600">
+          SmartClub Pro améliore à la fois la rigueur opérationnelle, la lecture financière et la qualité du pilotage.
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-8">
+        <div class="soft-card rounded-3xl p-8">
+          <h3 class="font-bold text-xl mb-3">Bénéfices opérationnels</h3>
+          <p class="text-gray-500">Vous réunissez les fonctions essentielles dans un seul environnement et réduisez la dispersion entre outils, fichiers et suivis manuels.</p>
         </div>
-        <div class="relative animate-on-scroll animate-fade-right">
-          <img src="https://images.unsplash.com/photo-1571902943202-507ec2618e8f?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80" alt="Cours collectif" class="rounded-3xl shadow-2xl object-cover w-full h-auto border-8 border-white">
+        <div class="soft-card rounded-3xl p-8">
+          <h3 class="font-bold text-xl mb-3">Bénéfices financiers</h3>
+          <p class="text-gray-500">La caisse fiabilise le suivi des paiements et donne une base plus solide aux rapports et à la lecture économique du club.</p>
+        </div>
+        <div class="soft-card rounded-3xl p-8">
+          <h3 class="font-bold text-xl mb-3">Bénéfices de pilotage</h3>
+          <p class="text-gray-500">Vous gagnez en visibilité, prenez vos décisions sur une base plus fiable et faites évoluer votre cadre de gestion avec plus de maîtrise.</p>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- TARIFS -->
-  <section id="tarifs" class="py-24 bg-white">
-    <div class="container mx-auto px-6 lg:px-8">
-      <h2 class="text-3xl md:text-4xl font-bold text-center mb-4 animate-on-scroll animate-fade-up">Des formules <span class="gradient-text">adaptées</span></h2>
-      <p class="text-center text-gray-600 max-w-2xl mx-auto mb-16 text-lg animate-on-scroll animate-fade-up">Sans engagement ou avec avantages.</p>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-        <!-- Mensuel -->
-        <div class="bg-gray-50 rounded-3xl p-8 border border-gray-200 hover:shadow-xl transition hover:-translate-y-2 animate-on-scroll animate-fade-up delay-1">
-          <h3 class="text-2xl font-bold mb-2">Mensuel</h3>
-          <p class="text-gray-500 mb-6">Idéal pour débuter</p>
-          <div class="text-4xl font-extrabold mb-6">45€<span class="text-lg font-normal text-gray-500">/mois</span></div>
-          <ul class="space-y-3 mb-8 text-gray-600">
-            <li><i class="fas fa-check text-green-500 mr-2"></i> Accès heures creuses</li>
-            <li><i class="fas fa-check text-green-500 mr-2"></i> Cours collectifs</li>
-            <li><i class="fas fa-check text-green-500 mr-2"></i> 1 coaching offert</li>
-            <li class="text-gray-400"><i class="fas fa-times mr-2"></i> Sauna</li>
-          </ul>
-          <a href="#" class="block text-center bg-white border-2 border-[#004e92] text-[#004e92] hover:bg-[#004e92] hover:text-white font-bold py-3 rounded-full transition">Souscrire</a>
+  <!-- FAQ ACCORDEON -->
+  <section id="faq" class="py-24 bg-white">
+    <div class="container-premium mx-auto px-6 lg:px-8 max-w-4xl">
+      <div class="text-center mb-16">
+        <span class="section-kicker mb-4">FAQ</span>
+        <h2 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">
+          Les réponses essentielles
+        </h2>
+        <p class="text-lg text-gray-600">
+          Pour comprendre rapidement la logique de la solution.
+        </p>
+      </div>
+
+      <div class="space-y-5" id="faqAccordion">
+        <div class="faq-item active">
+          <button class="faq-button" type="button">
+            <span>Quelle est la différence entre le Pack Club et le Pack Premium ?</span>
+            <i class="fas fa-chevron-down faq-icon"></i>
+          </button>
+          <div class="faq-content" style="max-height: 300px;">
+            <div class="faq-content-inner">
+              Le Pack Club couvre l’exploitation essentielle. Le Pack Premium ajoute les besoins plus avancés liés aux produits, aux employés et aux équipements.
+            </div>
+          </div>
         </div>
-        <!-- Annuel (populaire) -->
-        <div class="bg-gradient-to-b from-blue-50 to-white rounded-3xl p-8 border-2 border-[#004e92] shadow-xl relative transform scale-105 z-10 animate-on-scroll animate-fade-up delay-2">
-          <div class="absolute top-0 right-0 bg-[#FF8C00] text-white text-xs font-bold px-4 py-1 rounded-bl-2xl rounded-tr-2xl">POPULAIRE</div>
-          <h3 class="text-2xl font-bold mb-2">Annuel</h3>
-          <p class="text-gray-500 mb-6">Meilleur rapport qualité/prix</p>
-          <div class="text-4xl font-extrabold mb-6">39€<span class="text-lg font-normal text-gray-500">/mois</span></div>
-          <ul class="space-y-3 mb-8 text-gray-600">
-            <li><i class="fas fa-check text-green-500 mr-2"></i> Accès illimité</li>
-            <li><i class="fas fa-check text-green-500 mr-2"></i> Cours illimités</li>
-            <li><i class="fas fa-check text-green-500 mr-2"></i> 2 coachings</li>
-            <li><i class="fas fa-check text-green-500 mr-2"></i> Sauna & hammam</li>
-          </ul>
-          <a href="#" class="block text-center bg-[#004e92] text-white hover:bg-[#003a6e] font-bold py-3 rounded-full transition shadow-lg">Souscrire</a>
+
+        <div class="faq-item">
+          <button class="faq-button" type="button">
+            <span>Pourquoi la caisse est-elle centrale dans la solution ?</span>
+            <i class="fas fa-chevron-down faq-icon"></i>
+          </button>
+          <div class="faq-content">
+            <div class="faq-content-inner">
+              Parce qu’elle permet d’enregistrer correctement les paiements, qui conditionnent le suivi des abonnements, la qualité des rapports et le contrôle d’accès.
+            </div>
+          </div>
         </div>
-        <!-- Semestriel -->
-        <div class="bg-gray-50 rounded-3xl p-8 border border-gray-200 hover:shadow-xl transition hover:-translate-y-2 animate-on-scroll animate-fade-up delay-3">
-          <h3 class="text-2xl font-bold mb-2">Semestriel</h3>
-          <p class="text-gray-500 mb-6">Flexibilité 6 mois</p>
-          <div class="text-4xl font-extrabold mb-6">42€<span class="text-lg font-normal text-gray-500">/mois</span></div>
-          <ul class="space-y-3 mb-8 text-gray-600">
-            <li><i class="fas fa-check text-green-500 mr-2"></i> Accès toutes plages</li>
-            <li><i class="fas fa-check text-green-500 mr-2"></i> Cours inclus</li>
-            <li><i class="fas fa-check text-green-500 mr-2"></i> 1 coaching</li>
-            <li><i class="fas fa-check text-green-500 mr-2"></i> Sauna week-end</li>
-          </ul>
-          <a href="#" class="block text-center bg-white border-2 border-[#004e92] text-[#004e92] hover:bg-[#004e92] hover:text-white font-bold py-3 rounded-full transition">Souscrire</a>
+
+        <div class="faq-item">
+          <button class="faq-button" type="button">
+            <span>Comment fonctionne la tarification ?</span>
+            <i class="fas fa-chevron-down faq-icon"></i>
+          </button>
+          <div class="faq-content">
+            <div class="faq-content-inner">
+              Le prix mensuel dépend du pack choisi et du nombre de sites actifs équipés. Chaque site actif bénéficie du pack retenu.
+            </div>
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-button" type="button">
+            <span>Le Pack Club suffit-il pour une salle classique ?</span>
+            <i class="fas fa-chevron-down faq-icon"></i>
+          </button>
+          <div class="faq-content">
+            <div class="faq-content-inner">
+              Oui. Il couvre déjà les opérations essentielles d’un club qui veut structurer sérieusement son activité.
+            </div>
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-button" type="button">
+            <span>À quel moment passer au Pack Premium ?</span>
+            <i class="fas fa-chevron-down faq-icon"></i>
+          </button>
+          <div class="faq-content">
+            <div class="faq-content-inner">
+              Lorsque le club souhaite élargir son pilotage à des dimensions plus avancées comme le stock, les employés ou les équipements.
+            </div>
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-button" type="button">
+            <span>Est-ce adapté à une structure avec plusieurs sites ?</span>
+            <i class="fas fa-chevron-down faq-icon"></i>
+          </button>
+          <div class="faq-content">
+            <div class="faq-content-inner">
+              Oui. La logique par site actif permet de garder une lecture claire du déploiement et du budget.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA FINAL -->
+  <section class="py-20">
+    <div class="container-premium mx-auto px-6 lg:px-8">
+      <div class="cta-panel rounded-[32px] p-10 md:p-14 text-white text-center">
+        <h2 class="text-3xl md:text-4xl font-bold mb-4">
+          Prêt à mieux encadrer l’exploitation de votre club ?
+        </h2>
+        <p class="text-lg text-blue-100 mb-8 max-w-3xl mx-auto">
+          Choisissez la formule adaptée à votre niveau d’organisation et équipez chaque site actif avec un cadre de gestion clair, sérieux et lisible.
+        </p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <a href="#" class="px-6 py-3.5 bg-white text-[#004e92] font-bold rounded-full hover:bg-gray-100 transition">
+            Demander une démo personnalisée
+          </a>
+          <a href="#formules" class="px-6 py-3.5 border-2 border-white text-white font-bold rounded-full hover:bg-white hover:text-[#004e92] transition">
+            Comparer les formules
+          </a>
+          <a href="#" class="px-6 py-3.5 bg-[#FF8C00] text-white font-bold rounded-full hover:bg-orange-600 transition">
+            Équiper mon premier site
+          </a>
         </div>
       </div>
     </div>
   </section>
 
   <!-- FOOTER -->
-  <footer id="contact" class="bg-gray-900 text-gray-300 py-12 md:py-16">
-    <div class="container mx-auto px-6 lg:px-8">
+  <footer id="contact" class="footer-dark text-gray-300 py-12 md:py-16">
+    <div class="container-premium mx-auto px-6 lg:px-8">
       <div class="grid grid-cols-1 md:grid-cols-3 gap-10 md:gap-8">
-        <!-- Coordonnées -->
         <div class="text-center md:text-left">
           <div class="flex items-center justify-center md:justify-start gap-2 mb-4">
             <span class="text-xl font-bold text-white">SmartClub Pro</span>
@@ -211,16 +746,16 @@
           <p class="text-sm mt-2 flex items-center justify-center md:justify-start gap-2"><i class="fas fa-phone-alt text-[#FF8C00] w-4"></i> +243 979710633</p>
           <p class="text-sm flex items-center justify-center md:justify-start gap-2"><i class="fas fa-envelope text-[#FF8C00] w-4"></i> contact@smartclubpro.cd</p>
         </div>
-        <!-- Horaires -->
+
         <div class="text-center">
-          <h4 class="text-white font-bold text-lg mb-4">Horaires</h4>
+          <h4 class="text-white font-bold text-lg mb-4">Formules</h4>
           <ul class="space-y-2 text-sm">
-            <li><span class="font-medium">Lun-Ven :</span> 6h – 23h</li>
-            <li><span class="font-medium">Sam :</span> 8h – 21h</li>
-            <li><span class="font-medium">Dim :</span> 8h – 20h</li>
+            <li>Pack Club — 45$ / site / mois</li>
+            <li>Pack Premium — 55$ / site / mois</li>
+            <li>Tarification claire par site actif</li>
           </ul>
         </div>
-        <!-- Réseaux -->
+
         <div class="text-center md:text-right">
           <h4 class="text-white font-bold text-lg mb-4">Suivez-nous</h4>
           <div class="flex justify-center md:justify-end gap-5 text-3xl">
@@ -236,62 +771,34 @@
     </div>
   </footer>
 
-  <!-- MODALES (Inscription & Connexion) -->
-  <!-- Overlay unique pour les deux modales -->
+  <!-- MODALES -->
   <div id="modalOverlay" class="modal-overlay">
     <div class="modal-card relative">
-      <!-- Bouton fermeture -->
       <button id="closeModal" class="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-xl"><i class="fas fa-times"></i></button>
-      
-      <!-- Modale Inscription (2 étapes) -->
+
       <div id="registerModal" class="modal-step">
-        <h2 class="text-2xl font-bold mb-4 gradient-text">Inscription</h2>
-        
-        <!-- ÉTAPE 1 : Saisie numéro client -->
+        <h2 class="text-2xl font-bold mb-4 gradient-text">Demander une inscription</h2>
+
         <div id="registerStep1">
           <p class="text-gray-600 mb-4">Entrez votre numéro de client :</p>
-          <input 
-            type="text" 
-            id="clientNumber" 
-            placeholder="Ex: 123456" 
-            class="w-full p-3 border border-gray-300 rounded-xl mb-4 focus:outline-none focus:ring-2 focus:ring-[#004e92]"
-          >
-          <button 
-            id="checkClientBtn" 
-            class="w-full bg-[#004e92] text-white font-semibold py-3 rounded-xl hover:bg-[#003a6e] transition"
-          >
+          <input type="text" id="clientNumber" placeholder="Ex: 123456" class="w-full p-3 border border-gray-300 rounded-xl mb-4 focus:outline-none focus:ring-2 focus:ring-[#004e92]">
+          <button id="checkClientBtn" class="w-full bg-[#004e92] text-white font-semibold py-3 rounded-xl hover:bg-[#003a6e] transition">
             Vérifier
           </button>
         </div>
-        
-        <!-- ÉTAPE 2 : Création mot de passe -->
+
         <div id="registerStep2" style="display: none;">
           <p class="text-gray-600 mb-4">Créez votre mot de passe :</p>
-          <input 
-            type="password" 
-            id="password1" 
-            placeholder="Mot de passe" 
-            class="w-full p-3 border border-gray-300 rounded-xl mb-3 focus:outline-none focus:ring-2 focus:ring-[#004e92]"
-          >
-          <input 
-            type="password" 
-            id="password2" 
-            placeholder="Confirmer mot de passe" 
-            class="w-full p-3 border border-gray-300 rounded-xl mb-4 focus:outline-none focus:ring-2 focus:ring-[#004e92]"
-          >
-          <button 
-            id="createAccountBtn" 
-            class="w-full bg-[#FF8C00] text-white font-semibold py-3 rounded-xl hover:bg-orange-600 transition"
-          >
+          <input type="password" id="password1" placeholder="Mot de passe" class="w-full p-3 border border-gray-300 rounded-xl mb-3 focus:outline-none focus:ring-2 focus:ring-[#004e92]">
+          <input type="password" id="password2" placeholder="Confirmer mot de passe" class="w-full p-3 border border-gray-300 rounded-xl mb-4 focus:outline-none focus:ring-2 focus:ring-[#004e92]">
+          <button id="createAccountBtn" class="w-full bg-[#FF8C00] text-white font-semibold py-3 rounded-xl hover:bg-orange-600 transition">
             Créer mon compte
           </button>
         </div>
-        
-        <!-- Message d'erreur -->
+
         <p id="registerError" class="text-red-500 text-sm mt-2 hidden"></p>
       </div>
 
-      <!-- Modale Connexion (désactivée) -->
       <div id="loginModal" class="modal-step" style="display: none;">
         <h2 class="text-2xl font-bold mb-4 gradient-text">Connexion</h2>
         <input type="text" id="loginClientNumber" placeholder="Numéro client" class="w-full p-3 border border-gray-300 rounded-xl mb-3 focus:outline-none focus:ring-2 focus:ring-[#004e92]">
@@ -302,7 +809,31 @@
     </div>
   </div>
 
-  <!-- Script principal -->
-  <script src="{% static 'js/script_accueil.js' %}?v=login-fix-2"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const faqItems = document.querySelectorAll(".faq-item");
+
+      faqItems.forEach((item) => {
+        const button = item.querySelector(".faq-button");
+        const content = item.querySelector(".faq-content");
+
+        button.addEventListener("click", () => {
+          const isActive = item.classList.contains("active");
+
+          faqItems.forEach((otherItem) => {
+            otherItem.classList.remove("active");
+            otherItem.querySelector(".faq-content").style.maxHeight = null;
+          });
+
+          if (!isActive) {
+            item.classList.add("active");
+            content.style.maxHeight = content.scrollHeight + "px";
+          }
+        });
+      });
+    });
+  </script>
+
+  <script src="{% static 'js/script_accueil.js' %}?v=landing-premium-v2-faq"></script>
 </body>
 </html>
