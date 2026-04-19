@@ -1457,7 +1457,51 @@ body.modal-open *:not(.modal-backdrop) {
 }
 
 /* =============================================================================
-  16. OWNER GYM SWITCHER
+  16. PROFIL UTILISATEUR
+   ============================================================================= */
+
+.profile-avatar {
+    width: 96px;
+    height: 96px;
+    display: grid;
+    place-items: center;
+    border-radius: 32px;
+    background: linear-gradient(135deg, #0f172a, #3454d1);
+    color: #fff;
+    box-shadow: 0 18px 42px rgba(15, 23, 42, 0.16);
+}
+
+.profile-avatar .material-icons {
+    font-size: 54px;
+}
+
+.profile-info-list {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.profile-info-list > div {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    border-radius: 16px;
+    background: #f8fafc;
+    padding: 0.85rem 1rem;
+}
+
+.profile-info-list span {
+    color: #64748b;
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.profile-info-list strong {
+    color: #0f172a;
+    text-align: right;
+}
+
+/* =============================================================================
+  17. OWNER GYM SWITCHER
    ============================================================================= */
 
 .owner-gym-switcher {

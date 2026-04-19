@@ -20,8 +20,20 @@
             </div>
             <div class="page-header">
                 <ul class="breadcrumb">
-                    <li class="breadcrumb-item"><a href="#">Accueil</a></li>
-                    <li class="breadcrumb-item active">{{ page_title|default:"Tableau de bord" }}</li>
+                    {% if breadcrumbs %}
+                        {% for item in breadcrumbs %}
+                            {% if forloop.last or not item.url %}
+                                <li class="breadcrumb-item active">{{ item.label }}</li>
+                            {% else %}
+                                <li class="breadcrumb-item">
+                                    <a href="{{ item.url }}">{{ item.label }}</a>
+                                </li>
+                            {% endif %}
+                        {% endfor %}
+                    {% else %}
+                        <li class="breadcrumb-item"><a href="{% url 'core:dashboard_redirect' %}">Accueil</a></li>
+                        <li class="breadcrumb-item active">{{ page_title|default:"Tableau de bord" }}</li>
+                    {% endif %}
                 </ul>
             </div>
         </div>
@@ -115,6 +127,15 @@
                             </div>
                         </div>
                     </div>
+                    <div class="dropdown-divider"></div>
+                    <a href="{% url 'compte:profile' %}" class="dropdown-item">
+                        <span class="material-icons">account_circle</span>
+                        Mon profil
+                    </a>
+                    <a href="{% url 'compte:profile' %}#password" class="dropdown-item">
+                        <span class="material-icons">lock_reset</span>
+                        Mot de passe
+                    </a>
                     <div class="dropdown-divider"></div>
                     <a href="{% url 'compte:logout' %}" class="dropdown-item">
                         <span class="material-icons">logout</span>

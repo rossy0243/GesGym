@@ -126,3 +126,73 @@ class OwnerLoginAndGymSwitchTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("Aucune salle active", response.content.decode("utf-8"))
+
+
+class UserProfileTests(TestCase):
+    def setUp(self):
+        self.organization = Organization.objects.create(name="Profile Org", slug="profile-org")
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Profile Gym",
+            slug="profile-gym",
+            subdomain="profile-gym",
+        )
+        self.user = User.objects.create_user(
+            username="profile-owner",
+            password="oldpass123",
+            first_name="Old",
+            last_name="Name",
+            email="old@example.com",
+            owned_organization=self.organization,
+        )
+        self.client.force_login(self.user)
+
+    def test_profile_page_renders_context_and_breadcrumbs(self):
+        response = self.client.get(reverse("compte:profile"))
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        self.assertIn("Mon profil", content)
+        self.assertIn("Accueil", content)
+        self.assertIn("Profile Org", content)
+        self.assertIn("Profile Gym", content)
+
+    def test_profile_update_persists_and_shows_success_toast(self):
+        response = self.client.post(
+            reverse("compte:profile"),
+            {
+                "action": "profile",
+                "first_name": "New",
+                "last_name": "Owner",
+                "email": "new@example.com",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.first_name, "New")
+        self.assertEqual(self.user.last_name, "Owner")
+        self.assertEqual(self.user.email, "new@example.com")
+        self.assertContains(response, "Profil mis a jour avec succes.")
+        self.assertContains(response, "bg-success")
+
+    def test_password_change_updates_password_and_keeps_user_logged_in(self):
+        response = self.client.post(
+            reverse("compte:profile"),
+            {
+                "action": "password",
+                "old_password": "oldpass123",
+                "new_password1": "NewStrongPass123",
+                "new_password2": "NewStrongPass123",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("NewStrongPass123"))
+        self.assertContains(response, "Mot de passe modifie avec succes.")
+
+        response = self.client.get(reverse("compte:profile"))
+        self.assertEqual(response.status_code, 200)

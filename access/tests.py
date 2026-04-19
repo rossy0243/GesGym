@@ -10,6 +10,7 @@ from members.models import Member
 from organizations.models import Gym, Organization
 from subscriptions.models import MemberSubscription, SubscriptionPlan
 from .models import AccessLog
+from .views import DOUBLE_SCAN_REASON
 
 
 class AccessControlTests(TestCase):
@@ -93,6 +94,112 @@ class AccessControlTests(TestCase):
         self.assertEqual(log.gym, self.gym_a)
         self.assertEqual(log.scanned_by, self.user)
         self.assertEqual(log.device_used, "Manuel")
+
+    def test_manual_access_denies_second_entry_same_day(self):
+        first_response = self.client.post(
+            reverse("access:manual_access_entry", args=[self.member_a.id])
+        )
+        second_response = self.client.post(
+            reverse("access:manual_access_entry", args=[self.member_a.id])
+        )
+
+        self.assertEqual(first_response.status_code, 200)
+        self.assertEqual(second_response.status_code, 200)
+        self.assertTrue(first_response.json()["access"])
+
+        payload = second_response.json()
+        self.assertFalse(payload["access"])
+        self.assertEqual(payload["reason"], DOUBLE_SCAN_REASON)
+        self.assertEqual(payload["log"]["status"], "denied")
+        self.assertEqual(payload["log"]["reason"], DOUBLE_SCAN_REASON)
+        self.assertEqual(payload["stats"]["entries"], 1)
+        self.assertEqual(payload["stats"]["denied"], 1)
+
+        logs = AccessLog.objects.filter(member=self.member_a).order_by("id")
+        self.assertEqual(logs.count(), 2)
+        self.assertTrue(logs[0].access_granted)
+        self.assertFalse(logs[1].access_granted)
+        self.assertEqual(logs[1].denial_reason, DOUBLE_SCAN_REASON)
+
+    def test_qr_access_denies_second_scan_same_day(self):
+        first_response = self.client.post(
+            reverse("access:member_access", args=[self.member_a.qr_code])
+        )
+        second_response = self.client.post(
+            reverse("access:member_access", args=[self.member_a.qr_code])
+        )
+
+        self.assertEqual(first_response.status_code, 200)
+        self.assertEqual(second_response.status_code, 200)
+        self.assertTrue(first_response.json()["access"])
+
+        payload = second_response.json()
+        self.assertFalse(payload["access"])
+        self.assertEqual(payload["reason"], DOUBLE_SCAN_REASON)
+        self.assertEqual(payload["log"]["method"], "QR Scanner")
+        self.assertEqual(payload["stats"]["entries"], 1)
+        self.assertEqual(payload["stats"]["denied"], 1)
+
+    def test_previous_day_entry_does_not_block_today(self):
+        log = AccessLog.objects.create(
+            gym=self.gym_a,
+            member=self.member_a,
+            access_granted=True,
+            device_used="Manuel",
+            scanned_by=self.user,
+        )
+        AccessLog.objects.filter(pk=log.pk).update(
+            check_in_time=timezone.now() - timedelta(days=1)
+        )
+
+        response = self.client.post(
+            reverse("access:manual_access_entry", args=[self.member_a.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["access"])
+        self.assertEqual(payload["stats"]["entries"], 1)
+        self.assertEqual(
+            AccessLog.objects.filter(member=self.member_a, access_granted=True).count(),
+            2,
+        )
+
+    def test_denied_attempt_does_not_block_later_valid_entry(self):
+        member = Member.objects.create(
+            gym=self.gym_a,
+            first_name="Retry",
+            last_name="Member",
+            phone="10003",
+            email="retry-access@example.com",
+        )
+
+        first_response = self.client.post(
+            reverse("access:manual_access_entry", args=[member.id])
+        )
+
+        self.assertEqual(first_response.status_code, 200)
+        self.assertFalse(first_response.json()["access"])
+
+        today = timezone.now().date()
+        MemberSubscription.objects.create(
+            gym=self.gym_a,
+            member=member,
+            plan=self.plan_a,
+            start_date=today,
+            end_date=today + timedelta(days=30),
+            is_active=True,
+        )
+
+        second_response = self.client.post(
+            reverse("access:manual_access_entry", args=[member.id])
+        )
+
+        self.assertEqual(second_response.status_code, 200)
+        payload = second_response.json()
+        self.assertTrue(payload["access"])
+        self.assertEqual(payload["stats"]["entries"], 1)
+        self.assertEqual(payload["stats"]["denied"], 1)
 
     def test_qr_access_cannot_read_member_from_other_gym(self):
         response = self.client.post(

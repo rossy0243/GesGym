@@ -4,7 +4,8 @@ from django.dispatch import receiver
 from django.contrib.auth import get_user_model
 
 from compte.models import UserGymRole
-from .models import Member
+from organizations.models import Gym
+from .models import Member, MemberPreRegistrationLink
 
 User = get_user_model()
 
@@ -40,3 +41,9 @@ def create_user_for_member(sender, instance, created, **kwargs):
 
         instance.user = user
         instance.save(update_fields=["user"])
+
+
+@receiver(post_save, sender=Gym)
+def create_pre_registration_link_for_gym(sender, instance, created, **kwargs):
+    if created:
+        MemberPreRegistrationLink.objects.get_or_create(gym=instance)

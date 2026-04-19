@@ -10,15 +10,30 @@ from django.core.exceptions import PermissionDenied
 from django.shortcuts import redirect
 from django.db.models import Q, Exists, OuterRef
 from django.core.paginator import Paginator
+from django.urls import reverse
 import qrcode
 from access.models import AccessLog
 from .forms import MemberCreationForm
-from .models import Member
+from .models import Member, MemberPreRegistration, MemberPreRegistrationLink
 from pos.models import Payment
 from subscriptions.models import MemberSubscription, SubscriptionPlan
 
 
 #######   MEMBRE  ######
+
+
+def _cleanup_expired_pre_registrations():
+    MemberPreRegistration.delete_expired_pending()
+
+
+def _member_management_allowed(request):
+    return request.role in ["owner", "manager"] and request.gym
+
+
+def _get_pre_registration_public_url(request, link):
+    return request.build_absolute_uri(
+        reverse("members:public_pre_registration", args=[link.token])
+    )
 
 #######   liste  ######
 @login_required
@@ -28,9 +43,10 @@ def member_list(request):
     """
 
     # 🔐 sécurité rôles
-    if request.role not in ["owner", "manager"]:
+    if not _member_management_allowed(request):
         raise PermissionDenied
 
+    _cleanup_expired_pre_registrations()
     gym = request.gym
     today = timezone.now().date()
     limit = today + timedelta(days=7)
@@ -158,6 +174,13 @@ def member_list(request):
     )
     # AJOUT IMPORTANT : On passe le formulaire au template
     form = MemberCreationForm()
+    pre_registration_link, _ = MemberPreRegistrationLink.objects.get_or_create(gym=gym)
+    pre_registration_url = _get_pre_registration_public_url(request, pre_registration_link)
+    pending_pre_registrations_count = MemberPreRegistration.objects.filter(
+        gym=gym,
+        status=MemberPreRegistration.STATUS_PENDING,
+        expires_at__gt=timezone.now(),
+    ).count()
 
     context = {
         "page_obj": page_obj,
@@ -172,6 +195,9 @@ def member_list(request):
         "created_to": created_to or "",
         "sort_selected": sort,
         "form" : form,
+        "pre_registration_link": pre_registration_link,
+        "pre_registration_url": pre_registration_url,
+        "pending_pre_registrations_count": pending_pre_registrations_count,
     }
 
     return render(request, "members/member_list.html", context)

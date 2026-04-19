@@ -60,6 +60,11 @@
                                 Tous les membres
                             </a>
                         </li>
+                        <li class="nxl-item {% if nav_sub == 'pre_registrations' %}active{% endif %}" id="nav-clients-preinscriptions">
+                            <a class="nxl-link" href="{% url 'members:pre_registration_list' %}">
+                                Preinscriptions
+                            </a>
+                        </li>
 
                     </ul>
                 </li>
@@ -267,6 +272,13 @@
                         </li>
                         {% endif %}
                     </ul>
+                </li>
+
+                <li class="nxl-item nav-profil-link {% if nav_active == 'profile' %}active{% endif %}">
+                    <a class="nxl-link" href="{% url 'compte:profile' %}">
+                        <span class="nxl-micon"><span class="material-icons">account_circle</span></span>
+                        <span class="nxl-mtext">Mon profil</span>
+                    </a>
                 </li>
 
                 <li class="nxl-item nav-logout-link">

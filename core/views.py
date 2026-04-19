@@ -5,7 +5,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseForbidden
 from django.views.decorators.http import require_POST
 from django.db.models import Q, Count, Sum, Exists, OuterRef
-from django.db.models.functions import ExtractMonth, TruncDate
+from django.db.models.functions import ExtractHour, ExtractMonth, TruncDate
 from django.utils.timezone import now
 from datetime import timedelta
 import calendar
@@ -116,6 +116,36 @@ def _build_trend(current_value, previous_value):
         "direction": direction,
         "badge_class": badge_class,
         "display": f"{prefix}{percent:.1f}%",
+    }
+
+
+def _format_hour_range(hour):
+    end_hour = (hour + 1) % 24
+    return f"{hour:02d}h-{end_hour:02d}h"
+
+
+def _build_peak_hour(access_logs):
+    peak = (
+        access_logs.filter(access_granted=True)
+        .annotate(hour=ExtractHour("check_in_time"))
+        .values("hour")
+        .annotate(count=Count("id"))
+        .order_by("-count", "hour")
+        .first()
+    )
+
+    if not peak or peak["hour"] is None:
+        return {
+            "label": "Aucune donnee",
+            "count": 0,
+            "has_data": False,
+        }
+
+    hour = int(peak["hour"])
+    return {
+        "label": _format_hour_range(hour),
+        "count": peak["count"],
+        "has_data": True,
     }
 
 
@@ -736,6 +766,7 @@ def gym_dashboard(request, gym_id):
     ).count()
     engagement_rate = round((unique_visitors_period / active_members) * 100, 1) if active_members else 0
     average_daily_visits = round(visits_period / period_data["days"], 1) if period_data["days"] else 0
+    peak_hour = _build_peak_hour(access_period_qs)
     attendance_rows = _build_attendance_rows(gym, period_data)
     week_labels = [row["label"] for row in attendance_rows]
     week_values = [row["count"] for row in attendance_rows]
@@ -961,6 +992,7 @@ def gym_dashboard(request, gym_id):
         "unique_visitors_period": unique_visitors_period,
         "engagement_rate": engagement_rate,
         "average_daily_visits": average_daily_visits,
+        "peak_hour": peak_hour,
         "new_members_trend": new_members_trend,
         "renewals_trend": renewals_trend,
         "visits_trend": visits_trend,

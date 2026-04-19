@@ -1,9 +1,14 @@
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
+from datetime import timedelta
 import uuid
 from organizations.models import Gym
 from core.managers import GymManager
+
+
+def default_pre_registration_expiry():
+    return timezone.now() + timedelta(days=7)
 
 
 class Member(models.Model):
@@ -141,6 +146,170 @@ class Member(models.Model):
 
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
-    
+
+
+class MemberPreRegistrationLink(models.Model):
+    """
+    Lien public permanent de preinscription pour une salle precise.
+    Les demandes creees via ce lien expirent separement apres 7 jours.
+    """
+
+    gym = models.OneToOneField(
+        Gym,
+        on_delete=models.CASCADE,
+        related_name="member_pre_registration_link",
+    )
+
+    token = models.UUIDField(
+        default=uuid.uuid4,
+        unique=True,
+        editable=False,
+        db_index=True,
+    )
+
+    is_active = models.BooleanField(default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["gym", "is_active"]),
+        ]
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Lien preinscription - {self.gym}"
+
+
+class MemberPreRegistration(models.Model):
+    """
+    Demande de preinscription publique. Elle ne devient un vrai membre
+    qu'apres confirmation interne par un Owner ou Manager du gym.
+    """
+
+    STATUS_PENDING = "pending"
+    STATUS_CONFIRMED = "confirmed"
+    STATUS_CANCELLED = "cancelled"
+
+    STATUS_CHOICES = (
+        (STATUS_PENDING, "En attente"),
+        (STATUS_CONFIRMED, "Confirmee"),
+        (STATUS_CANCELLED, "Annulee"),
+    )
+
+    gym = models.ForeignKey(
+        Gym,
+        on_delete=models.CASCADE,
+        related_name="member_pre_registrations",
+        db_index=True,
+    )
+
+    link = models.ForeignKey(
+        MemberPreRegistrationLink,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pre_registrations",
+    )
+
+    member = models.OneToOneField(
+        Member,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pre_registration",
+    )
+
+    token = models.UUIDField(
+        default=uuid.uuid4,
+        unique=True,
+        editable=False,
+        db_index=True,
+    )
+
+    first_name = models.CharField(max_length=100)
+
+    last_name = models.CharField(max_length=100)
+
+    phone = models.CharField(max_length=20, db_index=True)
+
+    email = models.EmailField(blank=True, null=True, db_index=True)
+
+    address = models.TextField(blank=True, null=True)
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING,
+        db_index=True,
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    expires_at = models.DateTimeField(default=default_pre_registration_expiry)
+
+    confirmed_at = models.DateTimeField(blank=True, null=True)
+
+    confirmed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="confirmed_member_pre_registrations",
+    )
+
+    objects = GymManager()
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["gym", "status"]),
+            models.Index(fields=["gym", "expires_at"]),
+            models.Index(fields=["status", "expires_at"]),
+            models.Index(fields=["gym", "phone"]),
+            models.Index(fields=["gym", "email"]),
+        ]
+        ordering = ["-created_at"]
+
+    @property
+    def full_name(self):
+        return f"{self.first_name} {self.last_name}".strip()
+
+    @property
+    def is_expired(self):
+        return self.status == self.STATUS_PENDING and self.expires_at <= timezone.now()
+
+    @classmethod
+    def delete_expired_pending(cls):
+        return cls.objects.filter(
+            status=cls.STATUS_PENDING,
+            expires_at__lte=timezone.now(),
+        ).delete()
+
+    def confirm(self, confirmed_by):
+        if self.is_expired:
+            raise ValueError("Cette preinscription a expire.")
+        if self.status != self.STATUS_PENDING:
+            raise ValueError("Cette preinscription n'est plus en attente.")
+
+        member = Member.objects.create(
+            gym=self.gym,
+            first_name=self.first_name,
+            last_name=self.last_name,
+            phone=self.phone,
+            email=self.email,
+            address=self.address,
+        )
+
+        self.member = member
+        self.status = self.STATUS_CONFIRMED
+        self.confirmed_at = timezone.now()
+        self.confirmed_by = confirmed_by
+        self.save(update_fields=["member", "status", "confirmed_at", "confirmed_by"])
+        return member
+
+    def __str__(self):
+        return f"{self.full_name} - {self.gym}"
 
 

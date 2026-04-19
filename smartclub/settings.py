@@ -75,6 +75,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'smartclub.context_processors.breadcrumbs_processor',
                 'smartclub.context_processors.modules_processor',
                 'smartclub.context_processors.user_owner_check',
             ],

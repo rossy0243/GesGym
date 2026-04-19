@@ -1,12 +1,20 @@
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
+from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils.timezone import localtime, now
 from django.views.decorators.http import require_POST
-from django.db.models import Q
 
 from members.models import Member
 from .models import AccessLog
+
+
+DOUBLE_SCAN_REASON = "Ce membre est d\u00e9j\u00e0 dans la salle."
+
+
+def _today():
+    return localtime(now()).date()
 
 
 def _member_has_valid_access(member):
@@ -16,12 +24,11 @@ def _member_has_valid_access(member):
     if member.status == "suspended":
         return False, "Membre suspendu"
 
-    today = now().date()
     has_valid_subscription = member.subscriptions.filter(
         gym=member.gym,
         is_active=True,
         is_paused=False,
-        end_date__gte=today,
+        end_date__gte=_today(),
     ).exists()
 
     if not has_valid_subscription:
@@ -30,11 +37,19 @@ def _member_has_valid_access(member):
     return True, ""
 
 
+def _member_already_checked_in_today(gym, member):
+    return AccessLog.objects.filter(
+        gym=gym,
+        member=member,
+        access_granted=True,
+        check_in_time__date=_today(),
+    ).exists()
+
+
 def _today_stats(gym):
-    today = now().date()
     logs_today = AccessLog.objects.filter(
         gym=gym,
-        check_in_time__date=today,
+        check_in_time__date=_today(),
     )
 
     return {
@@ -44,16 +59,22 @@ def _today_stats(gym):
 
 
 def _record_access(gym, member, user, method):
-    access_granted, reason = _member_has_valid_access(member)
+    with transaction.atomic():
+        member = Member.objects.select_for_update().get(id=member.id, gym=gym)
+        access_granted, reason = _member_has_valid_access(member)
 
-    log = AccessLog.objects.create(
-        gym=gym,
-        member=member,
-        access_granted=access_granted,
-        denial_reason=reason,
-        device_used=method,
-        scanned_by=user,
-    )
+        if access_granted and _member_already_checked_in_today(gym, member):
+            access_granted = False
+            reason = DOUBLE_SCAN_REASON
+
+        log = AccessLog.objects.create(
+            gym=gym,
+            member=member,
+            access_granted=access_granted,
+            denial_reason=reason,
+            device_used=method,
+            scanned_by=user,
+        )
 
     return access_granted, reason, log
 

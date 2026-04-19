@@ -61,22 +61,31 @@
     <main class="nxl-container">
         <div class="nxl-content">
             <div class="container-fluid">
-                <!-- Toast Container - Version propre -->
+                <!-- Toast Container - messages globaux -->
                 <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 9999;">
                     {% if messages %}
                         {% for message in messages %}
                             <div id="toast-{{ forloop.counter }}" 
                                 class="toast align-items-center border-0 shadow-lg
-                                        {% if 'toast-success' in message.tags %}bg-success text-white{% elif 'error' in message.tags %}bg-danger text-white{% else %}bg-primary text-white{% endif %}" 
+                                        {% if 'success' in message.tags or 'toast-success' in message.tags %}bg-success text-white{% elif 'warning' in message.tags %}bg-warning text-dark{% elif 'error' in message.tags or 'danger' in message.tags %}bg-danger text-white{% else %}bg-primary text-white{% endif %}"
                                 role="alert" 
                                 aria-live="assertive" 
                                 aria-atomic="true"
                                 data-bs-delay="8000">
-                                <div class="d-flex">
-                                    <div class="toast-body">
+                                <div class="d-flex align-items-center">
+                                    <div class="toast-body d-flex align-items-center gap-2">
+                                        {% if 'success' in message.tags or 'toast-success' in message.tags %}
+                                            <span class="material-icons" style="font-size:20px;">check_circle</span>
+                                        {% elif 'warning' in message.tags %}
+                                            <span class="material-icons" style="font-size:20px;">warning</span>
+                                        {% elif 'error' in message.tags or 'danger' in message.tags %}
+                                            <span class="material-icons" style="font-size:20px;">error</span>
+                                        {% else %}
+                                            <span class="material-icons" style="font-size:20px;">info</span>
+                                        {% endif %}
                                         {{ message|safe }}
                                     </div>
-                                    <button type="button" class="btn-close btn-close-white me-2 m-auto" 
+                                    <button type="button" class="btn-close {% if 'warning' not in message.tags %}btn-close-white{% endif %} me-2 m-auto"
                                             data-bs-dismiss="toast" aria-label="Close"></button>
                                 </div>
                             </div>

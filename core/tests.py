@@ -1,10 +1,13 @@
 from decimal import Decimal
+from datetime import datetime, time
 from io import BytesIO
 from zipfile import ZipFile
 
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
+from access.models import AccessLog
 from compte.models import User
 from compte.models import UserGymRole
 from coaching.forms import CoachForm
@@ -102,6 +105,41 @@ class AccountingReportExportTests(TestCase):
         session = self.client.session
         session["current_gym_id"] = self.gym_a.id
         session.save()
+
+    def _create_access_log_at(self, gym, member, hour, granted=True):
+        checked_at = timezone.make_aware(
+            datetime.combine(timezone.localdate(), time(hour=hour, minute=15))
+        )
+        log = AccessLog.objects.create(
+            gym=gym,
+            member=member,
+            access_granted=granted,
+            device_used="Test",
+            scanned_by=self.owner,
+        )
+        AccessLog.objects.filter(pk=log.pk).update(check_in_time=checked_at)
+        return log
+
+    def test_dashboard_displays_peak_hour_scoped_to_current_gym(self):
+        for _ in range(3):
+            self._create_access_log_at(self.gym_a, self.member_a, 18)
+        self._create_access_log_at(self.gym_a, self.member_a, 9)
+        self._create_access_log_at(self.gym_a, self.member_a, 19, granted=False)
+
+        for _ in range(5):
+            self._create_access_log_at(self.gym_b, self.member_b, 20)
+
+        response = self.client.get(
+            reverse("core:gym_dashboard", args=[self.gym_a.id]),
+            {"period": "day"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        self.assertIn("Heure de pointe", content)
+        self.assertIn("18h-19h", content)
+        self.assertIn("3 passages autorises", content)
+        self.assertNotIn("20h-21h", content)
 
     def test_csv_export_is_accounting_file_scoped_to_current_gym(self):
         response = self.client.get(

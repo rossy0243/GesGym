@@ -1,11 +1,12 @@
 # compte/urls.py
 from django.urls import path
-from .views import CustomLoginView, activate_user, create_user_by_owner, deactivate_user, get_gyms_by_organization, logout_view, reset_password, user_list
+from .views import CustomLoginView, activate_user, create_user_by_owner, deactivate_user, get_gyms_by_organization, logout_view, profile, reset_password, user_list
 
 app_name = 'compte'
 
 urlpatterns = [
     path('login/', CustomLoginView.as_view(), name='login'),
+    path("profile/", profile, name="profile"),
     path("logout/", logout_view, name="logout"),
     path('admin/get-gyms/', get_gyms_by_organization, name='get_gyms_by_organization'),
     # Gestion des utilisateurs (Owner)

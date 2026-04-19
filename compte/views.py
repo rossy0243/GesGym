@@ -1,11 +1,11 @@
 # compte/views.py
-from django.contrib.auth import logout
+from django.contrib.auth import logout, update_session_auth_hash
 from django.contrib.auth.views import LoginView
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.contrib.auth.hashers import make_password
 from compte.utils import generate_username
-from .forms import CreateUserForm, CustomAuthenticationForm
+from .forms import CreateUserForm, CustomAuthenticationForm, UserPasswordChangeForm, UserProfileForm
 from .models import User, UserGymRole
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -54,6 +54,52 @@ def logout_view(request):
     """
     logout(request)
     return redirect("compte:login")
+
+
+@login_required
+def profile(request):
+    profile_form = UserProfileForm(instance=request.user)
+    password_form = UserPasswordChangeForm(request.user)
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+
+        if action == "profile":
+            profile_form = UserProfileForm(request.POST, instance=request.user)
+            if profile_form.is_valid():
+                profile_form.save()
+                messages.success(request, "Profil mis a jour avec succes.")
+                return redirect("compte:profile")
+            messages.error(request, "Impossible de mettre a jour le profil. Verifiez les champs.")
+
+        elif action == "password":
+            password_form = UserPasswordChangeForm(request.user, request.POST)
+            if password_form.is_valid():
+                user = password_form.save()
+                update_session_auth_hash(request, user)
+                messages.success(request, "Mot de passe modifie avec succes.")
+                return redirect("compte:profile")
+            messages.error(request, "Mot de passe non modifie. Verifiez les informations saisies.")
+
+    active_roles = UserGymRole.objects.filter(
+        user=request.user,
+        is_active=True,
+        gym__is_active=True,
+        gym__organization__is_active=True,
+    ).select_related("gym", "gym__organization")
+
+    context = {
+        "profile_form": profile_form,
+        "password_form": password_form,
+        "active_roles": active_roles,
+        "page_title": "Mon profil",
+        "nav_active": "profile",
+        "breadcrumbs": [
+            {"label": "Accueil", "url": reverse_lazy("core:dashboard_redirect")},
+            {"label": "Mon profil", "url": ""},
+        ],
+    }
+    return render(request, "compte/profile.html", context)
 
 
 @staff_member_required

@@ -15,6 +15,17 @@
     <div class="page-header-right ms-auto">
         <div class="page-header-right-items">
             <div class="d-flex align-items-center gap-2">
+                <button type="button" class="btn btn-light" data-bs-toggle="modal" data-bs-target="#preRegistrationLinkModal">
+                    <span class="material-icons me-2" style="font-size:18px;">link</span>
+                    <span>Lien de preinscription</span>
+                </button>
+                <a href="{% url 'members:pre_registration_list' %}" class="btn btn-light">
+                    <span class="material-icons me-2" style="font-size:18px;">how_to_reg</span>
+                    <span>Preinscriptions</span>
+                    {% if pending_pre_registrations_count %}
+                        <span class="badge bg-warning text-dark ms-1">{{ pending_pre_registrations_count }}</span>
+                    {% endif %}
+                </a>
                 <a href="javascript:void(0);" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addMemberModal">
                     <span class="material-icons me-2" style="font-size:18px;">person_add</span>
                     <span>Nouveau Membre</span>
@@ -24,6 +35,33 @@
     </div>
 </div>
 <!-- [ page-header ] end -->
+
+<div class="modal fade" id="preRegistrationLinkModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <span class="material-icons me-2">link</span>
+                    Lien de preinscription
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted">
+                    Ce lien est propre a {{ request.gym.name }}. Les demandes non confirmees
+                    sont supprimees automatiquement apres 7 jours.
+                </p>
+                <label class="form-label">Lien public</label>
+                <div class="input-group">
+                    <input type="text" id="preRegistrationUrl" class="form-control" value="{{ pre_registration_url }}" readonly>
+                    <button class="btn btn-primary" type="button" onclick="copyPreRegistrationLink()">
+                        Copier
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
 <style>
 .members-list-card,
@@ -849,6 +887,14 @@ document.addEventListener('DOMContentLoaded', function () {
         if (row) row.classList.remove('dropdown-row-active');
     });
 });
+
+function copyPreRegistrationLink() {
+    const input = document.getElementById("preRegistrationUrl");
+    if (!input) return;
+    input.select();
+    input.setSelectionRange(0, 99999);
+    navigator.clipboard.writeText(input.value).catch(() => document.execCommand("copy"));
+}
 </script>
 
 <script>

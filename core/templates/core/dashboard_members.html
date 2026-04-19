@@ -18,6 +18,25 @@
     width: 100% !important;
     height: 100% !important;
 }
+
+.peak-hour-card {
+    border: 1px solid rgba(52, 84, 209, 0.14);
+    border-radius: 16px;
+    background: linear-gradient(135deg, rgba(52, 84, 209, 0.08), rgba(23, 198, 102, 0.08));
+    padding: 14px;
+}
+
+.peak-hour-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 14px;
+    background: rgba(52, 84, 209, 0.12);
+    color: #3454d1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
 </style>
 
 <div class="page-header">
@@ -368,6 +387,22 @@
                     <h5 class="card-title">Frequentation {{ period_label_lower }}</h5>
                 </div>
                 <div class="card-body">
+                    <div class="peak-hour-card mb-4">
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="peak-hour-icon">
+                                <span class="material-icons">query_stats</span>
+                            </div>
+                            <div>
+                                <div class="fs-12 text-muted">Heure de pointe</div>
+                                <div class="fs-4 fw-bold text-dark">{{ peak_hour.label }}</div>
+                                {% if peak_hour.has_data %}
+                                <div class="fs-12 text-muted">{{ peak_hour.count }} passage{{ peak_hour.count|pluralize }} autorise{{ peak_hour.count|pluralize }} sur la periode</div>
+                                {% else %}
+                                <div class="fs-12 text-muted">Aucun passage autorise sur la periode</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
                     <div class="member-analytics-chart compact mb-4">
                         <canvas id="attendanceTrendChart"></canvas>
                     </div>
@@ -511,6 +546,10 @@
                         <div class="d-flex justify-content-between">
                             <span>Entrées aujourd'hui</span>
                             <strong>{{ today_checkins }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Heure de pointe</span>
+                            <strong>{{ peak_hour.label }}</strong>
                         </div>
                         <div class="d-flex justify-content-between">
                             <span>Abonnements actifs</span>
