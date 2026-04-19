@@ -10,22 +10,107 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import os
 from pathlib import Path
+from urllib.parse import parse_qs, unquote, urlparse
+
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+def _env(name, default=None):
+    return os.environ.get(name, default)
+
+
+def _env_bool(name, default=False):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name, default):
+    value = os.environ.get(name)
+    if value in (None, ""):
+        return default
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise ImproperlyConfigured(f"{name} must be an integer.") from exc
+
+
+def _env_list(name, default=None):
+    value = os.environ.get(name)
+    if not value:
+        return default or []
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def _env_admins(name="DJANGO_ADMINS"):
+    admins = []
+    for item in _env_list(name):
+        if ":" not in item:
+            raise ImproperlyConfigured(f"{name} entries must use Name:email@example.com.")
+        admin_name, admin_email = item.split(":", 1)
+        admins.append((admin_name.strip(), admin_email.strip()))
+    return admins
+
+
+def _database_from_url(database_url):
+    parsed = urlparse(database_url)
+    scheme = parsed.scheme.lower()
+
+    if scheme in {"postgres", "postgresql"}:
+        config = {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": unquote(parsed.path.lstrip("/")),
+            "USER": unquote(parsed.username or ""),
+            "PASSWORD": unquote(parsed.password or ""),
+            "HOST": parsed.hostname or "",
+            "PORT": str(parsed.port or ""),
+        }
+        query = parse_qs(parsed.query)
+        sslmode = query.get("sslmode", [None])[0]
+        if sslmode:
+            config["OPTIONS"] = {"sslmode": sslmode}
+        return config
+
+    if scheme in {"sqlite", "sqlite3"}:
+        database_name = unquote(parsed.path.lstrip("/")) or "db.sqlite3"
+        database_path = Path(database_name)
+        if not database_path.is_absolute():
+            database_path = BASE_DIR / database_path
+        return {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": str(database_path),
+        }
+
+    raise ImproperlyConfigured("DATABASE_URL must use postgres://, postgresql:// or sqlite:///")
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-0m)gxejvaa0o6qzj3_r(ntri&3=s2l2#xnx&0)o=t6motvh1=1'
+ENVIRONMENT = _env("DJANGO_ENV", "development").lower()
+DEBUG = _env_bool("DJANGO_DEBUG", ENVIRONMENT != "production")
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+SECRET_KEY = _env("DJANGO_SECRET_KEY")
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = "django-insecure-dev-only-change-me-before-production"
+    else:
+        raise ImproperlyConfigured("DJANGO_SECRET_KEY is required when DJANGO_DEBUG=False.")
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = _env_list(
+    "DJANGO_ALLOWED_HOSTS",
+    ["localhost", "127.0.0.1", "[::1]", "testserver"] if DEBUG else [],
+)
+if not DEBUG and not ALLOWED_HOSTS:
+    raise ImproperlyConfigured("DJANGO_ALLOWED_HOSTS is required when DJANGO_DEBUG=False.")
+
+CSRF_TRUSTED_ORIGINS = _env_list("DJANGO_CSRF_TRUSTED_ORIGINS")
 
 
 # Application definition
@@ -89,16 +174,30 @@ WSGI_APPLICATION = 'smartclub.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'smartclub_db',
-        'USER': 'postgres',
-        'PASSWORD': '      ',  # mets ton vrai mot de passe
-        'HOST': 'localhost',
-        'PORT': '5432',
+DATABASE_URL = _env("DATABASE_URL")
+if DATABASE_URL:
+    DATABASES = {"default": _database_from_url(DATABASE_URL)}
+else:
+    if not DEBUG and not _env("DB_PASSWORD"):
+        raise ImproperlyConfigured("DATABASE_URL or DB_PASSWORD is required when DJANGO_DEBUG=False.")
+    DATABASES = {
+        "default": {
+            "ENGINE": _env("DB_ENGINE", "django.db.backends.postgresql"),
+            "NAME": _env("DB_NAME", "smartclub_db"),
+            "USER": _env("DB_USER", "postgres"),
+            "PASSWORD": _env("DB_PASSWORD", "      "),
+            "HOST": _env("DB_HOST", "localhost"),
+            "PORT": _env("DB_PORT", "5432"),
+        }
     }
-}
+
+DATABASES["default"]["CONN_MAX_AGE"] = _env_int(
+    "DB_CONN_MAX_AGE",
+    60 if not DEBUG else 0,
+)
+if _env_bool("DB_SSL_REQUIRE", not DEBUG) and DATABASES["default"]["ENGINE"] == "django.db.backends.postgresql":
+    DATABASES["default"].setdefault("OPTIONS", {})
+    DATABASES["default"]["OPTIONS"].setdefault("sslmode", "require")
 
 
 # Password validation
@@ -108,16 +207,25 @@ AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
     },
-
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {"min_length": _env_int("DJANGO_PASSWORD_MIN_LENGTH", 10)},
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
+    },
 ]
 
 
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = _env("DJANGO_LANGUAGE_CODE", "fr-fr")
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = _env("DJANGO_TIME_ZONE", "Africa/Kinshasa")
 
 USE_I18N = True
 
@@ -143,6 +251,89 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+USE_X_FORWARDED_HOST = _env_bool("DJANGO_USE_X_FORWARDED_HOST", False)
+
+SECURE_SSL_REDIRECT = _env_bool("DJANGO_SECURE_SSL_REDIRECT", not DEBUG)
+SECURE_HSTS_SECONDS = _env_int("DJANGO_SECURE_HSTS_SECONDS", 31536000 if not DEBUG else 0)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = _env_bool("DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS", False)
+SECURE_HSTS_PRELOAD = _env_bool("DJANGO_SECURE_HSTS_PRELOAD", False)
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"
+
+SESSION_COOKIE_SECURE = _env_bool("DJANGO_SESSION_COOKIE_SECURE", not DEBUG)
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = _env("DJANGO_SESSION_COOKIE_SAMESITE", "Lax")
+SESSION_COOKIE_AGE = _env_int("DJANGO_SESSION_COOKIE_AGE", 8 * 60 * 60)
+SESSION_EXPIRE_AT_BROWSER_CLOSE = _env_bool("DJANGO_SESSION_EXPIRE_AT_BROWSER_CLOSE", False)
+
+CSRF_COOKIE_SECURE = _env_bool("DJANGO_CSRF_COOKIE_SECURE", not DEBUG)
+CSRF_COOKIE_HTTPONLY = _env_bool("DJANGO_CSRF_COOKIE_HTTPONLY", False)
+CSRF_COOKIE_SAMESITE = _env("DJANGO_CSRF_COOKIE_SAMESITE", "Lax")
+
+X_FRAME_OPTIONS = "DENY"
+
+DATA_UPLOAD_MAX_MEMORY_SIZE = _env_int("DJANGO_DATA_UPLOAD_MAX_MEMORY_SIZE", 10 * 1024 * 1024)
+FILE_UPLOAD_MAX_MEMORY_SIZE = _env_int("DJANGO_FILE_UPLOAD_MAX_MEMORY_SIZE", 10 * 1024 * 1024)
+DATA_UPLOAD_MAX_NUMBER_FIELDS = _env_int("DJANGO_DATA_UPLOAD_MAX_NUMBER_FIELDS", 2000)
+
 LOGIN_URL = "compte:login"
 LOGIN_REDIRECT_URL = "core:dashboard_redirect"
 LOGOUT_REDIRECT_URL = "compte:login"
+
+ADMINS = _env_admins()
+MANAGERS = ADMINS
+
+EMAIL_BACKEND = _env(
+    "DJANGO_EMAIL_BACKEND",
+    "django.core.mail.backends.console.EmailBackend" if DEBUG else "django.core.mail.backends.smtp.EmailBackend",
+)
+EMAIL_HOST = _env("DJANGO_EMAIL_HOST", "localhost")
+EMAIL_PORT = _env_int("DJANGO_EMAIL_PORT", 587)
+EMAIL_HOST_USER = _env("DJANGO_EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = _env("DJANGO_EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = _env_bool("DJANGO_EMAIL_USE_TLS", not DEBUG)
+EMAIL_USE_SSL = _env_bool("DJANGO_EMAIL_USE_SSL", False)
+DEFAULT_FROM_EMAIL = _env("DJANGO_DEFAULT_FROM_EMAIL", "noreply@gesgym.local")
+SERVER_EMAIL = _env("DJANGO_SERVER_EMAIL", DEFAULT_FROM_EMAIL)
+
+LOG_LEVEL = _env("DJANGO_LOG_LEVEL", "INFO")
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "filters": {
+        "require_debug_false": {
+            "()": "django.utils.log.RequireDebugFalse",
+        },
+    },
+    "formatters": {
+        "standard": {
+            "format": "{levelname} {asctime} {name} {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "standard",
+        },
+        "mail_admins": {
+            "class": "django.utils.log.AdminEmailHandler",
+            "filters": ["require_debug_false"],
+            "level": "ERROR",
+        },
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console", "mail_admins"],
+            "level": LOG_LEVEL,
+            "propagate": True,
+        },
+        "django.security": {
+            "handlers": ["console", "mail_admins"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+    },
+}
