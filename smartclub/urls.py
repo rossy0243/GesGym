@@ -19,12 +19,14 @@ from django.contrib import admin
 from django.urls import include, path
 from django.conf import settings
 from django.conf.urls.static import static
+from django.http import HttpResponse
 from django.views.generic import RedirectView
 from website.views import landing
 
 
 urlpatterns = [
     path('', landing, name='landing'),
+    path('health/', lambda request: HttpResponse("ok", content_type="text/plain"), name='health'),
     path('login/', RedirectView.as_view(pattern_name='compte:login', permanent=False), name='login'),
     path('admin/', admin.site.urls),
     path('compte/', include('compte.urls')),
