@@ -34,12 +34,6 @@
                                 Vue d'ensemble
                             </a>
                         </li>
-                        <li class="nxl-item" id="nav-analytics">
-                            <a class="nxl-link"
-                                href="{% url 'core:gym_dashboard' gym_id=request.gym.id %}?view=analytics">
-                                <span class="nxl-mtext">Vue analytique</span>
-                            </a>
-                        </li>
                         {% else %}
                         <!-- Si pas de gym (cas de l'Owner sur vue organisation) -->
                         <li class="nxl-item" id="nav-dashboard-global">
