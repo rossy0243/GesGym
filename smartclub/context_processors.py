@@ -35,6 +35,7 @@ def breadcrumbs_processor(request):
         "rh": ("Ressources humaines", "rh:list"),
         "products": ("Stock & produits", "products:list"),
         "coaching": ("Coaching", "coaching:list"),
+        "notifications": ("Messages membres", "notifications:dashboard"),
         "compte": ("Compte", "compte:profile"),
     }
     leaf_map = {
@@ -60,6 +61,7 @@ def breadcrumbs_processor(request):
         "products:stock_dashboard": "Stock",
         "products:movement_list": "Mouvements",
         "coaching:list": "Coachs",
+        "notifications:dashboard": "Messages membres",
         "compte:profile": "Mon profil",
     }
 

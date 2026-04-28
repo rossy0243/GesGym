@@ -14,6 +14,7 @@ POS_HISTORY_ROLES = frozenset({"owner", "manager"})
 ACCESS_ROLES = frozenset({"owner", "manager", "reception"})
 REPORT_ROLES = frozenset({"owner", "manager"})
 COACHING_ROLES = frozenset({"owner", "manager"})
+NOTIFICATION_ROLES = frozenset({"owner", "manager", "reception"})
 MACHINE_ROLES = frozenset({"owner", "manager"})
 RH_EMPLOYEE_ROLES = frozenset({"owner", "manager"})
 RH_ATTENDANCE_ROLES = frozenset({"owner", "manager", "reception"})
@@ -53,6 +54,7 @@ def permission_flags(request):
         "can_access": has_role(request, ACCESS_ROLES),
         "can_reports": has_role(request, REPORT_ROLES),
         "can_coaching": has_role(request, COACHING_ROLES),
+        "can_notifications": has_role(request, NOTIFICATION_ROLES),
         "can_machines": has_role(request, MACHINE_ROLES),
         "can_rh_employees": has_role(request, RH_EMPLOYEE_ROLES),
         "can_rh_attendance": has_role(request, RH_ATTENDANCE_ROLES),

@@ -21,6 +21,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.http import HttpResponse
 from django.views.generic import RedirectView
+from notifications.views import notification_dashboard
 from website.views import landing
 
 
@@ -34,6 +35,8 @@ urlpatterns = [
     path('subscriptions/', include('subscriptions.urls')),
     path('pos/', include('pos.urls')),
     path('access/', include('access.urls')),
+    path('notifications/', notification_dashboard, name='notifications'),
+    path('notifications/', include('notifications.urls')),
     path("coaching/", include("coaching.urls")),
     path("machines/", include("machines.urls")),
     path('rh/', include('rh.urls')),

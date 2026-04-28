@@ -19,6 +19,7 @@ from coaching.models import Coach
 from smartclub.access_control import MEMBER_ADMIN_ROLES, MEMBER_ROLES, has_role
 from .forms import MemberCreationForm
 from .models import Member, MemberPreRegistration, MemberPreRegistrationLink
+from notifications.models import Notification
 from pos.models import Payment
 from subscriptions.models import MemberSubscription, SubscriptionPlan, SubscriptionRequest
 
@@ -104,6 +105,17 @@ def member_portal(request):
         members=member,
         is_active=True,
     ).order_by("name")
+    member_notifications = Notification.objects.filter(
+        gym=member.gym,
+        member=member,
+        channel=Notification.CHANNEL_IN_APP,
+    ).select_related("sent_by").order_by("-created_at")[:8]
+    unread_notification_count = Notification.objects.filter(
+        gym=member.gym,
+        member=member,
+        channel=Notification.CHANNEL_IN_APP,
+        read_at__isnull=True,
+    ).count()
     available_plans = SubscriptionPlan.objects.filter(
         gym=member.gym,
         is_active=True,
@@ -129,6 +141,8 @@ def member_portal(request):
         "payments": payments,
         "access_logs": access_logs,
         "coaches": coaches,
+        "member_notifications": member_notifications,
+        "unread_notification_count": unread_notification_count,
         "available_plans": available_plans,
         "pending_requests": pending_requests,
         "pending_plan_ids": pending_plan_ids,
@@ -194,6 +208,33 @@ def member_subscription_request(request):
 
 
 @login_required
+@require_POST
+def member_notification_read(request, notification_id):
+    current_member = _get_current_member(request.user)
+    if not current_member:
+        raise PermissionDenied
+
+    member = get_object_or_404(
+        Member.objects.select_related("gym"),
+        id=current_member.id,
+        user=request.user,
+    )
+    notification = get_object_or_404(
+        Notification,
+        id=notification_id,
+        gym=member.gym,
+        member=member,
+        channel=Notification.CHANNEL_IN_APP,
+    )
+
+    if not notification.read_at:
+        notification.read_at = timezone.now()
+        notification.save(update_fields=["read_at"])
+
+    return redirect(f"{reverse('members:member_portal')}#messages")
+
+
+@login_required
 def member_portal_qr(request):
     current_member = _get_current_member(request.user)
     if not current_member:
@@ -236,7 +277,7 @@ def member_app_manifest(request):
 
 def member_app_service_worker(request):
     content = """
-const CACHE_NAME = "smartclub-member-v4";
+const CACHE_NAME = "smartclub-member-v5";
 const STATIC_ASSETS = [
   "/static/css/member-portal.css",
   "/static/js/member-portal.js",

@@ -416,9 +416,68 @@ a {
 .timeline-list,
 .payment-list,
 .coach-list,
+.member-message-list,
 .plan-list {
     display: grid;
     gap: 12px;
+}
+
+.member-message-card {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: #fbfcfb;
+    padding: 14px;
+}
+
+.member-message-card.is-unread {
+    border-color: rgba(0, 78, 146, 0.26);
+    background: linear-gradient(180deg, rgba(0, 78, 146, 0.08), rgba(255, 255, 255, 0.96));
+}
+
+.member-message-card.is-unread::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 5px;
+    background: linear-gradient(180deg, var(--accent-dark), var(--accent));
+}
+
+.member-message-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.member-message-head strong {
+    display: block;
+    font-size: 0.98rem;
+    line-height: 1.25;
+}
+
+.member-message-head span {
+    flex: 0 0 auto;
+    border-radius: 999px;
+    background: rgba(255, 140, 0, 0.14);
+    color: var(--warn);
+    padding: 5px 8px;
+    font-size: 0.7rem;
+    font-weight: 900;
+    text-transform: uppercase;
+}
+
+.member-message-card p {
+    margin: 9px 0 8px;
+    color: var(--ink);
+    line-height: 1.45;
+}
+
+.member-message-card small {
+    display: block;
+    color: var(--muted);
+    line-height: 1.35;
 }
 
 .timeline-item,

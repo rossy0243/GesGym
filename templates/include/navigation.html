@@ -70,6 +70,15 @@
                 </li>
                 {% endif %}
 
+                {% if module_notifications and can_notifications %}
+                <li class="nxl-item {% if nav_active == 'notifications' %}active{% endif %}">
+                    <a class="nxl-link" href="{% url 'notifications:dashboard' %}">
+                        <span class="nxl-micon"><span class="material-icons">forum</span></span>
+                        <span class="nxl-mtext">Messages membres</span>
+                    </a>
+                </li>
+                {% endif %}
+
                 {% if module_subscriptions and can_subscriptions %}
                 <!-- Abonnements -->
                 <li class="nxl-item nxl-hasmenu {% if nav_active == 'abonnements' %}active{% endif %}">

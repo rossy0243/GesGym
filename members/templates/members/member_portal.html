@@ -11,7 +11,7 @@
     <title>{{ gym.name }} | Espace membre</title>
     <link rel="manifest" href="{{ pwa_manifest_url }}">
     <link rel="apple-touch-icon" href="{% static 'icons/1.png' %}">
-    <link rel="stylesheet" href="{% static 'css/member-portal.css' %}?v=20260429b">
+    <link rel="stylesheet" href="{% static 'css/member-portal.css' %}?v=20260429c">
 </head>
 <body data-service-worker-url="{{ pwa_service_worker_url }}">
     <main class="member-app-shell">
@@ -93,6 +93,41 @@
                 <span>Email</span>
                 <strong>{{ member.email|default:"-" }}</strong>
             </article>
+        </section>
+
+        <section class="content-panel" id="messages">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">Messages</p>
+                    <h2>De la salle</h2>
+                </div>
+                {% if unread_notification_count %}
+                    <span class="metric">{{ unread_notification_count }} new</span>
+                {% endif %}
+            </div>
+
+            <div class="member-message-list">
+                {% for notification in member_notifications %}
+                    <article class="member-message-card {% if not notification.read_at %}is-unread{% endif %}">
+                        <div class="member-message-head">
+                            <strong>{{ notification.title|default:"Message de la salle" }}</strong>
+                            {% if not notification.read_at %}
+                                <span>Non lu</span>
+                            {% endif %}
+                        </div>
+                        <p>{{ notification.message }}</p>
+                        <small>{{ notification.created_at|date:"d/m/Y H:i" }}</small>
+                        {% if not notification.read_at %}
+                            <form method="post" action="{% url 'members:member_notification_read' notification.id %}">
+                                {% csrf_token %}
+                                <button type="submit" class="text-button">Marquer comme lu</button>
+                            </form>
+                        {% endif %}
+                    </article>
+                {% empty %}
+                    <p class="empty-state">Aucun message de votre salle pour le moment.</p>
+                {% endfor %}
+            </div>
         </section>
 
         <section class="content-panel" id="coach">
@@ -274,13 +309,13 @@
 
     <nav class="mobile-dock" aria-label="Navigation membre">
         <a href="#card">Carte</a>
-        <a href="#identity">Identite</a>
+        <a href="#messages">Messages</a>
         <a href="#coach">Coach</a>
         <a href="#plans">Formules</a>
         <a href="#history">Acces</a>
     </nav>
 
     <div class="copy-toast" id="copyToast" role="status" aria-live="polite">Copie</div>
-    <script src="{% static 'js/member-portal.js' %}?v=20260429b"></script>
+    <script src="{% static 'js/member-portal.js' %}?v=20260429c"></script>
 </body>
 </html>

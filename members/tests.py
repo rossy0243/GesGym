@@ -9,6 +9,7 @@ from django.utils import timezone
 from coaching.models import Coach
 from compte.models import User, UserGymRole
 from members.models import Member, MemberPreRegistration, MemberPreRegistrationLink
+from notifications.models import Notification
 from organizations.models import Gym, Organization
 from subscriptions.models import MemberSubscription, SubscriptionPlan, SubscriptionRequest
 
@@ -221,6 +222,33 @@ class MemberPortalTests(TestCase):
         self.assertContains(response, reverse("members:member_portal_qr"))
         self.assertNotContains(response, "Imprimer carte")
         self.assertNotContains(response, "window.print")
+
+    def test_member_can_read_in_app_notification(self):
+        notification = Notification.objects.create(
+            gym=self.gym,
+            member=self.member,
+            title="Bienvenue",
+            message="Votre carte membre est active.",
+            channel=Notification.CHANNEL_IN_APP,
+            status=Notification.STATUS_SENT,
+            sent_at=timezone.now(),
+        )
+        self.client.force_login(self.member.user)
+
+        response = self.client.get(reverse("members:member_portal"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Bienvenue")
+        self.assertContains(response, "Non lu")
+
+        response = self.client.post(
+            reverse("members:member_notification_read", args=[notification.id])
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], f"{reverse('members:member_portal')}#messages")
+        notification.refresh_from_db()
+        self.assertIsNotNone(notification.read_at)
 
     def test_member_can_create_pending_subscription_request_without_activating_plan(self):
         self.client.force_login(self.member.user)
