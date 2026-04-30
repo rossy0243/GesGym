@@ -1430,30 +1430,25 @@ html.app-skin-dark .sub-tabs .btn.active {
 }
 
 /* ===========================
-   Effet modale (voile + flou contrôlé)
+   Effet modale global
    =========================== */
-.modal-backdrop,
+.modal-backdrop {
+    --bs-backdrop-zindex: 1040;
+    --bs-backdrop-bg: #0f172a;
+    --bs-backdrop-opacity: 0.22;
+}
+
 .modal-backdrop.show {
-    background-color: rgba(15, 23, 42, 0.35) !important; /* léger assombrissement */
-    opacity: 1 !important;
-    backdrop-filter: blur(3px);                          /* flou sur le fond uniquement */
-    z-index: 1040 !important;                            /* derrière la modale */
+    opacity: var(--bs-backdrop-opacity) !important;
 }
 
 .modal {
-    z-index: 1050 !important;                            /* au-dessus du backdrop */
+    z-index: 1050;
 }
 
-/* Empêcher tout filter: blur() appliqué directement sur le body ou les sections
-   (le flou doit uniquement venir du backdrop ci-dessus) */
 body.modal-open {
-    filter: none !important;
-    -webkit-filter: none !important;
-}
-
-body.modal-open *:not(.modal-backdrop) {
-    filter: none !important;
-    -webkit-filter: none !important;
+    overflow: hidden;
+    padding-right: 0 !important;
 }
 
 /* =============================================================================
