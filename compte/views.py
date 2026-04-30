@@ -14,6 +14,73 @@ from django.http import JsonResponse
 from django.contrib.admin.views.decorators import staff_member_required
 from organizations.models import Gym
 
+
+def _resolve_login_success_url(request):
+    user = request.user
+
+    if user.is_saas_admin:
+        return reverse_lazy("admin:index")
+
+    if user.owned_organization and user.owned_organization.is_active:
+        return reverse_lazy("core:dashboard_redirect")
+
+    member_profile = getattr(user, "member_profile", None)
+    if member_profile:
+        has_staff_role = UserGymRole.objects.filter(
+            user=user,
+            is_active=True,
+            gym__is_active=True,
+            gym__organization__is_active=True,
+        ).exclude(role="accountant").exists()
+        if not has_staff_role:
+            return reverse_lazy("members:member_portal")
+
+    role = UserGymRole.objects.filter(
+        user=user,
+        is_active=True,
+        gym__is_active=True,
+        gym__organization__is_active=True,
+    ).select_related("gym").first()
+
+    if not role:
+        logout(request)
+        messages.error(
+            request,
+            "Aucun acces actif n'est associe a ces identifiants."
+        )
+        return reverse_lazy("compte:login")
+
+    return reverse_lazy("core:dashboard_redirect")
+
+
+def _welcome_context_for_user(request):
+    user = request.user
+    organization = getattr(request, "organization", None) or getattr(user, "owned_organization", None)
+    role = UserGymRole.objects.filter(
+        user=user,
+        is_active=True,
+        gym__is_active=True,
+        gym__organization__is_active=True,
+    ).select_related("gym", "gym__organization").first()
+    gym = getattr(request, "gym", None) or (role.gym if role else None)
+    if not organization and gym:
+        organization = gym.organization
+
+    is_owner = bool(user.owned_organization_id)
+    subtitle = "Proprietaire"
+    if not is_owner and gym:
+        subtitle = gym.name
+    elif not is_owner and role:
+        subtitle = role.get_role_display()
+
+    return {
+        "organization": organization,
+        "gym": gym,
+        "is_owner": is_owner,
+        "subtitle": subtitle,
+        "welcome_target": request.session.get("post_login_target", reverse_lazy("core:dashboard_redirect")),
+    }
+
 class CustomLoginView(LoginView):
     template_name = 'compte/login.html'
     authentication_form = CustomAuthenticationForm
@@ -29,49 +96,18 @@ class CustomLoginView(LoginView):
             self.request.session.set_expiry(settings.SESSION_COOKIE_AGE)
         else:
             self.request.session.set_expiry(0)
-        return response
+        self.request.session["post_login_target"] = str(_resolve_login_success_url(self.request))
+        self.request.session.modified = True
+        return redirect("compte:welcome")
 
     def get_success_url(self):
+        return _resolve_login_success_url(self.request)
 
-        user = self.request.user
 
-        # SaaS admin (global)
-        if user.is_saas_admin:
-            return reverse_lazy("admin:index")  # ou futur dashboard SaaS
-
-        # Owner organisationnel : pas besoin d'un role gym.
-        if user.owned_organization and user.owned_organization.is_active:
-            return reverse_lazy("core:dashboard_redirect")
-
-        # Membre final : espace mobile dedie, sans passer par l'interface staff.
-        member_profile = getattr(user, "member_profile", None)
-        if member_profile:
-            has_staff_role = UserGymRole.objects.filter(
-                user=user,
-                is_active=True,
-                gym__is_active=True,
-                gym__organization__is_active=True,
-            ).exclude(role="accountant").exists()
-            if not has_staff_role:
-                return reverse_lazy("members:member_portal")
-
-        # Employe interne : il doit avoir un role actif dans une salle active.
-        role = UserGymRole.objects.filter(
-            user=user,
-            is_active=True,
-            gym__is_active=True,
-            gym__organization__is_active=True,
-        ).select_related("gym").first()
-
-        if not role:
-            logout(self.request)
-            messages.error(
-                self.request,
-                "Aucun acces actif n'est associe a ces identifiants."
-            )
-            return reverse_lazy("compte:login")
-
-        return reverse_lazy("core:dashboard_redirect")
+@login_required
+def welcome(request):
+    context = _welcome_context_for_user(request)
+    return render(request, "compte/welcome.html", context)
         
 
 def logout_view(request):

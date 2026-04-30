@@ -1,0 +1,226 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Bienvenue</title>
+    <style>
+        :root {
+            --ink: #0f172a;
+            --muted: #64748b;
+            --accent: #ff8c00;
+            --accent-dark: #004e92;
+            --panel: rgba(255, 255, 255, 0.86);
+            --line: rgba(148, 163, 184, 0.18);
+        }
+
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            overflow: hidden;
+            font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+            color: var(--ink);
+            background:
+                radial-gradient(circle at top left, rgba(255, 140, 0, 0.18), transparent 26%),
+                radial-gradient(circle at bottom right, rgba(0, 78, 146, 0.18), transparent 32%),
+                linear-gradient(135deg, #f8fafc 0%, #eef4ff 100%);
+        }
+
+        .welcome-orb,
+        .welcome-orb::before,
+        .welcome-orb::after {
+            position: absolute;
+            border-radius: 999px;
+            filter: blur(10px);
+        }
+
+        .welcome-orb {
+            width: 280px;
+            height: 280px;
+            background: rgba(255, 140, 0, 0.14);
+            top: 10%;
+            left: 12%;
+            animation: drift 6s ease-in-out infinite;
+        }
+
+        .welcome-orb::before,
+        .welcome-orb::after {
+            content: "";
+        }
+
+        .welcome-orb::before {
+            width: 190px;
+            height: 190px;
+            background: rgba(52, 84, 209, 0.12);
+            right: -360px;
+            top: 220px;
+            animation: drift 7s ease-in-out infinite reverse;
+        }
+
+        .welcome-orb::after {
+            width: 120px;
+            height: 120px;
+            background: rgba(15, 23, 42, 0.08);
+            left: 120px;
+            top: 380px;
+        }
+
+        .welcome-shell {
+            position: relative;
+            width: min(92vw, 620px);
+            padding: 40px 28px;
+            border: 1px solid var(--line);
+            border-radius: 34px;
+            background: var(--panel);
+            backdrop-filter: blur(14px);
+            box-shadow: 0 28px 70px rgba(15, 23, 42, 0.16);
+            text-align: center;
+            animation: reveal .8s ease both;
+        }
+
+        .logo-wrap {
+            width: 116px;
+            height: 116px;
+            margin: 0 auto 24px;
+            border-radius: 30px;
+            display: grid;
+            place-items: center;
+            background: linear-gradient(135deg, #ffffff, #eef4ff);
+            box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+            overflow: hidden;
+        }
+
+        .logo-wrap img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .logo-fallback {
+            width: 100%;
+            height: 100%;
+            display: grid;
+            place-items: center;
+            background: linear-gradient(135deg, var(--accent-dark), var(--accent));
+            color: #fff;
+            font-size: 2rem;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+        }
+
+        .eyebrow {
+            margin: 0 0 10px;
+            color: var(--accent-dark);
+            font-size: 0.76rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: clamp(2rem, 5vw, 3rem);
+            line-height: 1.02;
+            font-weight: 900;
+        }
+
+        .org-name {
+            margin-top: 12px;
+            font-size: clamp(1.1rem, 3vw, 1.5rem);
+            font-weight: 800;
+            color: var(--muted);
+        }
+
+        .context-chip {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 18px;
+            padding: 10px 16px;
+            border-radius: 999px;
+            background: rgba(255, 140, 0, 0.1);
+            color: #8a4d00;
+            font-weight: 800;
+        }
+
+        .loader {
+            width: min(240px, 80%);
+            height: 8px;
+            margin: 26px auto 0;
+            border-radius: 999px;
+            background: rgba(148, 163, 184, 0.18);
+            overflow: hidden;
+        }
+
+        .loader span {
+            display: block;
+            width: 100%;
+            height: 100%;
+            transform-origin: left center;
+            background: linear-gradient(90deg, var(--accent-dark), var(--accent));
+            animation: load 1.35s ease forwards;
+        }
+
+        .caption {
+            margin: 16px 0 0;
+            color: var(--muted);
+            font-size: 0.95rem;
+        }
+
+        @keyframes reveal {
+            from { opacity: 0; transform: translateY(16px) scale(0.96); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        @keyframes load {
+            from { transform: scaleX(0); }
+            to { transform: scaleX(1); }
+        }
+
+        @keyframes drift {
+            0%, 100% { transform: translate3d(0, 0, 0); }
+            50% { transform: translate3d(0, -12px, 0); }
+        }
+    </style>
+</head>
+<body>
+    <div class="welcome-orb" aria-hidden="true"></div>
+
+    <main class="welcome-shell">
+        <div class="logo-wrap">
+            {% if organization and organization.logo %}
+                <img src="{{ organization.logo.url }}" alt="{{ organization.name }}">
+            {% else %}
+                <div class="logo-fallback">
+                    {{ organization.name|default:"SmartClub"|slice:":2"|upper }}
+                </div>
+            {% endif %}
+        </div>
+
+        <p class="eyebrow">Connexion reussie</p>
+        <h1>Bienvenue</h1>
+        <div class="org-name">{{ organization.name|default:"SmartClub Pro" }}</div>
+        <div class="context-chip">
+            {% if is_owner %}
+                Proprietaire
+            {% else %}
+                {{ organization.name|default:"SmartClub Pro" }}{% if gym %} · {{ gym.name }}{% endif %}
+            {% endif %}
+        </div>
+
+        <div class="loader" aria-hidden="true"><span></span></div>
+        <p class="caption">Ouverture de votre espace...</p>
+    </main>
+
+    <script>
+        window.setTimeout(function () {
+            window.location.replace("{{ welcome_target|escapejs }}");
+        }, 1450);
+    </script>
+</body>
+</html>

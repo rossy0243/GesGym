@@ -37,7 +37,7 @@ class OwnerLoginAndGymSwitchTests(TestCase):
 
         self.assertRedirects(
             response,
-            reverse("core:dashboard_redirect"),
+            reverse("compte:welcome"),
             fetch_redirect_response=False,
         )
 
@@ -59,6 +59,10 @@ class OwnerLoginAndGymSwitchTests(TestCase):
             reverse("compte:login"),
             {"username": "owner-group", "password": "pass12345"},
         )
+
+        welcome_response = self.client.get(reverse("compte:welcome"))
+        self.assertEqual(welcome_response.status_code, 200)
+        self.assertContains(welcome_response, "Fit Group")
 
         response = self.client.get(reverse("core:dashboard_redirect"))
         self.assertRedirects(
@@ -153,7 +157,7 @@ class LoginConfigurationTests(TestCase):
 
         self.assertRedirects(
             response,
-            reverse("core:dashboard_redirect"),
+            reverse("compte:welcome"),
             fetch_redirect_response=False,
         )
         self.assertTrue(self.client.session.get_expire_at_browser_close())
@@ -170,10 +174,33 @@ class LoginConfigurationTests(TestCase):
 
         self.assertRedirects(
             response,
-            reverse("core:dashboard_redirect"),
+            reverse("compte:welcome"),
             fetch_redirect_response=False,
         )
         self.assertFalse(self.client.session.get_expire_at_browser_close())
+
+    def test_welcome_screen_uses_org_and_gym_context_for_staff(self):
+        organization = Organization.objects.create(name="Splash Org", slug="splash-org")
+        gym = Gym.objects.create(
+            organization=organization,
+            name="Splash Gym",
+            slug="splash-gym",
+            subdomain="splash-gym",
+        )
+        user = User.objects.create_user(username="staff-splash", password="pass12345")
+        UserGymRole.objects.create(user=user, gym=gym, role="manager", is_active=True)
+
+        self.client.force_login(user)
+        session = self.client.session
+        session["post_login_target"] = reverse("core:dashboard_redirect")
+        session["current_gym_id"] = gym.id
+        session.save()
+
+        response = self.client.get(reverse("compte:welcome"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Splash Org")
+        self.assertContains(response, "Splash Gym")
 
     @override_settings(
         SOCIAL_LINKS=[

@@ -201,7 +201,7 @@ class MemberPortalTests(TestCase):
 
         self.assertRedirects(
             response,
-            reverse("members:member_portal"),
+            reverse("compte:welcome"),
             fetch_redirect_response=False,
         )
 
@@ -337,7 +337,7 @@ class MemberPortalTests(TestCase):
         )
         self.assertRedirects(
             login_response,
-            reverse("members:member_portal"),
+            reverse("compte:welcome"),
             fetch_redirect_response=False,
         )
 

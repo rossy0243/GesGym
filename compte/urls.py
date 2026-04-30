@@ -4,12 +4,13 @@ from django.urls import path
 from django.urls import reverse_lazy
 
 from .forms import StyledPasswordResetForm, StyledSetPasswordForm
-from .views import CustomLoginView, activate_user, create_user_by_owner, deactivate_user, get_gyms_by_organization, logout_view, profile, reset_password, user_list
+from .views import CustomLoginView, activate_user, create_user_by_owner, deactivate_user, get_gyms_by_organization, logout_view, profile, reset_password, user_list, welcome
 
 app_name = 'compte'
 
 urlpatterns = [
     path('login/', CustomLoginView.as_view(), name='login'),
+    path('welcome/', welcome, name='welcome'),
     path("profile/", profile, name="profile"),
     path("logout/", logout_view, name="logout"),
     path(
