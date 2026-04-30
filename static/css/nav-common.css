@@ -24,6 +24,27 @@ footer.footer {
     margin-top: auto;
 }
 
+/* Navigation laterale : utiliser toute la hauteur avant de scroller */
+.nxl-navigation .navbar-wrapper {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+.nxl-navigation .navbar-content {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.nxl-navigation .nxl-navbar {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    width: 100%;
+}
+
 /* Navigation - états actifs : parent vs sous-menu */
 /* Parent actif (ex: Finances) - fond plus marqué */
 .nxl-item.nxl-hasmenu.active > .nxl-link {
@@ -57,6 +78,9 @@ footer.footer {
 /* Profil dans la nav */
 .nav-profil-link .nxl-link {
     color: #6c757d;
+}
+.nav-profil-link {
+    margin-top: auto;
 }
 .nav-profil-link .nxl-link:hover {
     background-color: rgba(52, 84, 209, 0.06);
