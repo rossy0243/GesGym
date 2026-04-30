@@ -78,13 +78,10 @@ def _status_class(status):
 def _member_tab_config(unread_notification_count):
     badge = str(unread_notification_count) if unread_notification_count else ""
     return [
-        {"key": "card", "label": "Carte", "icon": "card"},
+        {"key": "home", "label": "Accueil", "icon": "home"},
         {"key": "messages", "label": "Messages", "icon": "mail", "badge": badge},
-        {"key": "coach", "label": "Coach", "icon": "coach"},
         {"key": "subscription", "label": "Abonnement", "icon": "subscription"},
         {"key": "plans", "label": "Formules", "icon": "plans"},
-        {"key": "history", "label": "Acces", "icon": "history"},
-        {"key": "payments", "label": "Paiements", "icon": "payments"},
     ]
 
 
@@ -143,12 +140,20 @@ def member_portal(request):
     ).select_related("plan").order_by("-created_at")
     pending_plan_ids = list(pending_requests.values_list("plan_id", flat=True))
     status = member.computed_status
-    active_tab = request.GET.get("tab", "card")
+    active_tab = request.GET.get("tab", "home")
+    payments_list = list(payments)
+    recent_payments = payments_list[:4]
+    archived_payments = payments_list[4:]
+    access_logs_list = list(access_logs)
+    recent_access_logs = access_logs_list[:4]
+    archived_access_logs = access_logs_list[4:]
+    granted_access_count = sum(1 for item in access_logs_list if item.access_granted)
+    denied_access_count = len(access_logs_list) - granted_access_count
     member_notifications_list = list(member_notifications)
     unread_notifications = [item for item in member_notifications_list if not item.read_at]
     read_notifications = [item for item in member_notifications_list if item.read_at]
     if active_tab not in {tab["key"] for tab in _member_tab_config(unread_notification_count)}:
-        active_tab = "card"
+        active_tab = "home"
 
     member_tabs = []
     for tab in _member_tab_config(unread_notification_count):
@@ -167,8 +172,14 @@ def member_portal(request):
         "gym": member.gym,
         "subscription": subscription,
         "subscription_progress": _subscription_progress(subscription),
-        "payments": payments,
-        "access_logs": access_logs,
+        "payments": payments_list,
+        "recent_payments": recent_payments,
+        "archived_payments": archived_payments,
+        "access_logs": access_logs_list,
+        "recent_access_logs": recent_access_logs,
+        "archived_access_logs": archived_access_logs,
+        "granted_access_count": granted_access_count,
+        "denied_access_count": denied_access_count,
         "coaches": coaches,
         "member_notifications": member_notifications_list,
         "unread_notifications": unread_notifications[:5],

@@ -142,11 +142,28 @@ class InAppNotificationDashboardTests(TestCase):
     def test_manager_can_open_dashboard_when_module_is_active(self):
         self.client.force_login(self.manager)
 
+        sent_at = timezone.now()
+        for member in [self.member, self.active_member, self.suspended_member]:
+            Notification.objects.create(
+                gym=self.gym,
+                member=member,
+                title="Infos salle",
+                message="Planning special cette semaine.",
+                channel=Notification.CHANNEL_IN_APP,
+                status=Notification.STATUS_SENT,
+                sent_at=sent_at,
+                sent_by=self.owner,
+            )
+
         response = self.client.get(reverse("notifications:dashboard"))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Messages membres")
+        self.assertContains(response, "Infos salle")
+        self.assertContains(response, "3 membres")
+        self.assertContains(response, "Apercu des destinataires")
         self.assertContains(response, "Maya Message")
+        self.assertContains(response, "Alice Active")
 
     def test_reception_cannot_open_dashboard(self):
         self.client.force_login(self.reception)
@@ -154,3 +171,68 @@ class InAppNotificationDashboardTests(TestCase):
         response = self.client.get(reverse("notifications:dashboard"))
 
         self.assertEqual(response.status_code, 403)
+
+    def test_dashboard_groups_large_campaigns_in_collapsible_history(self):
+        self.client.force_login(self.owner)
+
+        extra_members = [
+            Member.objects.create(
+                gym=self.gym,
+                first_name=f"Member{i}",
+                last_name="Bulk",
+                phone=f"+24381000050{i}",
+            )
+            for i in range(5)
+        ]
+        sent_at = timezone.now()
+        for member in [self.member, self.active_member, *extra_members]:
+            Notification.objects.create(
+                gym=self.gym,
+                member=member,
+                title="Campagne avril",
+                message="Le club ouvre plus tot demain.",
+                channel=Notification.CHANNEL_IN_APP,
+                status=Notification.STATUS_SENT,
+                sent_at=sent_at,
+                sent_by=self.owner,
+            )
+
+        response = self.client.get(reverse("notifications:dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "7 membres")
+        self.assertContains(response, "Voir 3 autres")
+
+    def test_dashboard_shows_read_and_unread_members_per_campaign(self):
+        self.client.force_login(self.owner)
+
+        sent_at = timezone.now()
+        first = Notification.objects.create(
+            gym=self.gym,
+            member=self.member,
+            title="Lecture",
+            message="Merci de confirmer reception.",
+            channel=Notification.CHANNEL_IN_APP,
+            status=Notification.STATUS_SENT,
+            sent_at=sent_at,
+            sent_by=self.owner,
+            read_at=timezone.now(),
+        )
+        Notification.objects.create(
+            gym=self.gym,
+            member=self.active_member,
+            title=first.title,
+            message=first.message,
+            channel=Notification.CHANNEL_IN_APP,
+            status=Notification.STATUS_SENT,
+            sent_at=sent_at,
+            sent_by=self.owner,
+        )
+
+        response = self.client.get(reverse("notifications:dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Ont lu (1)")
+        self.assertContains(response, "N'ont pas lu (1)")
+        self.assertContains(response, "Maya Message")
+        self.assertContains(response, "Alice Active")

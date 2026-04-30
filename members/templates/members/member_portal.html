@@ -44,7 +44,7 @@
             </div>
         </header>
 
-        {% if active_tab == "card" %}
+        {% if active_tab == "home" %}
             <section class="hero-panel {{ status_class }}" id="card">
                 <div class="member-identity">
                     <div class="avatar">
@@ -99,6 +99,100 @@
                     <span>Email</span>
                     <strong>{{ member.email|default:"-" }}</strong>
                 </article>
+            </section>
+
+            <section class="content-panel">
+                <div class="section-heading">
+                    <div>
+                        <p class="eyebrow">Coaching</p>
+                        <h2>Mon accompagnement</h2>
+                    </div>
+                </div>
+
+                {% if coaches %}
+                    <div class="coach-list">
+                        {% for coach in coaches %}
+                            <article class="coach-card">
+                                <div class="coach-avatar">{{ coach.name|slice:":1" }}</div>
+                                <div>
+                                    <strong>{{ coach.name }}</strong>
+                                    <small>{{ coach.specialty|default:"Coach" }}{% if coach.phone %} - {{ coach.phone }}{% endif %}</small>
+                                </div>
+                            </article>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="empty-state">Aucun coach n'est encore rattache a votre compte.</p>
+                {% endif %}
+            </section>
+
+            <section class="content-panel">
+                <div class="section-heading">
+                    <div>
+                        <p class="eyebrow">Activite</p>
+                        <h2>Derniers acces</h2>
+                    </div>
+                </div>
+
+                {% if access_logs %}
+                    <div class="access-summary-grid">
+                        <article class="summary-card">
+                            <span>Autorises</span>
+                            <strong>{{ granted_access_count }}</strong>
+                            <small>Entrees validees dans l'historique recent.</small>
+                        </article>
+                        <article class="summary-card">
+                            <span>Refuses</span>
+                            <strong>{{ denied_access_count }}</strong>
+                            <small>Cas a surveiller si le compteur monte.</small>
+                        </article>
+                    </div>
+
+                    <div class="access-compact-list">
+                        {% for log in recent_access_logs %}
+                            <article class="access-compact-card {% if log.access_granted %}is-ok{% else %}is-ko{% endif %}">
+                                <div class="access-compact-status">
+                                    <span class="dot {% if log.access_granted %}ok{% else %}ko{% endif %}"></span>
+                                    <strong>{% if log.access_granted %}Autorise{% else %}Refuse{% endif %}</strong>
+                                </div>
+                                <div class="access-compact-meta">
+                                    <small>{{ log.check_in_time|date:"d/m/Y H:i" }}</small>
+                                    {% if log.denial_reason %}
+                                        <p>{{ log.denial_reason|truncatechars:70 }}</p>
+                                    {% else %}
+                                        <p>Passage en salle enregistre.</p>
+                                    {% endif %}
+                                </div>
+                            </article>
+                        {% endfor %}
+                    </div>
+
+                    {% if archived_access_logs %}
+                        <details class="message-archive access-archive">
+                            <summary>Voir plus d'acces ({{ archived_access_logs|length }})</summary>
+                            <div class="access-compact-list archive-list">
+                                {% for log in archived_access_logs %}
+                                    <article class="access-compact-card {% if log.access_granted %}is-ok{% else %}is-ko{% endif %}">
+                                        <div class="access-compact-status">
+                                            <span class="dot {% if log.access_granted %}ok{% else %}ko{% endif %}"></span>
+                                            <strong>{% if log.access_granted %}Autorise{% else %}Refuse{% endif %}</strong>
+                                        </div>
+                                        <div class="access-compact-meta">
+                                            <small>{{ log.check_in_time|date:"d/m/Y H:i" }}</small>
+                                            {% if log.denial_reason %}
+                                                <p>{{ log.denial_reason|truncatechars:70 }}</p>
+                                            {% else %}
+                                                <p>Passage en salle enregistre.</p>
+                                            {% endif %}
+                                        </div>
+                                    </article>
+                                {% endfor %}
+                            </div>
+                        </details>
+                    {% endif %}
+                {% else %}
+                    <p class="empty-state">Aucun acces enregistre pour le moment.</p>
+                {% endif %}
             </section>
         {% elif active_tab == "messages" %}
             <section class="content-panel">
@@ -191,31 +285,6 @@
                     <p class="empty-state">Aucun message de votre salle pour le moment.</p>
                 {% endif %}
             </section>
-        {% elif active_tab == "coach" %}
-            <section class="content-panel">
-                <div class="section-heading">
-                    <div>
-                        <p class="eyebrow">Coaching</p>
-                        <h2>Mon accompagnement</h2>
-                    </div>
-                </div>
-
-                {% if coaches %}
-                    <div class="coach-list">
-                        {% for coach in coaches %}
-                            <article class="coach-card">
-                                <div class="coach-avatar">{{ coach.name|slice:":1" }}</div>
-                                <div>
-                                    <strong>{{ coach.name }}</strong>
-                                    <small>{{ coach.specialty|default:"Coach" }}{% if coach.phone %} - {{ coach.phone }}{% endif %}</small>
-                                </div>
-                            </article>
-                        {% endfor %}
-                    </div>
-                {% else %}
-                    <p class="empty-state">Aucun coach n'est encore rattache a votre compte.</p>
-                {% endif %}
-            </section>
         {% elif active_tab == "subscription" %}
             <section class="content-panel">
                 <div class="section-heading">
@@ -256,6 +325,69 @@
                     </dl>
                 {% else %}
                     <p class="empty-state">Aucun abonnement actif n'est rattache a ce compte.</p>
+                {% endif %}
+
+                <div class="section-heading payment-heading">
+                    <div>
+                        <p class="eyebrow">Paiements</p>
+                        <h2>Dernieres operations</h2>
+                    </div>
+                </div>
+
+                {% if payments %}
+                    <div class="payment-summary-grid">
+                        <article class="summary-card">
+                            <span>Operations</span>
+                            <strong>{{ payments|length }}</strong>
+                            <small>Transactions recentes sur ce compte.</small>
+                        </article>
+                        <article class="summary-card">
+                            <span>Derniere</span>
+                            <strong>{{ recent_payments.0.created_at|date:"d/m" }}</strong>
+                            <small>{{ recent_payments.0.get_method_display|default:"Paiement" }}</small>
+                        </article>
+                    </div>
+
+                    <div class="payment-compact-list">
+                        {% for payment in recent_payments %}
+                            <article class="payment-compact-card">
+                                <div class="payment-compact-head">
+                                    <strong>{{ payment.description|default:"Paiement" }}</strong>
+                                    <span>{{ payment.amount_cdf|floatformat:0 }} CDF</span>
+                                </div>
+                                <div class="payment-compact-meta">
+                                    <small>{{ payment.created_at|date:"d/m/Y H:i" }}</small>
+                                    <p>{{ payment.get_method_display }}</p>
+                                </div>
+                            </article>
+                        {% endfor %}
+                    </div>
+
+                    {% if archived_payments %}
+                        <details class="message-archive payment-archive">
+                            <summary>Voir plus d'operations ({{ archived_payments|length }})</summary>
+                            <div class="payment-compact-list archive-list">
+                                {% for payment in archived_payments %}
+                                    <article class="payment-compact-card is-muted">
+                                        <div class="payment-compact-head">
+                                            <strong>{{ payment.description|default:"Paiement" }}</strong>
+                                            <span>{{ payment.amount_cdf|floatformat:0 }} CDF</span>
+                                        </div>
+                                        <div class="payment-compact-meta">
+                                            <small>{{ payment.created_at|date:"d/m/Y H:i" }}</small>
+                                            <p>{{ payment.get_method_display }}</p>
+                                        </div>
+                                    </article>
+                                {% endfor %}
+                            </div>
+                        </details>
+                    {% endif %}
+                {% else %}
+                    <div class="empty-panel">
+                        <span class="empty-panel__eyebrow">Paiements</span>
+                        <strong>Aucune operation recente</strong>
+                        <p>Aucun paiement n'a encore ete enregistre sur ce compte membre.</p>
+                    </div>
                 {% endif %}
             </section>
         {% elif active_tab == "plans" %}
@@ -318,52 +450,6 @@
                         </article>
                     {% empty %}
                         <p class="empty-state">Aucune formule active n'est disponible pour le moment.</p>
-                    {% endfor %}
-                </div>
-            </section>
-        {% elif active_tab == "history" %}
-            <section class="content-panel">
-                <div class="section-heading">
-                    <div>
-                        <p class="eyebrow">Activite</p>
-                        <h2>Derniers acces</h2>
-                    </div>
-                </div>
-
-                <div class="timeline-list">
-                    {% for log in access_logs %}
-                        <div class="timeline-item">
-                            <span class="dot {% if log.access_granted %}ok{% else %}ko{% endif %}"></span>
-                            <div>
-                                <strong>{% if log.access_granted %}Acces autorise{% else %}Acces refuse{% endif %}</strong>
-                                <small>{{ log.check_in_time|date:"d/m/Y H:i" }}{% if log.denial_reason %} - {{ log.denial_reason }}{% endif %}</small>
-                            </div>
-                        </div>
-                    {% empty %}
-                        <p class="empty-state">Aucun acces enregistre pour le moment.</p>
-                    {% endfor %}
-                </div>
-            </section>
-        {% elif active_tab == "payments" %}
-            <section class="content-panel">
-                <div class="section-heading">
-                    <div>
-                        <p class="eyebrow">Paiements</p>
-                        <h2>Dernieres operations</h2>
-                    </div>
-                </div>
-
-                <div class="payment-list">
-                    {% for payment in payments %}
-                        <div class="payment-row">
-                            <div>
-                                <strong>{{ payment.description|default:"Paiement" }}</strong>
-                                <small>{{ payment.created_at|date:"d/m/Y H:i" }} - {{ payment.get_method_display }}</small>
-                            </div>
-                            <span>{{ payment.amount_cdf|floatformat:0 }} CDF</span>
-                        </div>
-                    {% empty %}
-                        <p class="empty-state">Aucun paiement recent.</p>
                     {% endfor %}
                 </div>
             </section>

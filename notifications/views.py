@@ -53,7 +53,7 @@ def notification_dashboard(request):
     else:
         form = InAppMessageForm(gym=gym)
 
-    notifications = (
+    notifications = list(
         Notification.objects.filter(gym=gym, channel=Notification.CHANNEL_IN_APP)
         .select_related("member", "sent_by")
         .order_by("-created_at")[:40]
@@ -61,7 +61,7 @@ def notification_dashboard(request):
 
     context = {
         "form": form,
-        "notifications": notifications,
+        "message_batches": _group_message_batches(notifications),
         "sent_count": Notification.objects.filter(
             gym=gym,
             channel=Notification.CHANNEL_IN_APP,
@@ -91,3 +91,56 @@ def _audience_cards(gym):
             }
         )
     return cards
+
+
+def _group_message_batches(notifications):
+    batches = []
+    grouped = {}
+
+    for notification in notifications:
+        sent_on = notification.sent_at or notification.created_at
+        batch_key = (
+            notification.title or "",
+            notification.message,
+            sent_on.isoformat() if sent_on else "",
+            notification.sent_by_id,
+        )
+
+        if batch_key not in grouped:
+            batch = {
+                "title": notification.title or "Message de la salle",
+                "message": notification.message,
+                "sent_at": sent_on,
+                "sent_by": notification.sent_by,
+                "total_count": 0,
+                "read_count": 0,
+                "unread_count": 0,
+                "preview_members": [],
+                "extra_members": [],
+                "read_members": [],
+                "unread_members": [],
+                "has_unread": False,
+            }
+            grouped[batch_key] = batch
+            batches.append(batch)
+
+        batch = grouped[batch_key]
+        batch["total_count"] += 1
+        if notification.read_at:
+            batch["read_count"] += 1
+        else:
+            batch["has_unread"] = True
+            batch["unread_count"] += 1
+
+        full_name = f"{notification.member.first_name} {notification.member.last_name}".strip()
+        if batch["total_count"] <= 4:
+            batch["preview_members"].append(full_name)
+        else:
+            batch["extra_members"].append(full_name)
+
+        if notification.read_at:
+            batch["read_members"].append(full_name)
+        else:
+            batch["unread_members"].append(full_name)
+
+    return batches

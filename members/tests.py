@@ -212,6 +212,8 @@ class MemberPortalTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Carte membre")
+        self.assertContains(response, "Mon accompagnement")
+        self.assertContains(response, "Derniers acces")
         self.assertContains(response, f"MEM-{self.member.id:05d}")
         self.assertContains(response, self.member.user.username)
         self.assertContains(response, reverse("members:member_portal_qr"))
@@ -220,10 +222,7 @@ class MemberPortalTests(TestCase):
 
         subscription_response = self.client.get(reverse("members:member_portal"), {"tab": "subscription"})
         self.assertContains(subscription_response, "Mensuel")
-
-        coach_response = self.client.get(reverse("members:member_portal"), {"tab": "coach"})
-        self.assertContains(coach_response, "Coach Junior")
-        self.assertContains(coach_response, "Musculation")
+        self.assertContains(subscription_response, "Dernieres operations")
 
         plans_response = self.client.get(reverse("members:member_portal"), {"tab": "plans"})
         self.assertContains(plans_response, "Choisir un abonnement")

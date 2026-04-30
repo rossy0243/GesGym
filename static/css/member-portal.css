@@ -437,6 +437,20 @@ a {
     margin-bottom: 16px;
 }
 
+.access-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.payment-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
 .summary-card {
     border: 1px solid var(--line);
     border-radius: 18px;
@@ -481,11 +495,44 @@ a {
     gap: 10px;
 }
 
+.access-compact-list {
+    display: grid;
+    gap: 10px;
+}
+
+.payment-compact-list {
+    display: grid;
+    gap: 10px;
+}
+
 .message-compact-card {
     border: 1px solid var(--line);
     border-radius: 14px;
     background: #fbfcfb;
     padding: 12px 14px;
+}
+
+.access-compact-card {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: #fbfcfb;
+    padding: 12px 14px;
+}
+
+.payment-compact-card {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: #fbfcfb;
+    padding: 12px 14px;
+}
+
+.access-compact-card.is-ok {
+    border-color: rgba(21, 128, 61, 0.2);
+}
+
+.access-compact-card.is-ko {
+    border-color: rgba(180, 35, 24, 0.18);
+    background: linear-gradient(180deg, rgba(180, 35, 24, 0.04), rgba(255, 255, 255, 0.96));
 }
 
 .message-compact-card.is-muted {
@@ -497,6 +544,62 @@ a {
     align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
+}
+
+.access-compact-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.payment-compact-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.payment-compact-head strong {
+    font-size: 0.95rem;
+}
+
+.payment-compact-head span {
+    flex: 0 0 auto;
+    font-weight: 900;
+}
+
+.access-compact-status strong {
+    font-size: 0.95rem;
+}
+
+.access-compact-meta {
+    margin-top: 8px;
+}
+
+.payment-compact-meta {
+    margin-top: 8px;
+}
+
+.access-compact-meta small {
+    display: block;
+    color: var(--muted);
+}
+
+.access-compact-meta p {
+    margin: 6px 0 0;
+    color: var(--ink);
+    line-height: 1.4;
+}
+
+.payment-compact-meta small {
+    display: block;
+    color: var(--muted);
+}
+
+.payment-compact-meta p {
+    margin: 6px 0 0;
+    color: var(--ink);
+    line-height: 1.4;
 }
 
 .message-compact-meta strong {
@@ -876,6 +979,35 @@ a {
     line-height: 1.55;
 }
 
+.empty-panel {
+    border: 1px dashed rgba(16, 40, 32, 0.16);
+    border-radius: 18px;
+    background: linear-gradient(180deg, rgba(246, 247, 242, 0.88), rgba(255, 255, 255, 0.96));
+    padding: 18px 16px;
+    text-align: left;
+}
+
+.empty-panel__eyebrow {
+    display: block;
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.empty-panel strong {
+    display: block;
+    margin-top: 8px;
+    font-size: 1rem;
+}
+
+.empty-panel p {
+    margin: 8px 0 0;
+    color: var(--muted);
+    line-height: 1.5;
+}
+
 .mobile-dock {
     position: fixed;
     left: 50%;
@@ -1007,6 +1139,14 @@ a {
     }
 
     .message-summary-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .access-summary-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .payment-summary-grid {
         grid-template-columns: 1fr;
     }
 
