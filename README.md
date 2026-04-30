@@ -9,6 +9,28 @@ Application Django de gestion de salle de sport.
 .\.venv\Scripts\python.exe manage.py runserver
 ```
 
+## Lancement sur le reseau local
+
+Pour tester depuis un telephone sur le meme Wi-Fi sans changer la configuration de production :
+
+```powershell
+.\runserver_lan.ps1
+```
+
+Le script :
+
+- detecte l'IP locale privee du PC
+- ajoute temporairement `127.0.0.1`, `localhost` et cette IP a `DJANGO_ALLOWED_HOSTS`
+- demarre Django sur `0.0.0.0:8000`
+
+Ensuite, ouvre depuis le telephone l'URL affichee par le script, par exemple :
+
+```text
+http://192.168.1.69:8000
+```
+
+Si le telephone ne se connecte toujours pas, verifier le pare-feu Windows et l'absence d'isolation client sur le Wi-Fi.
+
 ## Pre-deploiement
 
 Verifier le projet :

@@ -28,9 +28,16 @@
                 <p class="eyebrow">{{ organization.name }}</p>
                 <h1>{{ gym.name }}</h1>
             </div>
-            <a class="icon-button" href="{% url 'compte:logout' %}" aria-label="Deconnexion" title="Deconnexion">
-                <span aria-hidden="true">&gt;</span>
-            </a>
+            <div class="topbar-actions" id="memberQuickActions">
+                <button type="button" class="install-button" id="installAppBtn" hidden>
+                    <span aria-hidden="true">+</span>
+                    Installer l'app
+                </button>
+                <a class="logout-button" href="{% url 'compte:logout' %}" aria-label="Se deconnecter" title="Se deconnecter">
+                    <span aria-hidden="true">-></span>
+                    Deconnexion
+                </a>
+            </div>
         </header>
 
         <section class="hero-panel {{ status_class }}" id="card">
@@ -70,12 +77,6 @@
                         <small>Presentez ce QR code a l'accueil.</small>
                     </div>
                 </div>
-            </div>
-
-            <div class="quick-actions" id="memberQuickActions" hidden>
-                <button type="button" class="action-button" id="installAppBtn" hidden>
-                    Installer
-                </button>
             </div>
         </section>
 

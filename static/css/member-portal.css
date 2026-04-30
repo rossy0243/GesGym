@@ -73,6 +73,14 @@ a {
     margin-bottom: 18px;
 }
 
+.topbar-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
 .member-topbar h1,
 .section-heading h2,
 .hero-panel h2 {
@@ -94,19 +102,46 @@ a {
     text-transform: uppercase;
 }
 
-.icon-button {
+.logout-button,
+.install-button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
+    min-height: 44px;
+    padding: 0 14px;
+    border-radius: 999px;
     border: 1px solid var(--line);
     background: rgba(255, 255, 255, 0.72);
     color: var(--ink);
     text-decoration: none;
-    font-size: 1.1rem;
     font-weight: 800;
+    font-size: 0.92rem;
+    gap: 8px;
+}
+
+.logout-button span,
+.install-button span {
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.install-button {
+    cursor: pointer;
+    background: rgba(0, 78, 146, 0.08);
+    color: var(--accent-dark);
+    border-color: rgba(0, 78, 146, 0.18);
+}
+
+.logout-button:hover,
+.logout-button:focus,
+.install-button:hover,
+.install-button:focus {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 24px rgba(16, 40, 32, 0.1);
+}
+
+.install-button[hidden] {
+    display: none;
 }
 
 .hero-panel,
@@ -268,17 +303,6 @@ a {
     margin: 4px 0 8px;
     font-size: 1.35rem;
     word-break: break-word;
-}
-
-.quick-actions {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 10px;
-    margin-top: 14px;
-}
-
-.quick-actions[hidden] {
-    display: none;
 }
 
 .action-button,
@@ -793,6 +817,20 @@ a {
 }
 
 @media (max-width: 390px) {
+    .member-topbar {
+        align-items: flex-start;
+    }
+
+    .topbar-actions {
+        width: 100%;
+        justify-content: stretch;
+    }
+
+    .logout-button,
+    .install-button {
+        flex: 1 1 100%;
+    }
+
     .qr-zone {
         grid-template-columns: 108px 1fr;
     }
