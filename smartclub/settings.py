@@ -152,6 +152,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'compte.middleware.ForcePasswordChangeMiddleware',
     'core.middleware.GymMiddleware',
     'core.middleware.RequestTraceMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',

@@ -1,18 +1,26 @@
 # compte/views.py
 from django.conf import settings
+from django.contrib import messages
+from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import logout, update_session_auth_hash
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.hashers import make_password
 from django.contrib.auth.views import LoginView
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
-from django.contrib.auth.hashers import make_password
-from compte.utils import generate_username
-from .forms import CreateUserForm, CustomAuthenticationForm, UserPasswordChangeForm, UserProfileForm
-from .models import User, UserGymRole
-from django.contrib.auth.decorators import login_required
-from django.contrib import messages
-from django.http import JsonResponse
-from django.contrib.admin.views.decorators import staff_member_required
+
+from compte.utils import generate_temporary_password, generate_username
 from organizations.models import Gym
+
+from .forms import (
+    CreateUserForm,
+    CustomAuthenticationForm,
+    ForcedPasswordChangeForm,
+    UserPasswordChangeForm,
+    UserProfileForm,
+)
+from .models import User, UserGymRole
 
 
 def _resolve_login_success_url(request):
@@ -77,8 +85,9 @@ def _welcome_context_for_user(request):
         "welcome_target": request.session.get("post_login_target", reverse_lazy("core:dashboard_redirect")),
     }
 
+
 class CustomLoginView(LoginView):
-    template_name = 'compte/login.html'
+    template_name = "compte/login.html"
     authentication_form = CustomAuthenticationForm
 
     def get_context_data(self, **kwargs):
@@ -94,6 +103,12 @@ class CustomLoginView(LoginView):
             self.request.session.set_expiry(0)
         self.request.session["post_login_target"] = str(_resolve_login_success_url(self.request))
         self.request.session.modified = True
+        if self.request.user.force_password_change:
+            messages.warning(
+                self.request,
+                "Votre mot de passe temporaire doit etre remplace avant d'acceder a l'application.",
+            )
+            return redirect("compte:profile")
         return redirect("compte:welcome")
 
     def get_success_url(self):
@@ -104,25 +119,27 @@ class CustomLoginView(LoginView):
 def welcome(request):
     context = _welcome_context_for_user(request)
     return render(request, "compte/welcome.html", context)
-        
+
 
 def logout_view(request):
-    """
-    Déconnexion propre de l'utilisateur
-    """
     logout(request)
     return redirect("compte:login")
 
 
 @login_required
 def profile(request):
+    force_password_change = bool(request.user.force_password_change)
     profile_form = UserProfileForm(instance=request.user)
-    password_form = UserPasswordChangeForm(request.user)
+    password_form = (
+        ForcedPasswordChangeForm(request.user)
+        if force_password_change
+        else UserPasswordChangeForm(request.user)
+    )
 
     if request.method == "POST":
         action = request.POST.get("action")
 
-        if action == "profile":
+        if action == "profile" and not force_password_change:
             profile_form = UserProfileForm(request.POST, instance=request.user)
             if profile_form.is_valid():
                 profile_form.save()
@@ -131,12 +148,24 @@ def profile(request):
             messages.error(request, "Impossible de mettre a jour le profil. Verifiez les champs.")
 
         elif action == "password":
-            password_form = UserPasswordChangeForm(request.user, request.POST)
+            password_form = (
+                ForcedPasswordChangeForm(request.user, request.POST)
+                if force_password_change
+                else UserPasswordChangeForm(request.user, request.POST)
+            )
             if password_form.is_valid():
                 user = password_form.save()
+                if user.force_password_change:
+                    user.force_password_change = False
+                    user.save(update_fields=["force_password_change"])
                 update_session_auth_hash(request, user)
-                messages.success(request, "Mot de passe modifie avec succes.")
-                return redirect("compte:profile")
+                messages.success(
+                    request,
+                    "Mot de passe defini avec succes."
+                    if force_password_change
+                    else "Mot de passe modifie avec succes.",
+                )
+                return redirect(request.session.get("post_login_target", reverse_lazy("compte:profile")))
             messages.error(request, "Mot de passe non modifie. Verifiez les informations saisies.")
 
     active_roles = UserGymRole.objects.filter(
@@ -152,6 +181,7 @@ def profile(request):
         "active_roles": active_roles,
         "page_title": "Mon profil",
         "nav_active": "profile",
+        "force_password_change": force_password_change,
         "breadcrumbs": [
             {"label": "Accueil", "url": reverse_lazy("core:dashboard_redirect")},
             {"label": "Mon profil", "url": ""},
@@ -162,175 +192,160 @@ def profile(request):
 
 @staff_member_required
 def get_gyms_by_organization(request):
-    """API pour récupérer les gyms d'une organisation (utilisé dans l'admin)"""
-    organization_id = request.GET.get('organization_id')
+    organization_id = request.GET.get("organization_id")
     if organization_id:
         gyms = Gym.objects.filter(
             organization_id=organization_id,
             is_active=True
-        ).values('id', 'name')
-        return JsonResponse({'gyms': list(gyms)})
-    return JsonResponse({'gyms': []})
+        ).values("id", "name")
+        return JsonResponse({"gyms": list(gyms)})
+    return JsonResponse({"gyms": []})
 
 
 @login_required
 def create_user_by_owner(request):
-    """
-    Vue pour permettre au Owner de créer des utilisateurs.
-    Ne permet PAS de créer un autre Owner.
-    """
-    # Vérifier que l'utilisateur est Owner
     gym = request.gym
     user_role = UserGymRole.objects.filter(user=request.user, gym=gym, is_active=True).first()
-    
-    if not user_role or user_role.role != 'owner':
-        messages.error(request, "Vous n'avez pas les permissions nécessaires")
-        return redirect('core:dashboard_redirect')
-    
-    if request.method == 'POST':
+
+    if not user_role or user_role.role != "owner":
+        messages.error(request, "Vous n'avez pas les permissions necessaires")
+        return redirect("core:dashboard_redirect")
+
+    if request.method == "POST":
         form = CreateUserForm(request.POST)
         if form.is_valid():
-            # Créer l'utilisateur
             username = generate_username(
-                form.cleaned_data['first_name'],
-                form.cleaned_data['last_name']
+                form.cleaned_data["first_name"],
+                form.cleaned_data["last_name"]
             )
-            
+
             user = User.objects.create(
                 username=username,
-                first_name=form.cleaned_data['first_name'],
-                last_name=form.cleaned_data['last_name'],
-                email=form.cleaned_data['email'],
-                password=make_password("12345"),
+                first_name=form.cleaned_data["first_name"],
+                last_name=form.cleaned_data["last_name"],
+                email=form.cleaned_data["email"],
+                password=make_password(generate_temporary_password()),
+                force_password_change=True,
                 is_active=True,
-                is_staff=False,  # Seuls les Owners ont accès admin
+                is_staff=False,
             )
-            
-            # Assigner le rôle (jamais Owner)
+
             UserGymRole.objects.create(
                 user=user,
                 gym=gym,
-                role=form.cleaned_data['role'],
+                role=form.cleaned_data["role"],
                 is_active=True
             )
-            
+
             messages.success(
                 request,
-                f"Utilisateur '{username}' créé avec succès. Mot de passe: 12345"
+                f"Utilisateur '{username}' cree avec succes. Un mot de passe temporaire fort a ete genere et devra etre change a la premiere connexion."
             )
-            return redirect('compte:user_list')
+            return redirect("compte:user_list")
     else:
         form = CreateUserForm()
-    
+
     context = {
-        'form': form,
-        'gym': gym,
-        'available_roles': ['manager', 'coach', 'reception', 'cashier'],
+        "form": form,
+        "gym": gym,
+        "available_roles": ["manager", "coach", "reception", "cashier"],
     }
-    return render(request, 'compte/create_user.html', context)
+    return render(request, "compte/create_user.html", context)
+
 
 @login_required
 def user_list(request):
-    """Liste des utilisateurs du gym (pour Owner)"""
     gym = request.gym
     users_with_roles = UserGymRole.objects.filter(
         gym=gym,
         is_active=True
-    ).select_related('user')
-    
+    ).select_related("user")
+
     context = {
-        'users': users_with_roles,
-        'gym': gym,
+        "users": users_with_roles,
+        "gym": gym,
     }
-    return render(request, 'compte/user_list.html', context)
+    return render(request, "compte/user_list.html", context)
+
 
 @login_required
 def reset_password(request, user_id):
-    """Réinitialiser le mot de passe d'un utilisateur"""
-    # Vérifier que l'utilisateur connecté est Owner
     gym = request.gym
     user_role = UserGymRole.objects.filter(user=request.user, gym=gym, is_active=True).first()
-    
-    if not user_role or user_role.role != 'owner':
-        messages.error(request, "Permission non accordée")
-        return redirect('core:dashboard_redirect')
-    
-    # Récupérer l'utilisateur cible
+
+    if not user_role or user_role.role != "owner":
+        messages.error(request, "Permission non accordee")
+        return redirect("core:dashboard_redirect")
+
     target_user = get_object_or_404(User, id=user_id)
-    
-    # Vérifier que l'utilisateur appartient bien au gym
+
     target_role = UserGymRole.objects.filter(user=target_user, gym=gym).first()
     if not target_role:
-        messages.error(request, "Utilisateur non trouvé dans ce gym")
-        return redirect('compte:user_list')
-    
-    # Réinitialiser le mot de passe
-    target_user.password = make_password("12345")
-    target_user.save()
-    
-    messages.success(request, f"Mot de passe réinitialisé pour {target_user.username} (12345)")
-    return redirect('compte:user_list')
+        messages.error(request, "Utilisateur non trouve dans ce gym")
+        return redirect("compte:user_list")
+
+    target_user.password = make_password(generate_temporary_password())
+    target_user.force_password_change = True
+    target_user.save(update_fields=["password", "force_password_change"])
+
+    messages.success(
+        request,
+        f"Mot de passe reinitialise pour {target_user.username}. Un nouveau mot de passe temporaire fort a ete genere et devra etre change a la prochaine connexion."
+    )
+    return redirect("compte:user_list")
 
 
 @login_required
 def deactivate_user(request, user_id):
-    """Désactiver un utilisateur"""
-    # Vérifier que l'utilisateur connecté est Owner
     gym = request.gym
     user_role = UserGymRole.objects.filter(user=request.user, gym=gym, is_active=True).first()
-    
-    if not user_role or user_role.role != 'owner':
-        messages.error(request, "Permission non accordée")
-        return redirect('core:dashboard_redirect')
-    
-    # Récupérer l'utilisateur cible
+
+    if not user_role or user_role.role != "owner":
+        messages.error(request, "Permission non accordee")
+        return redirect("core:dashboard_redirect")
+
     target_user = get_object_or_404(User, id=user_id)
-    
-    # Ne pas se désactiver soi-même
+
     if target_user.id == request.user.id:
-        messages.error(request, "Vous ne pouvez pas vous désactiver vous-même")
-        return redirect('compte:user_list')
-    
-    # Vérifier que l'utilisateur appartient bien au gym
+        messages.error(request, "Vous ne pouvez pas vous desactiver vous-meme")
+        return redirect("compte:user_list")
+
     target_role = UserGymRole.objects.filter(user=target_user, gym=gym).first()
     if not target_role:
-        messages.error(request, "Utilisateur non trouvé dans ce gym")
-        return redirect('compte:user_list')
-    
-    # Désactiver le rôle (pas l'utilisateur complet)
+        messages.error(request, "Utilisateur non trouve dans ce gym")
+        return redirect("compte:user_list")
+
     target_role.is_active = False
     target_role.save()
-    
-    # Optionnel : aussi désactiver l'utilisateur
+
     target_user.is_active = False
     target_user.save()
-    
-    messages.success(request, f"Utilisateur {target_user.username} désactivé")
-    return redirect('compte:user_list')
+
+    messages.success(request, f"Utilisateur {target_user.username} desactive")
+    return redirect("compte:user_list")
 
 
 @login_required
 def activate_user(request, user_id):
-    """Réactiver un utilisateur"""
     gym = request.gym
     user_role = UserGymRole.objects.filter(user=request.user, gym=gym, is_active=True).first()
-    
-    if not user_role or user_role.role != 'owner':
-        messages.error(request, "Permission non accordée")
-        return redirect('core:dashboard_redirect')
-    
+
+    if not user_role or user_role.role != "owner":
+        messages.error(request, "Permission non accordee")
+        return redirect("core:dashboard_redirect")
+
     target_user = get_object_or_404(User, id=user_id)
     target_role = UserGymRole.objects.filter(user=target_user, gym=gym).first()
-    
+
     if not target_role:
-        messages.error(request, "Utilisateur non trouvé dans ce gym")
-        return redirect('compte:user_list')
-    
+        messages.error(request, "Utilisateur non trouve dans ce gym")
+        return redirect("compte:user_list")
+
     target_role.is_active = True
     target_role.save()
-    
+
     target_user.is_active = True
     target_user.save()
-    
-    messages.success(request, f"Utilisateur {target_user.username} réactivé")
-    return redirect('compte:user_list')
+
+    messages.success(request, f"Utilisateur {target_user.username} reactive")
+    return redirect("compte:user_list")

@@ -17,7 +17,7 @@
             <div class="form-row">{{ form.first_name.errors }}{{ form.first_name.label_tag }}{{ form.first_name }}</div>
             <div class="form-row">{{ form.last_name.errors }}{{ form.last_name.label_tag }}{{ form.last_name }}</div>
             <div class="form-row">{{ form.email.errors }}{{ form.email.label_tag }}{{ form.email }}</div>
-            <p class="help">Username genere automatiquement. Mot de passe par defaut : <strong>12345</strong>.</p>
+            <p class="help">Username genere automatiquement. Un mot de passe temporaire fort sera genere et devra etre change a la premiere connexion.</p>
         </fieldset>
 
         <fieldset class="module aligned">
@@ -34,7 +34,7 @@
         <fieldset class="module aligned">
             <h2>Gyms</h2>
             <div class="form-row">{{ form.gyms.errors }}{{ form.gyms.label_tag }}{{ form.gyms }}</div>
-            <p class="help">Un gym par ligne. Les slugs et subdomains seront generes automatiquement.</p>
+            <p class="help">Un gym par ligne. Les doublons sont bloques et les slugs/subdomains seront generes automatiquement.</p>
         </fieldset>
 
         <fieldset class="module">
@@ -46,7 +46,7 @@
         </fieldset>
 
         <div class="submit-row">
-            <input type="submit" class="default" value="Creer le client">
+            <input type="submit" class="default" value="Verifier le recapitulatif">
             <a class="button cancel-link" href="{% url 'admin:compte_user_changelist' %}">Annuler</a>
         </div>
     </form>

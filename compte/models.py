@@ -3,7 +3,7 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 from organizations.models import Gym, Organization
 from smartclub import settings
-from .utils import generate_username
+from .utils import generate_temporary_password, generate_username
 from django.contrib.auth.hashers import make_password
 
 
@@ -25,6 +25,10 @@ class User(AbstractUser):
         blank=True,
         related_name="owners",
         help_text="Si l'utilisateur est Owner d'une organisation"
+    )
+    force_password_change = models.BooleanField(
+        default=False,
+        help_text="Oblige l'utilisateur a definir un nouveau mot de passe a la prochaine connexion.",
     )
     def get_owned_gyms(self):
         """Récupère tous les gyms de l'organisation dont il est Owner"""
@@ -56,7 +60,8 @@ class User(AbstractUser):
 
         # Mot de passe par défaut si vide
         if not self.password:
-            self.password = make_password("12345")
+            self.password = make_password(generate_temporary_password())
+            self.force_password_change = True
 
         super().save(*args, **kwargs)
 

@@ -109,3 +109,16 @@ class UserPasswordChangeForm(PasswordChangeForm):
             "class": "form-control",
             "placeholder": "Confirmer le nouveau mot de passe",
         })
+
+
+class ForcedPasswordChangeForm(SetPasswordForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["new_password1"].widget.attrs.update({
+            "class": "form-control",
+            "placeholder": "Nouveau mot de passe",
+        })
+        self.fields["new_password2"].widget.attrs.update({
+            "class": "form-control",
+            "placeholder": "Confirmer le nouveau mot de passe",
+        })

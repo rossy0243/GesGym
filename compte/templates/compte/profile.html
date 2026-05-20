@@ -59,6 +59,14 @@
     </div>
 
     <div class="col-xl-8">
+        {% if force_password_change %}
+        <div class="alert alert-warning border-0 shadow-sm">
+            <strong>Action requise :</strong> ce compte utilise encore un mot de passe temporaire.
+            Definis maintenant un mot de passe personnel pour continuer.
+        </div>
+        {% endif %}
+
+        {% if not force_password_change %}
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-header">
                 <h5 class="card-title mb-0 d-flex align-items-center gap-2">
@@ -94,12 +102,13 @@
                 </form>
             </div>
         </div>
+        {% endif %}
 
         <div class="card border-0 shadow-sm" id="password">
             <div class="card-header">
                 <h5 class="card-title mb-0 d-flex align-items-center gap-2">
                     <span class="material-icons" style="font-size:22px;">lock_reset</span>
-                    Changer le mot de passe
+                    {% if force_password_change %}Definir votre mot de passe{% else %}Changer le mot de passe{% endif %}
                 </h5>
             </div>
             <div class="card-body">
@@ -111,11 +120,13 @@
                             <div class="alert alert-danger">{{ password_form.non_field_errors }}</div>
                         </div>
                     {% endif %}
+                    {% if not force_password_change %}
                     <div class="col-md-12">
                         <label class="form-label">Mot de passe actuel</label>
                         {{ password_form.old_password }}
                         {% for error in password_form.old_password.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
                     </div>
+                    {% endif %}
                     <div class="col-md-6">
                         <label class="form-label">Nouveau mot de passe</label>
                         {{ password_form.new_password1 }}
@@ -129,7 +140,7 @@
                     <div class="col-12">
                         <button type="submit" class="btn btn-dark">
                             <span class="material-icons me-2" style="font-size:18px;">vpn_key</span>
-                            Modifier le mot de passe
+                            {% if force_password_change %}Valider le nouveau mot de passe{% else %}Modifier le mot de passe{% endif %}
                         </button>
                     </div>
                 </form>

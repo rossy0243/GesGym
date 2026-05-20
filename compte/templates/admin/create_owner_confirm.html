@@ -1,0 +1,65 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div id="content-main">
+    <h1>Verifier le recapitulatif avant creation</h1>
+    <p class="help">
+        Controle une derniere fois les informations du client. La creation n'a pas encore ete lancee.
+    </p>
+
+    <fieldset class="module aligned">
+        <h2>Owner</h2>
+        <div class="form-row"><strong>Nom :</strong> {{ preview.first_name }} {{ preview.last_name }}</div>
+        <div class="form-row"><strong>Email :</strong> {{ preview.email }}</div>
+    </fieldset>
+
+    <fieldset class="module aligned">
+        <h2>Organisation</h2>
+        <div class="form-row"><strong>Mode :</strong> {% if preview.uses_existing_organization %}Organisation existante{% else %}Nouvelle organisation{% endif %}</div>
+        <div class="form-row"><strong>Nom :</strong> {{ preview.organization_name }}</div>
+        <div class="form-row"><strong>Slug :</strong> {{ preview.organization_slug }}</div>
+        <div class="form-row"><strong>Email :</strong> {{ preview.organization_email|default:"-" }}</div>
+        <div class="form-row"><strong>Telephone :</strong> {{ preview.organization_phone|default:"-" }}</div>
+        <div class="form-row"><strong>Adresse :</strong> {{ preview.organization_address|default:"-" }}</div>
+    </fieldset>
+
+    <fieldset class="module aligned">
+        <h2>Gyms</h2>
+        {% if preview.gym_names %}
+        <ul>
+            {% for gym_name in preview.gym_names %}
+            <li>{{ gym_name }}</li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p>Aucun nouveau gym. Les gyms actifs existants seront reutilises.</p>
+        {% endif %}
+        {% if preview.existing_active_gym_names %}
+        <p><strong>Gyms actifs deja presents :</strong></p>
+        <ul>
+            {% for gym_name in preview.existing_active_gym_names %}
+            <li>{{ gym_name }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </fieldset>
+
+    <fieldset class="module aligned">
+        <h2>Modules</h2>
+        <ul>
+            {% for module_code in preview.module_codes %}
+            <li>{{ module_code }}</li>
+            {% endfor %}
+        </ul>
+    </fieldset>
+
+    <form method="post">
+        {% csrf_token %}
+        <div class="submit-row">
+            <button type="submit" class="default" name="_confirm_create" value="1">Confirmer et creer le client</button>
+            <button type="submit" class="button" name="_edit_draft" value="1">Modifier le formulaire</button>
+            <a class="button cancel-link" href="{% url 'admin:compte_user_changelist' %}">Annuler</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

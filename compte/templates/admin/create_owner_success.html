@@ -1,0 +1,57 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div id="content-main">
+    <h1>Client cree et verifie</h1>
+    <p class="help">
+        La creation est terminee. Le recapitulatif ci-dessous confirme que le compte owner, les gyms
+        et les modules sont bien en place.
+    </p>
+
+    <fieldset class="module aligned">
+        <h2>Acces owner</h2>
+        <div class="form-row"><strong>Username :</strong> {{ result.owner_username }}</div>
+        <div class="form-row"><strong>Email :</strong> {{ result.owner_email }}</div>
+        <div class="form-row"><strong>Mot de passe temporaire :</strong> <code>{{ result.temporary_password }}</code></div>
+        <p class="help">Ce mot de passe devra etre remplace a la premiere connexion.</p>
+    </fieldset>
+
+    <fieldset class="module aligned">
+        <h2>Organisation et gyms</h2>
+        <div class="form-row"><strong>Organisation :</strong> {{ result.organization_name }}</div>
+        <div class="form-row"><strong>Slug :</strong> {{ result.organization_slug }}</div>
+        <div class="form-row"><strong>Gyms crees :</strong></div>
+        <ul>
+            {% for gym_name in result.gym_names %}
+            <li>{{ gym_name }}</li>
+            {% endfor %}
+        </ul>
+    </fieldset>
+
+    <fieldset class="module aligned">
+        <h2>Verification automatique</h2>
+        <ul>
+            <li>Owner cree : {% if result.verification.owner_active %}Oui{% else %}Non{% endif %}</li>
+            <li>Changement de mot de passe obligatoire : {% if result.verification.owner_must_change_password %}Oui{% else %}Non{% endif %}</li>
+            <li>Organisation active : {% if result.verification.organization_active %}Oui{% else %}Non{% endif %}</li>
+            <li>Gyms actifs : {{ result.verification.gyms_active_count }} / {{ result.verification.gyms_created_count }}</li>
+            <li>Modules actifs : {{ result.verification.modules_active_count }} / {{ result.verification.expected_modules_active_count }}</li>
+            <li>Login pret : {% if result.verification.login_ready %}Oui{% else %}Non{% endif %}</li>
+        </ul>
+    </fieldset>
+
+    <fieldset class="module aligned">
+        <h2>Modules actives</h2>
+        <ul>
+            {% for module_code in result.module_codes %}
+            <li>{{ module_code }}</li>
+            {% endfor %}
+        </ul>
+    </fieldset>
+
+    <div class="submit-row">
+        <a class="default" href="{% url 'admin:create_owner_view' %}">Creer un autre client</a>
+        <a class="button" href="{% url 'admin:compte_user_changelist' %}">Retour aux utilisateurs</a>
+    </div>
+</div>
+{% endblock %}

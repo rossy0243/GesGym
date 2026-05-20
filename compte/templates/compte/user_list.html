@@ -1,4 +1,3 @@
-<!-- templates/compte/user_list.html -->
 {% extends 'base.html' %}
 
 {% block content %}
@@ -9,7 +8,7 @@
             <i class="fas fa-plus"></i> Nouvel utilisateur
         </a>
     </div>
-    
+
     <div class="card">
         <div class="card-header">
             <h5 class="mb-0">Liste des utilisateurs</h5>
@@ -23,7 +22,7 @@
                             <th>Nom d'utilisateur</th>
                             <th>Nom complet</th>
                             <th>Email</th>
-                            <th>Rôle</th>
+                            <th>Role</th>
                             <th>Statut</th>
                             <th>Date d'ajout</th>
                             <th>Actions</th>
@@ -64,7 +63,7 @@
                             </td>
                             <td>
                                 <div class="btn-group btn-group-sm">
-                                    <button type="button" 
+                                    <button type="button"
                                             class="btn btn-outline-primary"
                                             data-bs-toggle="modal"
                                             data-bs-target="#resetModal{{ user_role.user.id }}">
@@ -77,41 +76,40 @@
                                         <i class="fas fa-ban"></i>
                                     </button>
                                 </div>
-                                
-                                <!-- Modal Reset Password -->
+
                                 <div class="modal fade" id="resetModal{{ user_role.user.id }}" tabindex="-1">
                                     <div class="modal-dialog">
                                         <div class="modal-content">
                                             <div class="modal-header">
-                                                <h5 class="modal-title">Réinitialiser le mot de passe</h5>
+                                                <h5 class="modal-title">Reinitialiser le mot de passe</h5>
                                                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                                             </div>
                                             <div class="modal-body">
-                                                <p>Êtes-vous sûr de vouloir réinitialiser le mot de passe de :</p>
+                                                <p>Etes-vous sur de vouloir reinitialiser le mot de passe de :</p>
                                                 <p><strong>{{ user_role.user.get_full_name|default:user_role.user.username }}</strong></p>
-                                                <p>Le nouveau mot de passe sera : <code>12345</code></p>
+                                                <p>Un nouveau mot de passe temporaire fort sera genere.</p>
+                                                <p>L'utilisateur devra le changer a sa prochaine connexion.</p>
                                             </div>
                                             <div class="modal-footer">
                                                 <form method="post" action="{% url 'compte:reset_password' user_role.user.id %}">
                                                     {% csrf_token %}
                                                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                                                    <button type="submit" class="btn btn-warning">Réinitialiser</button>
+                                                    <button type="submit" class="btn btn-warning">Reinitialiser</button>
                                                 </form>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-                                
-                                <!-- Modal Désactiver -->
+
                                 <div class="modal fade" id="deactivateModal{{ user_role.user.id }}" tabindex="-1">
                                     <div class="modal-dialog">
                                         <div class="modal-content">
                                             <div class="modal-header">
-                                                <h5 class="modal-title">Désactiver l'utilisateur</h5>
+                                                <h5 class="modal-title">Desactiver l'utilisateur</h5>
                                                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                                             </div>
                                             <div class="modal-body">
-                                                <p>Êtes-vous sûr de vouloir désactiver :</p>
+                                                <p>Etes-vous sur de vouloir desactiver :</p>
                                                 <p><strong>{{ user_role.user.get_full_name|default:user_role.user.username }}</strong></p>
                                                 <p>L'utilisateur ne pourra plus se connecter.</p>
                                             </div>
@@ -119,7 +117,7 @@
                                                 <form method="post" action="{% url 'compte:deactivate_user' user_role.user.id %}">
                                                     {% csrf_token %}
                                                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                                                    <button type="submit" class="btn btn-danger">Désactiver</button>
+                                                    <button type="submit" class="btn btn-danger">Desactiver</button>
                                                 </form>
                                             </div>
                                         </div>
@@ -133,8 +131,8 @@
             </div>
             {% else %}
             <div class="alert alert-info text-center">
-                <p class="mb-0">Aucun utilisateur trouvé.</p>
-                <a href="{% url 'compte:create_user' %}" class="btn btn-primary mt-3">Créer votre premier utilisateur</a>
+                <p class="mb-0">Aucun utilisateur trouve.</p>
+                <a href="{% url 'compte:create_user' %}" class="btn btn-primary mt-3">Creer votre premier utilisateur</a>
             </div>
             {% endif %}
         </div>
@@ -142,7 +140,6 @@
 </div>
 
 <script>
-    // Tooltips pour les boutons
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
     var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
         return new bootstrap.Tooltip(tooltipTriggerEl)

@@ -281,6 +281,26 @@ class LoginConfigurationTests(TestCase):
         )
         self.assertEqual(self.client.session["post_login_target"], reverse("coaching:coach_portal"))
 
+    def test_login_redirects_to_profile_when_password_change_is_forced(self):
+        forced_user = User.objects.create_user(
+            username="force-owner",
+            password="TempPass123!",
+            email="force@example.com",
+            owned_organization=self.organization,
+            force_password_change=True,
+        )
+
+        response = self.client.post(
+            reverse("compte:login"),
+            {"username": "force-owner", "password": "TempPass123!"},
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("compte:profile"),
+            fetch_redirect_response=False,
+        )
+
 
 @override_settings(
     EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
@@ -404,6 +424,33 @@ class UserProfileTests(TestCase):
         response = self.client.get(reverse("compte:profile"))
         self.assertEqual(response.status_code, 200)
 
+    def test_forced_password_change_uses_dedicated_form_and_clears_flag(self):
+        self.user.force_password_change = True
+        self.user.set_password("TempPass123!")
+        self.user.save(update_fields=["force_password_change", "password"])
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("compte:profile"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "mot de passe temporaire")
+        self.assertNotContains(response, "Mot de passe actuel")
+
+        response = self.client.post(
+            reverse("compte:profile"),
+            {
+                "action": "password",
+                "new_password1": "BrandNewPass123!",
+                "new_password2": "BrandNewPass123!",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.force_password_change)
+        self.assertTrue(self.user.check_password("BrandNewPass123!"))
+
 
 class SuperAdminOwnerCreationTests(TestCase):
     def setUp(self):
@@ -444,13 +491,24 @@ class SuperAdminOwnerCreationTests(TestCase):
             },
         )
 
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response["Location"], reverse("admin:compte_user_changelist"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Verifier le recapitulatif avant creation")
+        self.assertContains(response, "Client Demo Admin")
+        self.assertContains(response, "Gombe Premium")
+
+        response = self.client.post(
+            reverse("admin:create_owner_view"),
+            {"_confirm_create": "1"},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.request["PATH_INFO"], reverse("admin:create_owner_success_view"))
         organization = Organization.objects.get(slug="client-demo-admin")
         owner = User.objects.get(email="owner.client@example.com")
         self.assertEqual(owner.owned_organization, organization)
         self.assertFalse(owner.is_staff)
-        self.assertTrue(owner.check_password("12345"))
+        self.assertTrue(owner.force_password_change)
 
         gyms = Gym.objects.filter(organization=organization).order_by("name")
         self.assertEqual(gyms.count(), 2)
@@ -463,6 +521,27 @@ class SuperAdminOwnerCreationTests(TestCase):
             ).count(),
             4,
         )
+        self.assertContains(response, "Login pret : Oui")
+        self.assertContains(response, owner.username)
+
+    def test_owner_creation_blocks_duplicate_gym_names_in_same_submission(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(
+            reverse("admin:create_owner_view"),
+            {
+                "first_name": "Client",
+                "last_name": "Owner",
+                "email": "owner.duplicate@example.com",
+                "organization_name": "Client Duplicate",
+                "organization_slug": "client-duplicate",
+                "gyms": "Gombe\ngombe",
+                "modules": [self.module_members.id],
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "est saisi plusieurs fois")
 
     def test_non_superuser_cannot_access_owner_creation_view(self):
         staff = User.objects.create_user(username="staff", password="pass", is_staff=True)
