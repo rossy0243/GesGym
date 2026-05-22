@@ -23,6 +23,7 @@ from .forms import (
     OvertimeEntryForm,
     PaymentForm,
     PayrollAdjustmentForm,
+    PayrollContributionRuleForm,
 )
 from .kpis import available_months, build_rh_kpis, payroll_rows
 from .models import (
@@ -32,6 +33,7 @@ from .models import (
     OvertimeEntry,
     PaymentRecord,
     PayrollAdjustment,
+    PayrollContributionRule,
     PayrollSlip,
     PayrollWorkflowLog,
 )
@@ -50,6 +52,21 @@ def _parse_year_month(request):
     if month < 1 or month > 12:
         month = current_date.month
     return year, month
+
+
+def _redirect_to_payroll_dashboard(request):
+    current_date = timezone.localdate()
+    try:
+        year = int(request.POST.get("year", request.GET.get("year", current_date.year)))
+    except (TypeError, ValueError):
+        year = current_date.year
+    try:
+        month = int(request.POST.get("month", request.GET.get("month", current_date.month)))
+    except (TypeError, ValueError):
+        month = current_date.month
+    if month < 1 or month > 12:
+        month = current_date.month
+    return redirect(f"{reverse('rh:payroll_dashboard')}?year={year}&month={month}")
 
 
 def _month_name(month):
@@ -161,6 +178,7 @@ def employee_detail(request, employee_id):
         gym=request.gym, work_date__year=year, work_date__month=month
     ).order_by("-work_date", "-created_at")
     workflow_logs = slip.workflow_logs.select_related("actor").all()
+    contribution_lines = slip.contribution_breakdown()
 
     context = {
         "gym": request.gym,
@@ -178,6 +196,7 @@ def employee_detail(request, employee_id):
         "leaves": leaves,
         "overtime_entries": overtime_entries,
         "workflow_logs": workflow_logs,
+        "contribution_lines": contribution_lines,
         "adjustment_form": PayrollAdjustmentForm(),
         "leave_form": LeaveRequestForm(initial={"start_date": timezone.localdate(), "end_date": timezone.localdate()}),
         "overtime_form": OvertimeEntryForm(initial={"work_date": timezone.localdate()}),
@@ -339,6 +358,7 @@ def payroll_dashboard(request):
     gym = request.gym
     year, month = _parse_year_month(request)
     payroll = payroll_rows(gym, year, month)
+    contribution_rules = PayrollContributionRule.objects.filter(gym=gym).order_by("display_order", "name")
 
     context = {
         "gym": gym,
@@ -350,10 +370,40 @@ def payroll_dashboard(request):
         "paid_salaries": payroll["paid_salaries"],
         "pending_salaries": payroll["pending_salaries"],
         "pending_count": payroll["pending_count"],
+        "contribution_rules": contribution_rules,
+        "contribution_rule_form": PayrollContributionRuleForm(),
         "available_months": available_months(),
         **build_rh_kpis(gym),
     }
     return render(request, "rh/payroll_dashboard.html", context)
+
+
+@login_required
+@module_required("RH")
+@role_required(RH_PAYROLL_ROLES)
+def add_contribution_rule(request):
+    if request.method == "POST":
+        form = PayrollContributionRuleForm(request.POST)
+        if form.is_valid():
+            rule = form.save(commit=False)
+            rule.gym = request.gym
+            rule.save()
+            messages.success(request, "Regle de cotisation ajoutee.")
+        else:
+            messages.error(request, "Impossible d'ajouter la regle de cotisation.")
+    return _redirect_to_payroll_dashboard(request)
+
+
+@login_required
+@module_required("RH")
+@role_required(RH_PAYROLL_ROLES)
+def toggle_contribution_rule(request, rule_id):
+    rule = get_object_or_404(PayrollContributionRule, id=rule_id, gym=request.gym)
+    if request.method == "POST":
+        rule.is_active = not rule.is_active
+        rule.save(update_fields=["is_active", "updated_at"])
+        messages.success(request, "Regle de cotisation mise a jour.")
+    return _redirect_to_payroll_dashboard(request)
 
 
 @login_required
@@ -529,6 +579,7 @@ def process_payment(request, employee_id, year, month):
 def download_payslip_pdf(request, employee_id, year, month):
     employee = get_object_or_404(Employee, id=employee_id, gym=request.gym)
     slip = PayrollSlip.ensure_for_period(employee, year, month)
+    contribution_lines = slip.contribution_breakdown()
     lines = [
         "GesGym - Bulletin de paie",
         f"Employe : {employee.name}",
@@ -545,6 +596,9 @@ def download_payslip_pdf(request, employee_id, year, month):
         f"Avances : {slip.advance_total} CDF",
         f"Retenues : {slip.deduction_total} CDF",
         f"Retenue conges : {slip.leave_deduction_total} CDF",
+        f"Taxes employee : {slip.employee_tax_total} CDF",
+        f"Cotisations employee : {slip.employee_contribution_total} CDF",
+        f"Cotisations employeur : {slip.employer_contribution_total} CDF",
         f"Salaire brut : {slip.gross_salary} CDF",
         f"Net a payer : {slip.net_salary} CDF",
         f"Statut : {slip.get_status_display()}",
@@ -552,5 +606,9 @@ def download_payslip_pdf(request, employee_id, year, month):
         f"Approuve le : {slip.approved_at.strftime('%d/%m/%Y %H:%M') if slip.approved_at else '-'}",
         f"Paye le : {slip.paid_at.strftime('%d/%m/%Y %H:%M') if slip.paid_at else '-'}",
     ]
+    if contribution_lines:
+        lines.append("Detail cotisations :")
+        for line in contribution_lines:
+            lines.append(f"- {line['name']} ({line['party_label']}) : {line['amount']} CDF")
     filename = f"bulletin-paie-{employee.id}-{year}-{month}.pdf"
     return _simple_pdf_response(filename, lines)

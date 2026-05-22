@@ -434,6 +434,65 @@ class PayrollAdjustment(models.Model):
         super().save(*args, **kwargs)
 
 
+class PayrollContributionRule(models.Model):
+    PARTY_EMPLOYEE_TAX = "employee_tax"
+    PARTY_EMPLOYEE_CONTRIBUTION = "employee_contribution"
+    PARTY_EMPLOYER_CONTRIBUTION = "employer_contribution"
+    PARTY_CHOICES = (
+        (PARTY_EMPLOYEE_TAX, "Taxe employee"),
+        (PARTY_EMPLOYEE_CONTRIBUTION, "Cotisation employee"),
+        (PARTY_EMPLOYER_CONTRIBUTION, "Cotisation employeur"),
+    )
+
+    CALC_PERCENTAGE = "percentage"
+    CALC_FIXED = "fixed"
+    CALCULATION_CHOICES = (
+        (CALC_PERCENTAGE, "Pourcentage du brut"),
+        (CALC_FIXED, "Montant fixe"),
+    )
+
+    gym = models.ForeignKey(Gym, on_delete=models.CASCADE, related_name="payroll_contribution_rules")
+    name = models.CharField(max_length=120)
+    party = models.CharField(max_length=30, choices=PARTY_CHOICES)
+    calculation_type = models.CharField(max_length=20, choices=CALCULATION_CHOICES, default=CALC_PERCENTAGE)
+    rate_percent = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    fixed_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    is_active = models.BooleanField(default=True)
+    display_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["display_order", "name"]
+        indexes = [models.Index(fields=["gym", "is_active"])]
+
+    def __str__(self):
+        return f"{self.name} - {self.get_party_display()}"
+
+    def clean(self):
+        super().clean()
+        if self.calculation_type == self.CALC_PERCENTAGE and self.rate_percent <= 0:
+            raise ValidationError({"rate_percent": "Le pourcentage doit etre superieur a zero."})
+        if self.calculation_type == self.CALC_FIXED and self.fixed_amount <= 0:
+            raise ValidationError({"fixed_amount": "Le montant fixe doit etre superieur a zero."})
+        if self.rate_percent is not None and self.rate_percent < 0:
+            raise ValidationError({"rate_percent": "Le pourcentage ne peut pas etre negatif."})
+        if self.fixed_amount is not None and self.fixed_amount < 0:
+            raise ValidationError({"fixed_amount": "Le montant fixe ne peut pas etre negatif."})
+
+    def save(self, *args, **kwargs):
+        self.rate_percent = _money(self.rate_percent)
+        self.fixed_amount = _money(self.fixed_amount)
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def compute_amount(self, base_amount):
+        base_amount = _money(base_amount)
+        if self.calculation_type == self.CALC_PERCENTAGE:
+            return _money(base_amount * self.rate_percent / Decimal("100"))
+        return _money(self.fixed_amount)
+
+
 class PayrollSlip(models.Model):
     STATUS_DRAFT = "draft"
     STATUS_REVIEWED = "reviewed"
@@ -461,6 +520,9 @@ class PayrollSlip(models.Model):
     deduction_total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     advance_total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     leave_deduction_total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    employee_tax_total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    employee_contribution_total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    employer_contribution_total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     gross_salary = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     net_salary = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     notes = models.TextField(blank=True)
@@ -541,6 +603,9 @@ class PayrollSlip(models.Model):
                 "deduction_total",
                 "advance_total",
                 "leave_deduction_total",
+                "employee_tax_total",
+                "employee_contribution_total",
+                "employer_contribution_total",
                 "gross_salary",
                 "net_salary",
                 "payment_record",
@@ -571,6 +636,9 @@ class PayrollSlip(models.Model):
             "deduction_total",
             "advance_total",
             "leave_deduction_total",
+            "employee_tax_total",
+            "employee_contribution_total",
+            "employer_contribution_total",
             "gross_salary",
             "net_salary",
         ]:
@@ -611,7 +679,25 @@ class PayrollSlip(models.Model):
         )
         self.overtime_total = self.employee.approved_overtime_amount_for_month(self.year, self.month)
         self.gross_salary = _money(base_gross + self.bonus_total + self.overtime_total)
-        self.net_salary = _money(self.gross_salary - self.advance_total - self.deduction_total - self.leave_deduction_total)
+        self.employee_tax_total = Decimal("0")
+        self.employee_contribution_total = Decimal("0")
+        self.employer_contribution_total = Decimal("0")
+        for rule in PayrollContributionRule.objects.filter(gym=self.gym, is_active=True):
+            amount = rule.compute_amount(self.gross_salary)
+            if rule.party == PayrollContributionRule.PARTY_EMPLOYEE_TAX:
+                self.employee_tax_total = _money(self.employee_tax_total + amount)
+            elif rule.party == PayrollContributionRule.PARTY_EMPLOYEE_CONTRIBUTION:
+                self.employee_contribution_total = _money(self.employee_contribution_total + amount)
+            else:
+                self.employer_contribution_total = _money(self.employer_contribution_total + amount)
+        self.net_salary = _money(
+            self.gross_salary
+            - self.advance_total
+            - self.deduction_total
+            - self.leave_deduction_total
+            - self.employee_tax_total
+            - self.employee_contribution_total
+        )
 
     def review(self, user):
         if self.status == self.STATUS_PAID:
@@ -648,7 +734,39 @@ class PayrollSlip(models.Model):
 
     @property
     def total_deductions(self):
-        return _money(self.deduction_total + self.advance_total + self.leave_deduction_total)
+        return _money(
+            self.deduction_total
+            + self.advance_total
+            + self.leave_deduction_total
+            + self.employee_tax_total
+            + self.employee_contribution_total
+        )
+
+    @property
+    def payroll_deductions_total(self):
+        return _money(
+            self.deduction_total
+            + self.leave_deduction_total
+            + self.employee_tax_total
+            + self.employee_contribution_total
+        )
+
+    @property
+    def employee_withholding_total(self):
+        return _money(self.employee_tax_total + self.employee_contribution_total)
+
+    def contribution_breakdown(self):
+        lines = []
+        for rule in PayrollContributionRule.objects.filter(gym=self.gym, is_active=True):
+            lines.append(
+                {
+                    "name": rule.name,
+                    "party": rule.party,
+                    "party_label": rule.get_party_display(),
+                    "amount": rule.compute_amount(self.gross_salary),
+                }
+            )
+        return lines
 
 
 class PayrollWorkflowLog(models.Model):

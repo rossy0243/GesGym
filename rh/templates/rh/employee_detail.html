@@ -81,6 +81,9 @@
                                 <p><strong>Avances :</strong> {{ slip.advance_total }} CDF</p>
                                 <p><strong>Retenues :</strong> {{ slip.deduction_total }} CDF</p>
                                 <p><strong>Retenue conges :</strong> {{ slip.leave_deduction_total }} CDF</p>
+                                <p><strong>Taxes salarie :</strong> {{ slip.employee_tax_total }} CDF</p>
+                                <p><strong>Cotisations salarie :</strong> {{ slip.employee_contribution_total }} CDF</p>
+                                <p><strong>Cotisations employeur :</strong> {{ slip.employer_contribution_total }} CDF</p>
                             </div>
                         </div>
                         <p><strong>Brut :</strong> {{ slip.gross_salary }} CDF</p>
@@ -207,6 +210,29 @@
                     </ul>
                     {% else %}
                     <p class="text-muted mb-0">Aucun ajustement pour ce mois.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">Cotisations et taxes</h5>
+                </div>
+                <div class="card-body">
+                    {% if contribution_lines %}
+                    <ul class="list-group list-group-flush">
+                        {% for line in contribution_lines %}
+                        <li class="list-group-item px-0">
+                            <strong>{{ line.name }}</strong><br>
+                            <span>{{ line.party_label }}</span><br>
+                            <span>{{ line.amount }} CDF</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p class="text-muted mb-0">Aucune regle active pour ce gym.</p>
                     {% endif %}
                 </div>
             </div>

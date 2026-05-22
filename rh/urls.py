@@ -13,6 +13,8 @@ urlpatterns = [
     path('attendances/create/', views.attendance_create, name='attendance_create'),
     path('attendances/bulk/', views.attendance_bulk, name='attendance_bulk'),
     path('payroll/', views.payroll_dashboard, name='payroll_dashboard'),
+    path('payroll/contribution-rules/add/', views.add_contribution_rule, name='add_contribution_rule'),
+    path('payroll/contribution-rules/<int:rule_id>/toggle/', views.toggle_contribution_rule, name='toggle_contribution_rule'),
     path('payroll/<int:employee_id>/<int:year>/<int:month>/adjustments/add/',
          views.add_adjustment, name='add_adjustment'),
     path('payroll/<int:employee_id>/<int:year>/<int:month>/leaves/add/',

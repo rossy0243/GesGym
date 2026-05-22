@@ -7,6 +7,7 @@ from .models import (
     OvertimeEntry,
     PaymentRecord,
     PayrollAdjustment,
+    PayrollContributionRule,
 )
 
 
@@ -177,4 +178,28 @@ class OvertimeEntryForm(forms.ModelForm):
             "rate_multiplier": "Coefficient",
             "reason": "Motif",
             "status": "Statut",
+        }
+
+
+class PayrollContributionRuleForm(forms.ModelForm):
+    class Meta:
+        model = PayrollContributionRule
+        fields = ["name", "party", "calculation_type", "rate_percent", "fixed_amount", "display_order", "is_active"]
+        widgets = {
+            "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "Ex: INSS, IPR, CNSS..."}),
+            "party": forms.Select(attrs={"class": "form-select"}),
+            "calculation_type": forms.Select(attrs={"class": "form-select"}),
+            "rate_percent": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "fixed_amount": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "display_order": forms.NumberInput(attrs={"class": "form-control", "step": "1", "min": "0"}),
+            "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+        labels = {
+            "name": "Libelle",
+            "party": "Portee",
+            "calculation_type": "Mode de calcul",
+            "rate_percent": "Pourcentage",
+            "fixed_amount": "Montant fixe (CDF)",
+            "display_order": "Ordre",
+            "is_active": "Actif",
         }

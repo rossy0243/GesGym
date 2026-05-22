@@ -15,6 +15,7 @@ from .models import (
     Employee,
     LeaveRequest,
     OvertimeEntry,
+    PayrollContributionRule,
     PaymentRecord,
     PayrollAdjustment,
     PayrollSlip,
@@ -307,3 +308,69 @@ class RhTenantTests(TestCase):
         slip = PayrollSlip.ensure_for_period(employee, self.today.year, self.today.month)
         self.assertEqual(slip.base_salary, Decimal("1200.00"))
         self.assertEqual(slip.net_salary, Decimal("1200.00"))
+
+    def test_employee_tax_rule_reduces_net_salary(self):
+        PayrollContributionRule.objects.create(
+            gym=self.gym_a,
+            name="IPR",
+            party=PayrollContributionRule.PARTY_EMPLOYEE_TAX,
+            calculation_type=PayrollContributionRule.CALC_PERCENTAGE,
+            rate_percent=Decimal("10.00"),
+        )
+
+        slip = PayrollSlip.ensure_for_period(self.employee_a, self.today.year, self.today.month)
+
+        self.assertEqual(slip.employee_tax_total, Decimal("10.00"))
+        self.assertEqual(slip.net_salary, Decimal("90.00"))
+
+    def test_employer_contribution_does_not_reduce_net_salary(self):
+        PayrollContributionRule.objects.create(
+            gym=self.gym_a,
+            name="INSS employeur",
+            party=PayrollContributionRule.PARTY_EMPLOYER_CONTRIBUTION,
+            calculation_type=PayrollContributionRule.CALC_PERCENTAGE,
+            rate_percent=Decimal("5.00"),
+        )
+
+        slip = PayrollSlip.ensure_for_period(self.employee_a, self.today.year, self.today.month)
+
+        self.assertEqual(slip.employer_contribution_total, Decimal("5.00"))
+        self.assertEqual(slip.net_salary, Decimal("100.00"))
+
+    def test_fixed_employee_contribution_rule_reduces_net_salary(self):
+        PayrollContributionRule.objects.create(
+            gym=self.gym_a,
+            name="Mutuelle",
+            party=PayrollContributionRule.PARTY_EMPLOYEE_CONTRIBUTION,
+            calculation_type=PayrollContributionRule.CALC_FIXED,
+            fixed_amount=Decimal("12.50"),
+        )
+
+        slip = PayrollSlip.ensure_for_period(self.employee_a, self.today.year, self.today.month)
+
+        self.assertEqual(slip.employee_contribution_total, Decimal("12.50"))
+        self.assertEqual(slip.employee_withholding_total, Decimal("12.50"))
+        self.assertEqual(slip.net_salary, Decimal("87.50"))
+
+    def test_contribution_rule_can_be_added_from_dashboard(self):
+        response = self.client.post(
+            reverse("rh:add_contribution_rule"),
+            {
+                "year": self.today.year,
+                "month": self.today.month,
+                "name": "CNSS",
+                "party": PayrollContributionRule.PARTY_EMPLOYEE_CONTRIBUTION,
+                "calculation_type": PayrollContributionRule.CALC_PERCENTAGE,
+                "rate_percent": "3.50",
+                "fixed_amount": "0",
+                "display_order": "1",
+                "is_active": "on",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            f'{reverse("rh:payroll_dashboard")}?year={self.today.year}&month={self.today.month}',
+            fetch_redirect_response=False,
+        )
+        self.assertTrue(PayrollContributionRule.objects.filter(gym=self.gym_a, name="CNSS").exists())

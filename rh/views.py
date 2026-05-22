@@ -7,6 +7,7 @@ maintained implementation from `views_v2`.
 
 from .views_v2 import (  # noqa: F401
     add_adjustment,
+    add_contribution_rule,
     add_leave_request,
     add_overtime_entry,
     approve_payroll_slip,
@@ -22,4 +23,5 @@ from .views_v2 import (  # noqa: F401
     payroll_dashboard,
     process_payment,
     review_payroll_slip,
+    toggle_contribution_rule,
 )

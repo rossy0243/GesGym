@@ -46,6 +46,87 @@
     </div>
 
     <div class="row g-3 mb-4">
+        <div class="col-lg-5">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">Ajouter une regle de cotisation</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" action="{% url 'rh:add_contribution_rule' %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="year" value="{{ year }}">
+                        <input type="hidden" name="month" value="{{ month }}">
+                        {% for field in contribution_rule_form %}
+                        <div class="mb-3">
+                            <label class="form-label">{{ field.label }}</label>
+                            {{ field }}
+                            {% if field.errors %}<div class="text-danger small">{{ field.errors }}</div>{% endif %}
+                        </div>
+                        {% endfor %}
+                        <button type="submit" class="btn btn-outline-primary">Ajouter la regle</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-7">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">Regles actives du gym</h5>
+                </div>
+                <div class="card-body">
+                    {% if contribution_rules %}
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Libelle</th>
+                                    <th>Portee</th>
+                                    <th>Calcul</th>
+                                    <th>Statut</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for rule in contribution_rules %}
+                                <tr>
+                                    <td>{{ rule.name }}</td>
+                                    <td>{{ rule.get_party_display }}</td>
+                                    <td>
+                                        {% if rule.calculation_type == 'percentage' %}
+                                        {{ rule.rate_percent }} %
+                                        {% else %}
+                                        {{ rule.fixed_amount }} CDF
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge {% if rule.is_active %}bg-success{% else %}bg-secondary{% endif %}">
+                                            {% if rule.is_active %}Active{% else %}Inactive{% endif %}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <form method="post" action="{% url 'rh:toggle_contribution_rule' rule.id %}">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="year" value="{{ year }}">
+                                            <input type="hidden" name="month" value="{{ month }}">
+                                            <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                                {% if rule.is_active %}Desactiver{% else %}Activer{% endif %}
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted mb-0">Aucune regle definie pour le moment.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
         <div class="col-md-3">
             <div class="card h-100">
                 <div class="card-body">
@@ -94,6 +175,8 @@
                             <th>Brut</th>
                             <th>Primes</th>
                             <th>Heures sup</th>
+                            <th>Taxes/Cotis. salarie</th>
+                            <th>Cotis. employeur</th>
                             <th>Retenues</th>
                             <th>Avances</th>
                             <th>Net</th>
@@ -109,7 +192,9 @@
                             <td>{{ data.slip.gross_salary }} CDF</td>
                             <td>{{ data.slip.bonus_total }} CDF</td>
                             <td>{{ data.slip.overtime_total }} CDF</td>
-                            <td>{{ data.slip.total_deductions }} CDF</td>
+                            <td>{{ data.slip.employee_withholding_total }} CDF</td>
+                            <td>{{ data.slip.employer_contribution_total }} CDF</td>
+                            <td>{{ data.slip.payroll_deductions_total }} CDF</td>
                             <td>{{ data.slip.advance_total }} CDF</td>
                             <td><strong>{{ data.salary }} CDF</strong></td>
                             <td>
@@ -152,7 +237,7 @@
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="10" class="text-center">Aucun employe actif</td>
+                            <td colspan="12" class="text-center">Aucun employe actif</td>
                         </tr>
                         {% endfor %}
                     </tbody>
