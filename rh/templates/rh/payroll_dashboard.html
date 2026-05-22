@@ -1,21 +1,19 @@
 {% extends 'base.html' %}
-{% load employee_filters %}
 
 {% block content %}
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1>Tableau de bord des salaires - {{ gym.name }}</h1>
+        <h1>Paie mensuelle - {{ gym.name }}</h1>
         <div>
             <a href="{% url 'rh:attendance_bulk' %}" class="btn btn-primary">
-                <i class="fas fa-check-square"></i> Enregistrer présences
+                <i class="fas fa-check-square"></i> Enregistrer presences
             </a>
             <a href="{% url 'rh:list' %}" class="btn btn-secondary">
-                <i class="fas fa-users"></i> Employés
+                <i class="fas fa-users"></i> Employes
             </a>
         </div>
     </div>
-    
-    <!-- Sélecteur de mois -->
+
     <div class="card mb-4">
         <div class="card-body">
             <form method="get" class="row g-3">
@@ -23,17 +21,15 @@
                     <label class="form-label">Mois</label>
                     <select name="month" class="form-select">
                         {% for m in available_months %}
-                        <option value="{{ m.month }}" {% if month == m.month and year == m.year %}selected{% endif %}>
-                            {{ m.name }}
-                        </option>
+                        <option value="{{ m.month }}" {% if month == m.month and year == m.year %}selected{% endif %}>{{ m.name }}</option>
                         {% endfor %}
                     </select>
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label">Année</label>
+                    <label class="form-label">Annee</label>
                     <select name="year" class="form-select">
-                        {% for y in "2024,2025,2026"|split:"," %}
-                        <option value="{{ y }}" {% if year == y|add:0 %}selected{% endif %}>{{ y }}</option>
+                        {% for m in available_months %}
+                        <option value="{{ m.year }}" {% if year == m.year %}selected{% endif %}>{{ m.year }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -43,11 +39,10 @@
             </form>
         </div>
     </div>
-    
-    <!-- Résumé -->
+
     <div class="alert alert-info">
-        <h5>Résumé pour {{ month_name }} {{ year }}</h5>
-        <p class="mb-0">Total des salaires à payer: <strong>{{ total_salaries }} CDF</strong></p>
+        <h5>Resume pour {{ month_name }} {{ year }}</h5>
+        <p class="mb-0">Masse salariale nette du mois : <strong>{{ total_salaries }} CDF</strong></p>
     </div>
 
     <div class="row g-3 mb-4">
@@ -84,22 +79,24 @@
             </div>
         </div>
     </div>
-    
-    <!-- Tableau des salaires -->
+
     <div class="card">
         <div class="card-header">
-            <h5 class="mb-0">Détail des salaires</h5>
+            <h5 class="mb-0">Bulletins du mois</h5>
         </div>
         <div class="card-body">
             <div class="table-responsive">
                 <table class="table table-striped">
                     <thead>
                         <tr>
-                            <th>Employé</th>
-                            <th>Rôle</th>
-                            <th>Jours présents</th>
-                            <th>Salaire journalier</th>
-                            <th>Salaire mensuel</th>
+                            <th>Employe</th>
+                            <th>Type</th>
+                            <th>Brut</th>
+                            <th>Primes</th>
+                            <th>Heures sup</th>
+                            <th>Retenues</th>
+                            <th>Avances</th>
+                            <th>Net</th>
                             <th>Statut</th>
                             <th>Action</th>
                         </tr>
@@ -108,33 +105,44 @@
                         {% for data in payroll_data %}
                         <tr>
                             <td>{{ data.employee.name }}</td>
-                            <td>{{ data.employee.get_role_display }}</td>
-                            <td>{{ data.present_days }}</td>
-                            <td>{{ data.employee.daily_salary }} CDF</td>
+                            <td>{{ data.employee.get_compensation_label }}</td>
+                            <td>{{ data.slip.gross_salary }} CDF</td>
+                            <td>{{ data.slip.bonus_total }} CDF</td>
+                            <td>{{ data.slip.overtime_total }} CDF</td>
+                            <td>{{ data.slip.total_deductions }} CDF</td>
+                            <td>{{ data.slip.advance_total }} CDF</td>
                             <td><strong>{{ data.salary }} CDF</strong></td>
                             <td>
-                                {% if data.is_paid %}
-                                <span class="badge bg-success">Payé</span>
+                                {% if data.status == 'paid' %}
+                                <span class="badge bg-success">Paye</span>
+                                {% elif data.status == 'approved' %}
+                                <span class="badge bg-primary">Approuve</span>
                                 {% else %}
-                                <span class="badge bg-warning">À payer</span>
+                                <span class="badge bg-warning text-dark">Brouillon</span>
                                 {% endif %}
                             </td>
-                            <td>
-                                {% if not data.is_paid and data.salary > 0 %}
-                                <a href="{% url 'rh:process_payment' data.employee.id year month %}"
-                                   class="btn btn-success btn-sm">
+                            <td class="text-nowrap">
+                                {% if data.status == 'draft' %}
+                                <form method="post" action="{% url 'rh:approve_payroll_slip' data.employee.id year month %}" class="d-inline">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-outline-primary btn-sm">
+                                        <i class="fas fa-check"></i> Approuver
+                                    </button>
+                                </form>
+                                {% endif %}
+                                {% if data.status == 'approved' and data.salary > 0 %}
+                                <a href="{% url 'rh:process_payment' data.employee.id year month %}" class="btn btn-success btn-sm">
                                     <i class="fas fa-money-bill"></i> Payer
                                 </a>
                                 {% endif %}
-                                <a href="{% url 'rh:detail' data.employee.id %}?year={{ year }}&month={{ month }}"
-                                   class="btn btn-info btn-sm">
-                                    <i class="fas fa-eye"></i> Détail
+                                <a href="{% url 'rh:detail' data.employee.id %}?year={{ year }}&month={{ month }}" class="btn btn-info btn-sm">
+                                    <i class="fas fa-eye"></i> Detail
                                 </a>
                             </td>
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="7" class="text-center">Aucun employé actif</td>
+                            <td colspan="10" class="text-center">Aucun employe actif</td>
                         </tr>
                         {% endfor %}
                     </tbody>

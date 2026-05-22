@@ -10,7 +10,15 @@ from compte.models import User, UserGymRole
 from organizations.models import Gym, GymModule, Module, Organization
 from pos.models import CashRegister, Payment
 
-from .models import Attendance, Employee, PaymentRecord
+from .models import (
+    Attendance,
+    Employee,
+    LeaveRequest,
+    OvertimeEntry,
+    PaymentRecord,
+    PayrollAdjustment,
+    PayrollSlip,
+)
 
 
 class RhTenantTests(TestCase):
@@ -115,16 +123,12 @@ class RhTenantTests(TestCase):
         self.assertNotContains(response, "999 CDF")
 
     def test_payment_cannot_target_other_gym_employee(self):
-        response = self.client.get(
-            reverse(
-                "rh:process_payment",
-                args=[self.employee_b.id, self.today.year, self.today.month],
-            )
-        )
+        response = self.client.get(reverse("rh:process_payment", args=[self.employee_b.id, self.today.year, self.today.month]))
 
         self.assertEqual(response.status_code, 404)
 
     def test_salary_payment_creates_pos_expense(self):
+        self.client.post(reverse("rh:approve_payroll_slip", args=[self.employee_a.id, self.today.year, self.today.month]))
         response = self.client.post(
             reverse("rh:process_payment", args=[self.employee_a.id, self.today.year, self.today.month]),
             {"payment_method": "cash", "reference": "SAL-001", "notes": ""},
@@ -165,6 +169,78 @@ class RhTenantTests(TestCase):
                 response = self.client.get(url)
                 self.assertEqual(response.status_code, 200)
 
+    def test_payroll_slip_starts_as_draft_then_can_be_approved(self):
+        detail_response = self.client.get(
+            reverse("rh:detail", args=[self.employee_a.id]),
+            {"year": self.today.year, "month": self.today.month},
+        )
+
+        self.assertEqual(detail_response.status_code, 200)
+        slip = PayrollSlip.objects.get(employee=self.employee_a, year=self.today.year, month=self.today.month)
+        self.assertEqual(slip.status, PayrollSlip.STATUS_DRAFT)
+
+        approve_response = self.client.post(
+            reverse("rh:approve_payroll_slip", args=[self.employee_a.id, self.today.year, self.today.month]),
+        )
+
+        self.assertRedirects(
+            approve_response,
+            f'{reverse("rh:detail", args=[self.employee_a.id])}?year={self.today.year}&month={self.today.month}',
+            fetch_redirect_response=False,
+        )
+        slip.refresh_from_db()
+        self.assertEqual(slip.status, PayrollSlip.STATUS_APPROVED)
+
+    def test_adjustment_bonus_changes_net_salary(self):
+        response = self.client.post(
+            reverse("rh:add_adjustment", args=[self.employee_a.id, self.today.year, self.today.month]),
+            {"adjustment_type": "bonus", "label": "Prime test", "amount": "50", "notes": ""},
+        )
+
+        self.assertRedirects(
+            response,
+            f'{reverse("rh:detail", args=[self.employee_a.id])}?year={self.today.year}&month={self.today.month}',
+            fetch_redirect_response=False,
+        )
+        slip = PayrollSlip.objects.get(employee=self.employee_a, year=self.today.year, month=self.today.month)
+        self.assertEqual(slip.bonus_total, Decimal("50.00"))
+        self.assertEqual(slip.net_salary, Decimal("150.00"))
+
+    def test_unpaid_leave_creates_leave_deduction(self):
+        response = self.client.post(
+            reverse("rh:add_leave_request", args=[self.employee_a.id, self.today.year, self.today.month]),
+            {
+                "leave_type": "unpaid",
+                "start_date": self.today.isoformat(),
+                "end_date": self.today.isoformat(),
+                "reason": "Absence",
+                "status": "approved",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        slip = PayrollSlip.objects.get(employee=self.employee_a, year=self.today.year, month=self.today.month)
+        self.assertEqual(slip.unpaid_leave_days, 1)
+        self.assertEqual(slip.leave_deduction_total, Decimal("100.00"))
+        self.assertEqual(slip.net_salary, Decimal("0.00"))
+
+    def test_overtime_entry_increases_net_salary(self):
+        response = self.client.post(
+            reverse("rh:add_overtime_entry", args=[self.employee_a.id, self.today.year, self.today.month]),
+            {
+                "work_date": self.today.isoformat(),
+                "hours": "2",
+                "rate_multiplier": "1.50",
+                "reason": "Fermeture tardive",
+                "status": "approved",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        slip = PayrollSlip.objects.get(employee=self.employee_a, year=self.today.year, month=self.today.month)
+        self.assertEqual(slip.overtime_total, Decimal("37.50"))
+        self.assertEqual(slip.net_salary, Decimal("137.50"))
+
     def test_attendance_rejects_cross_gym_employee(self):
         with self.assertRaises(ValidationError):
             Attendance.objects.create(
@@ -173,3 +249,39 @@ class RhTenantTests(TestCase):
                 date=self.today + timedelta(days=1),
                 status="present",
             )
+
+    def test_leave_rejects_cross_gym_employee(self):
+        with self.assertRaises(ValidationError):
+            LeaveRequest.objects.create(
+                gym=self.gym_a,
+                employee=self.employee_b,
+                leave_type="paid",
+                start_date=self.today,
+                end_date=self.today,
+                status="approved",
+            )
+
+    def test_adjustment_rejects_cross_gym_employee(self):
+        with self.assertRaises(ValidationError):
+            PayrollAdjustment.objects.create(
+                gym=self.gym_a,
+                employee=self.employee_b,
+                year=self.today.year,
+                month=self.today.month,
+                adjustment_type="bonus",
+                label="Leak",
+                amount="10",
+            )
+
+    def test_monthly_salary_employee_uses_fixed_base(self):
+        employee = Employee.objects.create(
+            gym=self.gym_a,
+            name="Marc Fixe",
+            role="coach",
+            compensation_type=Employee.COMPENSATION_MONTHLY,
+            monthly_salary=Decimal("1200.00"),
+        )
+        Attendance.objects.create(gym=self.gym_a, employee=employee, date=self.today, status="present")
+        slip = PayrollSlip.ensure_for_period(employee, self.today.year, self.today.month)
+        self.assertEqual(slip.base_salary, Decimal("1200.00"))
+        self.assertEqual(slip.net_salary, Decimal("1200.00"))

@@ -15,36 +15,39 @@
     </div>
 
     <div class="row">
-        <!-- Informations employé -->
         <div class="col-md-4 mb-4">
             <div class="card">
                 <div class="card-header">
                     <h5 class="mb-0">Informations</h5>
                 </div>
                 <div class="card-body">
-                    <p><strong>Rôle:</strong> {{ employee.get_role_display }}</p>
-                    <p><strong>Téléphone:</strong> {{ employee.phone|default:"Non renseigné" }}</p>
-                    <p><strong>Salaire journalier:</strong> {{ employee.daily_salary }} CDF</p>
-                    <p><strong>Statut:</strong> 
+                    <p><strong>Role :</strong> {{ employee.get_role_display }}</p>
+                    <p><strong>Telephone :</strong> {{ employee.phone|default:"Non renseigne" }}</p>
+                    <p><strong>Remuneration :</strong> {{ employee.get_compensation_label }}</p>
+                    {% if employee.compensation_type == 'monthly' %}
+                    <p><strong>Salaire mensuel :</strong> {{ employee.monthly_salary }} CDF</p>
+                    {% else %}
+                    <p><strong>Salaire journalier :</strong> {{ employee.daily_salary }} CDF</p>
+                    {% endif %}
+                    <p><strong>Statut :</strong>
                         <span class="badge {% if employee.is_active %}bg-success{% else %}bg-secondary{% endif %}">
                             {% if employee.is_active %}Actif{% else %}Inactif{% endif %}
                         </span>
                     </p>
-                    <p><strong>Date d'embauche:</strong> {{ employee.created_at|date:"d/m/Y" }}</p>
+                    <p><strong>Date d'embauche :</strong> {{ employee.created_at|date:"d/m/Y" }}</p>
                 </div>
             </div>
         </div>
 
-        <!-- Salaire du mois -->
         <div class="col-md-8 mb-4">
             <div class="card">
                 <div class="card-header">
-                    <h5 class="mb-0">Salaire - {{ month_name }} {{ year }}</h5>
+                    <h5 class="mb-0">Bulletin - {{ month_name }} {{ year }}</h5>
                 </div>
                 <div class="card-body">
                     <form method="get" class="row g-3 mb-3">
                         <div class="col-md-6">
-                            <label class="form-label">Sélectionner un mois</label>
+                            <label class="form-label">Selectionner un mois</label>
                             <select name="month" class="form-select" onchange="this.form.submit()">
                                 {% for m in available_months %}
                                 <option value="{{ m.month }}" {% if month == m.month and year == m.year %}selected{% endif %}>
@@ -54,29 +57,53 @@
                             </select>
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label">Année</label>
+                            <label class="form-label">Annee</label>
                             <select name="year" class="form-select" onchange="this.form.submit()">
-                                <option value="2024" {% if year == 2024 %}selected{% endif %}>2024</option>
-                                <option value="2025" {% if year == 2025 %}selected{% endif %}>2025</option>
-                                <option value="2026" {% if year == 2026 %}selected{% endif %}>2026</option>
+                                {% for m in available_months %}
+                                <option value="{{ m.year }}" {% if year == m.year %}selected{% endif %}>{{ m.year }}</option>
+                                {% endfor %}
                             </select>
                         </div>
                     </form>
-                    
-                    <div class="alert {% if is_paid %}alert-success{% else %}alert-info{% endif %}">
-                        <h5>Résumé du mois</h5>
-                        <p><strong>Jours présents:</strong> {{ present_days }}</p>
-                        <p><strong>Salaire mensuel:</strong> {{ monthly_salary }} CDF</p>
-                        <p><strong>Statut:</strong> 
-                            {% if is_paid %}
-                            <span class="badge bg-success">Payé</span>
+
+                    <div class="alert {% if slip.status == 'paid' %}alert-success{% elif slip.status == 'approved' %}alert-primary{% else %}alert-info{% endif %}">
+                        <h5>Resume du bulletin</h5>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p><strong>Base salariale :</strong> {{ slip.base_salary }} CDF</p>
+                                <p><strong>Jours presents :</strong> {{ slip.present_days }}</p>
+                                <p><strong>Conges payes :</strong> {{ slip.paid_leave_days }}</p>
+                                <p><strong>Conges sans solde :</strong> {{ slip.unpaid_leave_days }}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>Primes :</strong> {{ slip.bonus_total }} CDF</p>
+                                <p><strong>Heures sup :</strong> {{ slip.overtime_total }} CDF</p>
+                                <p><strong>Avances :</strong> {{ slip.advance_total }} CDF</p>
+                                <p><strong>Retenues :</strong> {{ slip.deduction_total }} CDF</p>
+                                <p><strong>Retenue conges :</strong> {{ slip.leave_deduction_total }} CDF</p>
+                            </div>
+                        </div>
+                        <p><strong>Brut :</strong> {{ slip.gross_salary }} CDF</p>
+                        <p><strong>Net a payer :</strong> {{ monthly_salary }} CDF</p>
+                        <p><strong>Statut :</strong>
+                            {% if slip.status == 'paid' %}
+                            <span class="badge bg-success">Paye</span>
+                            {% elif slip.status == 'approved' %}
+                            <span class="badge bg-primary">Approuve</span>
                             {% else %}
-                            <span class="badge bg-warning">Non payé</span>
+                            <span class="badge bg-warning text-dark">Brouillon</span>
                             {% endif %}
                         </p>
-                        {% if not is_paid and monthly_salary > 0 %}
+                        {% if slip.status == 'draft' %}
+                        <form method="post" action="{% url 'rh:approve_payroll_slip' employee.id year month %}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-check"></i> Approuver le bulletin
+                            </button>
+                        </form>
+                        {% elif slip.status == 'approved' and monthly_salary > 0 %}
                         <a href="{% url 'rh:process_payment' employee.id year month %}" class="btn btn-success">
-                            <i class="fas fa-money-bill"></i> Procéder au paiement
+                            <i class="fas fa-money-bill"></i> Proceder au paiement
                         </a>
                         {% endif %}
                     </div>
@@ -86,11 +113,149 @@
     </div>
 
     <div class="row">
-        <!-- Présences du mois -->
+        <div class="col-lg-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">Ajouter une prime / avance / retenue</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" action="{% url 'rh:add_adjustment' employee.id year month %}">
+                        {% csrf_token %}
+                        {% for field in adjustment_form %}
+                        <div class="mb-3">
+                            <label class="form-label">{{ field.label }}</label>
+                            {{ field }}
+                            {% if field.errors %}<div class="text-danger small">{{ field.errors }}</div>{% endif %}
+                        </div>
+                        {% endfor %}
+                        <button type="submit" class="btn btn-outline-primary">Ajouter</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">Ajouter un conge</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" action="{% url 'rh:add_leave_request' employee.id year month %}">
+                        {% csrf_token %}
+                        {% for field in leave_form %}
+                        <div class="mb-3">
+                            <label class="form-label">{{ field.label }}</label>
+                            {{ field }}
+                            {% if field.errors %}<div class="text-danger small">{{ field.errors }}</div>{% endif %}
+                        </div>
+                        {% endfor %}
+                        <button type="submit" class="btn btn-outline-primary">Ajouter</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">Ajouter des heures sup</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" action="{% url 'rh:add_overtime_entry' employee.id year month %}">
+                        {% csrf_token %}
+                        {% for field in overtime_form %}
+                        <div class="mb-3">
+                            <label class="form-label">{{ field.label }}</label>
+                            {{ field }}
+                            {% if field.errors %}<div class="text-danger small">{{ field.errors }}</div>{% endif %}
+                        </div>
+                        {% endfor %}
+                        <button type="submit" class="btn btn-outline-primary">Ajouter</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">Ajustements du mois</h5>
+                </div>
+                <div class="card-body">
+                    {% if adjustments %}
+                    <ul class="list-group list-group-flush">
+                        {% for adjustment in adjustments %}
+                        <li class="list-group-item px-0">
+                            <strong>{{ adjustment.get_adjustment_type_display }}</strong> - {{ adjustment.label }}<br>
+                            <span>{{ adjustment.amount }} CDF</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p class="text-muted mb-0">Aucun ajustement pour ce mois.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">Conges</h5>
+                </div>
+                <div class="card-body">
+                    {% if leaves %}
+                    <ul class="list-group list-group-flush">
+                        {% for leave in leaves %}
+                        <li class="list-group-item px-0">
+                            <strong>{{ leave.get_leave_type_display }}</strong><br>
+                            <span>{{ leave.start_date|date:"d/m/Y" }} - {{ leave.end_date|date:"d/m/Y" }}</span><br>
+                            <span class="badge {% if leave.status == 'approved' %}bg-success{% elif leave.status == 'rejected' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
+                                {{ leave.get_status_display }}
+                            </span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p class="text-muted mb-0">Aucun conge enregistre.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">Heures supplementaires</h5>
+                </div>
+                <div class="card-body">
+                    {% if overtime_entries %}
+                    <ul class="list-group list-group-flush">
+                        {% for overtime in overtime_entries %}
+                        <li class="list-group-item px-0">
+                            <strong>{{ overtime.work_date|date:"d/m/Y" }}</strong> - {{ overtime.hours }} h<br>
+                            <span>{{ overtime.amount }} CDF</span><br>
+                            <span class="badge {% if overtime.status == 'approved' %}bg-success{% elif overtime.status == 'rejected' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
+                                {{ overtime.get_status_display }}
+                            </span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p class="text-muted mb-0">Aucune heure sup enregistree.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
         <div class="col-md-6 mb-4">
             <div class="card">
                 <div class="card-header">
-                    <h5 class="mb-0">Présences - {{ month_name }} {{ year }}</h5>
+                    <h5 class="mb-0">Presences - {{ month_name }} {{ year }}</h5>
                 </div>
                 <div class="card-body">
                     {% if attendances %}
@@ -117,13 +282,12 @@
                         </table>
                     </div>
                     {% else %}
-                    <p class="text-muted text-center">Aucune présence enregistrée pour ce mois</p>
+                    <p class="text-muted text-center">Aucune presence enregistree pour ce mois</p>
                     {% endif %}
                 </div>
             </div>
         </div>
 
-        <!-- Historique des paiements -->
         <div class="col-md-6 mb-4">
             <div class="card">
                 <div class="card-header">
@@ -154,7 +318,7 @@
                         </table>
                     </div>
                     {% else %}
-                    <p class="text-muted text-center">Aucun paiement enregistré</p>
+                    <p class="text-muted text-center">Aucun paiement enregistre</p>
                     {% endif %}
                 </div>
             </div>

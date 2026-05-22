@@ -2,20 +2,37 @@ from calendar import month_name
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.paginator import Paginator
 from django.core.exceptions import ValidationError
+from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 
 from pos.services import record_expense
 from smartclub.access_control import RH_ATTENDANCE_ROLES, RH_EMPLOYEE_ROLES, RH_PAYROLL_ROLES
 from smartclub.decorators import module_required, role_required
 
-from .forms import AttendanceForm, BulkAttendanceForm, EmployeeForm, PaymentForm
+from .forms import (
+    AttendanceForm,
+    BulkAttendanceForm,
+    EmployeeForm,
+    LeaveRequestForm,
+    OvertimeEntryForm,
+    PaymentForm,
+    PayrollAdjustmentForm,
+)
 from .kpis import available_months, build_rh_kpis, payroll_rows
-from .models import Attendance, Employee, PaymentRecord
+from .models import (
+    Attendance,
+    Employee,
+    LeaveRequest,
+    OvertimeEntry,
+    PaymentRecord,
+    PayrollAdjustment,
+    PayrollSlip,
+)
 
 
 def _parse_year_month(request):
@@ -39,6 +56,10 @@ def _month_name(month):
 
 def _validation_message(exc):
     return exc.messages[0] if getattr(exc, "messages", None) else str(exc)
+
+
+def _detail_url(employee_id, year, month):
+    return f"{reverse('rh:detail', args=[employee_id])}?year={year}&month={month}"
 
 
 @login_required
@@ -75,29 +96,23 @@ def employee_list(request):
 def employee_detail(request, employee_id):
     employee = get_object_or_404(Employee, id=employee_id, gym=request.gym)
     year, month = _parse_year_month(request)
-
-    monthly_salary = employee.calculate_monthly_salary(year, month)
-    present_days = employee.attendances.filter(
-        gym=request.gym,
-        date__year=year,
-        date__month=month,
-        status="present",
-    ).count()
-    is_paid = PaymentRecord.objects.filter(
-        employee=employee,
-        gym=request.gym,
-        year=year,
-        month=month,
-        is_paid=True,
-        pos_payment__isnull=False,
-        pos_payment__status="success",
-    ).exists()
+    slip = PayrollSlip.ensure_for_period(employee, year, month)
     attendances = employee.attendances.filter(
         gym=request.gym,
         date__year=year,
         date__month=month,
     ).order_by("-date")
     payments = employee.payments.filter(gym=request.gym).order_by("-year", "-month")
+    adjustments = employee.payroll_adjustments.filter(gym=request.gym, year=year, month=month).order_by("-created_at")
+    leaves = employee.leaves.filter(
+        gym=request.gym,
+        start_date__year__lte=year,
+    ).order_by("-start_date")[:8]
+    overtime_entries = employee.overtime_entries.filter(
+        gym=request.gym,
+        work_date__year=year,
+        work_date__month=month,
+    ).order_by("-work_date", "-created_at")
 
     context = {
         "gym": request.gym,
@@ -105,11 +120,20 @@ def employee_detail(request, employee_id):
         "year": year,
         "month": month,
         "month_name": _month_name(month),
-        "monthly_salary": monthly_salary,
-        "present_days": present_days,
-        "is_paid": is_paid,
+        "monthly_salary": slip.net_salary,
+        "present_days": slip.present_days,
+        "is_paid": slip.status == PayrollSlip.STATUS_PAID,
+        "slip": slip,
         "attendances": attendances,
         "payments": payments,
+        "adjustments": adjustments,
+        "leaves": leaves,
+        "overtime_entries": overtime_entries,
+        "adjustment_form": PayrollAdjustmentForm(),
+        "leave_form": LeaveRequestForm(
+            initial={"start_date": timezone.localdate(), "end_date": timezone.localdate()}
+        ),
+        "overtime_form": OvertimeEntryForm(initial={"work_date": timezone.localdate()}),
         "available_months": available_months(),
     }
     return render(request, "rh/employee_detail.html", context)
@@ -132,11 +156,7 @@ def employee_create(request):
     else:
         form = EmployeeForm()
 
-    return render(
-        request,
-        "rh/employee_form.html",
-        {"gym": gym, "form": form, "title": "Ajouter un employe"},
-    )
+    return render(request, "rh/employee_form.html", {"gym": gym, "form": form, "title": "Ajouter un employe"})
 
 
 @login_required
@@ -157,12 +177,7 @@ def employee_update(request, employee_id):
     return render(
         request,
         "rh/employee_form.html",
-        {
-            "gym": request.gym,
-            "form": form,
-            "employee": employee,
-            "title": "Modifier l'employe",
-        },
+        {"gym": request.gym, "form": form, "employee": employee, "title": "Modifier l'employe"},
     )
 
 
@@ -178,11 +193,7 @@ def employee_delete(request, employee_id):
         messages.success(request, f'Employe "{employee.name}" desactive avec succes.')
         return redirect("rh:list")
 
-    return render(
-        request,
-        "rh/employee_confirm_delete.html",
-        {"gym": request.gym, "employee": employee},
-    )
+    return render(request, "rh/employee_confirm_delete.html", {"gym": request.gym, "employee": employee})
 
 
 @login_required
@@ -202,11 +213,7 @@ def attendance_create(request):
     else:
         form = AttendanceForm(gym=gym)
 
-    return render(
-        request,
-        "rh/attendance_form.html",
-        {"gym": gym, "form": form, "title": "Enregistrer une presence"},
-    )
+    return render(request, "rh/attendance_form.html", {"gym": gym, "form": form, "title": "Enregistrer une presence"})
 
 
 @login_required
@@ -241,12 +248,7 @@ def attendance_bulk(request):
     return render(
         request,
         "rh/attendance_bulk.html",
-        {
-            "gym": gym,
-            "form": form,
-            "active_employees": active_employees,
-            "title": "Enregistrement groupe des presences",
-        },
+        {"gym": gym, "form": form, "active_employees": active_employees, "title": "Enregistrement groupe des presences"},
     )
 
 
@@ -312,8 +314,86 @@ def payroll_dashboard(request):
 @login_required
 @module_required("RH")
 @role_required(RH_PAYROLL_ROLES)
+def add_adjustment(request, employee_id, year, month):
+    employee = get_object_or_404(Employee, id=employee_id, gym=request.gym)
+    if request.method == "POST":
+        form = PayrollAdjustmentForm(request.POST)
+        if form.is_valid():
+            adjustment = form.save(commit=False)
+            adjustment.employee = employee
+            adjustment.gym = request.gym
+            adjustment.year = year
+            adjustment.month = month
+            adjustment.save()
+            PayrollSlip.ensure_for_period(employee, year, month)
+            messages.success(request, "Ajustement de paie ajoute.")
+        else:
+            messages.error(request, "Impossible d'ajouter l'ajustement de paie.")
+    return redirect(_detail_url(employee.id, year, month))
+
+
+@login_required
+@module_required("RH")
+@role_required(RH_PAYROLL_ROLES)
+def add_leave_request(request, employee_id, year, month):
+    employee = get_object_or_404(Employee, id=employee_id, gym=request.gym)
+    if request.method == "POST":
+        form = LeaveRequestForm(request.POST)
+        if form.is_valid():
+            leave = form.save(commit=False)
+            leave.employee = employee
+            leave.gym = request.gym
+            leave.save()
+            PayrollSlip.ensure_for_period(employee, year, month)
+            messages.success(request, "Conge enregistre.")
+        else:
+            messages.error(request, "Impossible d'enregistrer le conge.")
+    return redirect(_detail_url(employee.id, year, month))
+
+
+@login_required
+@module_required("RH")
+@role_required(RH_PAYROLL_ROLES)
+def add_overtime_entry(request, employee_id, year, month):
+    employee = get_object_or_404(Employee, id=employee_id, gym=request.gym)
+    if request.method == "POST":
+        form = OvertimeEntryForm(request.POST)
+        if form.is_valid():
+            overtime_entry = form.save(commit=False)
+            overtime_entry.employee = employee
+            overtime_entry.gym = request.gym
+            overtime_entry.save()
+            PayrollSlip.ensure_for_period(employee, year, month)
+            messages.success(request, "Heures supplementaires ajoutees.")
+        else:
+            messages.error(request, "Impossible d'ajouter les heures supplementaires.")
+    return redirect(_detail_url(employee.id, year, month))
+
+
+@login_required
+@module_required("RH")
+@role_required(RH_PAYROLL_ROLES)
+def approve_payroll_slip(request, employee_id, year, month):
+    employee = get_object_or_404(Employee, id=employee_id, gym=request.gym)
+    slip = PayrollSlip.ensure_for_period(employee, year, month)
+
+    if request.method == "POST":
+        try:
+            slip.approve()
+            slip.save(update_fields=["status", "approved_at", "updated_at"])
+            messages.success(request, f"Bulletin de {employee.name} approuve.")
+        except ValidationError as exc:
+            messages.error(request, _validation_message(exc))
+
+    return redirect(_detail_url(employee.id, year, month))
+
+
+@login_required
+@module_required("RH")
+@role_required(RH_PAYROLL_ROLES)
 def process_payment(request, employee_id, year, month):
     employee = get_object_or_404(Employee, id=employee_id, gym=request.gym)
+    slip = PayrollSlip.ensure_for_period(employee, year, month)
     existing_payment = PaymentRecord.objects.filter(
         employee=employee,
         gym=request.gym,
@@ -325,15 +405,13 @@ def process_payment(request, employee_id, year, month):
         messages.warning(request, f"Le salaire de {employee.name} est deja paye.")
         return redirect("rh:payroll_dashboard")
 
-    salary = employee.calculate_monthly_salary(year, month)
-    present_days = employee.attendances.filter(
-        gym=request.gym,
-        date__year=year,
-        date__month=month,
-        status="present",
-    ).count()
+    salary = slip.net_salary
+    present_days = slip.present_days
 
     if request.method == "POST":
+        if slip.status == PayrollSlip.STATUS_DRAFT:
+            messages.warning(request, "Approuve d'abord le bulletin avant de payer.")
+            return redirect(_detail_url(employee.id, year, month))
         form = PaymentForm(request.POST, instance=existing_payment)
         if form.is_valid():
             try:
@@ -346,8 +424,8 @@ def process_payment(request, employee_id, year, month):
                         description=f"Salaire {employee.name} - {month}/{year}",
                         created_by=request.user,
                         source_app="rh",
-                        source_model="Employee",
-                        source_id=employee.id,
+                        source_model="PayrollSlip",
+                        source_id=slip.id,
                     )
 
                     payment = form.save(commit=False)
@@ -363,6 +441,9 @@ def process_payment(request, employee_id, year, month):
                     pos_payment.source_model = "PaymentRecord"
                     pos_payment.source_id = payment.id
                     pos_payment.save(update_fields=["source_model", "source_id"])
+
+                    slip.mark_paid(payment)
+                    slip.save(update_fields=["payment_record", "status", "approved_at", "paid_at", "updated_at"])
             except ValidationError as exc:
                 messages.error(request, _validation_message(exc))
                 return redirect("rh:process_payment", employee_id=employee.id, year=year, month=month)
@@ -380,6 +461,7 @@ def process_payment(request, employee_id, year, month):
         "month_name": _month_name(month),
         "salary": salary,
         "present_days": present_days,
+        "slip": slip,
         "form": form,
     }
     return render(request, "rh/payment_form.html", context)

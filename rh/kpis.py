@@ -1,19 +1,9 @@
-from datetime import date
 from decimal import Decimal
 
 from django.db.models import Count, Sum
 from django.utils import timezone
 
-from .models import Attendance, Employee, PaymentRecord
-
-
-def month_bounds(year, month):
-    start_date = date(year, month, 1)
-    if month == 12:
-        end_date = date(year + 1, 1, 1)
-    else:
-        end_date = date(year, month + 1, 1)
-    return start_date, end_date
+from .models import Attendance, Employee, PaymentRecord, PayrollSlip
 
 
 def available_months(reference_date=None, limit=12):
@@ -21,11 +11,7 @@ def available_months(reference_date=None, limit=12):
     months = []
     cursor = reference_date.replace(day=1)
     for _ in range(limit):
-        months.append({
-            "year": cursor.year,
-            "month": cursor.month,
-            "name": cursor.strftime("%B %Y"),
-        })
+        months.append({"year": cursor.year, "month": cursor.month, "name": cursor.strftime("%B %Y")})
         if cursor.month == 1:
             cursor = cursor.replace(year=cursor.year - 1, month=12)
         else:
@@ -41,30 +27,22 @@ def payroll_rows(gym, year, month):
     pending_salaries = Decimal("0")
 
     for employee in employees:
-        salary = employee.calculate_monthly_salary(year, month)
-        present_days = employee.attendances.filter(
-            gym=gym,
-            date__year=year,
-            date__month=month,
-            status="present",
-        ).count()
-        is_paid = PaymentRecord.objects.filter(
-            employee=employee,
-            gym=gym,
-            year=year,
-            month=month,
-            is_paid=True,
-            pos_payment__isnull=False,
-            pos_payment__status="success",
-        ).exists()
+        slip = PayrollSlip.ensure_for_period(employee, year, month)
+        salary = slip.net_salary
+        present_days = slip.present_days
+        is_paid = slip.status == PayrollSlip.STATUS_PAID
 
-        if salary > 0 or present_days > 0:
-            rows.append({
-                "employee": employee,
-                "present_days": present_days,
-                "salary": salary,
-                "is_paid": is_paid,
-            })
+        if salary > 0 or present_days > 0 or slip.bonus_total > 0 or slip.overtime_total > 0:
+            rows.append(
+                {
+                    "employee": employee,
+                    "slip": slip,
+                    "present_days": present_days,
+                    "salary": salary,
+                    "is_paid": is_paid,
+                    "status": slip.status,
+                }
+            )
             total_salaries += salary
             if is_paid:
                 paid_salaries += salary
@@ -76,23 +54,17 @@ def payroll_rows(gym, year, month):
         "total_salaries": total_salaries,
         "paid_salaries": paid_salaries,
         "pending_salaries": pending_salaries,
-        "pending_count": sum(1 for row in rows if not row["is_paid"]),
+        "pending_count": sum(1 for row in rows if row["status"] != PayrollSlip.STATUS_PAID),
     }
 
 
 def build_rh_kpis(gym, period_data=None):
     today = timezone.localdate()
-    period_data = period_data or {
-        "start_date": today.replace(day=1),
-        "end_date": today,
-    }
+    period_data = period_data or {"start_date": today.replace(day=1), "end_date": today}
 
     employees = Employee.objects.filter(gym=gym)
     active_employees = employees.filter(is_active=True)
-    period_attendances = Attendance.objects.filter(
-        gym=gym,
-        date__range=(period_data["start_date"], period_data["end_date"]),
-    )
+    period_attendances = Attendance.objects.filter(gym=gym, date__range=(period_data["start_date"], period_data["end_date"]))
     today_attendances = Attendance.objects.filter(gym=gym, date=today)
     paid_period = PaymentRecord.objects.filter(
         gym=gym,

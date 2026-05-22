@@ -10,15 +10,26 @@
                 </div>
                 <div class="card-body">
                     <div class="alert alert-info">
-                        <h5>Employé: {{ employee.name }}</h5>
-                        <p><strong>Mois:</strong> {{ month_name }} {{ year }}</p>
-                        <p><strong>Jours présents:</strong> {{ present_days }}</p>
-                        <p><strong>Salaire à payer:</strong> {{ salary }} CDF</p>
+                        <h5>Employe : {{ employee.name }}</h5>
+                        <p><strong>Mois :</strong> {{ month_name }} {{ year }}</p>
+                        <p><strong>Type :</strong> {{ employee.get_compensation_label }}</p>
+                        <p><strong>Base salariale :</strong> {{ slip.base_salary }} CDF</p>
+                        <p><strong>Jours presents :</strong> {{ present_days }}</p>
+                        <p><strong>Bulletin :</strong>
+                            {% if slip.status == 'paid' %}
+                            <span class="badge bg-success">Paye</span>
+                            {% elif slip.status == 'approved' %}
+                            <span class="badge bg-primary">Approuve</span>
+                            {% else %}
+                            <span class="badge bg-warning text-dark">Brouillon</span>
+                            {% endif %}
+                        </p>
+                        <p><strong>Salaire a payer :</strong> {{ salary }} CDF</p>
                     </div>
-                    
+
                     <form method="post">
                         {% csrf_token %}
-                        
+
                         {% for field in form %}
                         <div class="mb-3">
                             <label for="{{ field.id_for_label }}" class="form-label">
@@ -35,7 +46,7 @@
                             {% endif %}
                         </div>
                         {% endfor %}
-                        
+
                         <div class="d-grid gap-2 d-md-flex justify-content-md-end">
                             <a href="{% url 'rh:payroll_dashboard' %}" class="btn btn-secondary">
                                 Annuler

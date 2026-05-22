@@ -6,6 +6,10 @@ maintained implementation from `views_v2`.
 """
 
 from .views_v2 import (  # noqa: F401
+    add_adjustment,
+    add_leave_request,
+    add_overtime_entry,
+    approve_payroll_slip,
     attendance_bulk,
     attendance_create,
     attendance_list,
