@@ -1,10 +1,11 @@
 import os
 
+from django.contrib.auth.hashers import make_password
 from django.db import migrations
 
 
-SUPERUSER_USERNAME = "rossymundyo"
-SUPERUSER_PASSWORD_HASH = "pbkdf2_sha256$1200000$Bv5sjkjHkNzxaiGDM0ixlb$jX7BKbFxT08cWx6ULOo0Y8exZJisL7LR4DvZDrn73cI="
+def _env(name, default=""):
+    return os.environ.get(name, default).strip()
 
 
 def create_render_superuser(apps, schema_editor):
@@ -12,10 +13,22 @@ def create_render_superuser(apps, schema_editor):
         return
 
     User = apps.get_model("compte", "User")
+    username = _env("DJANGO_BOOTSTRAP_SUPERUSER_USERNAME")
+    raw_password = _env("DJANGO_BOOTSTRAP_SUPERUSER_PASSWORD")
+    email = _env("DJANGO_BOOTSTRAP_SUPERUSER_EMAIL")
+    password_hash = make_password(raw_password) if raw_password else None
+
+    if not username:
+        return
+
+    if not User.objects.filter(username=username).exists() and not password_hash:
+        return
+
     user, created = User.objects.get_or_create(
-        username=SUPERUSER_USERNAME,
+        username=username,
         defaults={
-            "password": SUPERUSER_PASSWORD_HASH,
+            "password": password_hash or "",
+            "email": email,
             "is_superuser": True,
             "is_staff": True,
             "is_active": True,
@@ -23,9 +36,6 @@ def create_render_superuser(apps, schema_editor):
     )
 
     update_fields = []
-    if user.password != SUPERUSER_PASSWORD_HASH:
-        user.password = SUPERUSER_PASSWORD_HASH
-        update_fields.append("password")
     if not user.is_superuser:
         user.is_superuser = True
         update_fields.append("is_superuser")
@@ -35,8 +45,14 @@ def create_render_superuser(apps, schema_editor):
     if not user.is_active:
         user.is_active = True
         update_fields.append("is_active")
+    if created and password_hash and user.password != password_hash:
+        user.password = password_hash
+        update_fields.append("password")
+    if created and email and user.email != email:
+        user.email = email
+        update_fields.append("email")
 
-    if update_fields and not created:
+    if update_fields:
         user.save(update_fields=update_fields)
 
 

@@ -70,6 +70,18 @@ Variables minimales :
 - `DJANGO_CSRF_TRUSTED_ORIGINS=https://ton-domaine.com,https://www.ton-domaine.com`
 - `DATABASE_URL=postgresql://user:password@host:5432/dbname?sslmode=require`
 
+Bootstrap admin optionnel :
+
+- `DJANGO_BOOTSTRAP_SUPERUSER_USERNAME=admin-bootstrap`
+- `DJANGO_BOOTSTRAP_SUPERUSER_PASSWORD=<mot-de-passe-initial-fort>`
+- `DJANGO_BOOTSTRAP_SUPERUSER_EMAIL=admin@example.com`
+
+Important :
+
+- le depot ne contient plus de mot de passe admin code en dur
+- ces variables servent uniquement a creer le compte initial s'il n'existe pas
+- elles ne reinitialisent pas le mot de passe d'un compte deja cree
+
 ## Demarrage production
 
 Le depot fournit maintenant :
