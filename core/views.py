@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.hashers import make_password
 from django.shortcuts import get_object_or_404, redirect, render
@@ -13,7 +14,7 @@ import json
 from access.models import AccessLog
 from compte.models import UserGymRole
 from compte.models import User
-from compte.utils import generate_username
+from compte.utils import generate_username, has_other_active_access
 from coaching.models import CoachSpecialty
 from organizations.models import SensitiveActivityLog
 from .audit import log_sensitive_action
@@ -439,6 +440,10 @@ def _settings_allowed(request):
     )
 
 
+def _scoped_identity_change_blocked(user, role):
+    return has_other_active_access(user, exclude_role_ids=[role.id])
+
+
 @login_required
 def settings_dashboard(request):
     if not _settings_allowed(request):
@@ -531,8 +536,15 @@ def settings_dashboard(request):
                 return HttpResponseForbidden("Impossible de modifier un Owner ici.")
 
             if action == "employee_reset_password":
+                if _scoped_identity_change_blocked(role.user, role):
+                    messages.error(
+                        request,
+                        "Ce compte est partage avec un autre acces actif. Utilisez une reinitialisation globale supervisee.",
+                    )
+                    return redirect("core:settings")
                 role.user.password = make_password("12345")
-                role.user.save(update_fields=["password"])
+                role.user.force_password_change = True
+                role.user.save(update_fields=["password", "force_password_change"])
                 log_sensitive_action(
                     request,
                     "employee.password_reset",
@@ -551,8 +563,13 @@ def settings_dashboard(request):
             should_activate = action == "employee_activate"
             role.is_active = should_activate
             role.save(update_fields=["is_active"])
-            role.user.is_active = should_activate
-            role.user.save(update_fields=["is_active"])
+            if should_activate:
+                if not role.user.is_active:
+                    role.user.is_active = True
+                    role.user.save(update_fields=["is_active"])
+            elif not has_other_active_access(role.user, exclude_role_ids=[role.id]):
+                role.user.is_active = False
+                role.user.save(update_fields=["is_active"])
             log_sensitive_action(
                 request,
                 "employee.activated" if should_activate else "employee.deactivated",
@@ -1405,8 +1422,8 @@ def accounting_report_export(request):
     return response
 
 
+@staff_member_required
 def health_details(request):
-    from django.conf import settings
     from django.db import connections
     from django.db.utils import DatabaseError
 
@@ -1422,18 +1439,9 @@ def health_details(request):
 
     payload = {
         "status": "ok" if database_ok else "degraded",
-        "environment": settings.ENVIRONMENT,
-        "debug": settings.DEBUG,
         "database": {
             "ok": database_ok,
-            "engine": settings.DATABASES["default"]["ENGINE"],
             "error": database_error,
         },
-        "tenancy": {
-            "active_organizations": Gym.objects.values("organization_id").distinct().count(),
-            "active_gyms": Gym.objects.filter(is_active=True).count(),
-        },
-        "installed_apps_count": len(settings.INSTALLED_APPS),
-        "timezone": settings.TIME_ZONE,
     }
     return JsonResponse(payload, status=200 if database_ok else 503)

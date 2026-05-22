@@ -137,6 +137,60 @@ class OwnerLoginAndGymSwitchTests(TestCase):
         self.assertIn("Aucune salle active", response.content.decode("utf-8"))
 
 
+class OwnerScopedUserManagementTests(TestCase):
+    def setUp(self):
+        self.organization = Organization.objects.create(name="Scoped Org", slug="scoped-org")
+        self.gym_a = Gym.objects.create(
+            organization=self.organization,
+            name="Gym A",
+            slug="scoped-gym-a",
+            subdomain="scoped-gym-a",
+        )
+        self.gym_b = Gym.objects.create(
+            organization=self.organization,
+            name="Gym B",
+            slug="scoped-gym-b",
+            subdomain="scoped-gym-b",
+        )
+        self.owner = User.objects.create_user(
+            username="scoped-owner",
+            password="ScopedOwner123!",
+            owned_organization=self.organization,
+        )
+        UserGymRole.objects.create(user=self.owner, gym=self.gym_a, role="owner")
+        self.shared_user = User.objects.create_user(
+            username="shared-user",
+            password="SharedUser123!",
+            email="shared-user@example.com",
+        )
+        self.role_a = UserGymRole.objects.create(user=self.shared_user, gym=self.gym_a, role="cashier")
+        self.role_b = UserGymRole.objects.create(user=self.shared_user, gym=self.gym_b, role="cashier")
+
+        self.client.force_login(self.owner)
+        session = self.client.session
+        session["current_gym_id"] = self.gym_a.id
+        session.save()
+
+    def test_owner_cannot_reset_password_for_shared_user_identity(self):
+        response = self.client.post(reverse("compte:reset_password", args=[self.shared_user.id]))
+
+        self.assertRedirects(response, reverse("compte:user_list"), fetch_redirect_response=False)
+        self.shared_user.refresh_from_db()
+        self.assertFalse(self.shared_user.force_password_change)
+        self.assertTrue(self.shared_user.check_password("SharedUser123!"))
+
+    def test_owner_deactivation_only_disables_current_gym_role(self):
+        response = self.client.post(reverse("compte:deactivate_user", args=[self.shared_user.id]))
+
+        self.assertRedirects(response, reverse("compte:user_list"), fetch_redirect_response=False)
+        self.role_a.refresh_from_db()
+        self.role_b.refresh_from_db()
+        self.shared_user.refresh_from_db()
+        self.assertFalse(self.role_a.is_active)
+        self.assertTrue(self.role_b.is_active)
+        self.assertTrue(self.shared_user.is_active)
+
+
 class LoginConfigurationTests(TestCase):
     def setUp(self):
         self.organization = Organization.objects.create(name="Remember Org", slug="remember-org")

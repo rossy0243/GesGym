@@ -2,6 +2,8 @@ from django.conf import settings
 from django.test import TestCase
 from django.urls import reverse
 
+from compte.models import User
+
 
 class PublicRouteTests(TestCase):
     def test_root_route_displays_landing_page(self):
@@ -49,7 +51,19 @@ class PublicRouteTests(TestCase):
 
         self.assertTemplateUsed(response, "compte/accueil.html")
 
-    def test_health_details_route_returns_json_with_database_and_tenancy(self):
+    def test_health_details_route_requires_staff_authentication(self):
+        response = self.client.get("/health/details/")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/admin/login/", response["Location"])
+
+    def test_health_details_route_returns_minimal_json_for_staff(self):
+        staff_user = User.objects.create_superuser(
+            username="health-admin",
+            email="health-admin@example.com",
+            password="HealthAdmin123!",
+        )
+        self.client.force_login(staff_user)
         response = self.client.get("/health/details/")
 
         self.assertEqual(response.status_code, 200)
@@ -57,4 +71,5 @@ class PublicRouteTests(TestCase):
         payload = response.json()
         self.assertEqual(payload["status"], "ok")
         self.assertIn("database", payload)
-        self.assertIn("tenancy", payload)
+        self.assertNotIn("tenancy", payload)
+        self.assertNotIn("debug", payload)

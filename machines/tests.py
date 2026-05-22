@@ -96,6 +96,16 @@ class MachinesTenantTests(TestCase):
         self.assertContains(response, "75 CDF")
         self.assertNotContains(response, "999 CDF")
 
+    def test_general_dashboard_includes_scoped_machine_kpis(self):
+        response = self.client.get(reverse("core:gym_dashboard", args=[self.gym_a.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "KPI machines")
+        self.assertContains(response, "Disponibilite du parc")
+        self.assertContains(response, "1 / 1")
+        self.assertContains(response, "75 CDF")
+        self.assertNotContains(response, "999 CDF")
+
     def test_create_maintenance_uses_current_gym_machine(self):
         response = self.client.post(
             reverse("machines:add_maintenance", args=[self.machine_a.id]),

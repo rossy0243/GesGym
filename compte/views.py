@@ -10,7 +10,7 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 
-from compte.utils import generate_temporary_password, generate_username
+from compte.utils import generate_temporary_password, generate_username, has_other_active_access
 from organizations.models import Gym
 
 from .forms import (
@@ -21,6 +21,10 @@ from .forms import (
     UserProfileForm,
 )
 from .models import User, UserGymRole
+
+
+def _scoped_identity_change_blocked(user, role):
+    return has_other_active_access(user, exclude_role_ids=[role.id])
 
 
 def _resolve_login_success_url(request):
@@ -283,6 +287,12 @@ def reset_password(request, user_id):
     if not target_role:
         messages.error(request, "Utilisateur non trouve dans ce gym")
         return redirect("compte:user_list")
+    if _scoped_identity_change_blocked(target_user, target_role):
+        messages.error(
+            request,
+            "Ce compte est partage avec un autre acces actif. Utilisez une reinitialisation globale supervisee.",
+        )
+        return redirect("compte:user_list")
 
     target_user.password = make_password(generate_temporary_password())
     target_user.force_password_change = True
@@ -316,10 +326,11 @@ def deactivate_user(request, user_id):
         return redirect("compte:user_list")
 
     target_role.is_active = False
-    target_role.save()
+    target_role.save(update_fields=["is_active"])
 
-    target_user.is_active = False
-    target_user.save()
+    if not has_other_active_access(target_user, exclude_role_ids=[target_role.id]):
+        target_user.is_active = False
+        target_user.save(update_fields=["is_active"])
 
     messages.success(request, f"Utilisateur {target_user.username} desactive")
     return redirect("compte:user_list")
@@ -342,10 +353,11 @@ def activate_user(request, user_id):
         return redirect("compte:user_list")
 
     target_role.is_active = True
-    target_role.save()
+    target_role.save(update_fields=["is_active"])
 
-    target_user.is_active = True
-    target_user.save()
+    if not target_user.is_active:
+        target_user.is_active = True
+        target_user.save(update_fields=["is_active"])
 
     messages.success(request, f"Utilisateur {target_user.username} reactive")
     return redirect("compte:user_list")

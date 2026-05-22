@@ -104,6 +104,16 @@ class RhTenantTests(TestCase):
         self.assertNotContains(response, "Bob RH")
         self.assertNotContains(response, "999 CDF")
 
+    def test_general_dashboard_includes_scoped_rh_kpis(self):
+        response = self.client.get(reverse("core:gym_dashboard", args=[self.gym_a.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "KPI RH")
+        self.assertContains(response, "Presence aujourd'hui")
+        self.assertContains(response, "100,0%")
+        self.assertContains(response, "100 CDF")
+        self.assertNotContains(response, "999 CDF")
+
     def test_payment_cannot_target_other_gym_employee(self):
         response = self.client.get(
             reverse(
