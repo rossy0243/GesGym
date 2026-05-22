@@ -1343,6 +1343,10 @@ def reports_dashboard(request):
         sales_values.append(float(item["total"]))
 
     custom_report = build_custom_report(gym, request.GET, period_data, limit=50)
+    from rh.kpis import payroll_rows
+
+    payroll_report = payroll_rows(gym, period_data["end_date"].year, period_data["end_date"].month)
+    payroll_report_month_label = f"{calendar.month_name[period_data['end_date'].month]} {period_data['end_date'].year}"
 
     context = {
         "section": section,
@@ -1367,6 +1371,8 @@ def reports_dashboard(request):
         "sales_labels": sales_labels,
         "sales_values": sales_values,
         "monthly_transactions": monthly_transactions,
+        "payroll_report": payroll_report,
+        "payroll_report_month_label": payroll_report_month_label,
     }
 
     return render(request, "core/rapports.html", context)

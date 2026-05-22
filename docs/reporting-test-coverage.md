@@ -9,7 +9,7 @@ Axes covered by the canonical reporting suite:
 | Periods | `today`, `yesterday`, `week`, `month`, `year`, `custom` |
 | Standard sections | `journalier`, `mensuel` |
 | Custom section | `personnalise` |
-| Custom data types | `transactions`, `members`, `access`, `subscriptions`, `registers` |
+| Custom data types | `transactions`, `members`, `access`, `subscriptions`, `registers`, `payroll` |
 | Custom columns | `date`, `dataset`, `client`, `description`, `amount_cdf`, `method`, `status`, `reference`, `source` |
 | Groupings | `none`, `day`, `week`, `month`, `type` |
 | Export formats | `csv`, `xlsx` |
@@ -38,6 +38,11 @@ Tenant A:
 - Access logs:
   - granted on `2026-05-20 18:15`
   - denied on `2026-05-21 07:40`
+- RH:
+  - one employee `Alice RH`
+  - one payroll slip in month scope
+  - employee-side withholding visible in custom reporting
+  - employer contribution visible in custom reporting
 
 Tenant B:
 
@@ -60,6 +65,14 @@ Expected month report (`2026-05-01` to `2026-05-21`) for `Gym Canonique`:
   - `Abonnement Alice`
   - `Boisson isotonique`
   - `Prime coach`
+
+Expected RH monthly report block:
+
+- one employee row
+- visible gross amount
+- visible employee withholding
+- visible employer contribution
+- visible net amount
 
 ## Automatic Invariants
 

@@ -2,6 +2,92 @@
 
 Application Django de gestion de salle de sport.
 
+## Etat fonctionnel resume
+
+L'application couvre aujourd'hui les blocs suivants :
+
+- gestion multi-tenant par `organisation -> salle`
+- navigation et permissions par role
+- membres, preinscriptions et abonnements
+- POS, caisse et controle d'acces
+- rapports standards et rapports personnalises
+- coaching
+- machines et maintenances
+- produits et stock
+- RH avec paie evolutive
+
+## Roles et multi-salle
+
+Roles principaux actuellement exploites :
+
+- `owner`
+- `manager`
+- `reception`
+- `cashier`
+- `coach`
+
+Points importants :
+
+- un `owner` peut travailler sur plusieurs salles de la meme organisation
+- la salle active est memorisee en session via `current_gym_id`
+- les donnees et actions sont filtrees sur la salle active
+- un compte staff non-owner est pense pour une seule salle active a la fois
+- pour un beta sur 2 salles, le cas bien supporte est : `owner multi-salles`, `staff affecte a une seule salle`
+
+## Module RH
+
+Le module RH couvre maintenant :
+
+- employes RH actifs/inactifs
+- presences unitaires et en groupe
+- remuneration `journaliere` ou `mensuelle fixe`
+- ajustements : `primes`, `avances`, `retenues`
+- `heures supplementaires`
+- `conges` payes / sans solde / maladie
+- workflow bulletin : `brouillon -> verifie -> approuve -> paye`
+- generation PDF du bulletin
+- cotisations et taxes parametrables par salle
+- integration du paiement salaire avec le POS
+
+### Paie RH
+
+Le calcul du bulletin prend en compte :
+
+- base salariale
+- conges
+- heures supplementaires
+- primes
+- avances
+- retenues
+- taxes salarie
+- cotisations salarie
+- cotisations employeur
+
+Le dashboard RH et les rapports montrent maintenant :
+
+- masse nette
+- masse brute
+- retenues salarie
+- cotisations employeur
+
+## Rapports
+
+Le module Rapports fournit :
+
+- vues `journalier`, `mensuel`, `personnalise`
+- exports `CSV` et `XLSX`
+- bloc RH mensuel avec lecture `brut / net`
+- dataset personnalise `Paie RH`
+
+Le rapport personnalise peut maintenant inclure :
+
+- `transactions`
+- `members`
+- `access`
+- `subscriptions`
+- `registers`
+- `payroll`
+
 ## Lancement local
 
 ```powershell
@@ -107,3 +193,19 @@ gunicorn smartclub.wsgi --log-file - --access-logfile -
 
 - Les medias utilisateurs peuvent etre servis directement par Django seulement si `DJANGO_SERVE_MEDIA=True`.
 - Pour un deploiement plus solide, preferer un vrai service de medias (Nginx, bucket objet, CDN, etc.).
+
+## Verification recommandee avant beta
+
+```powershell
+.\.venv\Scripts\python.exe manage.py check
+.\.venv\Scripts\python.exe manage.py test core.tests --settings=smartclub.settings_test
+.\.venv\Scripts\python.exe manage.py test rh.tests --settings=smartclub.settings_test
+.\.venv\Scripts\python.exe manage.py test compte.tests --settings=smartclub.settings_test
+```
+
+Ces suites couvrent notamment :
+
+- la separation des acces par role
+- le multi-tenant et le changement de salle owner
+- l'isolation des donnees RH
+- les KPI et les rapports RH

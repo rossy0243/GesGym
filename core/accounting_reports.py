@@ -2,7 +2,7 @@ import csv
 import io
 import zipfile
 from collections import OrderedDict
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from xml.sax.saxutils import escape
 
@@ -13,6 +13,7 @@ from django.utils.dateparse import parse_date
 from access.models import AccessLog
 from members.models import Member
 from pos.models import CashRegister, Payment
+from rh.models import PayrollSlip
 from subscriptions.models import MemberSubscription
 
 
@@ -40,6 +41,7 @@ CUSTOM_DATA_TYPES = OrderedDict(
         ("access", "Acces"),
         ("subscriptions", "Abonnements"),
         ("registers", "Sessions de caisse"),
+        ("payroll", "Paie RH"),
     ]
 )
 
@@ -570,12 +572,57 @@ def build_register_rows(gym, period_data):
     return rows
 
 
+def build_payroll_rows(gym, period_data):
+    rows = []
+    slips = (
+        PayrollSlip.objects.filter(gym=gym)
+        .select_related("employee", "payment_record")
+        .order_by("year", "month", "employee__name")
+    )
+
+    for slip in slips:
+        slip_period_start = date(slip.year, slip.month, 1)
+        if slip.month == 12:
+            slip_period_end = date(slip.year + 1, 1, 1) - timedelta(days=1)
+        else:
+            slip_period_end = date(slip.year, slip.month + 1, 1) - timedelta(days=1)
+        if slip_period_end < period_data["start_date"] or slip_period_start > period_data["end_date"]:
+            continue
+
+        payment_method = ""
+        if slip.payment_record_id:
+            payment_method = slip.payment_record.get_payment_method_display()
+
+        description = (
+            f"Brut {money(slip.gross_salary)} CDF | "
+            f"Retenues salarie {money(slip.employee_withholding_total)} CDF | "
+            f"Cotis employeur {money(slip.employer_contribution_total)} CDF"
+        )
+        rows.append(
+            custom_row(
+                date=f"{slip.get_month_display()} {slip.year}",
+                sort_date=slip_period_start,
+                dataset="Bulletin RH",
+                client=slip.employee.name,
+                description=description,
+                amount_cdf=money(slip.net_salary),
+                method=payment_method,
+                status=slip.get_status_display(),
+                reference=f"PAY-{slip.year:04d}{slip.month:02d}-{slip.employee_id:04d}",
+                source="rh.PayrollSlip",
+            )
+        )
+
+    return rows
+
+
 CUSTOM_ROW_BUILDERS = {
     "transactions": build_transaction_rows,
     "members": build_member_rows,
     "access": build_access_rows,
     "subscriptions": build_subscription_rows,
     "registers": build_register_rows,
+    "payroll": build_payroll_rows,
 }
 
 

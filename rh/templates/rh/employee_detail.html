@@ -1,6 +1,24 @@
 {% extends 'base.html' %}
 
 {% block content %}
+<style>
+.rh-scroll-area {
+    max-height: 320px;
+    overflow-y: auto;
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
+
+.rh-scroll-area::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.rh-scroll-area::-webkit-scrollbar-thumb {
+    background: rgba(100, 116, 139, 0.35);
+    border-radius: 999px;
+}
+</style>
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1>{{ employee.name }}</h1>
@@ -20,7 +38,7 @@
                 <div class="card-header">
                     <h5 class="mb-0">Informations</h5>
                 </div>
-                <div class="card-body">
+                <div class="card-body rh-scroll-area">
                     <p><strong>Role :</strong> {{ employee.get_role_display }}</p>
                     <p><strong>Telephone :</strong> {{ employee.phone|default:"Non renseigne" }}</p>
                     <p><strong>Remuneration :</strong> {{ employee.get_compensation_label }}</p>
@@ -44,7 +62,7 @@
                 <div class="card-header">
                     <h5 class="mb-0">Bulletin - {{ month_name }} {{ year }}</h5>
                 </div>
-                <div class="card-body">
+                <div class="card-body rh-scroll-area">
                     <form method="get" class="row g-3 mb-3">
                         <div class="col-md-6">
                             <label class="form-label">Selectionner un mois</label>
@@ -133,7 +151,7 @@
                 <div class="card-header">
                     <h5 class="mb-0">Ajouter une prime / avance / retenue</h5>
                 </div>
-                <div class="card-body">
+                <div class="card-body rh-scroll-area">
                     <form method="post" action="{% url 'rh:add_adjustment' employee.id year month %}">
                         {% csrf_token %}
                         {% for field in adjustment_form %}
@@ -154,7 +172,7 @@
                 <div class="card-header">
                     <h5 class="mb-0">Ajouter un conge</h5>
                 </div>
-                <div class="card-body">
+                <div class="card-body rh-scroll-area">
                     <form method="post" action="{% url 'rh:add_leave_request' employee.id year month %}">
                         {% csrf_token %}
                         {% for field in leave_form %}
@@ -175,7 +193,7 @@
                 <div class="card-header">
                     <h5 class="mb-0">Ajouter des heures sup</h5>
                 </div>
-                <div class="card-body">
+                <div class="card-body rh-scroll-area">
                     <form method="post" action="{% url 'rh:add_overtime_entry' employee.id year month %}">
                         {% csrf_token %}
                         {% for field in overtime_form %}
@@ -198,7 +216,7 @@
                 <div class="card-header">
                     <h5 class="mb-0">Ajustements du mois</h5>
                 </div>
-                <div class="card-body">
+                <div class="card-body rh-scroll-area">
                     {% if adjustments %}
                     <ul class="list-group list-group-flush">
                         {% for adjustment in adjustments %}
@@ -220,7 +238,7 @@
                 <div class="card-header">
                     <h5 class="mb-0">Cotisations et taxes</h5>
                 </div>
-                <div class="card-body">
+                <div class="card-body rh-scroll-area">
                     {% if contribution_lines %}
                     <ul class="list-group list-group-flush">
                         {% for line in contribution_lines %}
@@ -243,7 +261,7 @@
                 <div class="card-header">
                     <h5 class="mb-0">Workflow</h5>
                 </div>
-                <div class="card-body">
+                <div class="card-body rh-scroll-area">
                     {% if workflow_logs %}
                     <ul class="list-group list-group-flush">
                         {% for log in workflow_logs %}
@@ -266,7 +284,7 @@
                 <div class="card-header">
                     <h5 class="mb-0">Conges</h5>
                 </div>
-                <div class="card-body">
+                <div class="card-body rh-scroll-area">
                     {% if leaves %}
                     <ul class="list-group list-group-flush">
                         {% for leave in leaves %}
@@ -291,7 +309,7 @@
                 <div class="card-header">
                     <h5 class="mb-0">Heures supplementaires</h5>
                 </div>
-                <div class="card-body">
+                <div class="card-body rh-scroll-area">
                     {% if overtime_entries %}
                     <ul class="list-group list-group-flush">
                         {% for overtime in overtime_entries %}
@@ -318,7 +336,7 @@
                 <div class="card-header">
                     <h5 class="mb-0">Presences - {{ month_name }} {{ year }}</h5>
                 </div>
-                <div class="card-body">
+                <div class="card-body rh-scroll-area">
                     {% if attendances %}
                     <div class="table-responsive">
                         <table class="table table-sm">
@@ -354,7 +372,7 @@
                 <div class="card-header">
                     <h5 class="mb-0">Historique des paiements</h5>
                 </div>
-                <div class="card-body">
+                <div class="card-body rh-scroll-area">
                     {% if payments %}
                     <div class="table-responsive">
                         <table class="table table-sm">

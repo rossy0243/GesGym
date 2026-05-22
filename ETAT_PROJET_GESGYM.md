@@ -1,10 +1,10 @@
 # Etat du projet GesGym
 
-Version de reference: etat du depot au 17/05/2026.
+Version de reference: etat du depot au 22/05/2026.
 
 ## 1. Niveau actuel
 
-Le projet a deja franchi une etape importante de structuration produit, surtout sur le module Coaching.
+Le projet a deja franchi une etape importante de structuration produit, surtout sur les modules Coaching, RH et Reporting.
 
 Les grands acquis a retenir:
 
@@ -13,6 +13,10 @@ Les grands acquis a retenir:
 - le coach dispose d'un portail mobile dedie
 - le manager dispose d'une vue de pilotage coaching plus operationnelle
 - le systeme trace les suivis, les feedbacks et les alertes prioritaires
+- le module RH couvre maintenant une vraie base de paie mensuelle
+- les taxes et cotisations RH sont parametrables par salle
+- les rapports intègrent la lecture RH `brut / net`
+- les controles role + multi-tenant ont ete revalidés avant beta
 - le manuel utilisateur a ete remis a jour en fonction de l'etat reel du produit
 
 ## 2. Sprints deja livres
@@ -146,6 +150,39 @@ Valeur:
 
 - les alertes se basent sur la vraie vie metier et non sur des approximations
 
+### Sprint RH 1 a 4 - Paie evolutive
+
+Livre:
+
+- remuneration `journaliere` ou `mensuelle fixe`
+- bulletin mensuel avec statuts `brouillon`, `verifie`, `approuve`, `paye`
+- ajustements de paie : `primes`, `avances`, `retenues`
+- `heures supplementaires`
+- `conges`
+- PDF bulletin
+- workflow de validation
+- journal d'actions de workflow
+- cotisations et taxes parametrables par salle
+- integration du paiement de salaire avec le POS
+
+Valeur:
+
+- la RH n'est plus limitee a un simple calcul `jours presents x salaire journalier`
+- la paie est exploitable en contexte beta et demonstration client
+
+### Sprint Reporting RH
+
+Livre:
+
+- bloc RH mensuel dans les rapports
+- dataset personnalise `Paie RH`
+- lecture `masse brute / masse nette` dans les KPI principaux
+- scrolls ergonomiques sur les zones longues RH et rapports
+
+Valeur:
+
+- la lecture manager/owner de la paie devient plus claire sans quitter les dashboards et rapports
+
 ## 3. Etat fonctionnel actuel par espace
 
 ### Espace membre
@@ -182,12 +219,26 @@ Disponible:
 
 - pilotage des formules
 - pilotage coaching depuis la page `Coaches`
+- pilotage RH depuis le dashboard, le dashboard RH et les rapports
 - suivi des membres sans coach
 - suivi des membres sans suivi
 - gestion des retards de premier contact
 - gestion des relances en retard
 - lecture des feedbacks sensibles
 - file manager `A traiter`
+
+### Espace RH
+
+Disponible:
+
+- creation et mise a jour des employes RH
+- pointage des presences
+- tableau de paie mensuelle
+- calcul brut/net
+- ajustements, conges, heures sup
+- cotisations et taxes
+- validation et paiement
+- PDF bulletin
 
 ## 4. Regles metier deja posees
 
@@ -198,12 +249,21 @@ Disponible:
 - un programme groupe a une capacite et ne peut plus etre rejoint s'il est plein
 - un feedback est sensible si la note globale est inferieure ou egale a 2, ou si le membre demande un recontact
 - les alertes de premier contact se basent sur la date reelle d'affectation au coach
+- un owner peut basculer entre plusieurs salles de sa propre organisation
+- les donnees metier visibles et modifiables sont filtrees sur la salle active
+- un staff non-owner est pense pour travailler sur une seule salle active a la fois
+- les cotisations employeur n'abaissent pas le net a payer du salarie
+- les taxes et cotisations salarie abaissent le net a payer
+- un bulletin paye reste lie a un paiement POS de type `salary`
 
 ## 5. Documentation deja alignee
 
 Fichier a jour:
 
 - [MANUEL_UTILISATEUR_GESGYM.md](D:\GesGym\MANUEL_UTILISATEUR_GESGYM.md)
+- [README.md](D:\GesGym\README.md)
+- [docs\kpi-test-coverage.md](D:\GesGym\docs\kpi-test-coverage.md)
+- [docs\reporting-test-coverage.md](D:\GesGym\docs\reporting-test-coverage.md)
 
 Le manuel a ete mis a jour sur:
 
@@ -211,6 +271,8 @@ Le manuel a ete mis a jour sur:
 - formules et droits coaching
 - espace membre
 - module coaching
+- module RH
+- rapports RH
 - routines manager et coach
 
 ## 6. Pistes logiques pour la suite
@@ -220,9 +282,12 @@ Les prochaines evolutions les plus naturelles sont:
 - historique d'entree/sortie des programmes groupes
 - notifications internes automatiques pour coach et manager
 - dashboard manager plus analytique
+- support propre d'un meme compte staff sur plusieurs salles si ce besoin devient reel
+- stockage persistant des medias utilisateurs
 - recommandations intelligentes de coach/programme selon objectif membre
 - gestion plus fine des changements de coach ou de programme
 - monetisation plus poussee des offres coaching
+- cotisations/taxes plus formalisees selon le contexte legal du client
 
 ## 7. Point de reprise recommande
 
@@ -230,10 +295,12 @@ Si on reprend le projet plus tard, le meilleur point de reprise est:
 
 1. relire ce fichier
 2. relire le chapitre coaching du manuel
-3. choisir un axe unique pour le prochain sprint:
+3. relire le chapitre RH et rapports du manuel
+4. choisir un axe unique pour le prochain sprint:
    - automatisation
    - analytics
    - monetisation
    - experience membre
+   - industrialisation RH
 
 Ce fichier sert de memoire projet rapide pour repartir sans perdre le niveau atteint.

@@ -98,6 +98,7 @@ L'application utilise principalement les roles suivants:
 - Le pilotage complet du module Coaching reste reserve a `owner` et `manager`.
 - Le role `coach` dispose d'un espace mobile dedie pour suivre ses membres et ses programmes, mais n'ouvre pas tout le back-office manager.
 - Le role `accountant` reste un role interne limite tant qu'aucun espace metier comptable dedie n'est active dans la salle.
+- Dans l'etat actuel, un compte staff non-owner est pense pour une seule salle active a la fois.
 
 ## 4. Premiere connexion et demarrage
 
@@ -665,6 +666,7 @@ Selon la periode selectionnee, vous pouvez suivre:
 - refus d'acces
 - detail des transactions
 - performance par formule
+- synthese RH mensuelle
 
 ### 6.6.4 Exports
 
@@ -672,6 +674,41 @@ Les rapports peuvent etre exportes en:
 
 - CSV
 - XLSX
+
+### 6.6.5 Lecture RH dans les rapports
+
+Les rapports intègrent maintenant une lecture RH simple avec :
+
+- masse salariale nette
+- deja paye
+- reste a payer
+- nombre de bulletins en attente
+- tableau de synthese avec :
+  - employe
+  - brut
+  - retenues salarie
+  - cotisations employeur
+  - net
+  - statut
+
+### 6.6.6 Rapport personnalise
+
+Le rapport personnalise peut combiner plusieurs jeux de donnees:
+
+- transactions POS
+- membres
+- acces
+- abonnements
+- sessions de caisse
+- paie RH
+
+Le jeu de donnees `Paie RH` permet de voir, selon les colonnes choisies:
+
+- la periode du bulletin
+- l'employe
+- un resume du brut / retenues salarie / cotisations employeur
+- le net
+- le statut du bulletin
 
 ## 6.7 Module Coaching
 
@@ -948,6 +985,11 @@ Le module RH sert a:
 - enregistrer les presences
 - calculer la paie mensuelle
 - enregistrer les paiements de salaire
+- gerer les ajustements de paie
+- gerer les conges
+- gerer les heures supplementaires
+- gerer les taxes et cotisations
+- produire un bulletin PDF
 
 ### 6.9.2 Employes
 
@@ -956,8 +998,15 @@ Chaque employe contient:
 - nom
 - role
 - telephone
+- mode de remuneration
 - salaire journalier en CDF
+- salaire mensuel fixe en CDF
 - statut actif/inactif
+
+Le mode de remuneration peut etre:
+
+- `salaire journalier`
+- `salaire mensuel fixe`
 
 ### 6.9.3 Presences
 
@@ -981,10 +1030,20 @@ La liste permet de filtrer:
 
 ### 6.9.5 Paie
 
-La paie mensuelle est calculee automatiquement a partir:
+La paie mensuelle est maintenant calculee a partir:
 
-- du salaire journalier
-- du nombre de jours marques `present`
+- du mode de remuneration
+- du nombre de jours presents
+- des conges payes
+- des conges sans solde
+- des primes
+- des avances
+- des retenues
+- des heures supplementaires
+- des taxes salarie
+- des cotisations salarie
+
+Les cotisations employeur sont aussi calculees, mais elles ne diminuent pas le net a payer du salarie.
 
 Le tableau de paie permet de voir:
 
@@ -992,12 +1051,86 @@ Le tableau de paie permet de voir:
 - salaires deja payes
 - salaires en attente
 - nombre de dossiers en attente
+- lecture brute / nette
+- retenues salarie
+- cotisations employeur
+
+### 6.9.5 bis Workflow bulletin
+
+Chaque bulletin suit maintenant les etapes suivantes:
+
+1. `brouillon`
+2. `verifie`
+3. `approuve`
+4. `paye`
+
+Le paiement n'est possible qu'apres approbation.
+
+Chaque action importante est historisee dans le workflow du bulletin.
+
+### 6.9.5 ter Ajustements, conges et heures supplementaires
+
+Le bulletin peut etre enrichi avec:
+
+- une `prime`
+- une `avance`
+- une `retenue`
+- un `conge paye`
+- un `conge sans solde`
+- un `conge maladie`
+- des `heures supplementaires`
+
+Effets:
+
+- une prime augmente le brut
+- une avance diminue le net
+- une retenue diminue le net
+- un conge sans solde cree une deduction
+- les heures supplementaires augmentent le brut
+
+### 6.9.5 quater Taxes et cotisations
+
+La salle peut definir des regles RH de type:
+
+- taxe salarie
+- cotisation salarie
+- cotisation employeur
+
+Chaque regle peut etre:
+
+- en pourcentage du brut
+- en montant fixe
+
+Ces regles sont rattachees a la salle active.
+
+Concretement:
+
+- les taxes salarie diminuent le net
+- les cotisations salarie diminuent le net
+- les cotisations employeur sont affichees et suivies, mais n'abaissent pas le net du salarie
+
+### 6.9.5 quinquies PDF bulletin
+
+Chaque bulletin peut etre telecharge en PDF.
+
+Le PDF reprend au minimum:
+
+- l'employe
+- la periode
+- le type de remuneration
+- la base salariale
+- les jours et conges
+- les primes, avances, retenues, heures sup
+- les taxes et cotisations
+- le brut
+- le net
+- le statut du bulletin
 
 ### 6.9.6 Paiement d'un salaire
 
 Lors du paiement:
 
-1. l'application calcule le salaire du mois
+1. l'application calcule ou relit le bulletin du mois
 2. vous saisissez le mode de paiement, la reference et les notes
 3. le systeme cree automatiquement une sortie POS de type `salary`
 4. l'historique de paie est enregistre
@@ -1223,6 +1356,9 @@ Voici les regles les plus importantes a connaitre pour bien utiliser GesGym.
 - Un paiement de salaire cree aussi un paiement de sortie POS.
 - Une maintenance avec cout cree aussi un paiement de sortie POS.
 - Ces flux assurent la coherence entre exploitation et finance.
+- Une cotisation employeur ne baisse pas le net verse au salarie.
+- Une taxe ou cotisation salarie baisse le net verse au salarie.
+- Un bulletin doit etre approuve avant paiement.
 
 ### 7.7 Regles sur les suppressions
 
@@ -1271,9 +1407,13 @@ Dans la version actuelle:
 
 1. enregistrer les presences du jour
 2. controler les absences
-3. a la fin du mois, ouvrir le tableau de paie
-4. payer les salaires depuis le module RH
-5. verifier l'impact dans la caisse
+3. verifier les conges et heures supplementaires
+4. verifier les primes, avances et retenues
+5. verifier les regles de taxes et cotisations actives pour la salle
+6. a la fin du mois, ouvrir le tableau de paie
+7. verifier puis approuver les bulletins
+8. payer les salaires depuis le module RH
+9. verifier l'impact dans la caisse
 
 ## 8.5 Routine stock
 
@@ -1338,6 +1478,18 @@ C'est normal. Une seule caisse ouverte est autorisee par salle.
 
 Parce que GesGym centralise les sorties d'argent de la salle dans le journal financier.
 
+### 9.7 bis "Pourquoi le net est inferieur au brut ?"
+
+Parce que le bulletin peut contenir:
+
+- avances
+- retenues
+- conges sans solde
+- taxes salarie
+- cotisations salarie
+
+Les cotisations employeur, elles, n'abaissent pas le net du salarie.
+
 ### 9.8 "J'ai supprime un produit mais il apparait encore dans l'historique"
 
 C'est normal. Les produits sont desactives pour conserver la tracabilite.
@@ -1386,6 +1538,7 @@ L'historique est groupe par campagne pour:
 - **Organisation**: entite cliente qui possede une ou plusieurs salles.
 - **Salle / gym**: unite de travail active sur laquelle les donnees sont filtrees.
 - **Module**: bloc fonctionnel activable pour une salle.
+- **Salle active**: salle actuellement selectionnee, utilisee pour filtrer les donnees et les actions.
 - **Membre**: client inscrit dans une salle.
 - **Preinscription**: demande publique avant creation definitive d'un membre.
 - **Formule**: offre d'abonnement avec duree et prix.
@@ -1394,6 +1547,7 @@ L'historique est groupe par campagne pour:
 - **Caisse**: session financiere ouverte pour enregistrer les paiements.
 - **Mouvement de stock**: entree ou sortie de quantite sur un produit.
 - **Journal sensible**: trace des actions importantes realisees dans les parametres.
+- **Bulletin de paie**: document mensuel RH qui resume le calcul du brut, du net et du workflow de paiement.
 
 ## Conclusion
 

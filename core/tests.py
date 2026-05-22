@@ -23,7 +23,7 @@ from machines.models import Machine, MaintenanceLog
 from products.kpis import build_product_kpis
 from products.models import Product, StockMovement
 from rh.kpis import build_rh_kpis
-from rh.models import Attendance, Employee, PaymentRecord
+from rh.models import Attendance, Employee, PaymentRecord, PayrollContributionRule, PayrollSlip
 from subscriptions.models import MemberSubscription, SubscriptionPlan
 from .forms import InternalEmployeeForm
 from .accounting_reports import (
@@ -120,6 +120,38 @@ class AccountingReportExportTests(TestCase):
             category="subscription",
             status="success",
             description="Other Tenant Subscription",
+        )
+
+        self.employee_a = Employee.objects.create(
+            gym=self.gym_a,
+            name="Alice RH",
+            role="manager",
+            daily_salary=Decimal("100.00"),
+        )
+        Attendance.objects.create(
+            gym=self.gym_a,
+            employee=self.employee_a,
+            date=timezone.localdate(),
+            status="present",
+        )
+        PayrollContributionRule.objects.create(
+            gym=self.gym_a,
+            name="IPR",
+            party=PayrollContributionRule.PARTY_EMPLOYEE_TAX,
+            calculation_type=PayrollContributionRule.CALC_PERCENTAGE,
+            rate_percent=Decimal("10.00"),
+        )
+        PayrollContributionRule.objects.create(
+            gym=self.gym_a,
+            name="INSS Employeur",
+            party=PayrollContributionRule.PARTY_EMPLOYER_CONTRIBUTION,
+            calculation_type=PayrollContributionRule.CALC_PERCENTAGE,
+            rate_percent=Decimal("5.00"),
+        )
+        self.payroll_slip = PayrollSlip.ensure_for_period(
+            self.employee_a,
+            timezone.localdate().year,
+            timezone.localdate().month,
         )
 
         self.client.force_login(self.owner)
@@ -231,6 +263,32 @@ class AccountingReportExportTests(TestCase):
         self.assertIn("Abonnement Alice", content)
         self.assertIn("Achat fournitures", content)
         self.assertNotIn("Other Tenant Subscription", content)
+
+    def test_report_page_displays_rh_payroll_summary_with_contributions(self):
+        response = self.client.get(reverse("core:rapport"), {"period": "month"})
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        self.assertIn("Synthese RH", content)
+        self.assertIn("Alice RH", content)
+        self.assertIn("Retenues salarie", content)
+        self.assertIn("Cotis. employeur", content)
+
+    def test_custom_report_preview_supports_payroll_dataset(self):
+        response = self.client.get(
+            reverse("core:rapport"),
+            {
+                "section": "personnalise",
+                "period": "month",
+                "types": ["payroll"],
+                "columns": ["date", "client", "description", "amount_cdf", "status"],
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        self.assertIn("Alice RH", content)
+        self.assertIn("Cotis employeur", content)
 
     def test_custom_report_export_is_scoped_to_current_gym(self):
         response = self.client.get(
@@ -1437,6 +1495,7 @@ class DashboardKpiCoverageMatrixTests(TestCase):
         self.assertEqual(kpis["attendance_period_present"], 2)
         self.assertEqual(kpis["attendance_period_absent"], 1)
         self.assertEqual(kpis["attendance_period_rate"], 66.7)
+        self.assertEqual(kpis["monthly_payroll_gross"], Decimal("200.00"))
         self.assertEqual(kpis["monthly_payroll"], Decimal("200.00"))
         self.assertEqual(kpis["monthly_payroll_paid"], Decimal("200.00"))
         self.assertEqual(kpis["monthly_payroll_pending"], Decimal("0"))

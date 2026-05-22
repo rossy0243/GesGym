@@ -372,6 +372,10 @@
                             <strong>{{ attendance_period_rate|default:0 }}%</strong>
                         </div>
                         <div class="d-flex justify-content-between">
+                            <span>Masse brute / nette</span>
+                            <strong>{{ monthly_payroll_gross|default:0|floatformat:0 }} / {{ monthly_payroll|default:0|floatformat:0 }} CDF</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
                             <span>Paie en attente</span>
                             <strong>{{ monthly_payroll_pending|default:0|floatformat:0 }} CDF</strong>
                         </div>

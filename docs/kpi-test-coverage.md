@@ -33,6 +33,7 @@ Tenant A (`Gym KPI A`):
   - one inactive employee at `80/day`
   - attendances: present/present/absent in scope
   - one salary POS payment + payment record
+  - monthly gross payroll tracked separately from net payroll
 - Coaching:
   - one active coach with 2 assigned members
   - one inactive coach
@@ -64,6 +65,7 @@ Month expectations for `Gym KPI A`:
   - inactive `1`
   - today rate `50.0`
   - period rate `66.7`
+  - payroll gross `200.00`
   - payroll `200.00`
 - Coaching:
   - coaches total `2`

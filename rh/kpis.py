@@ -22,6 +22,7 @@ def available_months(reference_date=None, limit=12):
 def payroll_rows(gym, year, month):
     employees = Employee.objects.filter(gym=gym, is_active=True).order_by("name")
     rows = []
+    total_gross_salaries = Decimal("0")
     total_salaries = Decimal("0")
     paid_salaries = Decimal("0")
     pending_salaries = Decimal("0")
@@ -43,6 +44,7 @@ def payroll_rows(gym, year, month):
                     "status": slip.status,
                 }
             )
+            total_gross_salaries += slip.gross_salary
             total_salaries += salary
             if is_paid:
                 paid_salaries += salary
@@ -51,6 +53,7 @@ def payroll_rows(gym, year, month):
 
     return {
         "rows": rows,
+        "total_gross_salaries": total_gross_salaries,
         "total_salaries": total_salaries,
         "paid_salaries": paid_salaries,
         "pending_salaries": pending_salaries,
@@ -93,6 +96,7 @@ def build_rh_kpis(gym, period_data=None):
         "attendance_period_present": period_present,
         "attendance_period_absent": period_attendances.filter(status="absent").count(),
         "attendance_period_rate": round((period_present / period_total) * 100, 1) if period_total else 0,
+        "monthly_payroll_gross": month_payroll["total_gross_salaries"],
         "monthly_payroll": month_payroll["total_salaries"],
         "monthly_payroll_paid": month_payroll["paid_salaries"],
         "monthly_payroll_pending": month_payroll["pending_salaries"],

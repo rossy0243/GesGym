@@ -1,6 +1,24 @@
 {% extends 'base.html' %}
 
 {% block content %}
+<style>
+.rh-scroll-area {
+    max-height: 340px;
+    overflow-y: auto;
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
+
+.rh-scroll-area::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.rh-scroll-area::-webkit-scrollbar-thumb {
+    background: rgba(100, 116, 139, 0.35);
+    border-radius: 999px;
+}
+</style>
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1>Paie mensuelle - {{ gym.name }}</h1>
@@ -51,7 +69,7 @@
                 <div class="card-header">
                     <h5 class="mb-0">Ajouter une regle de cotisation</h5>
                 </div>
-                <div class="card-body">
+                <div class="card-body rh-scroll-area">
                     <form method="post" action="{% url 'rh:add_contribution_rule' %}">
                         {% csrf_token %}
                         <input type="hidden" name="year" value="{{ year }}">
@@ -73,9 +91,9 @@
                 <div class="card-header">
                     <h5 class="mb-0">Regles actives du gym</h5>
                 </div>
-                <div class="card-body">
+                <div class="card-body rh-scroll-area">
                     {% if contribution_rules %}
-                    <div class="table-responsive">
+                    <div class="table-responsive rh-scroll-area">
                         <table class="table table-sm">
                             <thead>
                                 <tr>
@@ -166,7 +184,7 @@
             <h5 class="mb-0">Bulletins du mois</h5>
         </div>
         <div class="card-body">
-            <div class="table-responsive">
+            <div class="table-responsive rh-scroll-area">
                 <table class="table table-striped">
                     <thead>
                         <tr>
