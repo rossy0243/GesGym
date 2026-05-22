@@ -115,6 +115,8 @@
                             <td>
                                 {% if data.status == 'paid' %}
                                 <span class="badge bg-success">Paye</span>
+                                {% elif data.status == 'reviewed' %}
+                                <span class="badge bg-info text-dark">Verifie</span>
                                 {% elif data.status == 'approved' %}
                                 <span class="badge bg-primary">Approuve</span>
                                 {% else %}
@@ -123,9 +125,17 @@
                             </td>
                             <td class="text-nowrap">
                                 {% if data.status == 'draft' %}
-                                <form method="post" action="{% url 'rh:approve_payroll_slip' data.employee.id year month %}" class="d-inline">
+                                <form method="post" action="{% url 'rh:review_payroll_slip' data.employee.id year month %}" class="d-inline">
                                     {% csrf_token %}
                                     <button type="submit" class="btn btn-outline-primary btn-sm">
+                                        <i class="fas fa-search"></i> Verifier
+                                    </button>
+                                </form>
+                                {% endif %}
+                                {% if data.status == 'reviewed' %}
+                                <form method="post" action="{% url 'rh:approve_payroll_slip' data.employee.id year month %}" class="d-inline">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-primary btn-sm">
                                         <i class="fas fa-check"></i> Approuver
                                     </button>
                                 </form>

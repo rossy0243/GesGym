@@ -13,6 +13,7 @@ from .views_v2 import (  # noqa: F401
     attendance_bulk,
     attendance_create,
     attendance_list,
+    download_payslip_pdf,
     employee_create,
     employee_delete,
     employee_detail,
@@ -20,4 +21,5 @@ from .views_v2 import (  # noqa: F401
     employee_update,
     payroll_dashboard,
     process_payment,
+    review_payroll_slip,
 )

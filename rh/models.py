@@ -2,6 +2,7 @@ from calendar import month_name, monthrange
 from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
@@ -47,11 +48,7 @@ class Employee(models.Model):
     name = models.CharField(max_length=255)
     role = models.CharField(max_length=50, choices=ROLE_CHOICES)
     phone = models.CharField(max_length=20, blank=True, null=True)
-    compensation_type = models.CharField(
-        max_length=20,
-        choices=COMPENSATION_TYPE_CHOICES,
-        default=COMPENSATION_DAILY,
-    )
+    compensation_type = models.CharField(max_length=20, choices=COMPENSATION_TYPE_CHOICES, default=COMPENSATION_DAILY)
     daily_salary = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     monthly_salary = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     is_active = models.BooleanField(default=True)
@@ -121,11 +118,7 @@ class Employee(models.Model):
 
     def present_days_for_month(self, year, month):
         start_date, end_date = month_bounds(year, month)
-        return self.attendances.filter(
-            date__gte=start_date,
-            date__lt=end_date,
-            status="present",
-        ).count()
+        return self.attendances.filter(date__gte=start_date, date__lt=end_date, status="present").count()
 
     def calculate_monthly_salary(self, year, month):
         paid_leave_days = self.paid_leave_days_for_month(year, month)
@@ -324,10 +317,7 @@ class LeaveRequest(models.Model):
 
     class Meta:
         ordering = ["-start_date", "-created_at"]
-        indexes = [
-            models.Index(fields=["gym", "status"]),
-            models.Index(fields=["employee", "start_date"]),
-        ]
+        indexes = [models.Index(fields=["gym", "status"]), models.Index(fields=["employee", "start_date"])]
 
     def __str__(self):
         return f"{self.employee.name} - {self.get_leave_type_display()} ({self.start_date} au {self.end_date})"
@@ -372,10 +362,7 @@ class OvertimeEntry(models.Model):
 
     class Meta:
         ordering = ["-work_date", "-created_at"]
-        indexes = [
-            models.Index(fields=["gym", "status"]),
-            models.Index(fields=["employee", "work_date"]),
-        ]
+        indexes = [models.Index(fields=["gym", "status"]), models.Index(fields=["employee", "work_date"])]
 
     def __str__(self):
         return f"{self.employee.name} - {self.hours}h sup ({self.work_date})"
@@ -449,10 +436,12 @@ class PayrollAdjustment(models.Model):
 
 class PayrollSlip(models.Model):
     STATUS_DRAFT = "draft"
+    STATUS_REVIEWED = "reviewed"
     STATUS_APPROVED = "approved"
     STATUS_PAID = "paid"
     STATUS_CHOICES = (
         (STATUS_DRAFT, "Brouillon"),
+        (STATUS_REVIEWED, "Verifie"),
         (STATUS_APPROVED, "Approuve"),
         (STATUS_PAID, "Paye"),
     )
@@ -475,7 +464,22 @@ class PayrollSlip(models.Model):
     gross_salary = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     net_salary = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     notes = models.TextField(blank=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="payroll_slips_reviewed",
+    )
     approved_at = models.DateTimeField(null=True, blank=True)
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="payroll_slips_approved",
+    )
     paid_at = models.DateTimeField(null=True, blank=True)
     payment_record = models.OneToOneField(
         PaymentRecord,
@@ -490,10 +494,7 @@ class PayrollSlip(models.Model):
     class Meta:
         unique_together = ("employee", "year", "month")
         ordering = ["-year", "-month", "employee__name"]
-        indexes = [
-            models.Index(fields=["gym", "year", "month"]),
-            models.Index(fields=["gym", "status"]),
-        ]
+        indexes = [models.Index(fields=["gym", "year", "month"]), models.Index(fields=["gym", "status"])]
 
     def __str__(self):
         return f"Bulletin {self.employee.name} - {self.month}/{self.year}"
@@ -506,7 +507,7 @@ class PayrollSlip(models.Model):
             year=year,
             month=month,
         ).first()
-        slip, created = cls.objects.get_or_create(
+        slip, _ = cls.objects.get_or_create(
             employee=employee,
             gym=employee.gym,
             year=year,
@@ -528,27 +529,27 @@ class PayrollSlip(models.Model):
             if not slip.approved_at:
                 slip.approved_at = slip.paid_at
         slip.recalculate_from_employee()
-        update_fields = [
-            "compensation_type",
-            "base_salary",
-            "present_days",
-            "paid_leave_days",
-            "unpaid_leave_days",
-            "bonus_total",
-            "overtime_total",
-            "deduction_total",
-            "advance_total",
-            "leave_deduction_total",
-            "gross_salary",
-            "net_salary",
-            "payment_record",
-            "status",
-            "approved_at",
-            "paid_at",
-            "updated_at",
-        ]
-        if update_fields:
-            slip.save(update_fields=update_fields)
+        slip.save(
+            update_fields=[
+                "compensation_type",
+                "base_salary",
+                "present_days",
+                "paid_leave_days",
+                "unpaid_leave_days",
+                "bonus_total",
+                "overtime_total",
+                "deduction_total",
+                "advance_total",
+                "leave_deduction_total",
+                "gross_salary",
+                "net_salary",
+                "payment_record",
+                "status",
+                "approved_at",
+                "paid_at",
+                "updated_at",
+            ]
+        )
         return slip
 
     def clean(self):
@@ -559,11 +560,7 @@ class PayrollSlip(models.Model):
             raise ValidationError({"employee": "L'employe doit appartenir au gym du bulletin."})
         if self.month is not None and (self.month < 1 or self.month > 12):
             raise ValidationError({"month": "Le mois doit etre compris entre 1 et 12."})
-        for field_name in [
-            "present_days",
-            "paid_leave_days",
-            "unpaid_leave_days",
-        ]:
+        for field_name in ["present_days", "paid_leave_days", "unpaid_leave_days"]:
             value = getattr(self, field_name)
             if value is not None and value < 0:
                 raise ValidationError({field_name: "La valeur ne peut pas etre negative."})
@@ -599,12 +596,7 @@ class PayrollSlip(models.Model):
             base_gross = _money(daily_rate * payable_days)
 
         self.leave_deduction_total = _money(daily_rate * self.unpaid_leave_days)
-        adjustments = PayrollAdjustment.objects.filter(
-            employee=self.employee,
-            gym=self.gym,
-            year=self.year,
-            month=self.month,
-        )
+        adjustments = PayrollAdjustment.objects.filter(employee=self.employee, gym=self.gym, year=self.year, month=self.month)
         self.bonus_total = _money(
             adjustments.filter(adjustment_type=PayrollAdjustment.TYPE_BONUS).aggregate(total=models.Sum("amount"))["total"]
             or 0
@@ -619,20 +611,30 @@ class PayrollSlip(models.Model):
         )
         self.overtime_total = self.employee.approved_overtime_amount_for_month(self.year, self.month)
         self.gross_salary = _money(base_gross + self.bonus_total + self.overtime_total)
-        self.net_salary = _money(
-            self.gross_salary - self.advance_total - self.deduction_total - self.leave_deduction_total
-        )
+        self.net_salary = _money(self.gross_salary - self.advance_total - self.deduction_total - self.leave_deduction_total)
 
-    def approve(self):
+    def review(self, user):
         if self.status == self.STATUS_PAID:
             raise ValidationError("Le bulletin est deja paye.")
+        self.status = self.STATUS_REVIEWED
+        self.reviewed_at = timezone.now()
+        self.reviewed_by = user
+
+    def approve(self, user):
+        if self.status == self.STATUS_PAID:
+            raise ValidationError("Le bulletin est deja paye.")
+        if self.status == self.STATUS_DRAFT:
+            raise ValidationError("Le bulletin doit d'abord etre verifie.")
         self.status = self.STATUS_APPROVED
         self.approved_at = timezone.now()
+        self.approved_by = user
 
     def mark_paid(self, payment_record):
         now_value = timezone.now()
         self.payment_record = payment_record
         self.status = self.STATUS_PAID
+        if not self.reviewed_at:
+            self.reviewed_at = now_value
         if not self.approved_at:
             self.approved_at = now_value
         self.paid_at = now_value
@@ -647,3 +649,26 @@ class PayrollSlip(models.Model):
     @property
     def total_deductions(self):
         return _money(self.deduction_total + self.advance_total + self.leave_deduction_total)
+
+
+class PayrollWorkflowLog(models.Model):
+    ACTION_REVIEW = "review"
+    ACTION_APPROVE = "approve"
+    ACTION_PAY = "pay"
+    ACTION_CHOICES = (
+        (ACTION_REVIEW, "Verification"),
+        (ACTION_APPROVE, "Approbation"),
+        (ACTION_PAY, "Paiement"),
+    )
+
+    slip = models.ForeignKey(PayrollSlip, on_delete=models.CASCADE, related_name="workflow_logs")
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    action = models.CharField(max_length=20, choices=ACTION_CHOICES)
+    note = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.slip} - {self.get_action_display()}"

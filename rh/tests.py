@@ -128,6 +128,7 @@ class RhTenantTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_salary_payment_creates_pos_expense(self):
+        self.client.post(reverse("rh:review_payroll_slip", args=[self.employee_a.id, self.today.year, self.today.month]))
         self.client.post(reverse("rh:approve_payroll_slip", args=[self.employee_a.id, self.today.year, self.today.month]))
         response = self.client.post(
             reverse("rh:process_payment", args=[self.employee_a.id, self.today.year, self.today.month]),
@@ -179,6 +180,18 @@ class RhTenantTests(TestCase):
         slip = PayrollSlip.objects.get(employee=self.employee_a, year=self.today.year, month=self.today.month)
         self.assertEqual(slip.status, PayrollSlip.STATUS_DRAFT)
 
+        review_response = self.client.post(
+            reverse("rh:review_payroll_slip", args=[self.employee_a.id, self.today.year, self.today.month]),
+        )
+
+        self.assertRedirects(
+            review_response,
+            f'{reverse("rh:detail", args=[self.employee_a.id])}?year={self.today.year}&month={self.today.month}',
+            fetch_redirect_response=False,
+        )
+        slip.refresh_from_db()
+        self.assertEqual(slip.status, PayrollSlip.STATUS_REVIEWED)
+
         approve_response = self.client.post(
             reverse("rh:approve_payroll_slip", args=[self.employee_a.id, self.today.year, self.today.month]),
         )
@@ -190,6 +203,15 @@ class RhTenantTests(TestCase):
         )
         slip.refresh_from_db()
         self.assertEqual(slip.status, PayrollSlip.STATUS_APPROVED)
+
+    def test_pdf_download_returns_pdf_response(self):
+        response = self.client.get(
+            reverse("rh:download_payslip_pdf", args=[self.employee_a.id, self.today.year, self.today.month])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertTrue(response.content.startswith(b"%PDF"))
 
     def test_adjustment_bonus_changes_net_salary(self):
         response = self.client.post(

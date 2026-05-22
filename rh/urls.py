@@ -19,8 +19,12 @@ urlpatterns = [
          views.add_leave_request, name='add_leave_request'),
     path('payroll/<int:employee_id>/<int:year>/<int:month>/overtime/add/',
          views.add_overtime_entry, name='add_overtime_entry'),
+    path('payroll/<int:employee_id>/<int:year>/<int:month>/review/',
+         views.review_payroll_slip, name='review_payroll_slip'),
     path('payroll/<int:employee_id>/<int:year>/<int:month>/approve/',
          views.approve_payroll_slip, name='approve_payroll_slip'),
     path('payroll/<int:employee_id>/<int:year>/<int:month>/pay/',
          views.process_payment, name='process_payment'),
+    path('payroll/<int:employee_id>/<int:year>/<int:month>/pdf/',
+         views.download_payslip_pdf, name='download_payslip_pdf'),
 ]

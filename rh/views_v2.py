@@ -6,6 +6,7 @@ from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -32,6 +33,7 @@ from .models import (
     PaymentRecord,
     PayrollAdjustment,
     PayrollSlip,
+    PayrollWorkflowLog,
 )
 
 
@@ -60,6 +62,60 @@ def _validation_message(exc):
 
 def _detail_url(employee_id, year, month):
     return f"{reverse('rh:detail', args=[employee_id])}?year={year}&month={month}"
+
+
+def _pdf_escape(value):
+    return str(value).replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+
+def _simple_pdf_response(filename, lines):
+    content_stream = ["BT", "/F1 12 Tf", "40 790 Td"]
+    first = True
+    for line in lines:
+        safe_line = _pdf_escape(line)
+        if first:
+            content_stream.append(f"({safe_line}) Tj")
+            first = False
+        else:
+            content_stream.append("0 -18 Td")
+            content_stream.append(f"({safe_line}) Tj")
+    content_stream.append("ET")
+    stream_data = "\n".join(content_stream).encode("latin-1", errors="replace")
+
+    objects = []
+    objects.append(b"1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n")
+    objects.append(b"2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n")
+    objects.append(
+        b"3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R "
+        b"/Resources << /Font << /F1 5 0 R >> >> >> endobj\n"
+    )
+    objects.append(f"4 0 obj << /Length {len(stream_data)} >> stream\n".encode("ascii") + stream_data + b"\nendstream endobj\n")
+    objects.append(b"5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n")
+
+    pdf = bytearray(b"%PDF-1.4\n")
+    offsets = [0]
+    for obj in objects:
+        offsets.append(len(pdf))
+        pdf.extend(obj)
+    xref_offset = len(pdf)
+    pdf.extend(f"xref\n0 {len(objects) + 1}\n".encode("ascii"))
+    pdf.extend(b"0000000000 65535 f \n")
+    for offset in offsets[1:]:
+        pdf.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
+    pdf.extend(
+        (
+            f"trailer << /Size {len(objects) + 1} /Root 1 0 R >>\n"
+            f"startxref\n{xref_offset}\n%%EOF"
+        ).encode("ascii")
+    )
+
+    response = HttpResponse(bytes(pdf), content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+def _log_workflow_action(slip, user, action, note=""):
+    PayrollWorkflowLog.objects.create(slip=slip, actor=user, action=action, note=note)
 
 
 @login_required
@@ -97,22 +153,14 @@ def employee_detail(request, employee_id):
     employee = get_object_or_404(Employee, id=employee_id, gym=request.gym)
     year, month = _parse_year_month(request)
     slip = PayrollSlip.ensure_for_period(employee, year, month)
-    attendances = employee.attendances.filter(
-        gym=request.gym,
-        date__year=year,
-        date__month=month,
-    ).order_by("-date")
+    attendances = employee.attendances.filter(gym=request.gym, date__year=year, date__month=month).order_by("-date")
     payments = employee.payments.filter(gym=request.gym).order_by("-year", "-month")
     adjustments = employee.payroll_adjustments.filter(gym=request.gym, year=year, month=month).order_by("-created_at")
-    leaves = employee.leaves.filter(
-        gym=request.gym,
-        start_date__year__lte=year,
-    ).order_by("-start_date")[:8]
+    leaves = employee.leaves.filter(gym=request.gym, start_date__year__lte=year).order_by("-start_date")[:8]
     overtime_entries = employee.overtime_entries.filter(
-        gym=request.gym,
-        work_date__year=year,
-        work_date__month=month,
+        gym=request.gym, work_date__year=year, work_date__month=month
     ).order_by("-work_date", "-created_at")
+    workflow_logs = slip.workflow_logs.select_related("actor").all()
 
     context = {
         "gym": request.gym,
@@ -129,10 +177,9 @@ def employee_detail(request, employee_id):
         "adjustments": adjustments,
         "leaves": leaves,
         "overtime_entries": overtime_entries,
+        "workflow_logs": workflow_logs,
         "adjustment_form": PayrollAdjustmentForm(),
-        "leave_form": LeaveRequestForm(
-            initial={"start_date": timezone.localdate(), "end_date": timezone.localdate()}
-        ),
+        "leave_form": LeaveRequestForm(initial={"start_date": timezone.localdate(), "end_date": timezone.localdate()}),
         "overtime_form": OvertimeEntryForm(initial={"work_date": timezone.localdate()}),
         "available_months": available_months(),
     }
@@ -228,7 +275,6 @@ def attendance_bulk(request):
         if form.is_valid():
             attendance_date = form.cleaned_data["date"]
             count = 0
-
             for employee in active_employees:
                 status = form.cleaned_data.get(f"attendance_{employee.id}")
                 if status:
@@ -238,7 +284,6 @@ def attendance_bulk(request):
                         defaults={"status": status, "gym": gym},
                     )
                     count += 1
-
             messages.success(request, f"{count} presences enregistrees pour le {attendance_date}.")
             return redirect("rh:attendance_list")
     else:
@@ -373,18 +418,34 @@ def add_overtime_entry(request, employee_id, year, month):
 @login_required
 @module_required("RH")
 @role_required(RH_PAYROLL_ROLES)
+def review_payroll_slip(request, employee_id, year, month):
+    employee = get_object_or_404(Employee, id=employee_id, gym=request.gym)
+    slip = PayrollSlip.ensure_for_period(employee, year, month)
+    if request.method == "POST":
+        try:
+            slip.review(request.user)
+            slip.save(update_fields=["status", "reviewed_at", "reviewed_by", "updated_at"])
+            _log_workflow_action(slip, request.user, PayrollWorkflowLog.ACTION_REVIEW)
+            messages.success(request, f"Bulletin de {employee.name} verifie.")
+        except ValidationError as exc:
+            messages.error(request, _validation_message(exc))
+    return redirect(_detail_url(employee.id, year, month))
+
+
+@login_required
+@module_required("RH")
+@role_required(RH_PAYROLL_ROLES)
 def approve_payroll_slip(request, employee_id, year, month):
     employee = get_object_or_404(Employee, id=employee_id, gym=request.gym)
     slip = PayrollSlip.ensure_for_period(employee, year, month)
-
     if request.method == "POST":
         try:
-            slip.approve()
-            slip.save(update_fields=["status", "approved_at", "updated_at"])
+            slip.approve(request.user)
+            slip.save(update_fields=["status", "approved_at", "approved_by", "updated_at"])
+            _log_workflow_action(slip, request.user, PayrollWorkflowLog.ACTION_APPROVE)
             messages.success(request, f"Bulletin de {employee.name} approuve.")
         except ValidationError as exc:
             messages.error(request, _validation_message(exc))
-
     return redirect(_detail_url(employee.id, year, month))
 
 
@@ -394,12 +455,7 @@ def approve_payroll_slip(request, employee_id, year, month):
 def process_payment(request, employee_id, year, month):
     employee = get_object_or_404(Employee, id=employee_id, gym=request.gym)
     slip = PayrollSlip.ensure_for_period(employee, year, month)
-    existing_payment = PaymentRecord.objects.filter(
-        employee=employee,
-        gym=request.gym,
-        year=year,
-        month=month,
-    ).first()
+    existing_payment = PaymentRecord.objects.filter(employee=employee, gym=request.gym, year=year, month=month).first()
 
     if existing_payment and existing_payment.is_paid and existing_payment.pos_payment_id:
         messages.warning(request, f"Le salaire de {employee.name} est deja paye.")
@@ -409,8 +465,8 @@ def process_payment(request, employee_id, year, month):
     present_days = slip.present_days
 
     if request.method == "POST":
-        if slip.status == PayrollSlip.STATUS_DRAFT:
-            messages.warning(request, "Approuve d'abord le bulletin avant de payer.")
+        if slip.status != PayrollSlip.STATUS_APPROVED:
+            messages.warning(request, "Le bulletin doit etre approuve avant paiement.")
             return redirect(_detail_url(employee.id, year, month))
         form = PaymentForm(request.POST, instance=existing_payment)
         if form.is_valid():
@@ -427,7 +483,6 @@ def process_payment(request, employee_id, year, month):
                         source_model="PayrollSlip",
                         source_id=slip.id,
                     )
-
                     payment = form.save(commit=False)
                     payment.employee = employee
                     payment.gym = request.gym
@@ -443,7 +498,8 @@ def process_payment(request, employee_id, year, month):
                     pos_payment.save(update_fields=["source_model", "source_id"])
 
                     slip.mark_paid(payment)
-                    slip.save(update_fields=["payment_record", "status", "approved_at", "paid_at", "updated_at"])
+                    slip.save(update_fields=["payment_record", "status", "reviewed_at", "approved_at", "paid_at", "updated_at"])
+                    _log_workflow_action(slip, request.user, PayrollWorkflowLog.ACTION_PAY)
             except ValidationError as exc:
                 messages.error(request, _validation_message(exc))
                 return redirect("rh:process_payment", employee_id=employee.id, year=year, month=month)
@@ -465,3 +521,36 @@ def process_payment(request, employee_id, year, month):
         "form": form,
     }
     return render(request, "rh/payment_form.html", context)
+
+
+@login_required
+@module_required("RH")
+@role_required(RH_PAYROLL_ROLES)
+def download_payslip_pdf(request, employee_id, year, month):
+    employee = get_object_or_404(Employee, id=employee_id, gym=request.gym)
+    slip = PayrollSlip.ensure_for_period(employee, year, month)
+    lines = [
+        "GesGym - Bulletin de paie",
+        f"Employe : {employee.name}",
+        f"Gym : {request.gym.name}",
+        f"Periode : {slip.get_month_display()} {slip.year}",
+        f"Role : {employee.get_role_display()}",
+        f"Type remuneration : {employee.get_compensation_label()}",
+        f"Base salariale : {slip.base_salary} CDF",
+        f"Jours presents : {slip.present_days}",
+        f"Conges payes : {slip.paid_leave_days}",
+        f"Conges sans solde : {slip.unpaid_leave_days}",
+        f"Primes : {slip.bonus_total} CDF",
+        f"Heures supplementaires : {slip.overtime_total} CDF",
+        f"Avances : {slip.advance_total} CDF",
+        f"Retenues : {slip.deduction_total} CDF",
+        f"Retenue conges : {slip.leave_deduction_total} CDF",
+        f"Salaire brut : {slip.gross_salary} CDF",
+        f"Net a payer : {slip.net_salary} CDF",
+        f"Statut : {slip.get_status_display()}",
+        f"Verifie le : {slip.reviewed_at.strftime('%d/%m/%Y %H:%M') if slip.reviewed_at else '-'}",
+        f"Approuve le : {slip.approved_at.strftime('%d/%m/%Y %H:%M') if slip.approved_at else '-'}",
+        f"Paye le : {slip.paid_at.strftime('%d/%m/%Y %H:%M') if slip.paid_at else '-'}",
+    ]
+    filename = f"bulletin-paie-{employee.id}-{year}-{month}.pdf"
+    return _simple_pdf_response(filename, lines)

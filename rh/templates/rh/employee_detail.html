@@ -88,6 +88,8 @@
                         <p><strong>Statut :</strong>
                             {% if slip.status == 'paid' %}
                             <span class="badge bg-success">Paye</span>
+                            {% elif slip.status == 'reviewed' %}
+                            <span class="badge bg-info text-dark">Verifie</span>
                             {% elif slip.status == 'approved' %}
                             <span class="badge bg-primary">Approuve</span>
                             {% else %}
@@ -95,6 +97,13 @@
                             {% endif %}
                         </p>
                         {% if slip.status == 'draft' %}
+                        <form method="post" action="{% url 'rh:review_payroll_slip' employee.id year month %}" class="mb-2">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-outline-primary">
+                                <i class="fas fa-search"></i> Marquer comme verifie
+                            </button>
+                        </form>
+                        {% elif slip.status == 'reviewed' %}
                         <form method="post" action="{% url 'rh:approve_payroll_slip' employee.id year month %}">
                             {% csrf_token %}
                             <button type="submit" class="btn btn-primary">
@@ -106,6 +115,9 @@
                             <i class="fas fa-money-bill"></i> Proceder au paiement
                         </a>
                         {% endif %}
+                        <a href="{% url 'rh:download_payslip_pdf' employee.id year month %}" class="btn btn-outline-dark mt-2">
+                            <i class="fas fa-file-pdf"></i> Telecharger le PDF
+                        </a>
                     </div>
                 </div>
             </div>
@@ -195,6 +207,29 @@
                     </ul>
                     {% else %}
                     <p class="text-muted mb-0">Aucun ajustement pour ce mois.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">Workflow</h5>
+                </div>
+                <div class="card-body">
+                    {% if workflow_logs %}
+                    <ul class="list-group list-group-flush">
+                        {% for log in workflow_logs %}
+                        <li class="list-group-item px-0">
+                            <strong>{{ log.get_action_display }}</strong><br>
+                            <span>{{ log.created_at|date:"d/m/Y H:i" }}</span><br>
+                            <span>{{ log.actor.username|default:"Systeme" }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p class="text-muted mb-0">Aucune action workflow pour ce bulletin.</p>
                     {% endif %}
                 </div>
             </div>
