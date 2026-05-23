@@ -196,7 +196,6 @@
 
       <nav class="hidden md:flex gap-8 text-sm font-semibold text-gray-700">
         <a href="#accueil" class="hover:text-[#FF8C00] transition">Accueil</a>
-        <a href="#v1" class="hover:text-[#FF8C00] transition">V1 actuelle</a>
         <a href="#solution" class="hover:text-[#FF8C00] transition">Solution</a>
         <a href="#modules" class="hover:text-[#FF8C00] transition">Modules</a>
         <a href="#formules" class="hover:text-[#FF8C00] transition">Formules</a>
@@ -208,7 +207,7 @@
         <a href="{% url 'compte:login' %}" class="px-5 py-2.5 text-sm font-semibold text-[#004e92] border-2 border-[#004e92] rounded-full hover:bg-[#004e92] hover:text-white transition-all">
           Connexion
         </a>
-        <a href="#" id="registerBtn" data-open-register="true" class="px-5 py-2.5 text-sm font-semibold bg-gradient-to-r from-[#FF8C00] to-orange-600 text-white rounded-full shadow-lg shadow-orange-200 hover:shadow-xl transition">
+        <a href="#demo-form" class="px-5 py-2.5 text-sm font-semibold bg-gradient-to-r from-[#FF8C00] to-orange-600 text-white rounded-full shadow-lg shadow-orange-200 hover:shadow-xl transition">
           Demander une démo
         </a>
       </div>
@@ -221,7 +220,6 @@
     <div id="mobile-menu" class="mobile-menu md:hidden bg-white border-t border-gray-100 px-6">
       <nav class="flex flex-col py-4 space-y-3 text-sm font-semibold text-gray-700">
         <a href="#accueil" class="hover:text-[#FF8C00] transition">Accueil</a>
-        <a href="#v1" class="hover:text-[#FF8C00] transition">V1 actuelle</a>
         <a href="#solution" class="hover:text-[#FF8C00] transition">Solution</a>
         <a href="#modules" class="hover:text-[#FF8C00] transition">Modules</a>
         <a href="#formules" class="hover:text-[#FF8C00] transition">Formules</a>
@@ -232,7 +230,7 @@
           <a href="{% url 'compte:login' %}" class="px-5 py-2.5 text-sm font-semibold text-[#004e92] border-2 border-[#004e92] rounded-full hover:bg-[#004e92] hover:text-white transition-all block text-center">
             Connexion
           </a>
-          <a href="#" id="mobileRegisterBtn" data-open-register="true" class="px-5 py-2.5 text-sm font-semibold bg-gradient-to-r from-[#FF8C00] to-orange-600 text-white rounded-full shadow-lg shadow-orange-200 hover:shadow-xl transition block text-center">
+          <a href="#demo-form" class="px-5 py-2.5 text-sm font-semibold bg-gradient-to-r from-[#FF8C00] to-orange-600 text-white rounded-full shadow-lg shadow-orange-200 hover:shadow-xl transition block text-center">
             Demander une démo
           </a>
         </div>
@@ -265,7 +263,7 @@
           </div>
 
           <div class="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-            <a href="#" data-open-register="true" class="px-6 py-3.5 bg-[#004e92] text-white font-bold rounded-full hover:bg-[#003a6e] transition shadow-lg">
+            <a href="#demo-form" class="px-6 py-3.5 bg-[#004e92] text-white font-bold rounded-full hover:bg-[#003a6e] transition shadow-lg">
               Demander une démo
             </a>
             <a href="#formules" class="px-6 py-3.5 border-2 border-[#004e92] text-[#004e92] font-bold rounded-full hover:bg-[#004e92] hover:text-white transition">
@@ -297,66 +295,6 @@
           </div>
 
           
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- V1 ACTUELLE -->
-  <section id="v1" class="py-24 bg-white">
-    <div class="container-premium mx-auto px-6 lg:px-8">
-      <div class="grid lg:grid-cols-[0.9fr_1.1fr] gap-12 items-start">
-        <div>
-          <span class="section-kicker mb-4">V1 actuelle</span>
-          <h2 class="text-3xl md:text-4xl font-bold mt-2 mb-6 tracking-tight">
-            La version 1 couvre deja le parcours essentiel d'une salle
-          </h2>
-          <p class="text-lg text-gray-600 leading-relaxed mb-6">
-            SmartClub Pro n'est pas seulement une vitrine: la V1 structure le quotidien du club, du back-office jusqu'a l'espace mobile du membre.
-          </p>
-          <div class="premium-card rounded-[28px] p-6">
-            <p class="text-sm font-bold text-[#004e92] uppercase tracking-wide mb-3">Ce qui est pret pour l'exploitation</p>
-            <ul class="space-y-3 text-gray-600">
-              <li><i class="fas fa-check text-green-500 mr-2"></i> Creation owner, organisation, salles et modules</li>
-              <li><i class="fas fa-check text-green-500 mr-2"></i> Portail membre mobile PWA avec carte, QR code et abonnement</li>
-              <li><i class="fas fa-check text-green-500 mr-2"></i> Formules consultables et demandes de souscription</li>
-              <li><i class="fas fa-check text-green-500 mr-2"></i> Messages in-app cibles par audience membre</li>
-            </ul>
-          </div>
-        </div>
-
-        <div class="grid sm:grid-cols-2 gap-5">
-          <div class="soft-card rounded-3xl p-7">
-            <div class="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center mb-5 text-[#004e92] text-xl">
-              <i class="fas fa-mobile-screen-button"></i>
-            </div>
-            <h3 class="text-xl font-bold mb-3">Espace membre PWA</h3>
-            <p class="text-gray-500">Le membre retrouve son identite, son QR code, son coach, ses acces, ses paiements et ses messages depuis mobile.</p>
-          </div>
-
-          <div class="soft-card rounded-3xl p-7">
-            <div class="w-12 h-12 bg-orange-100 rounded-2xl flex items-center justify-center mb-5 text-[#FF8C00] text-xl">
-              <i class="fas fa-comments"></i>
-            </div>
-            <h3 class="text-xl font-bold mb-3">Communication in-app</h3>
-            <p class="text-gray-500">Les admins et managers peuvent envoyer un message a un membre, tous les membres, les actifs, les expires ou les suspendus.</p>
-          </div>
-
-          <div class="soft-card rounded-3xl p-7">
-            <div class="w-12 h-12 bg-green-100 rounded-2xl flex items-center justify-center mb-5 text-green-600 text-xl">
-              <i class="fas fa-tags"></i>
-            </div>
-            <h3 class="text-xl font-bold mb-3">Souscriptions preparees</h3>
-            <p class="text-gray-500">Le membre peut choisir une formule et creer une demande; le paiement en ligne pourra etre branche ensuite sans casser la V1.</p>
-          </div>
-
-          <div class="soft-card rounded-3xl p-7">
-            <div class="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center mb-5 text-slate-700 text-xl">
-              <i class="fas fa-shield-halved"></i>
-            </div>
-            <h3 class="text-xl font-bold mb-3">Cadre stable</h3>
-            <p class="text-gray-500">La V1 reste volontairement sobre: pas de temps reel fragile, pas de paiement force avant l'integration officielle de l'agregateur.</p>
-          </div>
         </div>
       </div>
     </div>
@@ -532,7 +470,6 @@
             <li><i class="fas fa-check text-green-500 mr-2"></i> Caisse / paiements</li>
             <li><i class="fas fa-check text-green-500 mr-2"></i> Rapports</li>
             <li><i class="fas fa-check text-green-500 mr-2"></i> Contrôle d’accès</li>
-            <li><i class="fas fa-check text-green-500 mr-2"></i> Coaching</li>
           </ul>
 
           <div class="border-t border-slate-200 pt-6 mb-8">
@@ -541,7 +478,7 @@
             </p>
           </div>
 
-          <a href="#" data-open-register="true" class="block text-center bg-white border-2 border-[#004e92] text-[#004e92] hover:bg-[#004e92] hover:text-white font-bold py-3.5 rounded-full transition">
+          <a href="#demo-form" class="block text-center bg-white border-2 border-[#004e92] text-[#004e92] hover:bg-[#004e92] hover:text-white font-bold py-3.5 rounded-full transition">
             Choisir le Pack Club
           </a>
         </div>
@@ -568,6 +505,7 @@
             <li><i class="fas fa-check text-green-500 mr-2"></i> Produits / stock</li>
             <li><i class="fas fa-check text-green-500 mr-2"></i> RH / employés</li>
             <li><i class="fas fa-check text-green-500 mr-2"></i> Machines / équipements</li>
+            <li><i class="fas fa-check text-green-500 mr-2"></i> Coaching</li>
           </ul>
 
           <div class="border-t border-slate-200 pt-6 mb-8">
@@ -576,7 +514,7 @@
             </p>
           </div>
 
-          <a href="#" data-open-register="true" class="block text-center bg-[#004e92] text-white hover:bg-[#003a6e] font-bold py-3.5 rounded-full transition shadow-lg">
+          <a href="#demo-form" class="block text-center bg-[#004e92] text-white hover:bg-[#003a6e] font-bold py-3.5 rounded-full transition shadow-lg">
             Choisir le Pack Premium
           </a>
         </div>
@@ -719,7 +657,7 @@
           </button>
           <div class="faq-content" style="max-height: 300px;">
             <div class="faq-content-inner">
-              Le Pack Club couvre l’exploitation essentielle. Le Pack Premium ajoute les besoins plus avancés liés aux produits, aux employés et aux équipements.
+              Le Pack Club couvre l’exploitation essentielle. Le Pack Premium ajoute les besoins plus avancés liés aux produits, aux employés, aux équipements et aux coaching.
             </div>
           </div>
         </div>
@@ -767,7 +705,7 @@
           </button>
           <div class="faq-content">
             <div class="faq-content-inner">
-              Oui. La V1 inclut un espace membre mobile PWA avec carte, QR code, abonnement, coach, acces, paiements et messages de la salle.
+              Oui. Tout Pack inclut un espace membre mobile PWA avec carte, QR code, abonnement, coach, acces, paiements et messages de la salle.
             </div>
           </div>
         </div>
@@ -791,7 +729,7 @@
           </button>
           <div class="faq-content">
             <div class="faq-content-inner">
-              Lorsque le club souhaite élargir son pilotage à des dimensions plus avancées comme le stock, les employés ou les équipements.
+              Lorsque le club souhaite élargir son pilotage à des dimensions plus avancées comme le stock, les employés, les équipements et les coaching.
             </div>
           </div>
         </div>
@@ -822,15 +760,113 @@
           Choisissez la formule adaptée à votre niveau d’organisation et équipez chaque site actif avec un cadre de gestion clair, sérieux et lisible.
         </p>
         <div class="flex flex-col sm:flex-row gap-4 justify-center">
-          <a href="#" data-open-register="true" class="px-6 py-3.5 bg-white text-[#004e92] font-bold rounded-full hover:bg-gray-100 transition">
-            Demander une démo personnalisée
-          </a>
           <a href="#formules" class="px-6 py-3.5 border-2 border-white text-white font-bold rounded-full hover:bg-white hover:text-[#004e92] transition">
             Comparer les formules
           </a>
-          <a href="#" data-open-register="true" class="px-6 py-3.5 bg-[#FF8C00] text-white font-bold rounded-full hover:bg-orange-600 transition">
+          <a href="#demo-form" class="px-6 py-3.5 bg-[#FF8C00] text-white font-bold rounded-full hover:bg-orange-600 transition">
             Équiper mon premier site
           </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FORMULAIRE DEMO -->
+  <section id="demo-form" class="py-24 bg-slate-50">
+    <div class="container-premium mx-auto px-6 lg:px-8">
+      <div class="grid gap-10 lg:grid-cols-[0.95fr_1.05fr] items-start">
+        <div>
+          <span class="section-kicker mb-4">Demander une demo</span>
+          <h2 class="text-3xl md:text-4xl font-bold mb-5 tracking-tight">
+            Parlons de votre club et de votre besoin
+          </h2>
+          <p class="text-lg text-gray-600 leading-relaxed mb-6">
+            Remplissez ce formulaire et votre demande sera envoyee directement a
+            <strong>contact@smartclubpro.org</strong>. Nous pourrons ensuite vous recontacter
+            pour organiser une demonstration adaptee a votre contexte.
+          </p>
+
+          <div class="space-y-4">
+            <div class="soft-card rounded-3xl p-6">
+              <h3 class="text-lg font-bold mb-2">Ce que vous pouvez indiquer</h3>
+              <p class="text-gray-500">Votre salle, le nombre de sites, vos besoins prioritaires et les modules qui vous interessent.</p>
+            </div>
+            <div class="soft-card rounded-3xl p-6">
+              <h3 class="text-lg font-bold mb-2">Ce que nous recevons</h3>
+              <p class="text-gray-500">Un email clair avec vos coordonnees, votre structure et votre message pour reprendre contact rapidement.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="premium-card rounded-[32px] p-6 md:p-8">
+          {% if demo_sent %}
+            <div class="mb-6 rounded-3xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-emerald-800">
+              Votre demande a bien ete envoyee. Nous reviendrons vers vous via l'adresse indiquee.
+            </div>
+          {% endif %}
+
+          {% if demo_form.non_field_errors %}
+            <div class="mb-6 rounded-3xl border border-red-200 bg-red-50 px-5 py-4 text-red-700">
+              {{ demo_form.non_field_errors }}
+            </div>
+          {% endif %}
+
+          <form method="post" action="{% url 'landing' %}#demo-form" class="space-y-5">
+            {% csrf_token %}
+            <div class="grid gap-5 md:grid-cols-2">
+              <div>
+                <label for="{{ demo_form.full_name.id_for_label }}" class="mb-2 block text-sm font-semibold text-slate-700">{{ demo_form.full_name.label }}</label>
+                {{ demo_form.full_name }}
+                {% if demo_form.full_name.errors %}
+                  <p class="mt-2 text-sm text-red-600">{{ demo_form.full_name.errors.0 }}</p>
+                {% endif %}
+              </div>
+              <div>
+                <label for="{{ demo_form.email.id_for_label }}" class="mb-2 block text-sm font-semibold text-slate-700">{{ demo_form.email.label }}</label>
+                {{ demo_form.email }}
+                {% if demo_form.email.errors %}
+                  <p class="mt-2 text-sm text-red-600">{{ demo_form.email.errors.0 }}</p>
+                {% endif %}
+              </div>
+            </div>
+
+            <div class="grid gap-5 md:grid-cols-2">
+              <div>
+                <label for="{{ demo_form.phone.id_for_label }}" class="mb-2 block text-sm font-semibold text-slate-700">{{ demo_form.phone.label }}</label>
+                {{ demo_form.phone }}
+                {% if demo_form.phone.errors %}
+                  <p class="mt-2 text-sm text-red-600">{{ demo_form.phone.errors.0 }}</p>
+                {% endif %}
+              </div>
+              <div>
+                <label for="{{ demo_form.club_name.id_for_label }}" class="mb-2 block text-sm font-semibold text-slate-700">{{ demo_form.club_name.label }}</label>
+                {{ demo_form.club_name }}
+                {% if demo_form.club_name.errors %}
+                  <p class="mt-2 text-sm text-red-600">{{ demo_form.club_name.errors.0 }}</p>
+                {% endif %}
+              </div>
+            </div>
+
+            <div>
+              <label for="{{ demo_form.sites_count.id_for_label }}" class="mb-2 block text-sm font-semibold text-slate-700">{{ demo_form.sites_count.label }}</label>
+              {{ demo_form.sites_count }}
+              {% if demo_form.sites_count.errors %}
+                <p class="mt-2 text-sm text-red-600">{{ demo_form.sites_count.errors.0 }}</p>
+              {% endif %}
+            </div>
+
+            <div>
+              <label for="{{ demo_form.message.id_for_label }}" class="mb-2 block text-sm font-semibold text-slate-700">{{ demo_form.message.label }}</label>
+              {{ demo_form.message }}
+              {% if demo_form.message.errors %}
+                <p class="mt-2 text-sm text-red-600">{{ demo_form.message.errors.0 }}</p>
+              {% endif %}
+            </div>
+
+            <button type="submit" class="w-full rounded-full bg-[#004e92] px-6 py-4 text-base font-bold text-white transition hover:bg-[#003a6e]">
+              Envoyer ma demande de demo
+            </button>
+          </form>
         </div>
       </div>
     </div>
@@ -845,8 +881,8 @@
             <span class="text-xl font-bold text-white">SmartClub Pro</span>
           </div>
           <p class="text-sm flex items-center justify-center md:justify-start gap-2"><i class="fas fa-map-marker-alt text-[#FF8C00] w-4"></i> 01 bis, route de Matadi, Ngaliema, Kinshasa</p>
-          <p class="text-sm mt-2 flex items-center justify-center md:justify-start gap-2"><i class="fas fa-phone-alt text-[#FF8C00] w-4"></i> +243 979710633</p>
-          <p class="text-sm flex items-center justify-center md:justify-start gap-2"><i class="fas fa-envelope text-[#FF8C00] w-4"></i> contact@smartclubpro.cd</p>
+          <p class="text-sm mt-2 flex items-center justify-center md:justify-start gap-2"><i class="fas fa-phone-alt text-[#FF8C00] w-4"></i> +243 821886995 / +243 979710633</p>
+          <p class="text-sm flex items-center justify-center md:justify-start gap-2"><i class="fas fa-envelope text-[#FF8C00] w-4"></i> contact@smartclubpro.org</p>
         </div>
 
         <div class="text-center">
@@ -865,51 +901,13 @@
             <a href="#" class="hover:text-[#FF8C00] transition transform hover:scale-110"><i class="fab fa-instagram"></i></a>
             <a href="#" class="hover:text-[#FF8C00] transition transform hover:scale-110"><i class="fab fa-whatsapp"></i></a>
           </div>
-          <p class="text-xs text-gray-500 mt-6">Développé par Smart IT Solution</p>
+          <p class="text-xs text-gray-500 mt-6">Développé par Mundyo Busyo rossy</p>
         </div>
       </div>
       <hr class="border-gray-800 my-8">
       <p class="text-xs text-center text-gray-500">© 2026 SmartClub Pro – Tous droits réservés.</p>
     </div>
   </footer>
-
-  <!-- MODALES -->
-  <div id="modalOverlay" class="modal-overlay">
-    <div class="modal-card relative">
-      <button id="closeModal" class="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-xl"><i class="fas fa-times"></i></button>
-
-      <div id="registerModal" class="modal-step">
-        <h2 class="text-2xl font-bold mb-4 gradient-text">Demander une inscription</h2>
-
-        <div id="registerStep1">
-          <p class="text-gray-600 mb-4">Entrez votre numéro de client :</p>
-          <input type="text" id="clientNumber" placeholder="Ex: 123456" class="w-full p-3 border border-gray-300 rounded-xl mb-4 focus:outline-none focus:ring-2 focus:ring-[#004e92]">
-          <button id="checkClientBtn" class="w-full bg-[#004e92] text-white font-semibold py-3 rounded-xl hover:bg-[#003a6e] transition">
-            Vérifier
-          </button>
-        </div>
-
-        <div id="registerStep2" style="display: none;">
-          <p class="text-gray-600 mb-4">Créez votre mot de passe :</p>
-          <input type="password" id="password1" placeholder="Mot de passe" class="w-full p-3 border border-gray-300 rounded-xl mb-3 focus:outline-none focus:ring-2 focus:ring-[#004e92]">
-          <input type="password" id="password2" placeholder="Confirmer mot de passe" class="w-full p-3 border border-gray-300 rounded-xl mb-4 focus:outline-none focus:ring-2 focus:ring-[#004e92]">
-          <button id="createAccountBtn" class="w-full bg-[#FF8C00] text-white font-semibold py-3 rounded-xl hover:bg-orange-600 transition">
-            Créer mon compte
-          </button>
-        </div>
-
-        <p id="registerError" class="text-red-500 text-sm mt-2 hidden"></p>
-      </div>
-
-      <div id="loginModal" class="modal-step" style="display: none;">
-        <h2 class="text-2xl font-bold mb-4 gradient-text">Connexion</h2>
-        <input type="text" id="loginClientNumber" placeholder="Numéro client" class="w-full p-3 border border-gray-300 rounded-xl mb-3 focus:outline-none focus:ring-2 focus:ring-[#004e92]">
-        <input type="password" id="loginPassword" placeholder="Mot de passe" class="w-full p-3 border border-gray-300 rounded-xl mb-4 focus:outline-none focus:ring-2 focus:ring-[#004e92]">
-        <button id="loginSubmitBtn" class="w-full bg-[#004e92] text-white font-semibold py-3 rounded-xl hover:bg-[#003a6e] transition">Se connecter</button>
-        <p id="loginError" class="text-red-500 text-sm mt-2 hidden"></p>
-      </div>
-    </div>
-  </div>
 
   <script>
     document.addEventListener("DOMContentLoaded", function () {
@@ -936,6 +934,6 @@
     });
   </script>
 
-  <script src="{% static 'js/script_accueil.js' %}?v=landing-v1-member-messaging"></script>
+  <script src="{% static 'js/script_accueil.js' %}?v=landing-v2-demo-form"></script>
 </body>
 </html>

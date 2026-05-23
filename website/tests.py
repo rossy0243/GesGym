@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core import mail
 from django.test import TestCase
 from django.urls import reverse
 
@@ -13,6 +14,7 @@ class PublicRouteTests(TestCase):
         self.assertContains(response, "SmartClub")
         self.assertContains(response, "Espace membre PWA")
         self.assertContains(response, "Messages membres")
+        self.assertContains(response, "Envoyer ma demande de demo")
         self.assertContains(response, reverse("compte:login"))
         self.assertNotContains(response, "{% url 'compte:login' %}")
 
@@ -37,7 +39,47 @@ class PublicRouteTests(TestCase):
     def test_landing_uses_versioned_script_to_avoid_stale_browser_cache(self):
         response = self.client.get("/")
 
-        self.assertContains(response, "script_accueil.js?v=landing-v1-member-messaging")
+        self.assertContains(response, "script_accueil.js?v=landing-v2-demo-form")
+
+    def test_demo_request_sends_email_to_contact_address(self):
+        response = self.client.post(
+            "/",
+            {
+                "full_name": "Rosette Mukendi",
+                "email": "rosette@example.com",
+                "phone": "+243821000000",
+                "club_name": "Club Horizon",
+                "sites_count": 2,
+                "message": "Nous voulons une demo pour la gestion multi-sites.",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(len(mail.outbox), 1)
+        sent_email = mail.outbox[0]
+        self.assertEqual(sent_email.to, ["contact@smartclubpro.org"])
+        self.assertEqual(sent_email.reply_to, ["rosette@example.com"])
+        self.assertIn("Club Horizon", sent_email.subject)
+        self.assertIn("Rosette Mukendi", sent_email.body)
+        self.assertIn("2", sent_email.body)
+
+    def test_demo_request_invalid_submission_shows_errors(self):
+        response = self.client.post(
+            "/",
+            {
+                "full_name": "",
+                "email": "email-invalide",
+                "phone": "",
+                "club_name": "",
+                "sites_count": 0,
+                "message": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Ce champ est obligatoire.")
+        self.assertContains(response, "Saisissez une adresse de courriel valide.")
+        self.assertEqual(len(mail.outbox), 0)
 
     def test_health_route_returns_plain_ok(self):
         response = self.client.get("/health/")
