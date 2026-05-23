@@ -2,6 +2,17 @@ from django import forms
 
 
 class DemoRequestForm(forms.Form):
+    PACK_CHOICES = (
+        ("", "Non precise"),
+        ("club", "Pack Club"),
+        ("premium", "Pack Premium"),
+    )
+
+    selected_pack = forms.ChoiceField(
+        required=False,
+        choices=PACK_CHOICES,
+        widget=forms.HiddenInput,
+    )
     full_name = forms.CharField(
         label="Nom complet",
         max_length=120,

@@ -478,7 +478,7 @@
             </p>
           </div>
 
-          <a href="#demo-form" class="block text-center bg-white border-2 border-[#004e92] text-[#004e92] hover:bg-[#004e92] hover:text-white font-bold py-3.5 rounded-full transition">
+          <a href="/?pack=club#demo-form" class="block text-center bg-white border-2 border-[#004e92] text-[#004e92] hover:bg-[#004e92] hover:text-white font-bold py-3.5 rounded-full transition">
             Choisir le Pack Club
           </a>
         </div>
@@ -514,7 +514,7 @@
             </p>
           </div>
 
-          <a href="#demo-form" class="block text-center bg-[#004e92] text-white hover:bg-[#003a6e] font-bold py-3.5 rounded-full transition shadow-lg">
+          <a href="/?pack=premium#demo-form" class="block text-center bg-[#004e92] text-white hover:bg-[#003a6e] font-bold py-3.5 rounded-full transition shadow-lg">
             Choisir le Pack Premium
           </a>
         </div>
@@ -805,6 +805,12 @@
             </div>
           {% endif %}
 
+          {% if selected_pack_label %}
+            <div class="mb-6 rounded-3xl border border-blue-200 bg-blue-50 px-5 py-4 text-blue-900">
+              Vous avez selectionne : <strong>{{ selected_pack_label }}</strong>. Le message du formulaire a ete prepare en fonction de ce choix.
+            </div>
+          {% endif %}
+
           {% if demo_form.non_field_errors %}
             <div class="mb-6 rounded-3xl border border-red-200 bg-red-50 px-5 py-4 text-red-700">
               {{ demo_form.non_field_errors }}
@@ -813,6 +819,7 @@
 
           <form method="post" action="{% url 'landing' %}#demo-form" class="space-y-5">
             {% csrf_token %}
+            {{ demo_form.selected_pack }}
             <div class="grid gap-5 md:grid-cols-2">
               <div>
                 <label for="{{ demo_form.full_name.id_for_label }}" class="mb-2 block text-sm font-semibold text-slate-700">{{ demo_form.full_name.label }}</label>

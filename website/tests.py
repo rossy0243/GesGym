@@ -45,6 +45,7 @@ class PublicRouteTests(TestCase):
         response = self.client.post(
             "/",
             {
+                "selected_pack": "premium",
                 "full_name": "Rosette Mukendi",
                 "email": "rosette@example.com",
                 "phone": "+243821000000",
@@ -60,8 +61,32 @@ class PublicRouteTests(TestCase):
         self.assertEqual(sent_email.to, ["contact@smartclubpro.org"])
         self.assertEqual(sent_email.reply_to, ["rosette@example.com"])
         self.assertIn("Club Horizon", sent_email.subject)
+        self.assertIn("Pack Premium", sent_email.body)
         self.assertIn("Rosette Mukendi", sent_email.body)
         self.assertIn("2", sent_email.body)
+
+    def test_pack_links_prefill_demo_form_for_club(self):
+        response = self.client.get("/?pack=club")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Vous avez selectionne")
+        self.assertContains(response, "Pack Club")
+        self.assertContains(
+            response,
+            "Je souhaite une demonstration du Pack Club",
+        )
+        self.assertContains(response, 'value="club"')
+
+    def test_pack_links_prefill_demo_form_for_premium(self):
+        response = self.client.get("/?pack=premium")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Pack Premium")
+        self.assertContains(
+            response,
+            "Je souhaite une demonstration du Pack Premium",
+        )
+        self.assertContains(response, 'value="premium"')
 
     def test_demo_request_invalid_submission_shows_errors(self):
         response = self.client.post(
