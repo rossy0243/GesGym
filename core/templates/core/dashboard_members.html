@@ -148,8 +148,8 @@
                         <div class="text-muted">Les chiffres et alertes ci-dessous sont limites a la salle active et a la periode selectionnee.</div>
                     </div>
                     {% if request.gym %}
-                    <a href="{% url 'core:gym_dashboard' gym_id=request.gym.id %}?view=analytics&period={{ selected_period }}" class="btn btn-outline-primary btn-sm">
-                        {% if context_view == "analytics" %}Rester en vue analytique{% else %}Basculer vers la vue analytique{% endif %}
+                    <a href="{% url 'core:gym_dashboard' gym_id=request.gym.id %}?{% if context_view == "analytics" %}view=dashboard{% else %}view=analytics{% endif %}&period={{ selected_period }}" class="btn btn-outline-primary btn-sm">
+                        {% if context_view == "analytics" %}Revenir a la vue d'ensemble{% else %}Basculer vers la vue analytique{% endif %}
                     </a>
                     {% endif %}
                 </div>
@@ -171,6 +171,7 @@
         </div>
     </div>
 
+    {% if context_view != "analytics" %}
     <div class="row g-3 mb-4">
         {% if module_members and can_members %}
         <div class="col-xl-3 col-md-6">
@@ -225,6 +226,66 @@
         </div>
         {% endif %}
     </div>
+    {% endif %}
+
+    {% if context_view != "analytics" %}
+    <div class="row g-3 mb-4">
+        <div class="col-xxl-2 col-md-4 col-sm-6">
+            <div class="card stretch stretch-full stat-card">
+                <div class="card-body">
+                    <span class="fs-12 fw-medium text-muted">Entrees aujourd'hui</span>
+                    <h3 class="mb-2 fw-bold">{{ today_checkins }}</h3>
+                    <div class="fs-12 text-muted">Refuses aujourd'hui: {{ denied_today }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xxl-2 col-md-4 col-sm-6">
+            <div class="card stretch stretch-full stat-card">
+                <div class="card-body">
+                    <span class="fs-12 fw-medium text-muted">Revenu du jour</span>
+                    <h3 class="mb-2 fw-bold">{{ daily_revenue|floatformat:0 }} CDF</h3>
+                    <div class="fs-12 text-muted">Mois en cours: {{ monthly_revenue|floatformat:0 }} CDF</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xxl-2 col-md-4 col-sm-6">
+            <div class="card stretch stretch-full stat-card">
+                <div class="card-body">
+                    <span class="fs-12 fw-medium text-muted">Paiements en attente</span>
+                    <h3 class="mb-2 fw-bold">{{ pending_count }}</h3>
+                    <div class="fs-12 text-muted">{{ pending_total|floatformat:0 }} CDF a regulariser</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xxl-2 col-md-4 col-sm-6">
+            <div class="card stretch stretch-full stat-card">
+                <div class="card-body">
+                    <span class="fs-12 fw-medium text-muted">Abonnements a risque</span>
+                    <h3 class="mb-2 fw-bold">{{ expiry_soon }}</h3>
+                    <div class="fs-12 text-muted">J-7: {{ expiry_7_days }} | J-3: {{ expiry_3_days }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xxl-2 col-md-4 col-sm-6">
+            <div class="card stretch stretch-full stat-card">
+                <div class="card-body">
+                    <span class="fs-12 fw-medium text-muted">Disponibilite machines</span>
+                    <h3 class="mb-2 fw-bold">{{ availability_rate|default:0 }}%</h3>
+                    <div class="fs-12 text-muted">{{ machines_ok|default:0 }} OK sur {{ total_machines|default:0 }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xxl-2 col-md-4 col-sm-6">
+            <div class="card stretch stretch-full stat-card">
+                <div class="card-body">
+                    <span class="fs-12 fw-medium text-muted">Coaching actif</span>
+                    <h3 class="mb-2 fw-bold">{{ assigned_members_count|default:0 }}</h3>
+                    <div class="fs-12 text-muted">{{ active_coaches|default:0 }} coach(s) actif(s)</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
     <div class="row g-3 mb-4">
         <div class="col-xxl-2 col-md-4 col-sm-6">
             <div class="card stretch stretch-full stat-card">
@@ -321,6 +382,117 @@
         </div>
     </div>
 
+    {% if context_view != "analytics" %}
+    <div class="row g-3 mb-4">
+        <div class="col-xl-4">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title">Alertes membres</h5>
+                </div>
+                <div class="card-body">
+                    <div class="vstack gap-3">
+                        <div class="d-flex justify-content-between">
+                            <span>Expire dans 7 jours</span>
+                            <strong>{{ expiry_7_days }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Expire dans 3 jours</span>
+                            <strong>{{ expiry_3_days }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Expire demain</span>
+                            <strong>{{ expiry_1_day }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Expire sous 15 jours</span>
+                            <strong>{{ expiry_soon }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Paiements en attente</span>
+                            <strong>{{ pending_count }} / {{ pending_total|floatformat:0 }} CDF</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-4">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title">Derniers acces</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Membre</th>
+                                    <th>Statut</th>
+                                    <th>Heure</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for access in recent_access %}
+                                <tr>
+                                    <td>{{ access.member.first_name }} {{ access.member.last_name }}</td>
+                                    <td>
+                                        {% if access.access_granted %}
+                                        <span class="badge bg-success">Autorise</span>
+                                        {% else %}
+                                        <span class="badge bg-danger">Refuse</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ access.check_in_time|date:"d/m H:i" }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted">Aucun acces recent</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-4">
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title">Derniers paiements</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Membre</th>
+                                    <th>Montant</th>
+                                    <th>Methode</th>
+                                    <th>Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for payment in recent_payments %}
+                                <tr>
+                                    <td>{% if payment.member %}{{ payment.member.first_name }} {{ payment.member.last_name }}{% else %}Decaissement{% endif %}</td>
+                                    <td>{{ payment.amount_cdf|floatformat:0 }} CDF</td>
+                                    <td>{{ payment.get_method_display }}</td>
+                                    <td>{{ payment.created_at|date:"d/m H:i" }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted">Aucun paiement recent</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if context_view == "analytics" %}
     <div class="row g-3 mb-4">
         <div class="col-xl-3">
             <div class="card stretch stretch-full">
@@ -401,7 +573,9 @@
             </div>
         </div>
     </div>
+    {% endif %}
 
+    {% if context_view == "analytics" %}
     <div class="row g-3 mb-4">
         <div class="col-xl-8">
             <div class="card stretch stretch-full">
@@ -447,7 +621,9 @@
             </div>
         </div>
     </div>
+    {% endif %}
 
+    {% if context_view == "analytics" %}
     <div class="row g-3 mb-4">
         <div class="col-xl-4">
             <div class="card stretch stretch-full">
@@ -512,6 +688,7 @@
             </div>
         </div>
     </div>
+    {% endif %}
 
     <div class="row g-3 mb-4">
         <div class="col-xl-4">

@@ -272,7 +272,23 @@
                             {% if p.member %}
                                 <div class="d-flex align-items-center gap-2">
                                     <span class="material-icons text-secondary" style="font-size:20px;">person</span>
-                                    <span>{{ p.member.first_name }} {{ p.member.last_name }}</span>
+                                    <div>
+                                        <div class="fw-semibold">{{ p.member.first_name }} {{ p.member.last_name }}</div>
+                                        {% if p.description %}
+                                            <small class="text-muted d-block">{{ p.description }}</small>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% elif p.product %}
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="material-icons text-secondary" style="font-size:20px;">inventory_2</span>
+                                    <div>
+                                        <div class="fw-semibold">Vente produit</div>
+                                        <small class="text-muted d-block">{{ p.product.name }}</small>
+                                        {% if p.description %}
+                                            <small class="text-muted d-block">{{ p.description }}</small>
+                                        {% endif %}
+                                    </div>
                                 </div>
                             {% else %}
                                 <div class="d-flex align-items-center gap-2">

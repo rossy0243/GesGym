@@ -962,7 +962,7 @@ def suspend_member(request, member_id):
     member.save()
 
     # Mettre en pause l'abonnement actif
-    active_sub = member.active_subscription
+    active_sub = member.latest_active_subscription
     if active_sub and not active_sub.is_paused:
         active_sub.is_paused = True
         active_sub.paused_at = timezone.now()
@@ -984,7 +984,7 @@ def reactivate_member(request, member_id):
     member.save()
 
     # Reprendre l'abonnement en pause
-    active_sub = member.active_subscription
+    active_sub = member.latest_active_subscription
     if active_sub and active_sub.is_paused:
         active_sub.resume_subscription()   # utilise la méthode qu'on a ajoutée
 

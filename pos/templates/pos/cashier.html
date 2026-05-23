@@ -292,7 +292,15 @@
                                         <span>{{ payment.member.first_name }} {{ payment.member.last_name }}</span>
                                     </div>
                                 {% elif payment.product %}
-                                    <span>Vente produit</span>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="material-icons text-secondary" style="font-size:20px;">inventory_2</span>
+                                        <div>
+                                            <div class="fw-semibold">Vente produit</div>
+                                            {% if payment.description %}
+                                                <small class="text-muted d-block">{{ payment.description }}</small>
+                                            {% endif %}
+                                        </div>
+                                    </div>
                                 {% else %}
                                     <span class="text-muted">Décaissement</span>
                                 {% endif %}
@@ -300,9 +308,10 @@
 
                             <td>
                                 {% if payment.subscription %}
-                                    {{ payment.subscription.plan.name }}
+                                    <div class="fw-semibold">{{ payment.subscription.plan.name }}</div>
                                 {% elif payment.product %}
-                                    {{ payment.product.name }}
+                                    <div class="fw-semibold">{{ payment.product.name }}</div>
+                                    <small class="text-muted d-block">Stock impacte automatiquement</small>
                                 {% elif payment.category %}
                                     {{ payment.get_category_display }}
                                 {% else %}

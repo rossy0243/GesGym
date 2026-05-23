@@ -81,12 +81,28 @@ class Member(models.Model):
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def _current_subscription_queryset(self):
+        today = timezone.localdate()
+        return self.subscriptions.filter(
+            is_active=True,
+            is_paused=False,
+            start_date__lte=today,
+            end_date__gte=today,
+        ).select_related("plan")
+
+    def _latest_active_subscription_queryset(self):
+        return self.subscriptions.filter(
+            is_active=True
+        ).select_related("plan")
     
     @property
     def active_subscription(self):
-        return self.subscriptions.filter(
-            is_active=True
-        ).select_related("plan").first()
+        return self._current_subscription_queryset().first()
+
+    @property
+    def latest_active_subscription(self):
+        return self._latest_active_subscription_queryset().first()
 
     @property
     def expiration_date(self):
@@ -108,14 +124,7 @@ class Member(models.Model):
         if self.status == "suspended":
             return "suspended"
 
-        today = timezone.now().date()
-
-        active_subscription = self.subscriptions.filter(
-            end_date__gte=today,
-            is_active=True
-        ).exists()
-
-        if active_subscription:
+        if self._current_subscription_queryset().exists():
             return "active"
 
         return "expired"

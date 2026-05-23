@@ -243,6 +243,34 @@ class MemberPortalTests(TestCase):
         self.assertContains(plans_response, "Choisir un abonnement")
         self.assertContains(plans_response, "Annuel")
 
+    def test_member_portal_hides_future_subscription_from_active_subscription_tab(self):
+        self.subscription.is_active = False
+        self.subscription.save(update_fields=["is_active"])
+        today = timezone.now().date()
+        MemberSubscription.objects.create(
+            gym=self.gym,
+            member=self.member,
+            plan=self.plan,
+            start_date=today + timedelta(days=3),
+            end_date=today + timedelta(days=33),
+            is_active=True,
+        )
+        self.client.force_login(self.member.user)
+
+        response = self.client.get(reverse("members:member_portal"), {"tab": "subscription"})
+
+        self.assertContains(response, "Aucun abonnement actif n'est rattache a ce compte.")
+        self.assertNotContains(response, "<dd>Mensuel</dd>", html=False)
+
+    def test_member_computed_status_is_expired_when_only_paused_subscription_exists(self):
+        self.subscription.is_paused = True
+        self.subscription.paused_at = timezone.now()
+        self.subscription.save(update_fields=["is_paused", "paused_at"])
+
+        self.member.refresh_from_db()
+        self.assertEqual(self.member.computed_status, "expired")
+        self.assertIsNone(self.member.active_subscription)
+
     def test_member_can_read_in_app_notification(self):
         notification = Notification.objects.create(
             gym=self.gym,

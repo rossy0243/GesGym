@@ -30,6 +30,7 @@ def _member_has_valid_access(member):
         gym=member.gym,
         is_active=True,
         is_paused=False,
+        start_date__lte=_today(),
         end_date__gte=_today(),
     ).exists()
 

@@ -235,6 +235,33 @@ class AccessControlTests(TestCase):
         self.assertFalse(log.access_granted)
         self.assertEqual(log.denial_reason, "Aucun abonnement actif")
 
+    def test_member_with_future_subscription_is_denied_until_start_date(self):
+        member = Member.objects.create(
+            gym=self.gym_a,
+            first_name="Future",
+            last_name="Member",
+            phone="10004",
+            email="future-access@example.com",
+        )
+        today = timezone.now().date()
+        MemberSubscription.objects.create(
+            gym=self.gym_a,
+            member=member,
+            plan=self.plan_a,
+            start_date=today + timedelta(days=2),
+            end_date=today + timedelta(days=32),
+            is_active=True,
+        )
+
+        response = self.client.post(
+            reverse("access:manual_access_entry", args=[member.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertFalse(payload["access"])
+        self.assertEqual(payload["reason"], "Aucun abonnement actif")
+
     def test_realtime_access_is_scoped_to_current_gym(self):
         AccessLog.objects.create(
             gym=self.gym_a,
