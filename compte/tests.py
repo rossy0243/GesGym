@@ -5,6 +5,7 @@ from django.urls import reverse
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 
+from compte.forms import CreateUserForm
 from compte.models import User, UserGymRole
 from members.models import Member
 from organizations.models import Gym, GymModule, Module, Organization
@@ -271,6 +272,28 @@ class LoginConfigurationTests(TestCase):
         self.assertContains(response, "https://github.com/rossy0243")
         self.assertNotContains(response, 'aria-label="Facebook"')
 
+    def test_login_page_displays_password_toggle_and_help_text(self):
+        response = self.client.get(reverse("compte:login"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="toggle-password"')
+        self.assertContains(response, "Afficher")
+        self.assertContains(response, "Utilisez le nom d'utilisateur")
+        self.assertContains(response, "reinitialisation securisee")
+
+    def test_owner_create_user_form_requires_email_for_password_reset_autonomy(self):
+        form = CreateUserForm(
+            data={
+                "first_name": "Amina",
+                "last_name": "Kasongo",
+                "email": "",
+                "role": "manager",
+            }
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("email", form.errors)
+
     def test_member_login_prioritizes_member_portal_even_with_staff_role(self):
         organization = Organization.objects.create(name="Member Org", slug="member-org")
         gym = Gym.objects.create(
@@ -381,7 +404,10 @@ class PasswordResetFlowTests(TestCase):
         )
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].to, ["reset@example.com"])
+        self.assertEqual(mail.outbox[0].subject, "SmartClub Pro - Reinitialisez votre mot de passe")
         self.assertIn("/compte/reset/", mail.outbox[0].body)
+        self.assertTrue(mail.outbox[0].alternatives)
+        self.assertIn("Definir un nouveau mot de passe", mail.outbox[0].alternatives[0][0])
 
     def test_password_reset_confirm_updates_password(self):
         uidb64 = urlsafe_base64_encode(force_bytes(self.user.pk))

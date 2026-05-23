@@ -12,7 +12,6 @@ User = get_user_model()
 class CustomAuthenticationForm(AuthenticationForm):
     remember_me = forms.BooleanField(
         required=False,
-        initial=True,
         widget=forms.CheckboxInput(
             attrs={
                 "class": "rounded border-gray-300 text-[#004e92] focus:ring-[#004e92]",
@@ -23,14 +22,17 @@ class CustomAuthenticationForm(AuthenticationForm):
     username = forms.CharField(
         widget=forms.TextInput(attrs={
             "class": "w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#004e92] ",
-            "placeholder": "Nom d'utilisateur"
+            "placeholder": "Nom d'utilisateur",
+            "autocomplete": "username",
+            "autofocus": "autofocus",
         })
     )
 
     password = forms.CharField(
         widget=forms.PasswordInput(attrs={
             "class": "w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#004e92]",
-            "placeholder": "Mot de passe"
+            "placeholder": "Mot de passe",
+            "autocomplete": "current-password",
         })
     )
 
@@ -63,7 +65,7 @@ class StyledSetPasswordForm(SetPasswordForm):
 class CreateUserForm(forms.Form):
     first_name = forms.CharField(max_length=150, widget=forms.TextInput(attrs={'class': 'form-control'}))
     last_name = forms.CharField(max_length=150, widget=forms.TextInput(attrs={'class': 'form-control'}))
-    email = forms.EmailField(required=False, widget=forms.EmailInput(attrs={'class': 'form-control'}))
+    email = forms.EmailField(required=True, widget=forms.EmailInput(attrs={'class': 'form-control'}))
     
     ROLE_CHOICES = (
         ('manager', 'Manager'),

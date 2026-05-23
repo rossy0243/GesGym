@@ -6,6 +6,9 @@
 {% block card_content %}
   <div class="mb-5">
     <h2 class="text-xl font-semibold text-center text-slate-900">Connexion</h2>
+    <p class="mt-2 text-center text-sm text-slate-500">
+      Saisissez vos identifiants pour acceder a votre espace SmartClub Pro.
+    </p>
   </div>
 
   <form action="{% url 'compte:login' %}" method="post" class="space-y-4">
@@ -14,21 +17,58 @@
       <input type="hidden" name="{{ redirect_field_name }}" value="{{ next }}">
     {% endif %}
 
-    {% if form.errors %}
+    {% if form.non_field_errors %}
       <div class="rounded-2xl px-4 py-3 bg-red-50 text-red-700 border border-red-100 text-sm">
-        {% for field in form %}
-          {% for error in field.errors %}
-            <p>{{ error }}</p>
-          {% endfor %}
-        {% endfor %}
+        <p class="font-semibold mb-1">Connexion impossible</p>
         {% for error in form.non_field_errors %}
           <p>{{ error }}</p>
         {% endfor %}
       </div>
     {% endif %}
 
-    <div>{{ form.username }}</div>
-    <div>{{ form.password }}</div>
+    <div>
+      <label for="{{ form.username.id_for_label }}" class="mb-2 block text-sm font-semibold text-slate-700">
+        Nom d'utilisateur
+      </label>
+      {{ form.username }}
+      <p class="mt-2 text-xs text-slate-500">
+        Utilisez le nom d'utilisateur qui vous a ete attribue par votre organisation.
+      </p>
+      {% if form.username.errors %}
+        <div class="mt-2 text-sm text-red-600 space-y-1">
+          {% for error in form.username.errors %}
+            <p>{{ error }}</p>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+
+    <div>
+      <label for="{{ form.password.id_for_label }}" class="mb-2 block text-sm font-semibold text-slate-700">
+        Mot de passe
+      </label>
+      <div class="relative">
+        {{ form.password }}
+        <button
+          type="button"
+          id="toggle-password"
+          class="absolute inset-y-0 right-3 inline-flex items-center text-sm font-medium text-slate-500 hover:text-slate-700 transition"
+          aria-controls="{{ form.password.id_for_label }}"
+          aria-label="Afficher le mot de passe">
+          <span id="toggle-password-text">Afficher</span>
+        </button>
+      </div>
+      <p class="mt-2 text-xs text-slate-500">
+        En cas d'oubli, vous pouvez lancer une reinitialisation securisee.
+      </p>
+      {% if form.password.errors %}
+        <div class="mt-2 text-sm text-red-600 space-y-1">
+          {% for error in form.password.errors %}
+            <p>{{ error }}</p>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
 
     <div class="flex items-center justify-between gap-4 text-sm">
       <label class="flex items-center gap-2 cursor-pointer text-slate-600">
@@ -67,4 +107,26 @@
       {% endfor %}
     </div>
   {% endif %}
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const passwordInput = document.getElementById("id_password");
+      const togglePasswordButton = document.getElementById("toggle-password");
+      const togglePasswordText = document.getElementById("toggle-password-text");
+
+      if (!passwordInput || !togglePasswordButton || !togglePasswordText) {
+        return;
+      }
+
+      togglePasswordButton.addEventListener("click", function () {
+        const isPasswordHidden = passwordInput.type === "password";
+        passwordInput.type = isPasswordHidden ? "text" : "password";
+        togglePasswordText.textContent = isPasswordHidden ? "Masquer" : "Afficher";
+        togglePasswordButton.setAttribute(
+          "aria-label",
+          isPasswordHidden ? "Masquer le mot de passe" : "Afficher le mot de passe"
+        );
+      });
+    });
+  </script>
 {% endblock %}
