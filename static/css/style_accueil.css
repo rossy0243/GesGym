@@ -22,8 +22,8 @@ body { font-family: 'Inter', sans-serif; }
 .delay-5 { transition-delay: 0.5s; }
 
 /* Mobile menu */
-.mobile-menu { max-height: 0; overflow: hidden; transition: max-height 0.4s ease-out; }
-.mobile-menu.open { max-height: 400px; }
+.mobile-menu { display: none; max-height: 0; overflow: hidden; transition: max-height 0.4s ease-out; }
+.mobile-menu.open { display: block; max-height: 500px; }
 
 /* Styles pour les boutons dans le menu mobile */
 .mobile-auth-buttons {
