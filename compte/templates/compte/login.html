@@ -6,9 +6,6 @@
 {% block card_content %}
   <div class="mb-5">
     <h2 class="text-xl font-semibold text-center text-slate-900">Connexion</h2>
-    <p class="mt-2 text-center text-sm text-slate-500">
-      Saisissez vos identifiants pour acceder a votre espace SmartClub Pro.
-    </p>
   </div>
 
   <form action="{% url 'compte:login' %}" method="post" class="space-y-4">
@@ -31,9 +28,6 @@
         Nom d'utilisateur
       </label>
       {{ form.username }}
-      <p class="mt-2 text-xs text-slate-500">
-        Utilisez le nom d'utilisateur qui vous a ete attribue par votre organisation.
-      </p>
       {% if form.username.errors %}
         <div class="mt-2 text-sm text-red-600 space-y-1">
           {% for error in form.username.errors %}
@@ -58,9 +52,6 @@
           <span id="toggle-password-text">Afficher</span>
         </button>
       </div>
-      <p class="mt-2 text-xs text-slate-500">
-        En cas d'oubli, vous pouvez lancer une reinitialisation securisee.
-      </p>
       {% if form.password.errors %}
         <div class="mt-2 text-sm text-red-600 space-y-1">
           {% for error in form.password.errors %}
@@ -82,6 +73,10 @@
       Se connecter
     </button>
   </form>
+
+  <p class="mt-4 text-center text-xs text-slate-500">
+    Utilisez "Mot de passe oublié ?" si vous ne retrouvez plus vos accès.
+  </p>
 
   {% if social_links %}
     <div class="relative my-6">

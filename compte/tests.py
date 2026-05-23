@@ -278,8 +278,8 @@ class LoginConfigurationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'id="toggle-password"')
         self.assertContains(response, "Afficher")
-        self.assertContains(response, "Utilisez le nom d'utilisateur")
-        self.assertContains(response, "reinitialisation securisee")
+        self.assertContains(response, "Mot de passe oublié ?")
+        self.assertContains(response, "si vous ne retrouvez plus vos accès")
 
     def test_owner_create_user_form_requires_email_for_password_reset_autonomy(self):
         form = CreateUserForm(
