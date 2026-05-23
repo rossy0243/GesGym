@@ -35,6 +35,21 @@ class MemberPreRegistrationTests(TestCase):
             password="pass12345",
             owned_organization=self.org,
         )
+        self.manager = User.objects.create_user(
+            username="manager-members",
+            password="pass12345",
+        )
+        self.reception = User.objects.create_user(
+            username="reception-members",
+            password="pass12345",
+        )
+        self.cashier = User.objects.create_user(
+            username="cashier-members",
+            password="pass12345",
+        )
+        UserGymRole.objects.create(user=self.manager, gym=self.gym, role="manager", is_active=True)
+        UserGymRole.objects.create(user=self.reception, gym=self.gym, role="reception", is_active=True)
+        UserGymRole.objects.create(user=self.cashier, gym=self.gym, role="cashier", is_active=True)
 
     def test_member_list_exposes_public_pre_registration_link_for_current_gym(self):
         self.client.force_login(self.owner)
@@ -75,6 +90,114 @@ class MemberPreRegistrationTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "Future")
+
+    def test_cashier_cannot_access_member_list(self):
+        self.client.force_login(self.cashier)
+
+        response = self.client.get(reverse("members:member_list"))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_reception_can_create_and_edit_member(self):
+        self.client.force_login(self.reception)
+
+        create_response = self.client.post(
+            reverse("members:create_member"),
+            {
+                "first_name": "Reception",
+                "last_name": "Created",
+                "phone": "+243810000099",
+                "email": "reception.created@example.com",
+                "address": "Kinshasa",
+            },
+        )
+
+        self.assertRedirects(create_response, reverse("members:member_list"), fetch_redirect_response=False)
+        member = Member.objects.get(phone="+243810000099")
+        self.assertEqual(member.gym, self.gym)
+
+        edit_response = self.client.post(
+            reverse("members:edit_member", args=[member.id]),
+            {
+                "first_name": "Reception",
+                "last_name": "Updated",
+                "phone": member.phone,
+                "email": member.email,
+                "address": "Gombe",
+            },
+        )
+
+        self.assertEqual(edit_response.status_code, 200)
+        member.refresh_from_db()
+        self.assertEqual(member.last_name, "Updated")
+        self.assertEqual(member.address, "Gombe")
+
+    def test_only_manager_can_suspend_and_reactivate_member(self):
+        member = Member.objects.create(
+            gym=self.gym,
+            first_name="Status",
+            last_name="Target",
+            phone="+243810000109",
+            email="status.target@example.com",
+        )
+        plan = SubscriptionPlan.objects.create(
+            gym=self.gym,
+            name="Mensuel permission",
+            duration_days=30,
+            price=20,
+        )
+        MemberSubscription.objects.create(
+            gym=self.gym,
+            member=member,
+            plan=plan,
+            start_date=timezone.localdate(),
+            end_date=timezone.localdate() + timedelta(days=30),
+            is_active=True,
+        )
+
+        for user in [self.owner, self.reception, self.cashier]:
+            self.client.force_login(user)
+            response = self.client.post(reverse("members:suspend_member", args=[member.id]))
+            self.assertEqual(response.status_code, 403)
+
+        self.client.force_login(self.manager)
+        suspend_response = self.client.post(reverse("members:suspend_member", args=[member.id]))
+        self.assertRedirects(suspend_response, reverse("members:member_list"), fetch_redirect_response=False)
+        member.refresh_from_db()
+        self.assertEqual(member.status, "suspended")
+
+        self.client.force_login(self.reception)
+        denied_reactivate = self.client.post(reverse("members:reactivate_member", args=[member.id]))
+        self.assertEqual(denied_reactivate.status_code, 403)
+
+        self.client.force_login(self.manager)
+        reactivate_response = self.client.post(reverse("members:reactivate_member", args=[member.id]))
+        self.assertRedirects(reactivate_response, reverse("members:member_list"), fetch_redirect_response=False)
+        member.refresh_from_db()
+        self.assertEqual(member.status, "active")
+
+    def test_member_list_masks_write_and_status_actions_by_role(self):
+        sample_member = Member.objects.create(
+            gym=self.gym,
+            first_name="Ui",
+            last_name="Sample",
+            phone="+243810000119",
+            email="ui.sample@example.com",
+        )
+
+        self.client.force_login(self.reception)
+        reception_response = self.client.get(reverse("members:member_list"))
+        self.assertContains(reception_response, "Nouveau Membre")
+        self.assertContains(reception_response, "openEditMemberModal(")
+        self.assertNotContains(reception_response, 'id="statusToggleBtn"', html=False)
+
+        self.client.force_login(self.manager)
+        manager_response = self.client.get(reverse("members:member_list"))
+        self.assertContains(manager_response, 'id="statusToggleBtn"', html=False)
+
+        self.client.force_login(self.owner)
+        owner_response = self.client.get(reverse("members:member_list"))
+        self.assertNotContains(owner_response, 'id="statusToggleBtn"', html=False)
 
     def test_public_pre_registration_creates_pending_request_for_link_gym(self):
         link = MemberPreRegistrationLink.objects.get(gym=self.gym)
@@ -327,6 +450,33 @@ class MemberPortalTests(TestCase):
         self.assertEqual(response["Location"], f"{reverse('members:member_portal')}?tab=messages")
         notification.refresh_from_db()
         self.assertIsNotNone(notification.read_at)
+
+    def test_member_portal_hides_unsent_notifications(self):
+        Notification.objects.create(
+            gym=self.gym,
+            member=self.member,
+            title="Visible",
+            message="Message envoye.",
+            channel=Notification.CHANNEL_IN_APP,
+            status=Notification.STATUS_SENT,
+            sent_at=timezone.now(),
+        )
+        Notification.objects.create(
+            gym=self.gym,
+            member=self.member,
+            title="Cache",
+            message="Message non envoye.",
+            channel=Notification.CHANNEL_IN_APP,
+            status=Notification.STATUS_PENDING,
+        )
+        self.client.force_login(self.member.user)
+
+        response = self.client.get(reverse("members:member_portal"), {"tab": "messages"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Visible")
+        self.assertNotContains(response, "Cache")
+        self.assertEqual(response.context["unread_notification_count"], 1)
 
     def test_member_can_create_pending_subscription_request_without_activating_plan(self):
         self.client.force_login(self.member.user)

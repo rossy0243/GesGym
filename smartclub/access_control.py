@@ -6,8 +6,10 @@ flags pour masquer la navigation non autorisee.
 """
 
 DASHBOARD_ROLES = frozenset({"owner", "manager"})
-MEMBER_ROLES = frozenset({"owner", "manager", "reception", "cashier"})
-MEMBER_ADMIN_ROLES = frozenset({"owner", "manager"})
+MEMBER_ROLES = frozenset({"owner", "manager", "reception"})
+MEMBER_WRITE_ROLES = frozenset({"owner", "manager", "reception"})
+MEMBER_STATUS_ROLES = frozenset({"manager"})
+MEMBER_ADMIN_ROLES = MEMBER_STATUS_ROLES
 SUBSCRIPTION_ROLES = frozenset({"owner", "manager"})
 POS_CASHIER_ROLES = frozenset({"owner", "manager", "reception", "cashier"})
 POS_HISTORY_ROLES = frozenset({"owner", "manager"})
@@ -49,6 +51,8 @@ def permission_flags(request):
     return {
         "can_dashboard": has_role(request, DASHBOARD_ROLES),
         "can_members": has_role(request, MEMBER_ROLES),
+        "can_member_write": has_role(request, MEMBER_WRITE_ROLES),
+        "can_member_status_admin": has_role(request, MEMBER_STATUS_ROLES),
         "can_subscriptions": has_role(request, SUBSCRIPTION_ROLES),
         "can_pos_cashier": has_role(request, POS_CASHIER_ROLES),
         "can_pos_history": has_role(request, POS_HISTORY_ROLES),
@@ -94,7 +98,6 @@ def role_home_route(request):
     if role == "cashier":
         route_candidates = [
             ("can_pos_cashier", "POS", "pos:cashier_dashboard"),
-            ("can_members", "MEMBERS", "members:member_list"),
         ]
     elif role == "reception":
         route_candidates = [

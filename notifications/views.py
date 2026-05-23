@@ -65,7 +65,11 @@ def notification_dashboard(request):
         form = InAppMessageForm(gym=gym)
 
     notifications = list(
-        Notification.objects.filter(gym=gym, channel=Notification.CHANNEL_IN_APP)
+        Notification.objects.filter(
+            gym=gym,
+            channel=Notification.CHANNEL_IN_APP,
+            status=Notification.STATUS_SENT,
+        )
         .select_related("member", "sent_by")
         .order_by("-created_at")[:40]
     )
@@ -76,10 +80,12 @@ def notification_dashboard(request):
         "sent_count": Notification.objects.filter(
             gym=gym,
             channel=Notification.CHANNEL_IN_APP,
+            status=Notification.STATUS_SENT,
         ).count(),
         "unread_count": Notification.objects.filter(
             gym=gym,
             channel=Notification.CHANNEL_IN_APP,
+            status=Notification.STATUS_SENT,
             read_at__isnull=True,
         ).count(),
         "audience_cards": _audience_cards(gym),

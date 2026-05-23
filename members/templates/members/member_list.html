@@ -44,11 +44,13 @@ body.members-screen .modal-dialog {
                     <span class="badge bg-warning text-dark ms-1">{{ pending_pre_registrations_count }}</span>
                     {% endif %}
                 </a>
+                {% if can_member_write %}
                 <a href="javascript:void(0);" class="btn btn-primary" data-bs-toggle="modal"
                     data-bs-target="#addMemberModal">
                     <span class="material-icons me-2" style="font-size:18px;">person_add</span>
                     <span>Nouveau Membre</span>
                 </a>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -383,9 +385,11 @@ body.members-screen .modal-dialog {
                                         <span class="material-icons me-2">visibility</span>Voir
                                     </a>
 
+                                    {% if can_member_write %}
                                     <a onclick="openEditMemberModal({{ member.id }})" class="dropdown-item">
                                         <span class="material-icons me-2">edit</span>Modifier
                                     </a>
+                                    {% endif %}
                                     {% if request.role == "owner" %}
                                     <div class="dropdown-divider"></div>
                                     <a href="#"
@@ -873,11 +877,13 @@ body.members-screen .modal-dialog {
                 <button type="button" class="btn btn-light d-flex align-items-center gap-2" data-bs-dismiss="modal">
                     <span class="material-icons" style="font-size:20px;">close</span>Fermer
                 </button>
+                {% if can_member_status_admin %}
                 <button type="button" class="btn d-flex align-items-center gap-2" onclick="toggleMemberStatus()"
                     id="statusToggleBtn" style="background-color: #f39c12; color: white;">
                     <span class="material-icons" style="font-size:20px;" id="statusIcon">pause_circle</span>
                     <span id="statusBtnText">Suspendre</span>
                 </button>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -1143,6 +1149,7 @@ body.members-screen .modal-dialog {
         const btn = document.getElementById("statusToggleBtn");
         const text = document.getElementById("statusBtnText");
         const icon = document.getElementById("statusIcon");
+        if (!btn || !text || !icon) return;
 
         if (currentMemberStatus === "suspended") {
             btn.style.backgroundColor = "#27ae60";

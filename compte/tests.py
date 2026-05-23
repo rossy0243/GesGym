@@ -192,6 +192,65 @@ class OwnerScopedUserManagementTests(TestCase):
         self.assertTrue(self.shared_user.is_active)
 
 
+class SharedStaffMultiGymContextTests(TestCase):
+    def setUp(self):
+        self.organization = Organization.objects.create(name="Shared Staff Org", slug="shared-staff-org")
+        self.gym_a = Gym.objects.create(
+            organization=self.organization,
+            name="Gym A",
+            slug="shared-staff-gym-a",
+            subdomain="shared-staff-gym-a",
+        )
+        self.gym_b = Gym.objects.create(
+            organization=self.organization,
+            name="Gym B",
+            slug="shared-staff-gym-b",
+            subdomain="shared-staff-gym-b",
+        )
+        self.user = User.objects.create_user(
+            username="shared-staff",
+            password="SharedStaff123!",
+            email="shared-staff@example.com",
+        )
+        UserGymRole.objects.create(user=self.user, gym=self.gym_a, role="cashier", is_active=True)
+        UserGymRole.objects.create(user=self.user, gym=self.gym_b, role="manager", is_active=True)
+        module_pos, _ = Module.objects.get_or_create(code="POS", defaults={"name": "Point de vente"})
+        GymModule.objects.get_or_create(gym=self.gym_a, module=module_pos, defaults={"is_active": True})
+        self.client.force_login(self.user)
+
+    def test_session_current_gym_id_drives_staff_context_and_role(self):
+        session = self.client.session
+        session["current_gym_id"] = self.gym_b.id
+        session.save()
+
+        response = self.client.get(reverse("core:dashboard_redirect"))
+
+        self.assertRedirects(
+            response,
+            reverse("core:gym_dashboard", kwargs={"gym_id": self.gym_b.id}),
+            fetch_redirect_response=False,
+        )
+
+    def test_staff_can_switch_context_between_roles_using_session_gym(self):
+        session = self.client.session
+        session["current_gym_id"] = self.gym_a.id
+        session.save()
+
+        cashier_response = self.client.get(reverse("core:dashboard_redirect"))
+        self.assertRedirects(
+            cashier_response,
+            reverse("pos:cashier_dashboard"),
+            fetch_redirect_response=False,
+        )
+
+        session = self.client.session
+        session["current_gym_id"] = self.gym_b.id
+        session.save()
+
+        dashboard_response = self.client.get(reverse("core:gym_dashboard", args=[self.gym_b.id]))
+        self.assertEqual(dashboard_response.status_code, 200)
+
+
 class LoginConfigurationTests(TestCase):
     def setUp(self):
         self.organization = Organization.objects.create(name="Remember Org", slug="remember-org")

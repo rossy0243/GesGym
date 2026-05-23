@@ -90,16 +90,25 @@ class InAppMessageForm(forms.Form):
             member=OuterRef("pk"),
             is_active=True,
             is_paused=False,
+            start_date__lte=today,
             end_date__gte=today,
         )
         expiring_subscription = active_subscription.filter(
             end_date__lte=today + timedelta(days=7),
+        )
+        expired_subscription = MemberSubscription.objects.filter(
+            member=OuterRef("pk"),
+            is_active=True,
+            is_paused=False,
+            start_date__lte=today,
+            end_date__lt=today,
         )
         any_subscription = MemberSubscription.objects.filter(member=OuterRef("pk"))
 
         return self._base_members().annotate(
             has_active_subscription=Exists(active_subscription),
             has_expiring_subscription=Exists(expiring_subscription),
+            has_expired_subscription=Exists(expired_subscription),
             has_any_subscription=Exists(any_subscription),
         )
 
@@ -119,7 +128,7 @@ class InAppMessageForm(forms.Form):
         if target == self.TARGET_ACTIVE:
             return members.filter(has_active_subscription=True).exclude(status="suspended")
         if target == self.TARGET_EXPIRED:
-            return members.filter(has_active_subscription=False).exclude(status="suspended")
+            return members.filter(has_expired_subscription=True).exclude(status="suspended")
         if target == self.TARGET_EXPIRING_SOON:
             return members.filter(has_expiring_subscription=True).exclude(status="suspended")
         if target == self.TARGET_SUSPENDED:

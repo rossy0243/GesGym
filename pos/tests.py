@@ -104,6 +104,29 @@ class PosAccountingTests(TestCase):
         self.assertEqual(payment.amount_usd, Decimal("10.00"))
         self.assertEqual(payment.amount_cdf, Decimal("28000.00"))
 
+    def test_cdf_payment_clears_any_usd_reference(self):
+        register = CashRegister.objects.create(
+            gym=self.gym_a,
+            opening_amount=Decimal("1000.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+
+        payment = Payment.objects.create(
+            gym=self.gym_a,
+            cash_register=register,
+            member=self.member_a,
+            amount=Decimal("5000.00"),
+            amount_usd=Decimal("10.00"),
+            currency="CDF",
+            method="cash",
+            type="in",
+            status="success",
+        )
+        payment.refresh_from_db()
+
+        self.assertEqual(payment.amount_cdf, Decimal("5000.00"))
+        self.assertIsNone(payment.amount_usd)
+
     def test_payment_requires_cash_register(self):
         with self.assertRaises(ValidationError):
             Payment.objects.create(

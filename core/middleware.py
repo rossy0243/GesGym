@@ -59,12 +59,35 @@ class GymMiddleware:
 
         # ====================== CAS UTILISATEUR NORMAL ======================
         else:
-            role_entry = UserGymRole.objects.filter(
-                user=user,
-                is_active=True,
-                gym__is_active=True,
-                gym__organization__is_active=True,
-            ).select_related('gym__organization').first()
+            role_entries = list(
+                UserGymRole.objects.filter(
+                    user=user,
+                    is_active=True,
+                    gym__is_active=True,
+                    gym__organization__is_active=True,
+                )
+                .select_related('gym__organization')
+                .order_by('gym__name', 'id')
+            )
+            current_gym_id = request.session.get('current_gym_id')
+            role_entry = None
+
+            if current_gym_id:
+                role_entry = next(
+                    (entry for entry in role_entries if str(entry.gym_id) == str(current_gym_id)),
+                    None,
+                )
+
+            if not role_entry and current_gym_id:
+                request.session.pop('current_gym_id', None)
+
+            if not role_entry and len(role_entries) == 1:
+                role_entry = role_entries[0]
+                request.session['current_gym_id'] = role_entry.gym_id
+                request.session.modified = True
+
+            if not role_entry and role_entries:
+                role_entry = role_entries[0]
 
             if role_entry:
                 request.gym = role_entry.gym

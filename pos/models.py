@@ -321,6 +321,7 @@ class Payment(models.Model):
         if self.currency == "CDF":
             self.amount = _money(self.amount)
             self.amount_cdf = self.amount
+            self.amount_usd = None
 
         elif self.currency == "USD":
             if not self.exchange_rate:
@@ -346,6 +347,7 @@ class Payment(models.Model):
         if self.currency == "CDF":
             self.amount = _money(self.amount)
             self.amount_cdf = self.amount
+            self.amount_usd = None
 
         elif self.currency == "USD":
             if not self.exchange_rate:

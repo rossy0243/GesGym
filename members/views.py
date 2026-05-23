@@ -19,7 +19,12 @@ import qrcode
 from access.models import AccessLog
 from coaching.forms import CoachingFeedbackForm
 from coaching.models import Coach, CoachingFeedback, GroupCoachingProgram
-from smartclub.access_control import MEMBER_ADMIN_ROLES, MEMBER_ROLES, has_role
+from smartclub.access_control import (
+    MEMBER_ROLES,
+    MEMBER_STATUS_ROLES,
+    MEMBER_WRITE_ROLES,
+    has_role,
+)
 from .forms import MemberCreationForm
 from .models import Member, MemberPreRegistration, MemberPreRegistrationLink
 from notifications.models import Notification
@@ -36,6 +41,10 @@ def _cleanup_expired_pre_registrations():
 
 def _member_management_allowed(request):
     return has_role(request, MEMBER_ROLES) and request.gym
+
+
+def _member_write_allowed(request):
+    return has_role(request, MEMBER_WRITE_ROLES) and request.gym
 
 
 def _get_pre_registration_public_url(request, link):
@@ -160,11 +169,13 @@ def member_portal(request):
         gym=member.gym,
         member=member,
         channel=Notification.CHANNEL_IN_APP,
+        status=Notification.STATUS_SENT,
     ).select_related("sent_by").order_by("-created_at")[:18]
     unread_notification_count = Notification.objects.filter(
         gym=member.gym,
         member=member,
         channel=Notification.CHANNEL_IN_APP,
+        status=Notification.STATUS_SENT,
         read_at__isnull=True,
     ).count()
     available_plans_queryset = SubscriptionPlan.objects.filter(
@@ -511,6 +522,7 @@ def member_notification_read(request, notification_id):
         gym=member.gym,
         member=member,
         channel=Notification.CHANNEL_IN_APP,
+        status=Notification.STATUS_SENT,
     )
 
     if not notification.read_at:
@@ -778,7 +790,7 @@ def member_list(request):
 @login_required
 def create_member(request):
 
-    if not _member_management_allowed(request):
+    if not _member_write_allowed(request):
         raise PermissionDenied
     
     if request.method == "POST":
@@ -839,7 +851,7 @@ def member_qr(request, uuid):
 
 @login_required
 def edit_member(request, member_id):
-    if not _member_management_allowed(request):
+    if not _member_write_allowed(request):
         raise PermissionDenied
 
     member = get_object_or_404(Member, id=member_id, gym=request.gym)
@@ -975,7 +987,7 @@ def delete_member(request, member_id):
 
 @login_required
 def suspend_member(request, member_id):
-    if not has_role(request, MEMBER_ADMIN_ROLES):
+    if not has_role(request, MEMBER_STATUS_ROLES):
         raise PermissionDenied
 
     member = get_object_or_404(Member, id=member_id, gym=request.gym)
@@ -997,7 +1009,7 @@ def suspend_member(request, member_id):
 
 @login_required
 def reactivate_member(request, member_id):
-    if not has_role(request, MEMBER_ADMIN_ROLES):
+    if not has_role(request, MEMBER_STATUS_ROLES):
         raise PermissionDenied
 
     member = get_object_or_404(Member, id=member_id, gym=request.gym)

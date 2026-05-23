@@ -736,6 +736,7 @@ class RoleAccessMatrixTests(TestCase):
         content = response.content.decode("utf-8")
         self.assertIn("Caisse & paiements", content)
         self.assertIn('href="/pos/"', content)
+        self.assertNotIn('href="/members/"', content)
         self.assertNotIn(
             f'href="{reverse("core:gym_dashboard", args=[self.gym.id])}?view=analytics"',
             content,
@@ -752,6 +753,7 @@ class RoleAccessMatrixTests(TestCase):
         self.assertEqual(response.status_code, 200)
         content = response.content.decode("utf-8")
         self.assertIn("Membres", content)
+        self.assertIn('href="/members/"', content)
         self.assertIn("Caisse & paiements", content)
         self.assertIn('href="/access/access-dashboard/?section=scan"', content)
         self.assertIn('href="/pos/"', content)

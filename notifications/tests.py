@@ -37,6 +37,18 @@ class InAppNotificationDashboardTests(TestCase):
             last_name="Active",
             phone="+243810000405",
         )
+        self.expired_member = Member.objects.create(
+            gym=self.gym,
+            first_name="Eli",
+            last_name="Expire",
+            phone="+243810000407",
+        )
+        self.future_member = Member.objects.create(
+            gym=self.gym,
+            first_name="Fiona",
+            last_name="Future",
+            phone="+243810000408",
+        )
         self.suspended_member = Member.objects.create(
             gym=self.gym,
             first_name="Sam",
@@ -57,6 +69,22 @@ class InAppNotificationDashboardTests(TestCase):
             plan=self.plan,
             start_date=today,
             end_date=today + timedelta(days=20),
+            is_active=True,
+        )
+        MemberSubscription.objects.create(
+            gym=self.gym,
+            member=self.expired_member,
+            plan=self.plan,
+            start_date=today - timedelta(days=40),
+            end_date=today - timedelta(days=5),
+            is_active=True,
+        )
+        MemberSubscription.objects.create(
+            gym=self.gym,
+            member=self.future_member,
+            plan=self.plan,
+            start_date=today + timedelta(days=2),
+            end_date=today + timedelta(days=32),
             is_active=True,
         )
         self.owner = User.objects.create_user(
@@ -142,8 +170,69 @@ class InAppNotificationDashboardTests(TestCase):
                     flat=True,
                 )
             ),
-            ["Maya"],
+            ["Eli"],
         )
+
+    def test_dashboard_excludes_future_subscriptions_from_active_and_expiring_audiences(self):
+        self.client.force_login(self.owner)
+
+        active_response = self.client.post(
+            reverse("notifications:dashboard"),
+            {
+                "target": "active",
+                "title": "Actif",
+                "message": "Votre abonnement est actif.",
+            },
+        )
+        self.assertEqual(active_response.status_code, 302)
+        self.assertEqual(
+            list(Notification.objects.values_list("member__first_name", flat=True)),
+            ["Alice"],
+        )
+
+        Notification.objects.all().delete()
+
+        expiring_response = self.client.post(
+            reverse("notifications:dashboard"),
+            {
+                "target": "expiring_soon",
+                "title": "Rappel",
+                "message": "Votre abonnement expire bientot.",
+            },
+        )
+        self.assertEqual(expiring_response.status_code, 302)
+        self.assertEqual(Notification.objects.count(), 0)
+
+    def test_dashboard_history_and_counts_ignore_unsent_notifications(self):
+        self.client.force_login(self.owner)
+
+        Notification.objects.create(
+            gym=self.gym,
+            member=self.member,
+            title="Visible",
+            message="Notification envoyee.",
+            channel=Notification.CHANNEL_IN_APP,
+            status=Notification.STATUS_SENT,
+            sent_at=timezone.now(),
+            sent_by=self.owner,
+        )
+        Notification.objects.create(
+            gym=self.gym,
+            member=self.active_member,
+            title="Cachee",
+            message="Notification en attente.",
+            channel=Notification.CHANNEL_IN_APP,
+            status=Notification.STATUS_PENDING,
+            sent_by=self.owner,
+        )
+
+        response = self.client.get(reverse("notifications:dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Visible")
+        self.assertNotContains(response, "Cachee")
+        self.assertEqual(response.context["sent_count"], 1)
+        self.assertEqual(response.context["unread_count"], 1)
 
     def test_manager_can_open_dashboard_when_module_is_active(self):
         self.client.force_login(self.manager)
