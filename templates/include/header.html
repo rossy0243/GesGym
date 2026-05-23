@@ -376,13 +376,6 @@
             </div>
             {% endif %}
 
-            {% if request.request_id %}
-            <span class="request-trace-chip" title="Identifiant de trace support">
-                <span class="material-icons">support_agent</span>
-                REF {{ request.request_id|slice:":8"|upper }}
-            </span>
-            {% endif %}
-
             <!-- Notifications -->
             <div class="dropdown nxl-h-item">
                 <a href="javascript:void(0);" class="nxl-head-link me-0" data-bs-toggle="dropdown">

@@ -212,9 +212,14 @@
         </a>
       </div>
 
-      <button id="menu-btn" class="block md:hidden text-2xl text-gray-700 focus:outline-none">
-        <i class="fas fa-bars"></i>
-      </button>
+      <div class="flex items-center gap-3 md:hidden">
+        <a href="{% url 'compte:login' %}" class="px-4 py-2 text-sm font-semibold text-[#004e92] border border-[#004e92] rounded-full hover:bg-[#004e92] hover:text-white transition">
+          Connexion
+        </a>
+        <button id="menu-btn" type="button" onclick="toggleLandingMenu()" class="block text-2xl text-gray-700 focus:outline-none" aria-controls="mobile-menu" aria-expanded="false" aria-label="Ouvrir le menu">
+          <i class="fas fa-bars"></i>
+        </button>
+      </div>
     </div>
 
     <div id="mobile-menu" class="mobile-menu md:hidden bg-white border-t border-gray-100 px-6">
@@ -938,6 +943,6 @@
     });
   </script>
 
-  <script src="{% static 'js/script_accueil.js' %}?v=landing-v4-mobile-menu-fix"></script>
+  <script src="{% static 'js/script_accueil.js' %}?v=landing-v5-mobile-menu-fallback"></script>
 </body>
 </html>

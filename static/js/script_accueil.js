@@ -24,13 +24,30 @@
             return;
         }
         mobileMenu.classList.remove("open");
+        if (menuBtn) {
+            menuBtn.setAttribute("aria-expanded", "false");
+        }
         updateMenuIcon(false);
     }
 
+    function toggleLandingMenu() {
+        if (!mobileMenu) {
+            return false;
+        }
+        var isOpen = mobileMenu.classList.toggle("open");
+        if (menuBtn) {
+            menuBtn.setAttribute("aria-expanded", isOpen ? "true" : "false");
+        }
+        updateMenuIcon(isOpen);
+        return false;
+    }
+
+    window.toggleLandingMenu = toggleLandingMenu;
+
     if (menuBtn && mobileMenu) {
-        menuBtn.addEventListener("click", function () {
-            var isOpen = mobileMenu.classList.toggle("open");
-            updateMenuIcon(isOpen);
+        menuBtn.addEventListener("click", function (event) {
+            event.preventDefault();
+            toggleLandingMenu();
         });
 
         var mobileLinks = mobileMenu.querySelectorAll("a");
