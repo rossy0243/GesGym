@@ -1,6 +1,8 @@
 from django import forms
+from django.utils import timezone
 
 from members.models import Member
+from subscriptions.models import SubscriptionPlan
 
 from .models import Coach, CoachSpecialty, CoachingFeedback, CoachingFollowUp, GroupCoachingProgram
 
@@ -53,11 +55,20 @@ class CoachMemberForm(forms.Form):
         coach = kwargs.pop("coach", None)
         super().__init__(*args, **kwargs)
         if coach:
+            today = timezone.localdate()
             self.fields["member"].queryset = Member.objects.filter(
                 gym=coach.gym,
                 is_active=True,
                 status="active",
-            ).exclude(id__in=coach.members.all())
+                subscriptions__is_active=True,
+                subscriptions__is_paused=False,
+                subscriptions__start_date__lte=today,
+                subscriptions__end_date__gte=today,
+                subscriptions__plan__coaching_mode__in=[
+                    SubscriptionPlan.COACHING_MODE_INDIVIDUAL,
+                    SubscriptionPlan.COACHING_MODE_BOTH,
+                ],
+            ).exclude(id__in=coach.members.all()).distinct()
 
 
 class GroupCoachingProgramForm(forms.ModelForm):

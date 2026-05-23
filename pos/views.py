@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 
 from django.contrib import messages
@@ -35,7 +36,7 @@ def _validation_message(exc):
 @module_required("POS")
 def search_members(request):
     query = request.GET.get("q", "")
-    members = Member.objects.filter(gym=request.gym).filter(
+    members = Member.objects.filter(gym=request.gym, is_active=True).filter(
         Q(first_name__icontains=query)
         | Q(last_name__icontains=query)
         | Q(phone__icontains=query)
@@ -146,14 +147,23 @@ def cashier_dashboard(request):
                     f"Vente produit enregistree: {payment.amount} {payment.currency}.",
                 )
             else:
-                member = get_object_or_404(Member, id=request.POST.get("member"), gym=gym)
+                member = get_object_or_404(Member, id=request.POST.get("member"), gym=gym, is_active=True)
                 plan = get_object_or_404(SubscriptionPlan, id=request.POST.get("plan"), gym=gym)
+                start_date_raw = request.POST.get("start_date")
+                start_date = None
+                if start_date_raw:
+                    try:
+                        start_date = datetime.strptime(start_date_raw, "%Y-%m-%d").date()
+                    except ValueError as exc:
+                        raise ValidationError("La date de debut est invalide.") from exc
                 subscription, payment = record_subscription_payment(
                     gym=gym,
                     member=member,
                     plan=plan,
                     currency=currency,
                     method=method,
+                    start_date=start_date,
+                    auto_renew=request.POST.get("auto_renew") == "on",
                     created_by=request.user,
                 )
                 log_sensitive_action(
@@ -178,7 +188,7 @@ def cashier_dashboard(request):
 
         return redirect("pos:cashier_dashboard")
 
-    members = Member.objects.filter(gym=gym)
+    members = Member.objects.filter(gym=gym, is_active=True)
     plans = SubscriptionPlan.objects.filter(gym=gym, is_active=True)
     products = Product.objects.filter(gym=gym, is_active=True, quantity__gt=0).order_by("name")
     latest_exchange_rate = ExchangeRate.objects.filter(gym=gym).order_by("-date", "-created_at").first()

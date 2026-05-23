@@ -94,11 +94,11 @@ def _member_coaching_rights(subscription):
 
 
 def _member_can_choose_individual_coach(member, subscription):
-    return bool(subscription and subscription.plan and subscription.plan.allows_individual_coaching and member.is_active)
+    return member.has_individual_coaching_access
 
 
 def _member_can_choose_group_program(member, subscription):
-    return bool(subscription and subscription.plan and subscription.plan.allows_group_coaching and member.is_active)
+    return member.has_group_coaching_access
 
 
 def _member_tab_config(unread_notification_count):
@@ -140,16 +140,22 @@ def member_portal(request):
         .select_related("scanned_by")
         .order_by("-check_in_time")[:8]
     )
+    can_choose_individual_coach = _member_can_choose_individual_coach(member, subscription)
+    can_choose_group_program = _member_can_choose_group_program(member, subscription)
     coaches = Coach.objects.filter(
         gym=member.gym,
         members=member,
         is_active=True,
-    ).order_by("name")
-    selected_group_programs = GroupCoachingProgram.objects.filter(
-        gym=member.gym,
-        participants=member,
-        is_active=True,
-    ).select_related("coach").order_by("name")
+    ).order_by("name") if can_choose_individual_coach else Coach.objects.none()
+    selected_group_programs = (
+        GroupCoachingProgram.objects.filter(
+            gym=member.gym,
+            participants=member,
+            is_active=True,
+        ).select_related("coach").order_by("name")
+        if can_choose_group_program
+        else GroupCoachingProgram.objects.none()
+    )
     member_notifications = Notification.objects.filter(
         gym=member.gym,
         member=member,
@@ -176,14 +182,20 @@ def member_portal(request):
         default=0,
     )
     available_plans = available_plans_queryset.order_by("-total_sales_count", "price", "duration_days", "name")
-    available_coaches = Coach.objects.filter(gym=member.gym, is_active=True).annotate(
-        member_count=Count("members", distinct=True)
-    ).order_by("name")
+    available_coaches = (
+        Coach.objects.filter(gym=member.gym, is_active=True)
+        .annotate(member_count=Count("members", distinct=True))
+        .order_by("name")
+        if can_choose_individual_coach
+        else Coach.objects.none()
+    )
     available_group_programs = (
         GroupCoachingProgram.objects.filter(gym=member.gym, is_active=True)
         .select_related("coach")
         .annotate(participants_total=Count("participants", distinct=True))
         .order_by("name")
+        if can_choose_group_program
+        else GroupCoachingProgram.objects.none()
     )
     pending_requests = SubscriptionRequest.objects.filter(
         gym=member.gym,
@@ -264,8 +276,8 @@ def member_portal(request):
         "available_plans": available_plans,
         "available_coaches": available_coaches,
         "available_group_programs": available_group_programs,
-        "can_choose_individual_coach": _member_can_choose_individual_coach(member, subscription),
-        "can_choose_group_program": _member_can_choose_group_program(member, subscription),
+        "can_choose_individual_coach": can_choose_individual_coach,
+        "can_choose_group_program": can_choose_group_program,
         "top_plan_sales_count": top_plan_sales_count,
         "pending_requests": pending_requests,
         "pending_plan_ids": pending_plan_ids,
@@ -306,6 +318,15 @@ def member_submit_coaching_feedback(request):
 
     if not form.is_valid():
         messages.error(request, "Votre avis n'a pas pu etre enregistre. Verifiez les notes renseignees.")
+        return redirect(f"{reverse('members:member_portal')}?tab=home")
+
+    subscription = member.active_subscription
+    if feedback_kind == "group_program":
+        if not _member_can_choose_group_program(member, subscription):
+            messages.error(request, "Votre formule actuelle ne permet pas de laisser un avis sur un programme groupe.")
+            return redirect(f"{reverse('members:member_portal')}?tab=home")
+    elif not _member_can_choose_individual_coach(member, subscription):
+        messages.error(request, "Votre formule actuelle ne permet pas de laisser un avis coaching individuel.")
         return redirect(f"{reverse('members:member_portal')}?tab=home")
 
     coach = get_object_or_404(Coach, id=coach_id, gym=member.gym, is_active=True)
@@ -601,12 +622,14 @@ def member_list(request):
     active_subscription_exists = MemberSubscription.objects.filter(
         member=OuterRef("pk"),
         is_active=True,
+        start_date__lte=today,
         end_date__gte=today,
         is_paused=False,
     )
     expiring_subscription_exists = MemberSubscription.objects.filter(
         member=OuterRef("pk"),
         is_active=True,
+        start_date__lte=today,
         end_date__range=(today, limit),
         is_paused=False,
     )

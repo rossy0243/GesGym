@@ -145,6 +145,7 @@
         </div>
     </div>
 
+    {% if slip.status != 'paid' %}
     <div class="row">
         <div class="col-lg-4 mb-4">
             <div class="card h-100">
@@ -209,6 +210,11 @@
             </div>
         </div>
     </div>
+    {% else %}
+    <div class="alert alert-warning">
+        Ce bulletin a deja ete paye via POS. Les ajustements, conges et heures supplementaires de cette periode sont verrouilles pour conserver la coherence entre RH et caisse.
+    </div>
+    {% endif %}
 
     <div class="row">
         <div class="col-md-4 mb-4">

@@ -1,5 +1,5 @@
 from decimal import Decimal
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from io import BytesIO
 from unittest.mock import patch
 from zipfile import ZipFile
@@ -246,6 +246,231 @@ class AccountingReportExportTests(TestCase):
         self.assertIn("Alice", content)
         self.assertNotIn("Other Tenant Subscription", content)
 
+    def test_journalier_report_defaults_to_today_period(self):
+        response = self.client.get(reverse("core:rapport"), {"section": "journalier"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["selected_period"], "today")
+
+    def test_journalier_export_defaults_to_today_period(self):
+        today_payment = Payment.objects.create(
+            gym=self.gym_a,
+            cash_register=self.register_a,
+            member=self.member_a,
+            amount=Decimal("8.00"),
+            currency="USD",
+            method="cash",
+            type="in",
+            category="subscription",
+            status="success",
+            description="Paiement du jour",
+            created_by=self.owner,
+        )
+        old_payment = Payment.objects.create(
+            gym=self.gym_a,
+            cash_register=self.register_a,
+            member=self.member_a,
+            amount=Decimal("9.00"),
+            currency="USD",
+            method="cash",
+            type="in",
+            category="subscription",
+            status="success",
+            description="Paiement ancien",
+            created_by=self.owner,
+        )
+        Payment.objects.filter(pk=today_payment.pk).update(created_at=timezone.now())
+        Payment.objects.filter(pk=old_payment.pk).update(created_at=timezone.now() - timedelta(days=12))
+
+        response = self.client.get(
+            reverse("core:rapport_export"),
+            {"section": "journalier", "format": "csv"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        self.assertIn("Paiement du jour", content)
+        self.assertNotIn("Paiement ancien", content)
+
+    def test_mensuel_report_defaults_to_month_period(self):
+        response = self.client.get(reverse("core:rapport"), {"section": "mensuel"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["selected_period"], "month")
+
+    def test_mensuel_export_defaults_to_month_period(self):
+        period_payment = Payment.objects.create(
+            gym=self.gym_a,
+            cash_register=self.register_a,
+            member=self.member_a,
+            amount=Decimal("11.00"),
+            currency="USD",
+            method="cash",
+            type="in",
+            category="subscription",
+            status="success",
+            description="Paiement du mois",
+            created_by=self.owner,
+        )
+        old_payment = Payment.objects.create(
+            gym=self.gym_a,
+            cash_register=self.register_a,
+            member=self.member_a,
+            amount=Decimal("7.00"),
+            currency="USD",
+            method="cash",
+            type="in",
+            category="subscription",
+            status="success",
+            description="Paiement ancien mensuel",
+            created_by=self.owner,
+        )
+        Payment.objects.filter(pk=period_payment.pk).update(created_at=timezone.now())
+        Payment.objects.filter(pk=old_payment.pk).update(created_at=timezone.now() - timedelta(days=45))
+
+        response = self.client.get(
+            reverse("core:rapport_export"),
+            {"section": "mensuel", "format": "csv"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        self.assertIn("Paiement du mois", content)
+        self.assertNotIn("Paiement ancien mensuel", content)
+
+    def test_custom_subscription_rows_only_sum_pos_payments_inside_period(self):
+        today = timezone.localdate()
+        plan = SubscriptionPlan.objects.create(
+            gym=self.gym_a,
+            name="Mensuel rapport",
+            duration_days=30,
+            price=Decimal("30.00"),
+        )
+        subscription = MemberSubscription.objects.create(
+            gym=self.gym_a,
+            member=self.member_a,
+            plan=plan,
+            start_date=today,
+            end_date=today + timedelta(days=30),
+            is_active=True,
+        )
+        in_period_payment = Payment.objects.create(
+            gym=self.gym_a,
+            cash_register=self.register_a,
+            member=self.member_a,
+            subscription=subscription,
+            amount=Decimal("10.00"),
+            currency="USD",
+            method="cash",
+            type="in",
+            category="subscription",
+            status="success",
+            description="Paiement dans la periode",
+            created_by=self.owner,
+        )
+        Payment.objects.filter(pk=in_period_payment.pk).update(created_at=timezone.now())
+        old_payment = Payment.objects.create(
+            gym=self.gym_a,
+            cash_register=self.register_a,
+            member=self.member_a,
+            subscription=subscription,
+            amount=Decimal("12.00"),
+            currency="USD",
+            method="cash",
+            type="in",
+            category="subscription",
+            status="success",
+            description="Paiement hors periode",
+            created_by=self.owner,
+        )
+        Payment.objects.filter(pk=old_payment.pk).update(created_at=timezone.now() - timedelta(days=90))
+        period_data = get_report_period({"period": "month"}, today=today)
+        params = QueryDict("", mutable=True)
+        params.setlist("types", ["subscriptions"])
+        params.setlist("columns", list(CUSTOM_COLUMNS.keys()))
+        params["grouping"] = "none"
+
+        report = build_custom_report(self.gym_a, params, period_data)
+
+        subscription_row = next(row for row in report["rows"] if row["reference"] == f"SUB-{subscription.id:06d}")
+        self.assertEqual(subscription_row["amount_cdf"], Decimal("28000.00"))
+
+    def test_custom_transaction_rows_use_real_status_and_keep_entry_type_in_description(self):
+        today = timezone.localdate()
+        period_data = get_report_period({"period": "month"}, today=today)
+        params = QueryDict("", mutable=True)
+        params.setlist("types", ["transactions"])
+        params.setlist("columns", list(CUSTOM_COLUMNS.keys()))
+        params["grouping"] = "none"
+
+        report = build_custom_report(self.gym_a, params, period_data)
+
+        row = next(row for row in report["rows"] if row["reference"].startswith("POS-"))
+        self.assertEqual(row["status"], "Success")
+        self.assertIn("Entrée", row["description"])
+
+    def test_custom_register_rows_include_opening_and_theoretical_balance(self):
+        today = timezone.localdate()
+        period_data = get_report_period({"period": "month"}, today=today)
+        params = QueryDict("", mutable=True)
+        params.setlist("types", ["registers"])
+        params.setlist("columns", list(CUSTOM_COLUMNS.keys()))
+        params["grouping"] = "none"
+
+        report = build_custom_report(self.gym_a, params, period_data)
+
+        row = next(row for row in report["rows"] if row["reference"] == self.register_a.session_code)
+        self.assertIn("Ouverture", row["description"])
+        self.assertIn("Solde theorique", row["description"])
+        self.assertEqual(row["amount_cdf"], Decimal("24000.00"))
+
+    def test_dashboard_excludes_future_subscriptions_from_active_metrics(self):
+        today = timezone.localdate()
+        self.member_a.status = "active"
+        self.member_a.save(update_fields=["status"])
+        current_plan = SubscriptionPlan.objects.create(
+            gym=self.gym_a,
+            name="Pack courant",
+            duration_days=30,
+            price=Decimal("15.00"),
+        )
+        MemberSubscription.objects.create(
+            gym=self.gym_a,
+            member=self.member_a,
+            plan=current_plan,
+            start_date=today,
+            end_date=today + timedelta(days=30),
+            is_active=True,
+        )
+        future_member = Member.objects.create(
+            gym=self.gym_a,
+            first_name="Future",
+            last_name="Dashboard",
+            phone="10009",
+            email="future.dashboard@example.com",
+            status="active",
+        )
+        future_plan = SubscriptionPlan.objects.create(
+            gym=self.gym_a,
+            name="Pack futur",
+            duration_days=30,
+            price=Decimal("20.00"),
+        )
+        MemberSubscription.objects.create(
+            gym=self.gym_a,
+            member=future_member,
+            plan=future_plan,
+            start_date=today + timedelta(days=4),
+            end_date=today + timedelta(days=34),
+            is_active=True,
+        )
+
+        response = self.client.get(reverse("core:gym_dashboard", args=[self.gym_a.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["active_members"], 1)
+        self.assertEqual(response.context["total_subscriptions"], 1)
+
     def test_custom_report_preview_uses_selected_types_and_columns(self):
         response = self.client.get(
             reverse("core:rapport"),
@@ -290,6 +515,25 @@ class AccountingReportExportTests(TestCase):
         self.assertIn("Alice RH", content)
         self.assertIn("Cotis employeur", content)
 
+    def test_custom_report_preview_displays_grouping_label_and_period_scoped_payroll_summary(self):
+        response = self.client.get(
+            reverse("core:rapport"),
+            {
+                "section": "personnalise",
+                "period": "custom",
+                "date_from": timezone.localdate().replace(day=1).isoformat(),
+                "date_to": timezone.localdate().isoformat(),
+                "types": ["transactions"],
+                "columns": ["date", "description"],
+                "grouping": "day",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        self.assertIn("Regroupement : Par jour", content)
+        self.assertIn(f"Synthese RH - Du 01/{timezone.localdate():%m/%Y} au {timezone.localdate():%d/%m/%Y}", content)
+
     def test_custom_report_export_is_scoped_to_current_gym(self):
         response = self.client.get(
             reverse("core:rapport_export"),
@@ -308,6 +552,48 @@ class AccountingReportExportTests(TestCase):
         self.assertIn("Abonnement Alice", content)
         self.assertIn("Achat fournitures", content)
         self.assertNotIn("Other Tenant Subscription", content)
+
+    def test_custom_report_xlsx_export_contains_expected_sheet_and_scoped_data(self):
+        response = self.client.get(
+            reverse("core:rapport_export"),
+            {
+                "format": "xlsx",
+                "section": "personnalise",
+                "period": "month",
+                "types": ["transactions"],
+                "columns": ["date", "description", "amount_cdf"],
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response["Content-Type"],
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        self.assertTrue(response.content.startswith(b"PK"))
+
+        with ZipFile(BytesIO(response.content)) as archive:
+            names = archive.namelist()
+            self.assertIn("xl/worksheets/sheet1.xml", names)
+            sheet = archive.read("xl/worksheets/sheet1.xml").decode("utf-8")
+
+        self.assertIn("Rapport personnalise GesGym", sheet)
+        self.assertIn("Abonnement Alice", sheet)
+        self.assertNotIn("Other Tenant Subscription", sheet)
+
+    def test_report_exports_use_period_based_filename(self):
+        response = self.client.get(
+            reverse("core:rapport_export"),
+            {
+                "format": "csv",
+                "section": "journalier",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("attachment;", response["Content-Disposition"])
+        self.assertIn("rapport-comptable-gym-a-", response["Content-Disposition"])
+        self.assertTrue(response["Content-Disposition"].endswith(".csv\""))
 
     def test_settings_owner_can_create_internal_employee_for_selected_gym(self):
         response = self.client.post(

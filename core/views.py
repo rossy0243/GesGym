@@ -713,6 +713,7 @@ def gym_dashboard(request, gym_id):
     active_subscriptions_qs = MemberSubscription.objects.filter(
         member__gym=gym,
         is_active=True,
+        start_date__lte=today,
         end_date__gte=today,
         is_paused=False,
     )
@@ -767,23 +768,31 @@ def gym_dashboard(request, gym_id):
     expiry_soon = MemberSubscription.objects.filter(
         member__gym=gym,
         is_active=True,
+        start_date__lte=today,
         end_date__gte=today,
+        is_paused=False,
         end_date__lte=today + timedelta(days=15),
     ).count()
     expiry_7_days = MemberSubscription.objects.filter(
         member__gym=gym,
         end_date=today + timedelta(days=7),
         is_active=True,
+        start_date__lte=today,
+        is_paused=False,
     ).count()
     expiry_3_days = MemberSubscription.objects.filter(
         member__gym=gym,
         end_date=today + timedelta(days=3),
         is_active=True,
+        start_date__lte=today,
+        is_paused=False,
     ).count()
     expiry_1_day = MemberSubscription.objects.filter(
         member__gym=gym,
         end_date=today + timedelta(days=1),
         is_active=True,
+        start_date__lte=today,
+        is_paused=False,
     ).count()
 
     access_period_qs = AccessLog.objects.filter(
@@ -867,12 +876,16 @@ def gym_dashboard(request, gym_id):
     plans_stats = MemberSubscription.objects.filter(
         member__gym=gym,
         is_active=True,
+        start_date__lte=today,
         end_date__gte=today,
+        is_paused=False,
     ).values("plan__name").annotate(total=Count("id")).order_by("-total")
     total_subscriptions = MemberSubscription.objects.filter(
         member__gym=gym,
         is_active=True,
+        start_date__lte=today,
         end_date__gte=today,
+        is_paused=False,
     ).count()
     plan_labels = [plan["plan__name"] or "Sans nom" for plan in plans_stats]
     plan_values = [plan["total"] for plan in plans_stats]
@@ -1343,10 +1356,10 @@ def reports_dashboard(request):
         sales_values.append(float(item["total"]))
 
     custom_report = build_custom_report(gym, request.GET, period_data, limit=50)
-    from rh.kpis import payroll_rows
+    from rh.kpis import payroll_rows_for_period
 
-    payroll_report = payroll_rows(gym, period_data["end_date"].year, period_data["end_date"].month)
-    payroll_report_month_label = f"{calendar.month_name[period_data['end_date'].month]} {period_data['end_date'].year}"
+    payroll_report = payroll_rows_for_period(gym, period_data["start_date"], period_data["end_date"])
+    payroll_report_label = period_data["label"]
 
     context = {
         "section": section,
@@ -1372,7 +1385,7 @@ def reports_dashboard(request):
         "sales_values": sales_values,
         "monthly_transactions": monthly_transactions,
         "payroll_report": payroll_report,
-        "payroll_report_month_label": payroll_report_month_label,
+        "payroll_report_label": payroll_report_label,
     }
 
     return render(request, "core/rapports.html", context)
@@ -1394,8 +1407,15 @@ def accounting_report_export(request):
         return HttpResponseBadRequest("Format d'export non supporte.")
 
     section = get_report_section(request.GET)
-    default_period = "custom" if section == "personnalise" else "month"
-    period_data = get_report_period(request.GET, default_period=default_period)
+    default_period_by_section = {
+        "journalier": "today",
+        "mensuel": "month",
+        "personnalise": "custom",
+    }
+    period_data = get_report_period(
+        request.GET,
+        default_period=default_period_by_section.get(section, "month"),
+    )
 
     if section == "personnalise":
         custom_report = build_custom_report(gym, request.GET, period_data)

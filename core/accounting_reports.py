@@ -421,6 +421,7 @@ def build_transaction_rows(gym, period_data):
     method_labels = dict(Payment.PAYMENT_METHODS)
     type_labels = dict(Payment.TRANSACTION_TYPE)
     category_labels = dict(Payment.CATEGORY_CHOICES)
+    status_labels = dict(Payment.STATUS)
     rows = []
 
     for payment in payment_queryset(gym, period_data["start_date"], period_data["end_date"]):
@@ -430,10 +431,13 @@ def build_transaction_rows(gym, period_data):
                 sort_date=local_date(payment.created_at),
                 dataset="Transaction POS",
                 client=member_label(payment.member),
-                description=payment.description or category_labels.get(payment.category, payment.category),
+                description=(
+                    f"{type_labels.get(payment.type, payment.type)} - "
+                    f"{payment.description or category_labels.get(payment.category, payment.category)}"
+                ),
                 amount_cdf=money(payment.amount_cdf),
                 method=method_labels.get(payment.method, payment.method),
-                status=type_labels.get(payment.type, payment.type),
+                status=status_labels.get(payment.status, payment.status),
                 reference=piece_reference(payment),
                 source=source_label(payment) or "pos",
             )
@@ -508,7 +512,11 @@ def build_subscription_rows(gym, period_data):
 
     for subscription in subscriptions:
         amount_cdf = money(
-            subscription.payments.filter(status="success", type="in").aggregate(total=Sum("amount_cdf"))["total"]
+            subscription.payments.filter(
+                status="success",
+                type="in",
+                created_at__date__range=(period_data["start_date"], period_data["end_date"]),
+            ).aggregate(total=Sum("amount_cdf"))["total"]
         )
         if subscription.is_paused:
             status = "En pause"
@@ -554,14 +562,23 @@ def build_register_rows(gym, period_data):
         )
         entries = money(period_payments.filter(type="in").aggregate(total=Sum("amount_cdf"))["total"])
         exits = money(period_payments.filter(type="out").aggregate(total=Sum("amount_cdf"))["total"])
+        opened_in_period = period_data["start_date"] <= local_date(register.opened_at) <= period_data["end_date"]
+        opening_amount = money(register.opening_amount) if opened_in_period else Decimal("0.00")
+        theoretical_balance = opening_amount + entries - exits
         rows.append(
             custom_row(
                 date=format_datetime(register.opened_at),
                 sort_date=local_date(register.opened_at),
                 dataset="Session de caisse",
                 client=user_label(register.opened_by),
-                description=register.session_code or f"Caisse #{register.id}",
-                amount_cdf=entries - exits,
+                description=(
+                    f"{register.session_code or f'Caisse #{register.id}'} | "
+                    f"Ouverture {format_money(opening_amount)} CDF | "
+                    f"Entrees {format_money(entries)} CDF | "
+                    f"Sorties {format_money(exits)} CDF | "
+                    f"Solde theorique {format_money(theoretical_balance)} CDF"
+                ),
+                amount_cdf=theoretical_balance,
                 method="POS",
                 status="Fermee" if register.is_closed else "Ouverte",
                 reference=register.session_code or f"Caisse #{register.id}",
@@ -704,6 +721,7 @@ def build_custom_report(gym, params, period_data, limit=None):
         "selected_types": selected_types,
         "selected_columns": selected_columns,
         "grouping": grouping,
+        "grouping_label": CUSTOM_GROUPINGS[grouping],
         "headers": headers,
         "rows": preview_rows,
         "total_count": total_count,

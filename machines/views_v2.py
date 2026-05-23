@@ -124,6 +124,12 @@ def machine_delete(request, machine_id):
     machine = get_object_or_404(Machine, id=machine_id, gym=request.gym)
 
     if request.method == "POST":
+        if machine.maintenance_logs.filter(pos_payment__isnull=False).exists():
+            messages.error(
+                request,
+                "Impossible de supprimer cette machine car certaines maintenances sont deja liees a des paiements POS.",
+            )
+            return redirect("machines:detail", machine_id=machine.id)
         machine_name = machine.name
         machine.delete()
         messages.success(request, f'Machine "{machine_name}" supprimee avec succes.')
@@ -281,6 +287,12 @@ def maintenance_delete(request, maintenance_id):
     machine = maintenance.machine
 
     if request.method == "POST":
+        if maintenance.pos_payment_id:
+            messages.error(
+                request,
+                "Impossible de supprimer cette maintenance car elle est deja liee a un paiement POS.",
+            )
+            return redirect("machines:detail", machine_id=machine.id)
         maintenance.delete()
         messages.success(request, "Log de maintenance supprime avec succes.")
         return redirect("machines:detail", machine_id=machine.id)

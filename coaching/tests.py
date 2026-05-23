@@ -7,6 +7,7 @@ from datetime import timedelta
 from compte.models import User, UserGymRole
 from members.models import Member
 from organizations.models import Gym, GymModule, Module, Organization
+from subscriptions.models import MemberSubscription, SubscriptionPlan
 
 from .models import Coach, CoachAssignment, CoachingFeedback, CoachingFollowUp, GroupCoachingProgram
 
@@ -72,6 +73,44 @@ class CoachingTenantTests(TestCase):
             status="active",
             is_active=True,
         )
+        self.plan_individual_a = SubscriptionPlan.objects.create(
+            gym=self.gym_a,
+            name="Coaching individuel",
+            duration_days=30,
+            price=50,
+            coaching_mode=SubscriptionPlan.COACHING_MODE_INDIVIDUAL,
+        )
+        self.plan_group_a = SubscriptionPlan.objects.create(
+            gym=self.gym_a,
+            name="Coaching groupe",
+            duration_days=30,
+            price=40,
+            coaching_mode=SubscriptionPlan.COACHING_MODE_GROUP,
+        )
+        self.plan_b = SubscriptionPlan.objects.create(
+            gym=self.gym_b,
+            name="Coaching externe",
+            duration_days=30,
+            price=55,
+            coaching_mode=SubscriptionPlan.COACHING_MODE_BOTH,
+        )
+        today = timezone.now().date()
+        self.subscription_a = MemberSubscription.objects.create(
+            gym=self.gym_a,
+            member=self.member_a,
+            plan=self.plan_individual_a,
+            start_date=today,
+            end_date=today + timedelta(days=30),
+            is_active=True,
+        )
+        MemberSubscription.objects.create(
+            gym=self.gym_b,
+            member=self.member_b,
+            plan=self.plan_b,
+            start_date=today,
+            end_date=today + timedelta(days=30),
+            is_active=True,
+        )
         self.coach_b.members.add(self.member_b)
         self.client.login(username="coach-manager", password="test-pass")
 
@@ -121,6 +160,36 @@ class CoachingTenantTests(TestCase):
 
         self.assertRedirects(response, reverse("coaching:detail", args=[self.coach_a.id]))
         self.assertFalse(self.coach_a.members.filter(id=self.member_b.id).exists())
+
+    def test_assign_member_rejects_member_without_individual_coaching_rights(self):
+        no_rights_member = Member.objects.create(
+            gym=self.gym_a,
+            first_name="Nina",
+            last_name="NoRights",
+            phone="333",
+            email="nina.norights@example.com",
+            status="active",
+            is_active=True,
+        )
+        today = timezone.now().date()
+        MemberSubscription.objects.create(
+            gym=self.gym_a,
+            member=no_rights_member,
+            plan=self.plan_group_a,
+            start_date=today,
+            end_date=today + timedelta(days=30),
+            is_active=True,
+        )
+
+        response = self.client.post(
+            reverse("coaching:assign_member", args=[self.coach_a.id]),
+            {"member": no_rights_member.id},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(self.coach_a.members.filter(id=no_rights_member.id).exists())
+        self.assertContains(response, "Membre invalide pour ce coach")
 
     def test_model_rejects_cross_gym_member_assignment(self):
         with self.assertRaises(ValidationError):
@@ -177,6 +246,18 @@ class CoachingTenantTests(TestCase):
         self.assertContains(response, "Coach A")
         self.assertContains(response, "Alice Member")
 
+    def test_coach_portal_hides_member_without_current_coaching_access(self):
+        self.client.logout()
+        self.client.login(username="coach-mobile", password="test-pass")
+        self.coach_a.members.add(self.member_a)
+        self.subscription_a.is_active = False
+        self.subscription_a.save(update_fields=["is_active"])
+
+        response = self.client.get(reverse("coaching:coach_portal"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Alice Member")
+
     def test_group_program_pages_are_scoped_to_current_gym(self):
         program = GroupCoachingProgram.objects.create(
             gym=self.gym_a,
@@ -207,6 +288,18 @@ class CoachingTenantTests(TestCase):
 
         other_detail_response = self.client.get(reverse("coaching:group_program_detail", args=[other_program.id]))
         self.assertEqual(other_detail_response.status_code, 404)
+
+    def test_group_program_rejects_member_without_group_coaching_rights(self):
+        program = GroupCoachingProgram.objects.create(
+            gym=self.gym_a,
+            coach=self.coach_a,
+            name="Team cardio",
+            objective="Cardio",
+            capacity=10,
+        )
+
+        with self.assertRaises(ValidationError):
+            program.join_member(self.member_a)
 
     def test_coach_can_open_member_follow_up_detail(self):
         self.client.logout()

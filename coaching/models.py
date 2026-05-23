@@ -116,6 +116,8 @@ class Coach(models.Model):
     def assign_member(self, member):
         if member.gym_id != self.gym_id:
             raise ValidationError("Le membre doit appartenir au meme gym que le coach.")
+        if not member.has_individual_coaching_access:
+            raise ValidationError("Le membre doit avoir un abonnement actif avec coaching individuel.")
         self.members.add(member)
 
     def remove_member(self, member):
@@ -201,6 +203,8 @@ class GroupCoachingProgram(models.Model):
     def join_member(self, member):
         if member.gym_id != self.gym_id:
             raise ValidationError("Le membre doit appartenir au meme gym que le programme.")
+        if not member.has_group_coaching_access:
+            raise ValidationError("Le membre doit avoir un abonnement actif avec acces au coaching groupe.")
         if self.is_full and not self.participants.filter(id=member.id).exists():
             raise ValidationError("Ce programme groupe est deja complet.")
         self.participants.add(member)

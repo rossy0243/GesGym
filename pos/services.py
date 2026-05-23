@@ -75,14 +75,29 @@ def record_payment(
     )
 
 
-def record_subscription_payment(*, gym, member, plan, currency, method, created_by=None):
+def record_subscription_payment(
+    *,
+    gym,
+    member,
+    plan,
+    currency,
+    method,
+    start_date=None,
+    auto_renew=False,
+    created_by=None,
+):
     if member.gym_id != gym.id:
         raise ValidationError("Le membre n'appartient pas a ce gym.")
     if plan.gym_id != gym.id:
         raise ValidationError("La formule d'abonnement n'appartient pas a ce gym.")
+    if not member.is_active:
+        raise ValidationError("Le membre doit etre actif pour acheter un abonnement.")
 
     register = get_open_register(gym)
-    start = timezone.localdate()
+    today = timezone.localdate()
+    start = start_date or today
+    if start > today:
+        raise ValidationError("La date de debut ne peut pas etre dans le futur pour un abonnement encaisse.")
     end = start + timedelta(days=plan.duration_days)
     amount_usd = _money(plan.price)
     amount = amount_usd if currency == "USD" else _money(amount_usd * register.exchange_rate)
@@ -100,6 +115,7 @@ def record_subscription_payment(*, gym, member, plan, currency, method, created_
             plan=plan,
             start_date=start,
             end_date=end,
+            auto_renew=auto_renew,
             is_active=True,
         )
 

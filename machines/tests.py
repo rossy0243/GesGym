@@ -137,3 +137,68 @@ class MachinesTenantTests(TestCase):
                 amount_cdf=Decimal("25.00"),
             ).exists()
         )
+
+    def test_cannot_delete_maintenance_linked_to_pos_payment(self):
+        response = self.client.post(
+            reverse("machines:add_maintenance", args=[self.machine_a.id]),
+            {
+                "description": "Remplacement moteur",
+                "cost": "55.00",
+            },
+            follow=True,
+        )
+
+        log = MaintenanceLog.objects.get(
+            machine=self.machine_a,
+            description="Remplacement moteur",
+        )
+
+        delete_response = self.client.post(
+            reverse("machines:maintenance_delete", args=[log.id]),
+            follow=True,
+        )
+
+        self.assertEqual(delete_response.status_code, 200)
+        self.assertContains(
+            delete_response,
+            "Impossible de supprimer cette maintenance car elle est deja liee a un paiement POS.",
+        )
+        self.assertTrue(MaintenanceLog.objects.filter(id=log.id).exists())
+        self.assertTrue(Payment.objects.filter(id=log.pos_payment_id).exists())
+
+    def test_cannot_delete_machine_when_paid_maintenance_exists(self):
+        self.client.post(
+            reverse("machines:add_maintenance", args=[self.machine_a.id]),
+            {
+                "description": "Graissage securise",
+                "cost": "30.00",
+            },
+            follow=True,
+        )
+
+        response = self.client.post(
+            reverse("machines:delete", args=[self.machine_a.id]),
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "Impossible de supprimer cette machine car certaines maintenances sont deja liees a des paiements POS.",
+        )
+        self.assertTrue(Machine.objects.filter(id=self.machine_a.id).exists())
+
+    def test_can_delete_maintenance_without_pos_payment(self):
+        log = MaintenanceLog.objects.create(
+            machine=self.machine_a,
+            description="Controle visuel",
+            cost=None,
+        )
+
+        response = self.client.post(
+            reverse("machines:maintenance_delete", args=[log.id]),
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(MaintenanceLog.objects.filter(id=log.id).exists())

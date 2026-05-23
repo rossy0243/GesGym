@@ -290,6 +290,26 @@
                                         {% endif %}
                                     </div>
                                 </div>
+                            {% elif p.category == "maintenance" %}
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="material-icons text-secondary" style="font-size:20px;">build</span>
+                                    <div>
+                                        <div class="fw-semibold">Maintenance</div>
+                                        {% if p.description %}
+                                            <small class="text-muted d-block">{{ p.description }}</small>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% elif p.category == "salary" %}
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="material-icons text-secondary" style="font-size:20px;">badge</span>
+                                    <div>
+                                        <div class="fw-semibold">Salaire</div>
+                                        {% if p.description %}
+                                            <small class="text-muted d-block">{{ p.description }}</small>
+                                        {% endif %}
+                                    </div>
+                                </div>
                             {% else %}
                                 <div class="d-flex align-items-center gap-2">
                                     <span class="material-icons text-secondary" style="font-size:20px;">money_off</span>

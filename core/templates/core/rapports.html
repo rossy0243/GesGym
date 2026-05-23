@@ -56,17 +56,6 @@
                 </div>
                 {% endif %}
 
-                <div class="vr d-none d-md-block"></div>
-
-                <button class="btn btn-sm btn-outline-secondary" onclick="toggleDailyClosure()">
-                    <span class="material-icons me-1" style="font-size:18px;">lock</span>
-                    <span id="dailyClosureLabel">Clôturer la journée</span>
-                </button>
-
-                <button class="btn btn-sm btn-outline-primary" onclick="openDailyAdjustmentDialog()" id="dailyAdjustBtn">
-                    <span class="material-icons me-1" style="font-size:18px;">edit</span>
-                    Ajustement après clôture
-                </button>
             </div>
         </div>
     </div>
@@ -408,7 +397,7 @@
                             <span class="material-icons">payments</span>
                         </div>
                         <div>
-                            <div class="fs-12 text-muted">CA Mensuel</div>
+                            <div class="fs-12 text-muted">CA sur la période</div>
                             <h4 class="mb-0 fw-bold" id="monthlyRevenue">{{ monthly_revenue }} CDF</h4>
                         </div>
                     </div>
@@ -436,7 +425,7 @@
                             <span class="material-icons">directions_run</span>
                         </div>
                         <div>
-                            <div class="fs-12 text-muted">Visites totales</div>
+                            <div class="fs-12 text-muted">Visites sur la période</div>
                             <h4 class="mb-0 fw-bold" id="monthlyVisits">{{ monthly_visits }}</h4>
                         </div>
                     </div>
@@ -450,7 +439,7 @@
                     <div class="card-header">
                         <h5 class="card-title d-flex align-items-center gap-2 mb-0">
                             <span class="material-icons">table_chart</span>
-                            Récapitulatif mensuel par formule
+                            Récapitulatif par formule
                         </h5>
                     </div>
                     <div class="card-body p-0">
@@ -475,8 +464,8 @@
                                         <td colspan="3" class="text-center py-5">
                                             <div class="d-flex flex-column align-items-center justify-content-center">
                                                 <span class="material-icons empty-state-icon">table_chart</span>
-                                                <p class="mt-3 mb-1 fw-semibold text-muted">Aucune donnée mensuelle</p>
-                                                <small class="text-muted">Les statistiques mensuelles apparaîtront ici</small>
+                                                <p class="mt-3 mb-1 fw-semibold text-muted">Aucune donnée sur cette période</p>
+                                                <small class="text-muted">Les statistiques de la période apparaîtront ici</small>
                                             </div>
                                         </td>
                                     </tr>
@@ -493,7 +482,7 @@
                     <div class="card-header">
                         <h5 class="card-title d-flex align-items-center gap-2 mb-0">
                             <span class="material-icons">show_chart</span>
-                            Tendance mensuelle
+                            Tendance de la période
                         </h5>
                     </div>
                     <div class="card-body">
@@ -625,7 +614,7 @@
 
                     <div class="card-footer d-flex justify-content-between align-items-center flex-wrap gap-2">
                         <p class="fs-12 text-muted mb-0">Affichage {{ custom_report.preview_count }} sur {{ custom_report.total_count }} resultat{{ custom_report.total_count|pluralize }}</p>
-                        <span class="badge bg-light text-primary">Regroupement : {{ custom_report.grouping }}</span>
+                        <span class="badge bg-light text-primary">Regroupement : {{ custom_report.grouping_label }}</span>
                     </div>
                 </div>
             </div>
@@ -685,7 +674,7 @@
                         <div>
                             <h5 class="card-title d-flex align-items-center gap-2 mb-1">
                                 <span class="material-icons">badge</span>
-                                Synthese RH - {{ payroll_report_month_label }}
+                                Synthese RH - {{ payroll_report_label }}
                             </h5>
                             <small class="text-muted">Le calcul integre les retenues salarie et les cotisations employeur du module RH.</small>
                         </div>
@@ -1101,22 +1090,6 @@ function exportCurrentView(format) {
 
 function printCurrentView() {
     window.print();
-}
-
-function toggleDailyClosure() {
-    if (typeof Swal !== "undefined") {
-        Swal.fire("Cloture", "La cloture de caisse se fait depuis le module POS.", "info");
-    } else {
-        alert("La cloture de caisse se fait depuis le module POS.");
-    }
-}
-
-function openDailyAdjustmentDialog() {
-    if (typeof Swal !== "undefined") {
-        Swal.fire("Ajustement", "Les ajustements financiers doivent etre saisis comme mouvements POS justifies.", "info");
-    } else {
-        alert("Les ajustements financiers doivent etre saisis comme mouvements POS justifies.");
-    }
 }
 
 function generateCustomReport() {

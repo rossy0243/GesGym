@@ -52,6 +52,32 @@ class SubscriptionPlanForm(forms.ModelForm):
         
 
 class MemberSubscriptionForm(forms.ModelForm):
+    PAYMENT_METHOD_CHOICES = (
+        ("cash", "Especes"),
+        ("card", "Carte bancaire"),
+        ("mobile_money", "Mobile Money"),
+        ("bank_transfer", "Virement bancaire"),
+        ("check", "Cheque"),
+    )
+
+    CURRENCY_CHOICES = (
+        ("USD", "USD"),
+        ("CDF", "CDF"),
+    )
+
+    payment_method = forms.ChoiceField(
+        choices=PAYMENT_METHOD_CHOICES,
+        initial="cash",
+        widget=forms.Select(attrs={"class": "form-control"}),
+        label="Mode de paiement",
+    )
+    currency = forms.ChoiceField(
+        choices=CURRENCY_CHOICES,
+        initial="USD",
+        widget=forms.Select(attrs={"class": "form-control"}),
+        label="Devise",
+    )
+
     def __init__(self, *args, gym=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.gym = gym
@@ -83,6 +109,7 @@ class MemberSubscriptionForm(forms.ModelForm):
         cleaned_data = super().clean()
         member = cleaned_data.get('member')
         plan = cleaned_data.get('plan')
+        start_date = cleaned_data.get('start_date')
 
         if self.gym:
             if member and member.gym_id != self.gym.id:
@@ -93,6 +120,9 @@ class MemberSubscriptionForm(forms.ModelForm):
 
         if member and plan and member.gym_id != plan.gym_id:
             raise forms.ValidationError("Le membre et la formule doivent appartenir au meme gym.")
+
+        if start_date and start_date > timezone.localdate():
+            self.add_error("start_date", "La date de debut ne peut pas etre dans le futur pour un abonnement encaisse.")
 
         return cleaned_data
 

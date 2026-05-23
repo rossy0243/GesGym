@@ -1,4 +1,5 @@
 from decimal import Decimal
+from datetime import date, timedelta
 
 from django.db.models import Count, Sum
 from django.utils import timezone
@@ -37,6 +38,59 @@ def payroll_rows(gym, year, month):
             rows.append(
                 {
                     "employee": employee,
+                    "slip": slip,
+                    "present_days": present_days,
+                    "salary": salary,
+                    "is_paid": is_paid,
+                    "status": slip.status,
+                }
+            )
+            total_gross_salaries += slip.gross_salary
+            total_salaries += salary
+            if is_paid:
+                paid_salaries += salary
+            else:
+                pending_salaries += salary
+
+    return {
+        "rows": rows,
+        "total_gross_salaries": total_gross_salaries,
+        "total_salaries": total_salaries,
+        "paid_salaries": paid_salaries,
+        "pending_salaries": pending_salaries,
+        "pending_count": sum(1 for row in rows if row["status"] != PayrollSlip.STATUS_PAID),
+    }
+
+
+def payroll_rows_for_period(gym, start_date, end_date):
+    slips = (
+        PayrollSlip.objects.filter(gym=gym)
+        .select_related("employee", "payment_record")
+        .order_by("year", "month", "employee__name")
+    )
+    rows = []
+    total_gross_salaries = Decimal("0")
+    total_salaries = Decimal("0")
+    paid_salaries = Decimal("0")
+    pending_salaries = Decimal("0")
+
+    for slip in slips:
+        slip_period_start = date(slip.year, slip.month, 1)
+        if slip.month == 12:
+            slip_period_end = date(slip.year + 1, 1, 1) - timedelta(days=1)
+        else:
+            slip_period_end = date(slip.year, slip.month + 1, 1) - timedelta(days=1)
+        if slip_period_end < start_date or slip_period_start > end_date:
+            continue
+
+        salary = slip.net_salary
+        present_days = slip.present_days
+        is_paid = slip.status == PayrollSlip.STATUS_PAID
+
+        if salary > 0 or present_days > 0 or slip.bonus_total > 0 or slip.overtime_total > 0:
+            rows.append(
+                {
+                    "employee": slip.employee,
                     "slip": slip,
                     "present_days": present_days,
                     "salary": salary,

@@ -6,10 +6,12 @@ from django.core.exceptions import ValidationError
 from django.db.models import Avg, Count, Max, Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 
 from members.models import Member
 from smartclub.access_control import COACHING_ROLES, COACH_PORTAL_ROLES
 from smartclub.decorators import module_required, role_required
+from subscriptions.models import SubscriptionPlan
 
 from .forms import CoachForm, CoachMemberForm, CoachingFollowUpForm, GroupCoachingProgramForm
 from .kpis import build_coaching_kpis, coaches_queryset
@@ -60,8 +62,27 @@ def _resolve_current_coach(request):
     return candidate
 
 
+def _filter_members_with_current_coaching_access(queryset, coaching_modes):
+    today = timezone.localdate()
+    return queryset.filter(
+        is_active=True,
+        status="active",
+        subscriptions__is_active=True,
+        subscriptions__is_paused=False,
+        subscriptions__start_date__lte=today,
+        subscriptions__end_date__gte=today,
+        subscriptions__plan__coaching_mode__in=coaching_modes,
+    ).distinct()
+
+
 def _coach_portal_member_queryset(request, coach):
-    return coach.members.filter(gym=request.gym, is_active=True).order_by("first_name", "last_name")
+    return _filter_members_with_current_coaching_access(
+        coach.members.filter(gym=request.gym),
+        [
+            SubscriptionPlan.COACHING_MODE_INDIVIDUAL,
+            SubscriptionPlan.COACHING_MODE_BOTH,
+        ],
+    ).order_by("first_name", "last_name")
 
 
 def _member_full_name(member):
@@ -220,12 +241,17 @@ def coach_list(request):
             | Q(specialty__icontains=search)
         )
 
-    assigned_members = Member.objects.filter(
-        gym=gym,
-        is_active=True,
-        coaches__is_active=True,
-        coaches__gym=gym,
-    ).distinct().annotate(last_follow_up_at=Max("coaching_follow_ups__created_at"))
+    assigned_members = _filter_members_with_current_coaching_access(
+        Member.objects.filter(
+            gym=gym,
+            coaches__is_active=True,
+            coaches__gym=gym,
+        ),
+        [
+            SubscriptionPlan.COACHING_MODE_INDIVIDUAL,
+            SubscriptionPlan.COACHING_MODE_BOTH,
+        ],
+    ).annotate(last_follow_up_at=Max("coaching_follow_ups__created_at"))
     active_assignments = CoachAssignment.objects.filter(gym=gym, ended_at__isnull=True)
     attention_members = assigned_members.filter(last_follow_up_at__isnull=True).order_by("first_name", "last_name")[:5]
     first_contact_overdue_member_ids = active_assignments.filter(
@@ -288,9 +314,15 @@ def coach_list(request):
 @role_required(COACHING_ROLES)
 def coach_detail(request, coach_id):
     coach = get_object_or_404(Coach, id=coach_id, gym=request.gym)
-    members = coach.members.filter(gym=request.gym, is_active=True).order_by("first_name", "last_name")
+    members = _coach_portal_member_queryset(request, coach)
     available_members = (
-        Member.objects.filter(gym=request.gym, is_active=True, status="active")
+        _filter_members_with_current_coaching_access(
+            Member.objects.filter(gym=request.gym),
+            [
+                SubscriptionPlan.COACHING_MODE_INDIVIDUAL,
+                SubscriptionPlan.COACHING_MODE_BOTH,
+            ],
+        )
         .exclude(id__in=members.values_list("id", flat=True))
         .order_by("first_name", "last_name")
     )

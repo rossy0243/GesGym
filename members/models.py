@@ -136,6 +136,36 @@ class Member(models.Model):
 
         return (self.expiration_date - timezone.now().date()).days
 
+    @property
+    def has_coaching_access(self):
+        subscription = self.active_subscription
+        return bool(
+            self.is_active
+            and subscription
+            and subscription.plan
+            and subscription.plan.coaching_mode != subscription.plan.COACHING_MODE_NONE
+        )
+
+    @property
+    def has_individual_coaching_access(self):
+        subscription = self.active_subscription
+        return bool(
+            self.is_active
+            and subscription
+            and subscription.plan
+            and subscription.plan.allows_individual_coaching
+        )
+
+    @property
+    def has_group_coaching_access(self):
+        subscription = self.active_subscription
+        return bool(
+            self.is_active
+            and subscription
+            and subscription.plan
+            and subscription.plan.allows_group_coaching
+        )
+
     def get_qr_data(self):
         """Données qui seront encodées dans le QR Code"""
         return str(self.qr_code)

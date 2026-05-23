@@ -2,6 +2,7 @@ from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
 from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Q
@@ -10,6 +11,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from core.audit import log_sensitive_action
+from pos.services import record_subscription_payment
 from smartclub.access_control import SUBSCRIPTION_ROLES, has_role
 from smartclub.decorators import module_required
 
@@ -38,6 +40,7 @@ def _plan_list_context(request, form=None):
     active_subscriptions = MemberSubscription.objects.filter(
         gym=request.gym,
         is_active=True,
+        start_date__lte=today,
         end_date__gte=today,
         is_paused=False,
     )
@@ -47,6 +50,7 @@ def _plan_list_context(request, form=None):
             filter=Q(
                 subscriptions__gym=request.gym,
                 subscriptions__is_active=True,
+                subscriptions__start_date__lte=today,
                 subscriptions__end_date__gte=today,
                 subscriptions__is_paused=False,
             ),
@@ -245,18 +249,27 @@ def create_subscription(request):
     if request.method == "POST":
         form = MemberSubscriptionForm(request.POST, gym=request.gym)
         if form.is_valid():
-            subscription = form.save(commit=False)
-            plan = subscription.plan
-            subscription.gym = request.gym
-            subscription.end_date = subscription.start_date + timedelta(days=plan.duration_days)
+            member = form.cleaned_data["member"]
+            plan = form.cleaned_data["plan"]
+            start_date = form.cleaned_data["start_date"]
+            auto_renew = form.cleaned_data["auto_renew"]
+            payment_method = form.cleaned_data["payment_method"]
+            currency = form.cleaned_data["currency"]
 
-            with transaction.atomic():
-                MemberSubscription.objects.filter(
+            try:
+                subscription, payment = record_subscription_payment(
                     gym=request.gym,
-                    member=subscription.member,
-                    is_active=True,
-                ).update(is_active=False)
-                subscription.save()
+                    member=member,
+                    plan=plan,
+                    currency=currency,
+                    method=payment_method,
+                    start_date=start_date,
+                    auto_renew=auto_renew,
+                    created_by=request.user,
+                )
+            except ValidationError as exc:
+                form.add_error(None, exc.messages[0] if getattr(exc, "messages", None) else str(exc))
+            else:
                 log_sensitive_action(
                     request,
                     "subscription.created",
@@ -265,11 +278,17 @@ def create_subscription(request):
                     metadata={
                         "subscription_id": subscription.id,
                         "plan_id": subscription.plan_id,
+                        "payment_id": payment.id,
+                        "currency": payment.currency,
+                        "amount": str(payment.amount),
                     },
                 )
 
-            messages.success(request, "Abonnement enregistre avec succes.")
-            return redirect("members:member_list")
+                messages.success(
+                    request,
+                    f"Abonnement enregistre avec succes et paiement POS cree: {payment.amount} {payment.currency}.",
+                )
+                return redirect("members:member_list")
     else:
         form = MemberSubscriptionForm(gym=request.gym)
 

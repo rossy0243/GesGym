@@ -9,8 +9,9 @@ from compte.models import User, UserGymRole
 from members.models import Member
 from organizations.models import Gym, GymModule, Module, Organization, SensitiveActivityLog
 from products.models import Product, StockMovement
+from subscriptions.models import MemberSubscription, SubscriptionPlan
 from .models import CashRegister, ExchangeRate, Payment
-from .services import record_product_sale
+from .services import record_product_sale, record_subscription_payment
 
 
 class PosAccountingTests(TestCase):
@@ -43,8 +44,16 @@ class PosAccountingTests(TestCase):
             phone="20001",
             email="bob@example.com",
         )
+        self.plan_a = SubscriptionPlan.objects.create(
+            gym=self.gym_a,
+            name="Mensuel",
+            duration_days=30,
+            price=Decimal("25.00"),
+        )
         self.cashier = User.objects.create_user(username="cashier-pos", password="test-pass")
+        self.manager = User.objects.create_user(username="manager-pos", password="test-pass")
         UserGymRole.objects.create(user=self.cashier, gym=self.gym_a, role="cashier")
+        UserGymRole.objects.create(user=self.manager, gym=self.gym_a, role="manager")
         module, _ = Module.objects.get_or_create(code="POS", defaults={"name": "POS"})
         GymModule.objects.get_or_create(gym=self.gym_a, module=module, defaults={"is_active": True})
 
@@ -143,6 +152,50 @@ class PosAccountingTests(TestCase):
             ).exists()
         )
 
+    def test_subscription_payment_respects_start_date_and_auto_renew(self):
+        CashRegister.objects.create(
+            gym=self.gym_a,
+            opening_amount=Decimal("0.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+        start_date = date(2026, 4, 17)
+
+        subscription, payment = record_subscription_payment(
+            gym=self.gym_a,
+            member=self.member_a,
+            plan=self.plan_a,
+            currency="USD",
+            method="cash",
+            start_date=start_date,
+            auto_renew=True,
+        )
+
+        self.assertEqual(subscription.start_date, start_date)
+        self.assertEqual(subscription.end_date, date(2026, 5, 17))
+        self.assertTrue(subscription.auto_renew)
+        self.assertEqual(payment.subscription_id, subscription.id)
+        self.assertEqual(payment.category, "subscription")
+        self.assertEqual(payment.amount_usd, Decimal("25.00"))
+        self.assertEqual(payment.amount_cdf, Decimal("70000.00"))
+
+    def test_subscription_payment_rejects_inactive_member(self):
+        CashRegister.objects.create(
+            gym=self.gym_a,
+            opening_amount=Decimal("0.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+        self.member_a.is_active = False
+        self.member_a.save(update_fields=["is_active"])
+
+        with self.assertRaises(ValidationError):
+            record_subscription_payment(
+                gym=self.gym_a,
+                member=self.member_a,
+                plan=self.plan_a,
+                currency="USD",
+                method="cash",
+            )
+
     def test_cash_register_totals_use_cdf_accounting_amounts(self):
         register = CashRegister.objects.create(
             gym=self.gym_a,
@@ -216,3 +269,105 @@ class PosAccountingTests(TestCase):
                 action="pos.register_opened",
             ).exists()
         )
+
+    def test_cashier_dashboard_labels_machine_maintenance_payments(self):
+        register = CashRegister.objects.create(
+            gym=self.gym_a,
+            opening_amount=Decimal("0.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+        Payment.objects.create(
+            gym=self.gym_a,
+            cash_register=register,
+            amount=Decimal("15000.00"),
+            currency="CDF",
+            method="cash",
+            type="out",
+            category="maintenance",
+            status="success",
+            description="Maintenance machine: Tapis A",
+        )
+        self.client.login(username="cashier-pos", password="test-pass")
+
+        response = self.client.get(reverse("pos:cashier_dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Maintenance")
+        self.assertContains(response, "Maintenance machine: Tapis A")
+        self.assertContains(response, "Sortie liee au module machines")
+
+    def test_register_detail_labels_machine_maintenance_payments(self):
+        register = CashRegister.objects.create(
+            gym=self.gym_a,
+            opening_amount=Decimal("0.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+        Payment.objects.create(
+            gym=self.gym_a,
+            cash_register=register,
+            amount=Decimal("8000.00"),
+            currency="CDF",
+            method="cash",
+            type="out",
+            category="maintenance",
+            status="success",
+            description="Maintenance machine: Velo A",
+        )
+        self.client.login(username="manager-pos", password="test-pass")
+
+        response = self.client.get(reverse("pos:register_detail", args=[register.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Maintenance")
+        self.assertContains(response, "Maintenance machine: Velo A")
+
+    def test_cashier_dashboard_labels_salary_payments(self):
+        register = CashRegister.objects.create(
+            gym=self.gym_a,
+            opening_amount=Decimal("0.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+        Payment.objects.create(
+            gym=self.gym_a,
+            cash_register=register,
+            amount=Decimal("25000.00"),
+            currency="CDF",
+            method="cash",
+            type="out",
+            category="salary",
+            status="success",
+            description="Salaire Alice RH - 5/2026",
+        )
+        self.client.login(username="cashier-pos", password="test-pass")
+
+        response = self.client.get(reverse("pos:cashier_dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Salaire")
+        self.assertContains(response, "Salaire Alice RH - 5/2026")
+        self.assertContains(response, "Sortie liee au module RH")
+
+    def test_register_detail_labels_salary_payments(self):
+        register = CashRegister.objects.create(
+            gym=self.gym_a,
+            opening_amount=Decimal("0.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+        Payment.objects.create(
+            gym=self.gym_a,
+            cash_register=register,
+            amount=Decimal("18000.00"),
+            currency="CDF",
+            method="cash",
+            type="out",
+            category="salary",
+            status="success",
+            description="Salaire Bob RH - 5/2026",
+        )
+        self.client.login(username="manager-pos", password="test-pass")
+
+        response = self.client.get(reverse("pos:register_detail", args=[register.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Salaire")
+        self.assertContains(response, "Salaire Bob RH - 5/2026")

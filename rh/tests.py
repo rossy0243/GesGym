@@ -114,7 +114,10 @@ class RhTenantTests(TestCase):
         self.assertNotContains(response, "999 CDF")
 
     def test_general_dashboard_includes_scoped_rh_kpis(self):
-        response = self.client.get(reverse("core:gym_dashboard", args=[self.gym_a.id]))
+        response = self.client.get(
+            reverse("core:gym_dashboard", args=[self.gym_a.id]),
+            {"view": "analytics"},
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "KPI RH")
@@ -156,6 +159,102 @@ class RhTenantTests(TestCase):
                 amount_cdf=Decimal("100.00"),
             ).exists()
         )
+
+    def test_paid_slip_blocks_new_adjustments(self):
+        self.client.post(reverse("rh:review_payroll_slip", args=[self.employee_a.id, self.today.year, self.today.month]))
+        self.client.post(reverse("rh:approve_payroll_slip", args=[self.employee_a.id, self.today.year, self.today.month]))
+        self.client.post(
+            reverse("rh:process_payment", args=[self.employee_a.id, self.today.year, self.today.month]),
+            {"payment_method": "cash", "reference": "SAL-002", "notes": ""},
+        )
+
+        response = self.client.post(
+            reverse("rh:add_adjustment", args=[self.employee_a.id, self.today.year, self.today.month]),
+            {"adjustment_type": "bonus", "label": "Prime tardive", "amount": "50", "notes": ""},
+            follow=True,
+        )
+
+        slip = PayrollSlip.objects.get(employee=self.employee_a, year=self.today.year, month=self.today.month)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Ce bulletin est deja paye via POS.")
+        self.assertFalse(
+            PayrollAdjustment.objects.filter(
+                employee=self.employee_a,
+                year=self.today.year,
+                month=self.today.month,
+                label="Prime tardive",
+            ).exists()
+        )
+        self.assertEqual(slip.net_salary, Decimal("100.00"))
+
+    def test_paid_slip_blocks_leave_and_overtime_changes(self):
+        self.client.post(reverse("rh:review_payroll_slip", args=[self.employee_a.id, self.today.year, self.today.month]))
+        self.client.post(reverse("rh:approve_payroll_slip", args=[self.employee_a.id, self.today.year, self.today.month]))
+        self.client.post(
+            reverse("rh:process_payment", args=[self.employee_a.id, self.today.year, self.today.month]),
+            {"payment_method": "cash", "reference": "SAL-003", "notes": ""},
+        )
+
+        leave_response = self.client.post(
+            reverse("rh:add_leave_request", args=[self.employee_a.id, self.today.year, self.today.month]),
+            {
+                "leave_type": "unpaid",
+                "start_date": self.today.isoformat(),
+                "end_date": self.today.isoformat(),
+                "reason": "Absence tardive",
+                "status": "approved",
+            },
+            follow=True,
+        )
+        overtime_response = self.client.post(
+            reverse("rh:add_overtime_entry", args=[self.employee_a.id, self.today.year, self.today.month]),
+            {
+                "work_date": self.today.isoformat(),
+                "hours": "2",
+                "rate_multiplier": "1.50",
+                "reason": "Fermeture tardive",
+                "status": "approved",
+            },
+            follow=True,
+        )
+
+        slip = PayrollSlip.objects.get(employee=self.employee_a, year=self.today.year, month=self.today.month)
+        self.assertContains(leave_response, "Ce bulletin est deja paye via POS.")
+        self.assertContains(overtime_response, "Ce bulletin est deja paye via POS.")
+        self.assertFalse(
+            LeaveRequest.objects.filter(
+                employee=self.employee_a,
+                reason="Absence tardive",
+                start_date=self.today,
+            ).exists()
+        )
+        self.assertFalse(
+            OvertimeEntry.objects.filter(
+                employee=self.employee_a,
+                reason="Fermeture tardive",
+                work_date=self.today,
+            ).exists()
+        )
+        self.assertEqual(slip.net_salary, Decimal("100.00"))
+
+    def test_paid_slip_hides_adjustment_forms_in_employee_detail(self):
+        self.client.post(reverse("rh:review_payroll_slip", args=[self.employee_a.id, self.today.year, self.today.month]))
+        self.client.post(reverse("rh:approve_payroll_slip", args=[self.employee_a.id, self.today.year, self.today.month]))
+        self.client.post(
+            reverse("rh:process_payment", args=[self.employee_a.id, self.today.year, self.today.month]),
+            {"payment_method": "cash", "reference": "SAL-004", "notes": ""},
+        )
+
+        response = self.client.get(
+            reverse("rh:detail", args=[self.employee_a.id]),
+            {"year": self.today.year, "month": self.today.month},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Ce bulletin a deja ete paye via POS.")
+        self.assertNotContains(response, "Ajouter une prime / avance / retenue")
+        self.assertNotContains(response, "Ajouter un conge")
+        self.assertNotContains(response, "Ajouter des heures sup")
 
     def test_form_pages_render_without_gym_id_urls(self):
         urls = [

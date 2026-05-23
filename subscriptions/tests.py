@@ -9,6 +9,7 @@ from django.utils import timezone
 from compte.models import User
 from members.models import Member
 from organizations.models import Gym, GymModule, Module, Organization
+from pos.models import CashRegister, Payment
 from subscriptions.forms import MemberSubscriptionForm, SubscriptionPlanForm
 from subscriptions.models import MemberSubscription, SubscriptionPlan
 from subscriptions.views import create_member_subscription
@@ -161,6 +162,11 @@ class SubscriptionTenantSafetyTests(TestCase):
         session = self.client.session
         session["current_gym_id"] = self.gym_a.id
         session.save()
+        CashRegister.objects.create(
+            gym=self.gym_a,
+            opening_amount=0,
+            exchange_rate=2800,
+        )
 
         response = self.client.post(
             reverse("subscriptions:create_subscription"),
@@ -169,13 +175,41 @@ class SubscriptionTenantSafetyTests(TestCase):
                 "plan": self.plan_a.id,
                 "start_date": timezone.now().date().isoformat(),
                 "auto_renew": "on",
+                "currency": "USD",
+                "payment_method": "cash",
             },
             follow=True,
         )
 
         self.assertEqual(response.status_code, 200)
         messages = [message.message for message in get_messages(response.wsgi_request)]
-        self.assertTrue(any("Abonnement enregistre avec succes." in message for message in messages))
+        self.assertTrue(any("Abonnement enregistre avec succes et paiement POS cree" in message for message in messages))
+        subscription = MemberSubscription.objects.get(member=self.member_a, plan=self.plan_a)
+        payment = Payment.objects.get(subscription=subscription)
+        self.assertTrue(subscription.auto_renew)
+        self.assertEqual(payment.category, "subscription")
+        self.assertEqual(payment.amount_cdf, 280000)
+
+    def test_create_subscription_requires_open_register_for_paid_activation(self):
+        self.client.force_login(self.owner)
+        session = self.client.session
+        session["current_gym_id"] = self.gym_a.id
+        session.save()
+
+        response = self.client.post(
+            reverse("subscriptions:create_subscription"),
+            {
+                "member": self.member_a.id,
+                "plan": self.plan_a.id,
+                "start_date": timezone.now().date().isoformat(),
+                "currency": "USD",
+                "payment_method": "cash",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Aucune caisse ouverte")
+        self.assertFalse(MemberSubscription.objects.filter(member=self.member_a, plan=self.plan_a).exists())
 
     def test_plan_list_marks_best_selling_plan(self):
         self.client.force_login(self.owner)
@@ -214,3 +248,41 @@ class SubscriptionTenantSafetyTests(TestCase):
         self.assertEqual(mensuel.total_sales_count, 2)
         self.assertEqual(annuel.total_sales_count, 1)
         self.assertContains(response, "Plus vendue", count=1)
+
+    def test_plan_list_excludes_future_subscriptions_from_active_counts(self):
+        self.client.force_login(self.owner)
+        session = self.client.session
+        session["current_gym_id"] = self.gym_a.id
+        session.save()
+        today = timezone.now().date()
+        future_member = Member.objects.create(
+            gym=self.gym_a,
+            first_name="Future",
+            last_name="Member",
+            phone="10003",
+            email="future.member@example.com",
+        )
+
+        MemberSubscription.objects.create(
+            gym=self.gym_a,
+            member=self.member_a,
+            plan=self.plan_a,
+            start_date=today,
+            end_date=today + timedelta(days=30),
+            is_active=True,
+        )
+        MemberSubscription.objects.create(
+            gym=self.gym_a,
+            member=future_member,
+            plan=self.plan_a,
+            start_date=today + timedelta(days=5),
+            end_date=today + timedelta(days=35),
+            is_active=True,
+        )
+
+        response = self.client.get(reverse("subscriptions:subscription_plan_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["active_subscriptions_count"], 1)
+        plan = next(plan for plan in response.context["plans"] if plan.id == self.plan_a.id)
+        self.assertEqual(plan.active_members_count, 1)

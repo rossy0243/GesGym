@@ -81,6 +81,17 @@ def _detail_url(employee_id, year, month):
     return f"{reverse('rh:detail', args=[employee_id])}?year={year}&month={month}"
 
 
+def _paid_slip_guard(request, employee, year, month):
+    slip = PayrollSlip.ensure_for_period(employee, year, month)
+    if slip.status == PayrollSlip.STATUS_PAID and slip.payment_record_id:
+        messages.warning(
+            request,
+            "Ce bulletin est deja paye via POS. Les ajustements de paie sont desormais bloques pour preserver la coherence comptable.",
+        )
+        return slip
+    return None
+
+
 def _pdf_escape(value):
     return str(value).replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
 
@@ -411,6 +422,9 @@ def toggle_contribution_rule(request, rule_id):
 @role_required(RH_PAYROLL_ROLES)
 def add_adjustment(request, employee_id, year, month):
     employee = get_object_or_404(Employee, id=employee_id, gym=request.gym)
+    paid_slip = _paid_slip_guard(request, employee, year, month)
+    if paid_slip:
+        return redirect(_detail_url(employee.id, year, month))
     if request.method == "POST":
         form = PayrollAdjustmentForm(request.POST)
         if form.is_valid():
@@ -432,6 +446,9 @@ def add_adjustment(request, employee_id, year, month):
 @role_required(RH_PAYROLL_ROLES)
 def add_leave_request(request, employee_id, year, month):
     employee = get_object_or_404(Employee, id=employee_id, gym=request.gym)
+    paid_slip = _paid_slip_guard(request, employee, year, month)
+    if paid_slip:
+        return redirect(_detail_url(employee.id, year, month))
     if request.method == "POST":
         form = LeaveRequestForm(request.POST)
         if form.is_valid():
@@ -451,6 +468,9 @@ def add_leave_request(request, employee_id, year, month):
 @role_required(RH_PAYROLL_ROLES)
 def add_overtime_entry(request, employee_id, year, month):
     employee = get_object_or_404(Employee, id=employee_id, gym=request.gym)
+    paid_slip = _paid_slip_guard(request, employee, year, month)
+    if paid_slip:
+        return redirect(_detail_url(employee.id, year, month))
     if request.method == "POST":
         form = OvertimeEntryForm(request.POST)
         if form.is_valid():

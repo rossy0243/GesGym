@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% now "Y-m-d" as today_iso %}
 
 {% block page_titre %}Paiements{% endblock %}
 
@@ -301,6 +302,26 @@
                                             {% endif %}
                                         </div>
                                     </div>
+                                {% elif payment.category == "maintenance" %}
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="material-icons text-secondary" style="font-size:20px;">build</span>
+                                        <div>
+                                            <div class="fw-semibold">Maintenance</div>
+                                            {% if payment.description %}
+                                                <small class="text-muted d-block">{{ payment.description }}</small>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                {% elif payment.category == "salary" %}
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="material-icons text-secondary" style="font-size:20px;">badge</span>
+                                        <div>
+                                            <div class="fw-semibold">Salaire</div>
+                                            {% if payment.description %}
+                                                <small class="text-muted d-block">{{ payment.description }}</small>
+                                            {% endif %}
+                                        </div>
+                                    </div>
                                 {% else %}
                                     <span class="text-muted">Décaissement</span>
                                 {% endif %}
@@ -312,6 +333,12 @@
                                 {% elif payment.product %}
                                     <div class="fw-semibold">{{ payment.product.name }}</div>
                                     <small class="text-muted d-block">Stock impacte automatiquement</small>
+                                {% elif payment.category == "maintenance" %}
+                                    <div class="fw-semibold">{{ payment.get_category_display }}</div>
+                                    <small class="text-muted d-block">Sortie liee au module machines</small>
+                                {% elif payment.category == "salary" %}
+                                    <div class="fw-semibold">{{ payment.get_category_display }}</div>
+                                    <small class="text-muted d-block">Sortie liee au module RH</small>
                                 {% elif payment.category %}
                                     {{ payment.get_category_display }}
                                 {% else %}
@@ -490,6 +517,29 @@
                         </select>
                     </div>
 
+                    <div class="row" data-sale-section="subscription">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Date de debut</label>
+                            <input type="date"
+                                   name="start_date"
+                                   id="subscriptionStartDate"
+                                   class="form-control"
+                                   value="{{ today_iso }}"
+                                   required>
+                        </div>
+                        <div class="col-md-6 mb-3 d-flex align-items-end">
+                            <div class="form-check mb-2">
+                                <input type="checkbox"
+                                       name="auto_renew"
+                                       id="subscriptionAutoRenew"
+                                       class="form-check-input">
+                                <label class="form-check-label" for="subscriptionAutoRenew">
+                                    Renouvellement automatique
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="row" data-sale-section="product" style="display:none;">
                         <div class="col-md-8 mb-3">
                             <label class="form-label">Produit</label>
@@ -649,6 +699,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const saleTypeSelect = document.getElementById('saleTypeSelect');
     const memberSelect = document.getElementById('memberSelect');
     const planSelect = document.getElementById('planSelect');
+    const subscriptionStartDate = document.getElementById('subscriptionStartDate');
     const productSelect = document.getElementById('productSelect');
     const quantityInput = document.getElementById('quantityInput');
     const currencySelect = document.getElementById('currencySelect');
@@ -669,6 +720,10 @@ document.addEventListener('DOMContentLoaded', function () {
         if (planSelect) {
             planSelect.disabled = saleType !== "subscription";
             planSelect.required = saleType === "subscription";
+        }
+        if (subscriptionStartDate) {
+            subscriptionStartDate.disabled = saleType !== "subscription";
+            subscriptionStartDate.required = saleType === "subscription";
         }
         if (productSelect) {
             productSelect.disabled = saleType !== "product";

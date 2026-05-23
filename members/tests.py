@@ -46,6 +46,36 @@ class MemberPreRegistrationTests(TestCase):
         self.assertContains(response, str(link.token))
         self.assertContains(response, "Lien de preinscription")
 
+    def test_member_list_active_filter_excludes_future_subscriptions(self):
+        today = timezone.now().date()
+        future_member = Member.objects.create(
+            gym=self.gym,
+            first_name="Future",
+            last_name="Starter",
+            phone="+243810000007",
+            email="future.starter@example.com",
+        )
+        plan = SubscriptionPlan.objects.create(
+            gym=self.gym,
+            name="Mensuel",
+            duration_days=30,
+            price=25,
+        )
+        MemberSubscription.objects.create(
+            gym=self.gym,
+            member=future_member,
+            plan=plan,
+            start_date=today + timedelta(days=3),
+            end_date=today + timedelta(days=33),
+            is_active=True,
+        )
+        self.client.force_login(self.owner)
+
+        response = self.client.get(reverse("members:member_list"), {"status": "active"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Future")
+
     def test_public_pre_registration_creates_pending_request_for_link_gym(self):
         link = MemberPreRegistrationLink.objects.get(gym=self.gym)
 
@@ -501,6 +531,36 @@ class MemberPortalTests(TestCase):
         self.assertEqual(response["Location"], f"{reverse('members:member_portal')}?tab=home")
         feedback = CoachingFeedback.objects.get(member=self.member, group_program=self.group_program)
         self.assertEqual(feedback.coach, self.coach)
+
+    def test_member_cannot_submit_individual_feedback_without_current_individual_rights(self):
+        self.subscription.plan = self.year_plan
+        self.subscription.save(update_fields=["plan"])
+        self.client.force_login(self.member.user)
+
+        response = self.client.post(
+            reverse("members:member_submit_coaching_feedback"),
+            {
+                "feedback_kind": "coach",
+                "coach_id": self.coach.id,
+                "coach-feedback-overall_rating": "5",
+                "coach-feedback-listening_rating": "5",
+                "coach-feedback-clarity_rating": "4",
+                "coach-feedback-motivation_rating": "5",
+                "coach-feedback-availability_rating": "4",
+                "coach-feedback-comment": "Tentative sans droit individuel.",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "ne permet pas de laisser un avis coaching individuel")
+        self.assertFalse(
+            CoachingFeedback.objects.filter(
+                member=self.member,
+                coach=self.coach,
+                comment__icontains="Tentative sans droit individuel",
+            ).exists()
+        )
 
     def test_member_portal_qr_is_limited_to_authenticated_member(self):
         anonymous_response = self.client.get(reverse("members:member_portal_qr"))
