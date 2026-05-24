@@ -11,7 +11,7 @@ from members.models import Member
 from organizations.models import Gym, GymModule, Module, Organization
 from pos.models import CashRegister, Payment
 from subscriptions.forms import MemberSubscriptionForm, SubscriptionPlanForm
-from subscriptions.models import MemberSubscription, SubscriptionPlan
+from subscriptions.models import MemberSubscription, SubscriptionOffer, SubscriptionPlan
 from subscriptions.views import create_member_subscription
 
 
@@ -61,6 +61,17 @@ class SubscriptionTenantSafetyTests(TestCase):
             coaching_mode=SubscriptionPlan.COACHING_MODE_BOTH,
             coaching_level=SubscriptionPlan.COACHING_LEVEL_PREMIUM,
         )
+        self.offer_a = SubscriptionOffer.objects.create(
+            gym=self.gym_a,
+            name="Acces coach",
+            category=SubscriptionOffer.CATEGORY_COACHING,
+            grants_individual_coaching=True,
+        )
+        self.offer_b = SubscriptionOffer.objects.create(
+            gym=self.gym_b,
+            name="Acces Zumba",
+            category=SubscriptionOffer.CATEGORY_CLASS,
+        )
         self.owner = User.objects.create_user(
             username="owner-subscriptions",
             password="pass12345",
@@ -76,6 +87,12 @@ class SubscriptionTenantSafetyTests(TestCase):
         self.assertNotIn(self.member_b, form.fields["member"].queryset)
         self.assertIn(self.plan_a, form.fields["plan"].queryset)
         self.assertNotIn(self.plan_b, form.fields["plan"].queryset)
+
+    def test_plan_form_scopes_available_offers_to_current_gym(self):
+        form = SubscriptionPlanForm(gym=self.gym_a)
+
+        self.assertIn(self.offer_a, form.fields["offers"].queryset)
+        self.assertNotIn(self.offer_b, form.fields["offers"].queryset)
 
     def test_subscription_form_rejects_cross_gym_post_data(self):
         form = MemberSubscriptionForm(
@@ -146,6 +163,41 @@ class SubscriptionTenantSafetyTests(TestCase):
         self.assertTrue(rights["allows_group"])
         self.assertEqual(rights["level"], SubscriptionPlan.COACHING_LEVEL_PREMIUM)
 
+    def test_plan_can_grant_coaching_access_via_parametrable_offer(self):
+        plan = SubscriptionPlan.objects.create(
+            gym=self.gym_a,
+            name="Pack offres",
+            duration_days=30,
+            price=120,
+            coaching_mode=SubscriptionPlan.COACHING_MODE_NONE,
+            coaching_level=SubscriptionPlan.COACHING_LEVEL_STANDARD,
+        )
+        plan.offers.add(self.offer_a)
+
+        rights = plan.coaching_rights_payload()
+
+        self.assertTrue(plan.allows_individual_coaching)
+        self.assertFalse(plan.allows_group_coaching)
+        self.assertTrue(rights["has_any_access"])
+        self.assertEqual(rights["offers"][0]["name"], "Acces coach")
+
+    def test_plan_form_derives_legacy_coaching_mode_from_selected_offers(self):
+        form = SubscriptionPlanForm(
+            data={
+                "name": "Pack auto",
+                "duration_days": 30,
+                "price": 80,
+                "offers": [str(self.offer_a.id)],
+                "is_active": "on",
+            },
+            gym=self.gym_a,
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        plan = form.save(commit=False)
+        self.assertEqual(form.cleaned_data["coaching_mode"], SubscriptionPlan.COACHING_MODE_INDIVIDUAL)
+        self.assertEqual(plan.coaching_mode, SubscriptionPlan.COACHING_MODE_INDIVIDUAL)
+
     def test_plan_list_requires_active_module(self):
         self.client.force_login(self.owner)
         GymModule.objects.filter(gym=self.gym_a, module__code="SUBSCRIPTIONS").update(is_active=False)
@@ -156,6 +208,31 @@ class SubscriptionTenantSafetyTests(TestCase):
         response = self.client.get(reverse("subscriptions:subscription_plan_list"))
 
         self.assertEqual(response.status_code, 403)
+
+    def test_create_plan_can_assign_offers(self):
+        self.client.force_login(self.owner)
+        session = self.client.session
+        session["current_gym_id"] = self.gym_a.id
+        session.save()
+
+        response = self.client.post(
+            reverse("subscriptions:create_subscription_plan"),
+            {
+                "name": "Pack hybride",
+                "duration_days": 45,
+                "price": 180,
+                "description": "Formule avec options",
+                "offers": [str(self.offer_a.id)],
+                "coaching_mode": SubscriptionPlan.COACHING_MODE_NONE,
+                "coaching_level": SubscriptionPlan.COACHING_LEVEL_STANDARD,
+                "is_active": "on",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        plan = SubscriptionPlan.objects.get(gym=self.gym_a, name="Pack hybride")
+        self.assertEqual(list(plan.offers.values_list("id", flat=True)), [self.offer_a.id])
 
     def test_create_subscription_shows_consistent_success_message(self):
         self.client.force_login(self.owner)

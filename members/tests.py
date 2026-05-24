@@ -8,10 +8,16 @@ from django.utils import timezone
 
 from coaching.models import Coach, CoachAssignment, CoachingFeedback, GroupCoachingProgram
 from compte.models import User, UserGymRole
-from members.models import Member, MemberPreRegistration, MemberPreRegistrationLink
+from members.models import (
+    Member,
+    MemberGoal,
+    MemberPreRegistration,
+    MemberPreRegistrationLink,
+    MemberWeightMeasurement,
+)
 from notifications.models import Notification
 from organizations.models import Gym, Organization
-from subscriptions.models import MemberSubscription, SubscriptionPlan, SubscriptionRequest
+from subscriptions.models import MemberSubscription, SubscriptionOffer, SubscriptionPlan, SubscriptionRequest
 
 
 class MemberPreRegistrationTests(TestCase):
@@ -370,6 +376,13 @@ class MemberPortalTests(TestCase):
         )
 
     def test_member_portal_shows_identity_card_and_subscription(self):
+        offer = SubscriptionOffer.objects.create(
+            gym=self.gym,
+            name="Acces coach premium",
+            category=SubscriptionOffer.CATEGORY_COACHING,
+            grants_individual_coaching=True,
+        )
+        self.plan.offers.add(offer)
         self.client.force_login(self.member.user)
 
         response = self.client.get(reverse("members:member_portal"))
@@ -391,10 +404,12 @@ class MemberPortalTests(TestCase):
         subscription_response = self.client.get(reverse("members:member_portal"), {"tab": "subscription"})
         self.assertContains(subscription_response, "Mensuel")
         self.assertContains(subscription_response, "Dernieres operations")
+        self.assertContains(subscription_response, "Acces coach premium")
 
         plans_response = self.client.get(reverse("members:member_portal"), {"tab": "plans"})
         self.assertContains(plans_response, "Choisir un abonnement")
         self.assertContains(plans_response, "Annuel")
+        self.assertContains(plans_response, "Acces coach premium")
 
     def test_member_portal_hides_future_subscription_from_active_subscription_tab(self):
         self.subscription.is_active = False
@@ -450,6 +465,157 @@ class MemberPortalTests(TestCase):
         self.assertEqual(response["Location"], f"{reverse('members:member_portal')}?tab=messages")
         notification.refresh_from_db()
         self.assertIsNotNone(notification.read_at)
+
+    def test_member_can_create_weight_goal_with_member_starter(self):
+        self.client.force_login(self.member.user)
+
+        response = self.client.post(
+            reverse("members:member_goal_create"),
+            {
+                "goal_type": MemberGoal.GOAL_GAIN_WEIGHT,
+                "target_weight": "78.5",
+                "target_date": (timezone.localdate() + timedelta(days=90)).isoformat(),
+                "measurement_starter": MemberGoal.STARTER_MEMBER,
+                "note": "Prise de masse progressive",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], f"{reverse('members:member_portal')}?tab=home")
+        goal = MemberGoal.objects.get(member=self.member, status=MemberGoal.STATUS_ACTIVE)
+        self.assertEqual(goal.gym, self.gym)
+        self.assertEqual(goal.goal_type, MemberGoal.GOAL_GAIN_WEIGHT)
+        self.assertEqual(goal.measurement_starter, MemberGoal.STARTER_MEMBER)
+        self.assertEqual(goal.created_by, self.member.user)
+
+    def test_member_can_record_first_weight_when_member_starts_goal(self):
+        goal = MemberGoal.objects.create(
+            gym=self.gym,
+            member=self.member,
+            goal_type=MemberGoal.GOAL_LOSE_WEIGHT,
+            target_weight="68.0",
+            measurement_starter=MemberGoal.STARTER_MEMBER,
+            created_by=self.member.user,
+        )
+        self.client.force_login(self.member.user)
+
+        response = self.client.post(
+            reverse("members:member_goal_measurement_create"),
+            {
+                "weight": "74.2",
+                "measured_at": timezone.localdate().isoformat(),
+                "note": "Premiere pesee",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], f"{reverse('members:member_portal')}?tab=home")
+        measurement = MemberWeightMeasurement.objects.get(goal=goal)
+        self.assertEqual(measurement.member, self.member)
+        self.assertEqual(measurement.source, MemberWeightMeasurement.SOURCE_MEMBER)
+        self.assertEqual(measurement.recorded_by, self.member.user)
+
+    def test_member_cannot_record_first_weight_when_coach_must_start_goal(self):
+        goal = MemberGoal.objects.create(
+            gym=self.gym,
+            member=self.member,
+            goal_type=MemberGoal.GOAL_LOSE_WEIGHT,
+            target_weight="67.0",
+            measurement_starter=MemberGoal.STARTER_COACH,
+            created_by=self.member.user,
+        )
+        self.client.force_login(self.member.user)
+
+        response = self.client.post(
+            reverse("members:member_goal_measurement_create"),
+            {
+                "weight": "73.8",
+                "measured_at": timezone.localdate().isoformat(),
+                "note": "Tentative membre",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "La premiere pesee doit etre enregistree par le coach.")
+        self.assertFalse(MemberWeightMeasurement.objects.filter(goal=goal).exists())
+
+    def test_member_portal_shows_waiting_message_when_coach_must_start_goal(self):
+        MemberGoal.objects.create(
+            gym=self.gym,
+            member=self.member,
+            goal_type=MemberGoal.GOAL_LOSE_WEIGHT,
+            target_weight="67.0",
+            measurement_starter=MemberGoal.STARTER_COACH,
+            created_by=self.member.user,
+        )
+        self.client.force_login(self.member.user)
+
+        response = self.client.get(reverse("members:member_portal"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Le coach doit lancer la premiere pesee")
+
+    def test_member_detail_json_exposes_subscription_offers(self):
+        offer = SubscriptionOffer.objects.create(
+            gym=self.gym,
+            name="Acces groupe coaching",
+            category=SubscriptionOffer.CATEGORY_COACHING,
+            grants_group_coaching=True,
+        )
+        self.plan.offers.add(offer)
+        reception_user = User.objects.create_user(username="reception-portal", password="pass12345")
+        UserGymRole.objects.create(user=reception_user, gym=self.gym, role="reception", is_active=True)
+        self.client.force_login(reception_user)
+
+        response = self.client.get(reverse("members:member_detail", args=[self.member.id]))
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("subscription_offers", data)
+        self.assertEqual(data["subscription_offers"], ["Acces groupe coaching"])
+
+    def test_member_offer_only_plan_unlocks_coach_and_group_choices(self):
+        offer_plan = SubscriptionPlan.objects.create(
+            gym=self.gym,
+            name="Pack offres complet",
+            duration_days=45,
+            price=90,
+            coaching_mode=SubscriptionPlan.COACHING_MODE_NONE,
+            coaching_level=SubscriptionPlan.COACHING_LEVEL_STANDARD,
+        )
+        offer_plan.offers.add(
+            SubscriptionOffer.objects.create(
+                gym=self.gym,
+                name="Acces coach individuel",
+                category=SubscriptionOffer.CATEGORY_COACHING,
+                grants_individual_coaching=True,
+            ),
+            SubscriptionOffer.objects.create(
+                gym=self.gym,
+                name="Acces coaching groupe",
+                category=SubscriptionOffer.CATEGORY_COACHING,
+                grants_group_coaching=True,
+            ),
+        )
+        self.subscription.is_active = False
+        self.subscription.save(update_fields=["is_active"])
+        today = timezone.localdate()
+        MemberSubscription.objects.create(
+            gym=self.gym,
+            member=self.member,
+            plan=offer_plan,
+            start_date=today,
+            end_date=today + timedelta(days=45),
+            is_active=True,
+        )
+        self.client.force_login(self.member.user)
+
+        response = self.client.get(reverse("members:member_portal"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Choisir mon coach")
+        self.assertContains(response, "Rejoindre un programme groupe")
 
     def test_member_portal_hides_unsent_notifications(self):
         Notification.objects.create(

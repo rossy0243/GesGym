@@ -31,8 +31,11 @@ body.subscription-plan-screen #addFormuleModal .modal-dialog {
     <div class="page-header-right ms-auto">
         <div class="page-header-right-items">
             <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-primary" id="newOfferBtn" type="button" onclick="window.subscriptionOffersPage && window.subscriptionOffersPage.openOfferCreateModal && window.subscriptionOffersPage.openOfferCreateModal();">
+                    <span class="material-icons me-2" style="font-size: 18px;">local_offer</span>Nouvelle offre
+                </button>
                 
-                <button class="btn btn-sm btn-primary" id="newFormuleBtn" type="button">
+                <button class="btn btn-sm btn-primary" id="newFormuleBtn" type="button" onclick="window.subscriptionOffersPage && window.subscriptionOffersPage.openPlanCreateModal && window.subscriptionOffersPage.openPlanCreateModal();">
                     <span class="material-icons me-2" style="font-size: 18px;">add</span>Nouvelle formule
                 </button>
             </div>
@@ -96,7 +99,59 @@ body.subscription-plan-screen #addFormuleModal .modal-dialog {
 <div class="tab-content" id="subscriptionTabsContent">
     <!-- Onglet FORMULES -->
     <div class="tab-pane fade show active" id="formules" role="tabpanel">
-        
+        <div class="row mx-2 mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Catalogue d'offres</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            {% for offer in offers_catalog %}
+                                <div class="col-lg-3 col-md-4 col-sm-6">
+                                    <div class="border rounded-3 p-3 h-100">
+                                        <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                                            <div>
+                                                <strong>{{ offer.name }}</strong>
+                                                <div class="small text-muted">{{ offer.get_category_display }}</div>
+                                            </div>
+                                            {% if offer.is_active %}
+                                                <span class="badge bg-success-subtle text-success">Active</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary-subtle text-secondary">Inactive</span>
+                                            {% endif %}
+                                        </div>
+                                        {% if offer.description %}
+                                            <p class="small text-muted mb-2">{{ offer.description }}</p>
+                                        {% endif %}
+                                        <div class="d-flex flex-wrap gap-2 mb-3">
+                                            {% if offer.grants_individual_coaching %}
+                                                <span class="badge bg-light-primary text-primary">Coach individuel</span>
+                                            {% endif %}
+                                            {% if offer.grants_group_coaching %}
+                                                <span class="badge bg-light-primary text-primary">Coaching groupe</span>
+                                            {% endif %}
+                                        </div>
+                                        <a href="#"
+                                           class="btn btn-sm btn-outline-primary btn-edit-offer"
+                                           data-offer-id="{{ offer.id }}"
+                                           data-edit-url="{% url 'subscriptions:edit_subscription_offer' offer.id %}"
+                                           onclick="return window.subscriptionOffersPage && window.subscriptionOffersPage.openOfferEditFromButton && window.subscriptionOffersPage.openOfferEditFromButton(this, event);">
+                                            <span class="material-icons me-1" style="font-size:16px;">edit</span>
+                                            Editer
+                                        </a>
+                                    </div>
+                                </div>
+                            {% empty %}
+                                <div class="col-12 text-center p-4 text-muted">
+                                    Aucune offre parametree pour le moment.
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- Grille des formules d'abonnement -->
         <div class="row mx-2">
@@ -160,15 +215,21 @@ body.subscription-plan-screen #addFormuleModal .modal-dialog {
                                 <strong>{{ plan.total_sales_count }}</strong>
                             </div>
 
-                            <div class="d-flex justify-content-between align-items-center bg-light rounded-3 px-3 py-2 mb-2">
-                                <span class="text-muted">Acces coaching</span>
-                                <strong>{{ plan.get_coaching_mode_display }}</strong>
+                            <div class="d-flex justify-content-between align-items-center bg-light rounded-3 px-3 py-2 mb-3">
+                                <span class="text-muted">Offres parametrees</span>
+                                <strong>{{ plan.active_offers|length }}</strong>
                             </div>
 
-                            <div class="d-flex justify-content-between align-items-center bg-light rounded-3 px-3 py-2 mb-3">
-                                <span class="text-muted">Niveau coaching</span>
-                                <strong>{{ plan.get_coaching_level_display }}</strong>
+                            {% if plan.active_offers %}
+                            <div class="mb-3">
+                                <div class="text-muted small mb-2">Offres incluses</div>
+                                <div class="d-flex flex-wrap gap-2">
+                                    {% for offer in plan.active_offers %}
+                                        <span class="badge bg-light-primary text-primary">{{ offer.name }}</span>
+                                    {% endfor %}
+                                </div>
                             </div>
+                            {% endif %}
 
 
                             {% if plan.description %}
@@ -206,7 +267,8 @@ body.subscription-plan-screen #addFormuleModal .modal-dialog {
                             <a href="#" 
                             class="btn btn-sm btn-outline-primary btn-edit-plan"
                             data-plan-id="{{ plan.id }}"
-                            data-edit-url="{% url 'subscriptions:edit_subscription_plan' plan.id %}">
+                            data-edit-url="{% url 'subscriptions:edit_subscription_plan' plan.id %}"
+                            onclick="return window.subscriptionOffersPage && window.subscriptionOffersPage.openPlanEditFromButton && window.subscriptionOffersPage.openPlanEditFromButton(this, event);">
                                 <span class="material-icons me-1" style="font-size:16px;">edit</span>
                                 Éditer
                             </a>
@@ -649,17 +711,18 @@ body.subscription-plan-screen #addFormuleModal .modal-dialog {
                         </div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Acces coaching</label>
-                        {{ form.coaching_mode|default:"" }}
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Niveau de service coaching</label>
-                        {{ form.coaching_level|default:"" }}
-                    </div>
-                    <div class="mb-3">
                         <label class="form-label">Description</label>
                         {{ form.description|default:"" }}
                     </div>
+                    <div class="mb-3">
+                        <label class="form-label">Offres incluses</label>
+                        <div class="small text-muted mb-2">Les avantages de la formule se definissent ici. Les droits coaching sont derives automatiquement des offres choisies.</div>
+                        <div class="border rounded-3 p-3">
+                            {{ form.offers|default:"" }}
+                        </div>
+                    </div>
+                    {{ form.coaching_mode }}
+                    {{ form.coaching_level }}
                 </form>
             </div>
             <div class="modal-footer">
@@ -760,6 +823,51 @@ body.subscription-plan-screen #addFormuleModal .modal-dialog {
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="offerModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="offerModalTitle">Creer une nouvelle offre</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="offerForm" method="post" action="{% url 'subscriptions:create_subscription_offer' %}">
+                    {% csrf_token %}
+                    <input type="hidden" id="offerId" value="">
+                    <div class="mb-3">
+                        <label class="form-label">Nom de l'offre</label>
+                        {{ offer_form.name }}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Categorie</label>
+                        {{ offer_form.category }}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        {{ offer_form.description }}
+                    </div>
+                    <div class="form-check mb-2">
+                        {{ offer_form.grants_individual_coaching }}
+                        <label class="form-check-label" for="{{ offer_form.grants_individual_coaching.id_for_label }}">Donne acces au coaching individuel</label>
+                    </div>
+                    <div class="form-check mb-3">
+                        {{ offer_form.grants_group_coaching }}
+                        <label class="form-check-label" for="{{ offer_form.grants_group_coaching.id_for_label }}">Donne acces au coaching groupe</label>
+                    </div>
+                    <div class="form-check mb-3">
+                        {{ offer_form.is_active }}
+                        <label class="form-check-label" for="{{ offer_form.is_active.id_for_label }}">Activer l'offre</label>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
+                <button type="submit" class="btn btn-primary" id="offerSaveBtn" form="offerForm">Creer l'offre</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -768,12 +876,56 @@ body.subscription-plan-screen #addFormuleModal .modal-dialog {
 document.addEventListener('DOMContentLoaded', function () {
     document.body.classList.add('subscription-plan-screen');
 
+    function createModalController(modalNode) {
+        if (!modalNode) return null;
+
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            return bootstrap.Modal.getOrCreateInstance(modalNode);
+        }
+
+        const ensureBackdrop = () => {
+            let backdrop = document.querySelector('.modal-backdrop.subscription-fallback-backdrop');
+            if (!backdrop) {
+                backdrop = document.createElement('div');
+                backdrop.className = 'modal-backdrop fade show subscription-fallback-backdrop';
+                document.body.appendChild(backdrop);
+            }
+            return backdrop;
+        };
+
+        return {
+            show() {
+                modalNode.style.display = 'block';
+                modalNode.classList.add('show');
+                modalNode.removeAttribute('aria-hidden');
+                modalNode.setAttribute('aria-modal', 'true');
+                document.body.classList.add('modal-open');
+                ensureBackdrop();
+            },
+            hide() {
+                modalNode.style.display = 'none';
+                modalNode.classList.remove('show');
+                modalNode.setAttribute('aria-hidden', 'true');
+                modalNode.removeAttribute('aria-modal');
+                document.body.classList.remove('modal-open');
+                document.querySelector('.modal-backdrop.subscription-fallback-backdrop')?.remove();
+                modalNode.dispatchEvent(new Event('hidden.bs.modal'));
+            }
+        };
+    }
+
     const createPlanUrl = "{% url 'subscriptions:create_subscription_plan' %}";
+    const createOfferUrl = "{% url 'subscriptions:create_subscription_offer' %}";
     const form = document.getElementById('newFormuleForm');
     const modalEl = document.getElementById('addFormuleModal');
     const titleEl = document.getElementById('addFormuleModalTitle');
     const submitBtn = document.getElementById('addFormuleBtn');
-    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    const modal = createModalController(modalEl);
+    const offerForm = document.getElementById('offerForm');
+    const offerModalEl = document.getElementById('offerModal');
+    const offerTitleEl = document.getElementById('offerModalTitle');
+    const offerSubmitBtn = document.getElementById('offerSaveBtn');
+    const offerModal = createModalController(offerModalEl);
 
     if (!form || !modalEl || !titleEl || !submitBtn) {
         return;
@@ -792,7 +944,25 @@ document.addEventListener('DOMContentLoaded', function () {
         coachingMode: document.getElementById('id_coaching_mode'),
         coachingLevel: document.getElementById('id_coaching_level'),
         active: document.getElementById('id_is_active'),
+        offers: Array.from(document.querySelectorAll('input[name="offers"]')),
     };
+
+    const offerFields = {
+        id: document.getElementById('offerId'),
+        name: document.getElementById('id_offer-name'),
+        category: document.getElementById('id_offer-category'),
+        description: document.getElementById('id_offer-description'),
+        grantsIndividual: document.getElementById('id_offer-grants_individual_coaching'),
+        grantsGroup: document.getElementById('id_offer-grants_group_coaching'),
+        active: document.getElementById('id_offer-is_active'),
+    };
+
+    function setCheckedValues(nodes, values) {
+        const selected = new Set((values || []).map(String));
+        nodes.forEach((node) => {
+            node.checked = selected.has(String(node.value));
+        });
+    }
 
     function resetForCreate() {
         titleEl.textContent = 'Creer une nouvelle formule';
@@ -804,6 +974,19 @@ document.addEventListener('DOMContentLoaded', function () {
         if (fields.coachingMode) fields.coachingMode.value = 'none';
         if (fields.coachingLevel) fields.coachingLevel.value = 'standard';
         if (fields.active) fields.active.checked = true;
+        setCheckedValues(fields.offers, []);
+    }
+
+    function resetOfferForCreate() {
+        if (!offerForm || !offerTitleEl || !offerSubmitBtn) return;
+        offerTitleEl.textContent = "Creer une nouvelle offre";
+        offerSubmitBtn.textContent = "Creer l'offre";
+        offerSubmitBtn.disabled = false;
+        offerForm.action = createOfferUrl;
+        offerForm.reset();
+        if (offerFields.id) offerFields.id.value = '';
+        if (offerFields.category) offerFields.category.value = 'access';
+        if (offerFields.active) offerFields.active.checked = true;
     }
 
     function cleanupModalArtifacts() {
@@ -831,18 +1014,47 @@ document.addEventListener('DOMContentLoaded', function () {
         return clone;
     }
 
-    const newBtn = replaceNode(document.getElementById('newFormuleBtn'));
-    if (newBtn) {
-        newBtn.addEventListener('click', function () {
+    function openPlanCreateModal() {
             cleanupModalArtifacts();
             resetForCreate();
             modal.show();
+    }
+
+    const newBtn = replaceNode(document.getElementById('newFormuleBtn'));
+    if (newBtn) {
+        newBtn.onclick = openPlanCreateModal;
+        newBtn.addEventListener('click', openPlanCreateModal);
+    }
+
+    function openOfferCreateModal() {
+            cleanupModalArtifacts();
+            resetOfferForCreate();
+            offerModal.show();
+    }
+
+    const newOfferBtn = replaceNode(document.getElementById('newOfferBtn'));
+    if (newOfferBtn && offerModal) {
+        newOfferBtn.onclick = openOfferCreateModal;
+        newOfferBtn.addEventListener('click', openOfferCreateModal);
+    }
+
+    modalEl.querySelectorAll('[data-bs-dismiss="modal"], .btn-close').forEach((button) => {
+        button.addEventListener('click', function () {
+            modal.hide();
+        });
+    });
+
+    if (offerModalEl && offerModal) {
+        offerModalEl.querySelectorAll('[data-bs-dismiss="modal"], .btn-close').forEach((button) => {
+            button.addEventListener('click', function () {
+                offerModal.hide();
+            });
         });
     }
 
     document.querySelectorAll('.btn-edit-plan').forEach((originalBtn) => {
         const btn = replaceNode(originalBtn);
-        btn.addEventListener('click', async function (event) {
+        const handleEditPlan = async function (event) {
             event.preventDefault();
             cleanupModalArtifacts();
             titleEl.textContent = 'Chargement...';
@@ -876,12 +1088,58 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (fields.coachingMode) fields.coachingMode.value = data.coaching_mode || 'none';
                 if (fields.coachingLevel) fields.coachingLevel.value = data.coaching_level || 'standard';
                 if (fields.active) fields.active.checked = Boolean(data.is_active);
+                setCheckedValues(fields.offers, data.offer_ids || []);
             } catch (error) {
                 console.error(error);
                 modal.hide();
                 alert("Erreur lors du chargement de la formule.");
             }
-        });
+        };
+        btn.onclick = handleEditPlan;
+        btn.addEventListener('click', handleEditPlan);
+    });
+
+    document.querySelectorAll('.btn-edit-offer').forEach((originalBtn) => {
+        const btn = replaceNode(originalBtn);
+        if (!offerModal || !offerForm || !offerTitleEl || !offerSubmitBtn) return;
+        const handleEditOffer = async function (event) {
+            event.preventDefault();
+            cleanupModalArtifacts();
+            offerTitleEl.textContent = 'Chargement...';
+            offerSubmitBtn.textContent = 'Chargement...';
+            offerSubmitBtn.disabled = true;
+            offerModal.show();
+
+            try {
+                const response = await fetch(this.dataset.editUrl, {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+                offerTitleEl.textContent = "Modifier l'offre";
+                offerSubmitBtn.textContent = 'Enregistrer les modifications';
+                offerSubmitBtn.disabled = false;
+                offerForm.action = this.dataset.editUrl;
+
+                if (offerFields.id) offerFields.id.value = data.id || '';
+                if (offerFields.name) offerFields.name.value = data.name || '';
+                if (offerFields.category) offerFields.category.value = data.category || 'access';
+                if (offerFields.description) offerFields.description.value = data.description || '';
+                if (offerFields.grantsIndividual) offerFields.grantsIndividual.checked = Boolean(data.grants_individual_coaching);
+                if (offerFields.grantsGroup) offerFields.grantsGroup.checked = Boolean(data.grants_group_coaching);
+                if (offerFields.active) offerFields.active.checked = Boolean(data.is_active);
+            } catch (error) {
+                console.error(error);
+                offerModal.hide();
+                alert("Erreur lors du chargement de l'offre.");
+            }
+        };
+        btn.onclick = handleEditOffer;
+        btn.addEventListener('click', handleEditOffer);
     });
 
     form.addEventListener('submit', async function (event) {
@@ -930,6 +1188,54 @@ document.addEventListener('DOMContentLoaded', function () {
         cleanupModalArtifacts();
         resetForCreate();
     });
+
+    if (offerForm && offerModalEl && offerTitleEl && offerSubmitBtn) {
+        offerForm.addEventListener('submit', async function (event) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+
+            const formData = new FormData(offerForm);
+            offerSubmitBtn.disabled = true;
+
+            try {
+                const response = await fetch(offerForm.action, {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-CSRFToken': offerForm.querySelector('[name=csrfmiddlewaretoken]').value,
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                });
+
+                const data = await response.json();
+                if (response.ok && data.success) {
+                    offerModal.hide();
+                    location.reload();
+                    return;
+                }
+
+                let errorMsg = 'Erreurs :\n';
+                if (data.errors) {
+                    for (const field in data.errors) {
+                        errorMsg += `- ${field}: ${data.errors[field]}\n`;
+                    }
+                } else {
+                    errorMsg += 'Erreur inconnue.';
+                }
+                alert(errorMsg);
+            } catch (error) {
+                console.error(error);
+                alert("Erreur lors de la sauvegarde de l'offre.");
+            } finally {
+                offerSubmitBtn.disabled = false;
+            }
+        });
+
+        offerModalEl.addEventListener('hidden.bs.modal', function () {
+            cleanupModalArtifacts();
+            resetOfferForCreate();
+        });
+    }
 });
 </script>
 

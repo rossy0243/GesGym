@@ -10,6 +10,8 @@ from .views import (
     member_choose_coach,
     member_choose_group_program,
     member_detail,
+    member_goal_create,
+    member_goal_measurement_create,
     member_portal,
     member_notification_read,
     member_portal_qr,
@@ -31,6 +33,8 @@ app_name = "members"
 urlpatterns = [
     path("", member_list, name="member_list"),
     path("me/", member_portal, name="member_portal"),
+    path("me/goals/create/", member_goal_create, name="member_goal_create"),
+    path("me/goals/measurements/create/", member_goal_measurement_create, name="member_goal_measurement_create"),
     path("me/change-password/", member_change_password, name="member_change_password"),
     path("me/choose-coach/", member_choose_coach, name="member_choose_coach"),
     path("me/choose-group-program/", member_choose_group_program, name="member_choose_group_program"),

@@ -1,7 +1,7 @@
 from django import forms
 from django.utils import timezone
 
-from .models import Member, MemberPreRegistration
+from .models import Member, MemberGoal, MemberPreRegistration, MemberWeightMeasurement
 
 
 class MemberCreationForm(forms.ModelForm):
@@ -128,3 +128,71 @@ class MemberPreRegistrationForm(forms.ModelForm):
             raise forms.ValidationError("Une preinscription active existe deja avec cet email.")
 
         return email
+
+
+class MemberGoalForm(forms.ModelForm):
+    class Meta:
+        model = MemberGoal
+        fields = [
+            "goal_type",
+            "target_weight",
+            "target_date",
+            "measurement_starter",
+            "note",
+        ]
+        widgets = {
+            "goal_type": forms.Select(attrs={"class": "form-control"}),
+            "target_weight": forms.NumberInput(
+                attrs={
+                    "class": "form-control",
+                    "step": "0.1",
+                    "min": "1",
+                    "placeholder": "Ex: 78.5",
+                }
+            ),
+            "target_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "measurement_starter": forms.Select(attrs={"class": "form-control"}),
+            "note": forms.Textarea(
+                attrs={
+                    "class": "form-control",
+                    "rows": 3,
+                    "placeholder": "Ex: prise de masse propre avant aout",
+                }
+            ),
+        }
+        labels = {
+            "goal_type": "Type d'objectif",
+            "target_weight": "Poids cible (kg)",
+            "target_date": "Date cible",
+            "measurement_starter": "Qui commence les releves ?",
+            "note": "Note",
+        }
+
+
+class MemberWeightMeasurementForm(forms.ModelForm):
+    class Meta:
+        model = MemberWeightMeasurement
+        fields = ["weight", "measured_at", "note"]
+        widgets = {
+            "weight": forms.NumberInput(
+                attrs={
+                    "class": "form-control",
+                    "step": "0.1",
+                    "min": "1",
+                    "placeholder": "Ex: 82.4",
+                }
+            ),
+            "measured_at": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "note": forms.Textarea(
+                attrs={
+                    "class": "form-control",
+                    "rows": 2,
+                    "placeholder": "Commentaire optionnel sur la pesee",
+                }
+            ),
+        }
+        labels = {
+            "weight": "Poids releve (kg)",
+            "measured_at": "Date de mesure",
+            "note": "Commentaire",
+        }

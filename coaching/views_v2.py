@@ -7,8 +7,10 @@ from django.db.models import Avg, Count, Max, Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.views.decorators.http import require_POST
 
-from members.models import Member
+from members.forms import MemberWeightMeasurementForm
+from members.models import Member, MemberGoal, MemberWeightMeasurement
 from smartclub.access_control import COACHING_ROLES, COACH_PORTAL_ROLES
 from smartclub.decorators import module_required, role_required
 from subscriptions.models import SubscriptionPlan
@@ -64,6 +66,28 @@ def _resolve_current_coach(request):
 
 def _filter_members_with_current_coaching_access(queryset, coaching_modes):
     today = timezone.localdate()
+    access_filter = Q()
+    if any(mode in coaching_modes for mode in [SubscriptionPlan.COACHING_MODE_INDIVIDUAL, SubscriptionPlan.COACHING_MODE_BOTH]):
+        access_filter |= Q(
+            subscriptions__plan__coaching_mode__in=[
+                SubscriptionPlan.COACHING_MODE_INDIVIDUAL,
+                SubscriptionPlan.COACHING_MODE_BOTH,
+            ]
+        ) | Q(
+            subscriptions__plan__offers__is_active=True,
+            subscriptions__plan__offers__grants_individual_coaching=True,
+        )
+    if any(mode in coaching_modes for mode in [SubscriptionPlan.COACHING_MODE_GROUP, SubscriptionPlan.COACHING_MODE_BOTH]):
+        access_filter |= Q(
+            subscriptions__plan__coaching_mode__in=[
+                SubscriptionPlan.COACHING_MODE_GROUP,
+                SubscriptionPlan.COACHING_MODE_BOTH,
+            ]
+        ) | Q(
+            subscriptions__plan__offers__is_active=True,
+            subscriptions__plan__offers__grants_group_coaching=True,
+        )
+
     return queryset.filter(
         is_active=True,
         status="active",
@@ -71,8 +95,7 @@ def _filter_members_with_current_coaching_access(queryset, coaching_modes):
         subscriptions__is_paused=False,
         subscriptions__start_date__lte=today,
         subscriptions__end_date__gte=today,
-        subscriptions__plan__coaching_mode__in=coaching_modes,
-    ).distinct()
+    ).filter(access_filter).distinct()
 
 
 def _coach_portal_member_queryset(request, coach):
@@ -87,6 +110,17 @@ def _coach_portal_member_queryset(request, coach):
 
 def _member_full_name(member):
     return f"{member.first_name} {member.last_name}".strip()
+
+
+def _goal_access_for_coach(goal):
+    if not goal:
+        return {"can_coach_record": False, "waiting_for": ""}
+    if not goal.is_started:
+        return {
+            "can_coach_record": goal.measurement_starter == MemberGoal.STARTER_COACH,
+            "waiting_for": goal.measurement_starter,
+        }
+    return {"can_coach_record": True, "waiting_for": ""}
 
 
 def _build_coach_priority_queue(priority_members, overdue_follow_ups, sensitive_feedbacks):
@@ -675,6 +709,9 @@ def coach_member_detail(request, member_id):
         form = CoachingFollowUpForm()
 
     latest_follow_up = follow_ups.first()
+    active_goal = member.active_goal
+    goal_measurements = list(active_goal.measurements_ordered) if active_goal else []
+    goal_access = _goal_access_for_coach(active_goal)
     context = {
         "gym": request.gym,
         "coach": coach,
@@ -683,5 +720,49 @@ def coach_member_detail(request, member_id):
         "follow_ups_count": follow_ups.count(),
         "latest_follow_up": latest_follow_up,
         "form": form,
+        "active_goal": active_goal,
+        "goal_measurements": goal_measurements,
+        "goal_measurement_form": MemberWeightMeasurementForm(initial={"measured_at": timezone.localdate()}),
+        "can_coach_record_goal_measurement": goal_access["can_coach_record"],
+        "goal_waiting_for": goal_access["waiting_for"],
     }
     return render(request, "coaching/coach_member_detail.html", context)
+
+
+@login_required
+@require_POST
+@module_required("COACHING")
+@role_required(COACH_PORTAL_ROLES)
+def coach_member_weight_measurement_create(request, member_id):
+    coach = _resolve_current_coach(request)
+    if not coach:
+        raise Http404("Coach introuvable")
+
+    member = get_object_or_404(_coach_portal_member_queryset(request, coach), id=member_id)
+    goal = get_object_or_404(
+        MemberGoal.objects.prefetch_related("measurements"),
+        member=member,
+        gym=request.gym,
+        status=MemberGoal.STATUS_ACTIVE,
+    )
+    goal_access = _goal_access_for_coach(goal)
+    if not goal_access["can_coach_record"]:
+        messages.error(request, "La premiere pesee doit etre enregistree par le membre.")
+        return redirect("coaching:coach_member_detail", member_id=member.id)
+
+    form = MemberWeightMeasurementForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, "La pesee n'a pas pu etre enregistree. Verifie les champs saisis.")
+        return redirect("coaching:coach_member_detail", member_id=member.id)
+
+    measurement = form.save(commit=False)
+    measurement.gym = request.gym
+    measurement.goal = goal
+    measurement.member = member
+    measurement.source = MemberWeightMeasurement.SOURCE_COACH
+    measurement.recorded_by = request.user
+    measurement.save()
+    goal.refresh_status_from_progress()
+
+    messages.success(request, "Pesee enregistree dans le suivi du membre.")
+    return redirect("coaching:coach_member_detail", member_id=member.id)

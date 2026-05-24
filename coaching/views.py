@@ -11,6 +11,7 @@ from .views_v2 import (  # noqa: F401
     coach_delete,
     coach_detail,
     coach_member_detail,
+    coach_member_weight_measurement_create,
     coach_list,
     coach_portal,
     coach_update,

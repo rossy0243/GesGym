@@ -27,16 +27,14 @@
     </div>
 
     <div class="mb-3">
-        <label class="form-label">Acces coaching</label>
-        {{ form.coaching_mode }}
-        {{ form.coaching_mode.errors }}
+        <label class="form-label">Offres incluses</label>
+        <div class="small text-muted mb-2">Les avantages de la formule sont definis par les offres affectees.</div>
+        {{ form.offers }}
+        {{ form.offers.errors }}
     </div>
 
-    <div class="mb-3">
-        <label class="form-label">Niveau de service coaching</label>
-        {{ form.coaching_level }}
-        {{ form.coaching_level.errors }}
-    </div>
+    {{ form.coaching_mode }}
+    {{ form.coaching_level }}
 
     <div class="form-check mb-3">
         {{ form.is_active }}

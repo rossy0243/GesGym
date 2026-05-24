@@ -15,8 +15,8 @@ from pos.services import record_subscription_payment
 from smartclub.access_control import SUBSCRIPTION_ROLES, has_role
 from smartclub.decorators import module_required
 
-from .forms import MemberSubscriptionForm, SubscriptionPlanForm
-from .models import MemberSubscription, SubscriptionPlan
+from .forms import MemberSubscriptionForm, SubscriptionOfferForm, SubscriptionPlanForm
+from .models import MemberSubscription, SubscriptionOffer, SubscriptionPlan
 
 
 PLAN_MANAGEMENT_ROLES = SUBSCRIPTION_ROLES
@@ -44,7 +44,7 @@ def _plan_list_context(request, form=None):
         end_date__gte=today,
         is_paused=False,
     )
-    plans = SubscriptionPlan.objects.filter(gym=request.gym).annotate(
+    plans = SubscriptionPlan.objects.filter(gym=request.gym).prefetch_related("offers").annotate(
         active_members_count=Count(
             "subscriptions",
             filter=Q(
@@ -67,6 +67,8 @@ def _plan_list_context(request, form=None):
     return {
         "plans": plans,
         "form": form or SubscriptionPlanForm(gym=request.gym),
+        "offer_form": SubscriptionOfferForm(gym=request.gym, prefix="offer"),
+        "offers_catalog": SubscriptionOffer.objects.filter(gym=request.gym).order_by("-is_active", "name"),
         "top_sales_count": top_sales_count,
         "active_plans_count": plans.filter(is_active=True).count(),
         "active_subscriptions_count": active_subscriptions.count(),
@@ -128,6 +130,7 @@ def create_plan(request):
             plan.gym = request.gym
             try:
                 plan.save()
+                form.save_m2m()
                 log_sensitive_action(
                     request,
                     "subscription.plan_created",
@@ -197,6 +200,7 @@ def edit_plan(request, plan_id):
             "duration_days": plan.duration_days,
             "price": float(plan.price),
             "description": plan.description or "",
+            "offer_ids": list(plan.offers.values_list("id", flat=True)),
             "coaching_mode": plan.coaching_mode,
             "coaching_level": plan.coaching_level,
             "is_active": plan.is_active,
@@ -239,6 +243,75 @@ def delete_plan(request, plan_id):
         return redirect("subscriptions:subscription_plan_list")
 
     return redirect("subscriptions:subscription_plan_list")
+
+
+@login_required
+@module_required("SUBSCRIPTIONS")
+def create_offer(request):
+    _require_gym_role(request, PLAN_MANAGEMENT_ROLES)
+
+    if request.method != "POST":
+        return redirect("subscriptions:subscription_plan_list")
+
+    form = SubscriptionOfferForm(request.POST, gym=request.gym, prefix="offer")
+    if form.is_valid():
+        offer = form.save(commit=False)
+        offer.gym = request.gym
+        offer.save()
+        log_sensitive_action(
+            request,
+            "subscription.offer_created",
+            "SubscriptionOffer",
+            offer.name,
+            metadata={"offer_id": offer.id, "category": offer.category},
+        )
+        if _wants_json(request):
+            return JsonResponse({"success": True, "message": "Offre creee avec succes."})
+        messages.success(request, "Offre creee avec succes.")
+        return redirect("subscriptions:subscription_plan_list")
+
+    if _wants_json(request):
+        return JsonResponse({"success": False, "errors": form.errors}, status=400)
+    return render(request, "subscriptions/subscription_plan_list.html", _plan_list_context(request, form=SubscriptionPlanForm(gym=request.gym)))
+
+
+@login_required
+@module_required("SUBSCRIPTIONS")
+def edit_offer(request, offer_id):
+    _require_gym_role(request, PLAN_MANAGEMENT_ROLES)
+    offer = get_object_or_404(SubscriptionOffer, id=offer_id, gym=request.gym)
+
+    if request.method == "POST":
+        form = SubscriptionOfferForm(request.POST, instance=offer, gym=request.gym, prefix="offer")
+        if form.is_valid():
+            form.save()
+            log_sensitive_action(
+                request,
+                "subscription.offer_updated",
+                "SubscriptionOffer",
+                offer.name,
+                metadata={"offer_id": offer.id},
+            )
+            if _wants_json(request):
+                return JsonResponse({"success": True, "message": "Offre modifiee avec succes."})
+            messages.success(request, "Offre modifiee avec succes.")
+            return redirect("subscriptions:subscription_plan_list")
+
+        if _wants_json(request):
+            return JsonResponse({"success": False, "errors": form.errors}, status=400)
+        return render(request, "subscriptions/subscription_plan_list.html", _plan_list_context(request, form=SubscriptionPlanForm(gym=request.gym)))
+
+    return JsonResponse(
+        {
+            "id": offer.id,
+            "name": offer.name,
+            "category": offer.category,
+            "description": offer.description or "",
+            "grants_individual_coaching": offer.grants_individual_coaching,
+            "grants_group_coaching": offer.grants_group_coaching,
+            "is_active": offer.is_active,
+        }
+    )
 
 
 @login_required

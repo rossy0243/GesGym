@@ -108,6 +108,121 @@
                 </article>
             </section>
 
+            <section class="content-panel" id="goal">
+                <div class="section-heading">
+                    <div>
+                        <p class="eyebrow">Objectif personnel</p>
+                        <h2>Mon objectif poids</h2>
+                    </div>
+                </div>
+
+                {% if active_goal %}
+                    <div class="access-summary-grid">
+                        <article class="summary-card">
+                            <span>Objectif</span>
+                            <strong>{{ active_goal.get_goal_type_display }}</strong>
+                            <small>Poids cible: {{ active_goal.target_weight|floatformat:1 }} kg</small>
+                        </article>
+                        <article class="summary-card">
+                            <span>Progression</span>
+                            <strong>{{ active_goal.progress_percent }}%</strong>
+                            <small>
+                                {% if active_goal.current_weight %}
+                                    {{ goal_direction_label }}: {{ active_goal.remaining_weight|floatformat:1 }} kg
+                                {% else %}
+                                    En attente de premiere pesee
+                                {% endif %}
+                            </small>
+                        </article>
+                    </div>
+
+                    <div class="detail-list" style="margin-top: 1rem;">
+                        <div>
+                            <dt>Demarrage</dt>
+                            <dd>{{ active_goal.get_measurement_starter_display }}</dd>
+                        </div>
+                        <div>
+                            <dt>Premiere pesee</dt>
+                            <dd>{% if active_goal.initial_weight %}{{ active_goal.initial_weight|floatformat:1 }} kg{% else %}-{% endif %}</dd>
+                        </div>
+                        <div>
+                            <dt>Poids actuel</dt>
+                            <dd>{% if active_goal.current_weight %}{{ active_goal.current_weight|floatformat:1 }} kg{% else %}-{% endif %}</dd>
+                        </div>
+                        <div>
+                            <dt>Date cible</dt>
+                            <dd>{{ active_goal.target_date|date:"d/m/Y"|default:"Non definie" }}</dd>
+                        </div>
+                    </div>
+
+                    {% if active_goal.note %}
+                        <div class="pending-box" style="margin-top: 1rem;">
+                            <strong>Note de l'objectif</strong>
+                            <small>{{ active_goal.note }}</small>
+                        </div>
+                    {% endif %}
+
+                    {% if can_member_record_goal_measurement %}
+                        <form method="post" action="{% url 'members:member_goal_measurement_create' %}" class="member-password-form" style="margin-top: 1.25rem;">
+                            {% csrf_token %}
+                            <div class="section-heading" style="margin-bottom: 0;">
+                                <div>
+                                    <p class="eyebrow">Pesee</p>
+                                    <h2>{% if active_goal.is_started %}Ajouter une mesure{% else %}Commencer les releves{% endif %}</h2>
+                                </div>
+                            </div>
+                            {% for field in goal_measurement_form %}
+                                <label class="form-field">
+                                    <span>{{ field.label }}</span>
+                                    {{ field }}
+                                </label>
+                            {% endfor %}
+                            <button type="submit" class="install-button">Enregistrer ma pesee</button>
+                        </form>
+                    {% elif goal_waiting_for == "coach" %}
+                        <div class="empty-panel" style="margin-top: 1.25rem;">
+                            <span class="empty-panel__eyebrow">En attente</span>
+                            <strong>Le coach doit lancer la premiere pesee</strong>
+                            <p>Votre objectif est cree. Le suivi demarrera des que le coach enregistrera le premier releve.</p>
+                        </div>
+                    {% endif %}
+
+                    {% if goal_measurements %}
+                        <div class="section-heading payment-heading">
+                            <div>
+                                <p class="eyebrow">Historique</p>
+                                <h2>Dernieres pesees</h2>
+                            </div>
+                        </div>
+                        <div class="payment-compact-list">
+                            {% for measurement in goal_measurements|slice:":4" %}
+                                <article class="payment-compact-card">
+                                    <div class="payment-compact-head">
+                                        <strong>{{ measurement.weight|floatformat:1 }} kg</strong>
+                                        <span>{{ measurement.get_source_display }}</span>
+                                    </div>
+                                    <div class="payment-compact-meta">
+                                        <small>{{ measurement.measured_at|date:"d/m/Y" }}</small>
+                                        <p>{{ measurement.note|default:"Mesure enregistree" }}</p>
+                                    </div>
+                                </article>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                {% else %}
+                    <form method="post" action="{% url 'members:member_goal_create' %}" class="member-password-form">
+                        {% csrf_token %}
+                        {% for field in goal_form %}
+                            <label class="form-field">
+                                <span>{{ field.label }}</span>
+                                {{ field }}
+                            </label>
+                        {% endfor %}
+                        <button type="submit" class="install-button">Creer mon objectif</button>
+                    </form>
+                {% endif %}
+            </section>
+
             <section class="content-panel" id="security">
                 <div class="section-heading">
                     <div>
@@ -621,6 +736,21 @@
                             <dd>{{ subscription.plan.price|floatformat:2 }} USD</dd>
                         </div>
                     </dl>
+                    <div class="section-heading payment-heading" style="margin-top: 1rem;">
+                        <div>
+                            <p class="eyebrow">Avantages</p>
+                            <h2>Offres incluses</h2>
+                        </div>
+                    </div>
+                    <div class="plan-benefits-wrap">
+                        <ul class="plan-benefits" aria-label="Offres de la formule active">
+                            {% for offer in subscription.plan.active_offers %}
+                                <li>{{ offer.name }}</li>
+                            {% empty %}
+                                <li>Aucune offre specifique n'est affectee a cette formule.</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
                 {% else %}
                     <p class="empty-state">Aucun abonnement actif n'est rattache a ce compte.</p>
                 {% endif %}
@@ -729,8 +859,12 @@
                                 {% endif %}
                                 <ul class="plan-benefits" aria-label="Avantages de la formule">
                                     <li>{{ plan.duration_days }} jours d'acces</li>
-                                    <li>Carte membre et QR code inclus</li>
-                                    <li>Suivi dans l'espace membre</li>
+                                    {% for offer in plan.active_offers %}
+                                        <li>{{ offer.name }}</li>
+                                    {% endfor %}
+                                    {% if not plan.active_offers %}
+                                        <li>Aucun avantage specifique parametre</li>
+                                    {% endif %}
                                 </ul>
                             </div>
                             <div class="plan-action">

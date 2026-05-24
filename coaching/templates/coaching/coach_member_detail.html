@@ -325,6 +325,72 @@
         <section class="panel">
             <div class="panel-head">
                 <div>
+                    <p class="eyebrow">Objectif poids</p>
+                    <h2>Suivi de progression</h2>
+                </div>
+            </div>
+
+            {% if active_goal %}
+                <div class="grid" style="margin-bottom: 14px;">
+                    <article class="metric">
+                        <span>Objectif</span>
+                        <strong>{{ active_goal.get_goal_type_display }}</strong>
+                    </article>
+                    <article class="metric">
+                        <span>Poids cible</span>
+                        <strong>{{ active_goal.target_weight|floatformat:1 }} kg</strong>
+                    </article>
+                    <article class="metric">
+                        <span>Poids actuel</span>
+                        <strong>{% if active_goal.current_weight %}{{ active_goal.current_weight|floatformat:1 }} kg{% else %}-{% endif %}</strong>
+                    </article>
+                    <article class="metric">
+                        <span>Progression</span>
+                        <strong>{{ active_goal.progress_percent }}%</strong>
+                    </article>
+                </div>
+
+                {% if active_goal.note %}
+                    <div class="message success" style="margin-bottom: 14px;">{{ active_goal.note }}</div>
+                {% endif %}
+
+                {% if can_coach_record_goal_measurement %}
+                    <form method="post" action="{% url 'coaching:coach_member_weight_measurement_create' member.id %}" style="margin-bottom: 18px;">
+                        {% csrf_token %}
+                        {% for field in goal_measurement_form %}
+                            <div>
+                                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                                {{ field }}
+                                {% if field.errors %}
+                                    <div class="message error" style="margin-top:8px;">{{ field.errors|join:", " }}</div>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                        <button type="submit" class="btn">{% if active_goal.is_started %}Ajouter une pesee{% else %}Commencer les releves{% endif %}</button>
+                    </form>
+                {% elif goal_waiting_for == "member" %}
+                    <div class="empty" style="margin-bottom: 18px;">Le membre doit enregistrer la premiere pesee avant que le coach puisse continuer le suivi.</div>
+                {% endif %}
+
+                <div class="timeline">
+                    {% for measurement in goal_measurements %}
+                        <article class="timeline-card">
+                            <small>{{ measurement.measured_at|date:"d/m/Y" }} • {{ measurement.get_source_display }}</small>
+                            <strong>{{ measurement.weight|floatformat:1 }} kg</strong>
+                            <p>{{ measurement.note|default:"Mesure de progression enregistree." }}</p>
+                        </article>
+                    {% empty %}
+                        <div class="empty">Aucune pesee n'a encore ete enregistree sur cet objectif.</div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="empty">Ce membre n'a pas encore cree d'objectif poids actif.</div>
+            {% endif %}
+        </section>
+
+        <section class="panel">
+            <div class="panel-head">
+                <div>
                     <p class="eyebrow">Action rapide</p>
                     <h2>Enregistrer un suivi</h2>
                 </div>

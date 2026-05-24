@@ -787,6 +787,10 @@ body.members-screen .modal-dialog {
                                         <td id="viewPrice">0</td>
                                     </tr>
                                     <tr>
+                                        <td class="fw-semibold">Offres :</td>
+                                        <td id="viewSubscriptionOffers">-</td>
+                                    </tr>
+                                    <tr>
                                         <td class="fw-semibold">Payé :</td>
                                         <td id="viewPaid">0</td>
                                     </tr>
@@ -1088,6 +1092,10 @@ body.members-screen .modal-dialog {
                 document.getElementById("viewSubscriptionType").innerText = data.subscription_type || "Aucun";
                 document.getElementById("viewStartDate").innerText = data.start_date || "-";
                 document.getElementById("viewExpiryDate").innerText = data.expiration_date || "-";
+                document.getElementById("viewSubscriptionOffers").innerText =
+                    data.subscription_offers && data.subscription_offers.length
+                    ? data.subscription_offers.join(", ")
+                    : "Aucune offre affectee";
 
                 // === PAIEMENTS ===
                 document.getElementById("viewPrice").innerText = (data.price || 0) + " USD";

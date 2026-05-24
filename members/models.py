@@ -143,7 +143,10 @@ class Member(models.Model):
             self.is_active
             and subscription
             and subscription.plan
-            and subscription.plan.coaching_mode != subscription.plan.COACHING_MODE_NONE
+            and (
+                subscription.plan.allows_individual_coaching
+                or subscription.plan.allows_group_coaching
+            )
         )
 
     @property
@@ -169,6 +172,10 @@ class Member(models.Model):
     def get_qr_data(self):
         """Données qui seront encodées dans le QR Code"""
         return str(self.qr_code)
+
+    @property
+    def active_goal(self):
+        return self.goals.filter(status=MemberGoal.STATUS_ACTIVE).prefetch_related("measurements").first()
     
     class Meta:
         unique_together = ("gym", "qr_code"), ("gym", "phone"), ("gym", "email")
@@ -186,6 +193,231 @@ class Member(models.Model):
     def __str__(self):
         gym_name = self.gym.name if self.gym_id else "Sans gym"
         return f"{self.first_name} {self.last_name} - {gym_name}"
+
+
+class MemberGoal(models.Model):
+    GOAL_LOSE_WEIGHT = "lose_weight"
+    GOAL_GAIN_WEIGHT = "gain_weight"
+
+    GOAL_TYPE_CHOICES = (
+        (GOAL_LOSE_WEIGHT, "Perte de poids"),
+        (GOAL_GAIN_WEIGHT, "Prise de poids"),
+    )
+
+    STARTER_MEMBER = "member"
+    STARTER_COACH = "coach"
+
+    STARTER_CHOICES = (
+        (STARTER_MEMBER, "Le membre commence les releves"),
+        (STARTER_COACH, "Le coach commence les releves"),
+    )
+
+    STATUS_ACTIVE = "active"
+    STATUS_ACHIEVED = "achieved"
+    STATUS_CANCELLED = "cancelled"
+
+    STATUS_CHOICES = (
+        (STATUS_ACTIVE, "Actif"),
+        (STATUS_ACHIEVED, "Atteint"),
+        (STATUS_CANCELLED, "Annule"),
+    )
+
+    gym = models.ForeignKey(
+        Gym,
+        on_delete=models.CASCADE,
+        related_name="member_goals",
+        db_index=True,
+    )
+    member = models.ForeignKey(
+        Member,
+        on_delete=models.CASCADE,
+        related_name="goals",
+    )
+    goal_type = models.CharField(max_length=20, choices=GOAL_TYPE_CHOICES)
+    target_weight = models.DecimalField(max_digits=5, decimal_places=2)
+    target_date = models.DateField(blank=True, null=True)
+    measurement_starter = models.CharField(
+        max_length=10,
+        choices=STARTER_CHOICES,
+        default=STARTER_MEMBER,
+    )
+    note = models.TextField(blank=True)
+    status = models.CharField(
+        max_length=12,
+        choices=STATUS_CHOICES,
+        default=STATUS_ACTIVE,
+        db_index=True,
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_member_goals",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["gym", "status"]),
+            models.Index(fields=["member", "status"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["member"],
+                condition=models.Q(status="active"),
+                name="unique_active_goal_per_member",
+            ),
+        ]
+        ordering = ["-created_at"]
+
+    def clean(self):
+        super().clean()
+        if self.gym_id and self.member_id and self.member.gym_id != self.gym_id:
+            raise models.ValidationError("L'objectif doit appartenir au meme gym que le membre.")
+        if self.target_weight and self.target_weight <= 0:
+            raise models.ValidationError("Le poids cible doit etre superieur a zero.")
+        if self.note:
+            self.note = self.note.strip()
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    @property
+    def measurements_ordered(self):
+        return self.measurements.order_by("measured_at", "created_at")
+
+    @property
+    def initial_measurement(self):
+        return self.measurements_ordered.first()
+
+    @property
+    def latest_measurement(self):
+        return self.measurements.order_by("-measured_at", "-created_at").first()
+
+    @property
+    def is_started(self):
+        return self.initial_measurement is not None
+
+    @property
+    def initial_weight(self):
+        measurement = self.initial_measurement
+        return measurement.weight if measurement else None
+
+    @property
+    def current_weight(self):
+        measurement = self.latest_measurement
+        return measurement.weight if measurement else None
+
+    @property
+    def remaining_weight(self):
+        if self.current_weight is None:
+            return None
+        if self.goal_type == self.GOAL_GAIN_WEIGHT:
+            return max(self.target_weight - self.current_weight, 0)
+        return max(self.current_weight - self.target_weight, 0)
+
+    @property
+    def progress_percent(self):
+        if self.initial_weight is None or self.current_weight is None:
+            return 0
+        if self.goal_type == self.GOAL_GAIN_WEIGHT:
+            total = self.target_weight - self.initial_weight
+            progressed = self.current_weight - self.initial_weight
+        else:
+            total = self.initial_weight - self.target_weight
+            progressed = self.initial_weight - self.current_weight
+        if total <= 0:
+            return 100 if self.reached_target else 0
+        return min(max(round((progressed / total) * 100), 0), 100)
+
+    @property
+    def reached_target(self):
+        if self.current_weight is None:
+            return False
+        if self.goal_type == self.GOAL_GAIN_WEIGHT:
+            return self.current_weight >= self.target_weight
+        return self.current_weight <= self.target_weight
+
+    def refresh_status_from_progress(self, save=True):
+        next_status = self.STATUS_ACHIEVED if self.reached_target else self.STATUS_ACTIVE
+        if self.status != next_status:
+            self.status = next_status
+            if save:
+                self.save(update_fields=["status", "updated_at"])
+        return self.status
+
+    def __str__(self):
+        return f"{self.member} - {self.get_goal_type_display()}"
+
+
+class MemberWeightMeasurement(models.Model):
+    SOURCE_MEMBER = "member"
+    SOURCE_COACH = "coach"
+
+    SOURCE_CHOICES = (
+        (SOURCE_MEMBER, "Membre"),
+        (SOURCE_COACH, "Coach"),
+    )
+
+    gym = models.ForeignKey(
+        Gym,
+        on_delete=models.CASCADE,
+        related_name="member_weight_measurements",
+        db_index=True,
+    )
+    goal = models.ForeignKey(
+        MemberGoal,
+        on_delete=models.CASCADE,
+        related_name="measurements",
+    )
+    member = models.ForeignKey(
+        Member,
+        on_delete=models.CASCADE,
+        related_name="weight_measurements",
+    )
+    weight = models.DecimalField(max_digits=5, decimal_places=2)
+    measured_at = models.DateField(default=timezone.localdate)
+    note = models.TextField(blank=True)
+    source = models.CharField(max_length=10, choices=SOURCE_CHOICES)
+    recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="recorded_weight_measurements",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["gym", "measured_at"]),
+            models.Index(fields=["member", "measured_at"]),
+            models.Index(fields=["goal", "measured_at"]),
+        ]
+        ordering = ["-measured_at", "-created_at"]
+
+    def clean(self):
+        super().clean()
+        if self.gym_id and self.member_id and self.member.gym_id != self.gym_id:
+            raise models.ValidationError("La mesure doit appartenir au meme gym que le membre.")
+        if self.goal_id and self.member_id and self.goal.member_id != self.member_id:
+            raise models.ValidationError("La mesure doit viser le meme membre que l'objectif.")
+        if self.goal_id and self.gym_id and self.goal.gym_id != self.gym_id:
+            raise models.ValidationError("La mesure doit appartenir au meme gym que l'objectif.")
+        if self.weight and self.weight <= 0:
+            raise models.ValidationError("Le poids releve doit etre superieur a zero.")
+        if self.note:
+            self.note = self.note.strip()
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.member} - {self.weight} kg"
 
 
 class MemberPreRegistrationLink(models.Model):

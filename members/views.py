@@ -25,8 +25,8 @@ from smartclub.access_control import (
     MEMBER_WRITE_ROLES,
     has_role,
 )
-from .forms import MemberCreationForm
-from .models import Member, MemberPreRegistration, MemberPreRegistrationLink
+from .forms import MemberCreationForm, MemberGoalForm, MemberWeightMeasurementForm
+from .models import Member, MemberGoal, MemberPreRegistration, MemberPreRegistrationLink, MemberWeightMeasurement
 from notifications.models import Notification
 from pos.models import Payment
 from subscriptions.models import MemberSubscription, SubscriptionPlan, SubscriptionRequest
@@ -124,6 +124,40 @@ def _build_feedback_form(prefix):
     return CoachingFeedbackForm(prefix=prefix)
 
 
+def _member_goal_access(goal):
+    if not goal:
+        return {
+            "can_member_record": False,
+            "can_coach_record": False,
+            "waiting_for": "",
+        }
+
+    if not goal.is_started:
+        if goal.measurement_starter == MemberGoal.STARTER_MEMBER:
+            return {
+                "can_member_record": True,
+                "can_coach_record": False,
+                "waiting_for": "member",
+            }
+        return {
+            "can_member_record": False,
+            "can_coach_record": True,
+            "waiting_for": "coach",
+        }
+
+    return {
+        "can_member_record": True,
+        "can_coach_record": True,
+        "waiting_for": "",
+    }
+
+
+def _goal_direction_label(goal):
+    if not goal:
+        return ""
+    return "Encore a gagner" if goal.goal_type == MemberGoal.GOAL_GAIN_WEIGHT else "Encore a perdre"
+
+
 @login_required
 def member_portal(request):
     """
@@ -178,10 +212,13 @@ def member_portal(request):
         status=Notification.STATUS_SENT,
         read_at__isnull=True,
     ).count()
+    active_goal = member.active_goal
+    goal_measurements = list(active_goal.measurements_ordered) if active_goal else []
+    goal_access = _member_goal_access(active_goal)
     available_plans_queryset = SubscriptionPlan.objects.filter(
         gym=member.gym,
         is_active=True,
-    ).annotate(
+    ).prefetch_related("offers").annotate(
         total_sales_count=Count(
             "subscriptions",
             filter=Q(subscriptions__gym=member.gym),
@@ -246,6 +283,10 @@ def member_portal(request):
     password_form = PasswordChangeForm(user=request.user)
     coach_feedback_form = _build_feedback_form("coach-feedback")
     group_feedback_form = _build_feedback_form("group-feedback")
+    goal_form = MemberGoalForm()
+    measurement_form = MemberWeightMeasurementForm(
+        initial={"measured_at": timezone.localdate()}
+    )
     latest_coach_feedback = CoachingFeedback.objects.filter(
         gym=member.gym,
         member=member,
@@ -305,8 +346,89 @@ def member_portal(request):
         "pwa_manifest_url": reverse("members:member_app_manifest"),
         "pwa_service_worker_url": reverse("members:member_app_service_worker"),
         "coaching_rights": _member_coaching_rights(subscription),
+        "active_goal": active_goal,
+        "goal_measurements": goal_measurements,
+        "goal_form": goal_form,
+        "goal_measurement_form": measurement_form,
+        "can_member_record_goal_measurement": goal_access["can_member_record"],
+        "goal_waiting_for": goal_access["waiting_for"],
+        "goal_direction_label": _goal_direction_label(active_goal),
     }
     return render(request, "members/member_portal.html", context)
+
+
+@login_required
+@require_POST
+def member_goal_create(request):
+    current_member = _get_current_member(request.user)
+    if not current_member:
+        raise PermissionDenied
+
+    member = get_object_or_404(
+        Member.objects.select_related("gym"),
+        id=current_member.id,
+        user=request.user,
+    )
+
+    if member.active_goal:
+        messages.error(request, "Un objectif actif existe deja sur ce compte.")
+        return redirect(f"{reverse('members:member_portal')}?tab=home")
+
+    form = MemberGoalForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, "L'objectif n'a pas pu etre enregistre. Verifiez les champs saisis.")
+        return redirect(f"{reverse('members:member_portal')}?tab=home")
+
+    goal = form.save(commit=False)
+    goal.gym = member.gym
+    goal.member = member
+    goal.created_by = request.user
+    goal.save()
+
+    starter_label = "vous" if goal.measurement_starter == MemberGoal.STARTER_MEMBER else "votre coach"
+    messages.success(request, f"Objectif cree. La premiere pesee doit maintenant etre enregistree par {starter_label}.")
+    return redirect(f"{reverse('members:member_portal')}?tab=home")
+
+
+@login_required
+@require_POST
+def member_goal_measurement_create(request):
+    current_member = _get_current_member(request.user)
+    if not current_member:
+        raise PermissionDenied
+
+    member = get_object_or_404(
+        Member.objects.select_related("gym"),
+        id=current_member.id,
+        user=request.user,
+    )
+    goal = get_object_or_404(
+        MemberGoal.objects.prefetch_related("measurements"),
+        member=member,
+        gym=member.gym,
+        status=MemberGoal.STATUS_ACTIVE,
+    )
+    goal_access = _member_goal_access(goal)
+    if not goal_access["can_member_record"]:
+        messages.error(request, "La premiere pesee doit etre enregistree par le coach.")
+        return redirect(f"{reverse('members:member_portal')}?tab=home")
+
+    form = MemberWeightMeasurementForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, "La pesee n'a pas pu etre enregistree. Verifiez les champs saisis.")
+        return redirect(f"{reverse('members:member_portal')}?tab=home")
+
+    measurement = form.save(commit=False)
+    measurement.gym = member.gym
+    measurement.goal = goal
+    measurement.member = member
+    measurement.source = MemberWeightMeasurement.SOURCE_MEMBER
+    measurement.recorded_by = request.user
+    measurement.save()
+    goal.refresh_status_from_progress()
+
+    messages.success(request, "Pesee enregistree dans votre suivi.")
+    return redirect(f"{reverse('members:member_portal')}?tab=home")
 
 
 @login_required
@@ -954,6 +1076,9 @@ def member_detail(request, member_id):
         "start_date": subscription.start_date.strftime("%d/%m/%Y") if subscription else None,
         "expiration_date": member.expiration_date.strftime("%d/%m/%Y") if member.expiration_date else None,
         "price": subscription.plan.price if subscription else 0,
+        "subscription_offers": [
+            offer.name for offer in subscription.plan.active_offers
+        ] if subscription and subscription.plan else [],
 
         # paiements
         "paid": member.amount_paid if hasattr(member, "amount_paid") else 0,

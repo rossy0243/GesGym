@@ -6,6 +6,7 @@ app_name = 'coaching'
 urlpatterns = [
     path('portal/', views.coach_portal, name='coach_portal'),
     path('portal/members/<int:member_id>/', views.coach_member_detail, name='coach_member_detail'),
+    path('portal/members/<int:member_id>/weight/', views.coach_member_weight_measurement_create, name='coach_member_weight_measurement_create'),
     path('coaches/', views.coach_list, name='list'),
     path('coaches/create/', views.coach_create, name='create'),
     path('coaches/<int:coach_id>/', views.coach_detail, name='detail'),

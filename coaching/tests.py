@@ -5,9 +5,9 @@ from django.utils import timezone
 from datetime import timedelta
 
 from compte.models import User, UserGymRole
-from members.models import Member
+from members.models import Member, MemberGoal, MemberWeightMeasurement
 from organizations.models import Gym, GymModule, Module, Organization
-from subscriptions.models import MemberSubscription, SubscriptionPlan
+from subscriptions.models import MemberSubscription, SubscriptionOffer, SubscriptionPlan
 
 from .models import Coach, CoachAssignment, CoachingFeedback, CoachingFollowUp, GroupCoachingProgram
 
@@ -93,6 +93,18 @@ class CoachingTenantTests(TestCase):
             duration_days=30,
             price=55,
             coaching_mode=SubscriptionPlan.COACHING_MODE_BOTH,
+        )
+        self.offer_individual_a = SubscriptionOffer.objects.create(
+            gym=self.gym_a,
+            name="Acces coach individuel",
+            category=SubscriptionOffer.CATEGORY_COACHING,
+            grants_individual_coaching=True,
+        )
+        self.offer_group_a = SubscriptionOffer.objects.create(
+            gym=self.gym_a,
+            name="Acces coaching groupe",
+            category=SubscriptionOffer.CATEGORY_COACHING,
+            grants_group_coaching=True,
         )
         today = timezone.now().date()
         self.subscription_a = MemberSubscription.objects.create(
@@ -190,6 +202,42 @@ class CoachingTenantTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(self.coach_a.members.filter(id=no_rights_member.id).exists())
         self.assertContains(response, "Membre invalide pour ce coach")
+
+    def test_assign_member_accepts_member_with_individual_coaching_offer_only(self):
+        offer_plan = SubscriptionPlan.objects.create(
+            gym=self.gym_a,
+            name="Pack offre individuelle",
+            duration_days=30,
+            price=42,
+            coaching_mode=SubscriptionPlan.COACHING_MODE_NONE,
+        )
+        offer_plan.offers.add(self.offer_individual_a)
+        member = Member.objects.create(
+            gym=self.gym_a,
+            first_name="Offer",
+            last_name="Individual",
+            phone="334",
+            email="offer.individual@example.com",
+            status="active",
+            is_active=True,
+        )
+        today = timezone.now().date()
+        MemberSubscription.objects.create(
+            gym=self.gym_a,
+            member=member,
+            plan=offer_plan,
+            start_date=today,
+            end_date=today + timedelta(days=30),
+            is_active=True,
+        )
+
+        response = self.client.post(
+            reverse("coaching:assign_member", args=[self.coach_a.id]),
+            {"member": member.id},
+        )
+
+        self.assertRedirects(response, reverse("coaching:detail", args=[self.coach_a.id]))
+        self.assertTrue(self.coach_a.members.filter(id=member.id).exists())
 
     def test_model_rejects_cross_gym_member_assignment(self):
         with self.assertRaises(ValidationError):
@@ -301,6 +349,45 @@ class CoachingTenantTests(TestCase):
         with self.assertRaises(ValidationError):
             program.join_member(self.member_a)
 
+    def test_group_program_accepts_member_with_group_coaching_offer_only(self):
+        program = GroupCoachingProgram.objects.create(
+            gym=self.gym_a,
+            coach=self.coach_a,
+            name="Team mobility",
+            objective="Mobilite",
+            capacity=10,
+        )
+        offer_plan = SubscriptionPlan.objects.create(
+            gym=self.gym_a,
+            name="Pack offre groupe",
+            duration_days=30,
+            price=38,
+            coaching_mode=SubscriptionPlan.COACHING_MODE_NONE,
+        )
+        offer_plan.offers.add(self.offer_group_a)
+        member = Member.objects.create(
+            gym=self.gym_a,
+            first_name="Offer",
+            last_name="Group",
+            phone="335",
+            email="offer.group@example.com",
+            status="active",
+            is_active=True,
+        )
+        today = timezone.now().date()
+        MemberSubscription.objects.create(
+            gym=self.gym_a,
+            member=member,
+            plan=offer_plan,
+            start_date=today,
+            end_date=today + timedelta(days=30),
+            is_active=True,
+        )
+
+        program.join_member(member)
+
+        self.assertTrue(program.participants.filter(id=member.id).exists())
+
     def test_coach_can_open_member_follow_up_detail(self):
         self.client.logout()
         self.client.login(username="coach-mobile", password="test-pass")
@@ -311,6 +398,80 @@ class CoachingTenantTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Suivi membre")
         self.assertContains(response, "Alice Member")
+
+    def test_coach_can_record_first_weight_when_coach_starts_goal(self):
+        self.client.logout()
+        self.client.login(username="coach-mobile", password="test-pass")
+        self.coach_a.members.add(self.member_a)
+        goal = MemberGoal.objects.create(
+            gym=self.gym_a,
+            member=self.member_a,
+            goal_type=MemberGoal.GOAL_LOSE_WEIGHT,
+            target_weight="68.0",
+            measurement_starter=MemberGoal.STARTER_COACH,
+            created_by=self.coach_user,
+        )
+
+        response = self.client.post(
+            reverse("coaching:coach_member_weight_measurement_create", args=[self.member_a.id]),
+            {
+                "weight": "75.0",
+                "measured_at": timezone.localdate().isoformat(),
+                "note": "Bilan initial",
+            },
+        )
+
+        self.assertRedirects(response, reverse("coaching:coach_member_detail", args=[self.member_a.id]))
+        measurement = MemberWeightMeasurement.objects.get(goal=goal)
+        self.assertEqual(measurement.source, MemberWeightMeasurement.SOURCE_COACH)
+        self.assertEqual(measurement.recorded_by, self.coach_user)
+
+    def test_coach_cannot_record_first_weight_when_member_must_start_goal(self):
+        self.client.logout()
+        self.client.login(username="coach-mobile", password="test-pass")
+        self.coach_a.members.add(self.member_a)
+        goal = MemberGoal.objects.create(
+            gym=self.gym_a,
+            member=self.member_a,
+            goal_type=MemberGoal.GOAL_GAIN_WEIGHT,
+            target_weight="82.0",
+            measurement_starter=MemberGoal.STARTER_MEMBER,
+            created_by=self.coach_user,
+        )
+
+        response = self.client.post(
+            reverse("coaching:coach_member_weight_measurement_create", args=[self.member_a.id]),
+            {
+                "weight": "72.5",
+                "measured_at": timezone.localdate().isoformat(),
+                "note": "Tentative coach",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "La premiere pesee doit etre enregistree par le membre.")
+        self.assertFalse(MemberWeightMeasurement.objects.filter(goal=goal).exists())
+
+    def test_coach_member_detail_shows_weight_goal_section(self):
+        self.client.logout()
+        self.client.login(username="coach-mobile", password="test-pass")
+        self.coach_a.members.add(self.member_a)
+        MemberGoal.objects.create(
+            gym=self.gym_a,
+            member=self.member_a,
+            goal_type=MemberGoal.GOAL_LOSE_WEIGHT,
+            target_weight="69.0",
+            measurement_starter=MemberGoal.STARTER_COACH,
+            created_by=self.coach_user,
+        )
+
+        response = self.client.get(reverse("coaching:coach_member_detail", args=[self.member_a.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Objectif poids")
+        self.assertContains(response, "Perte de poids")
+        self.assertContains(response, "Commencer les releves")
 
     def test_coach_cannot_open_member_outside_portfolio(self):
         self.client.logout()

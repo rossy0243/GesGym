@@ -6,8 +6,72 @@ from django.utils import timezone
 from members.models import Member
 from organizations.models import Gym
 from django.core.exceptions import ValidationError
+from django.utils.text import slugify
 
 # Create your models here.
+class SubscriptionOffer(models.Model):
+    CATEGORY_ACCESS = "access"
+    CATEGORY_COACHING = "coaching"
+    CATEGORY_CLASS = "class"
+    CATEGORY_OTHER = "other"
+
+    CATEGORY_CHOICES = (
+        (CATEGORY_ACCESS, "Acces"),
+        (CATEGORY_COACHING, "Coaching"),
+        (CATEGORY_CLASS, "Cours"),
+        (CATEGORY_OTHER, "Autre"),
+    )
+
+    gym = models.ForeignKey(
+        Gym,
+        on_delete=models.CASCADE,
+        related_name="subscription_offers",
+        db_index=True,
+    )
+    name = models.CharField(max_length=120)
+    code = models.SlugField(max_length=140, editable=False)
+    description = models.TextField(blank=True)
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default=CATEGORY_ACCESS)
+    grants_individual_coaching = models.BooleanField(default=False)
+    grants_group_coaching = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["gym", "name"], name="unique_subscription_offer_name_per_gym"),
+            models.UniqueConstraint(fields=["gym", "code"], name="unique_subscription_offer_code_per_gym"),
+        ]
+        indexes = [
+            models.Index(fields=["gym", "is_active"]),
+            models.Index(fields=["gym", "category"]),
+        ]
+        ordering = ["name"]
+
+    def clean(self):
+        super().clean()
+        if self.name:
+            self.name = self.name.strip()
+        if self.description:
+            self.description = self.description.strip()
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        if not self.code:
+            base_code = slugify(self.name) or "offre"
+            candidate = base_code
+            suffix = 2
+            while SubscriptionOffer.objects.filter(gym=self.gym, code=candidate).exclude(pk=self.pk).exists():
+                candidate = f"{base_code}-{suffix}"
+                suffix += 1
+            self.code = candidate
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        gym_name = self.gym.name if self.gym_id else "Sans gym"
+        return f"{self.name} - {gym_name}"
+
+
 class SubscriptionPlan(models.Model):
     COACHING_MODE_NONE = "none"
     COACHING_MODE_INDIVIDUAL = "individual"
@@ -41,6 +105,11 @@ class SubscriptionPlan(models.Model):
     duration_days = models.PositiveIntegerField()
     price = models.DecimalField(max_digits=10, decimal_places=2)
     description = models.TextField(blank=True, null=True)
+    offers = models.ManyToManyField(
+        SubscriptionOffer,
+        blank=True,
+        related_name="plans",
+    )
     coaching_mode = models.CharField(
         max_length=20,
         choices=COACHING_MODE_CHOICES,
@@ -73,11 +142,19 @@ class SubscriptionPlan(models.Model):
 
     @property
     def allows_individual_coaching(self):
-        return self.coaching_mode in {self.COACHING_MODE_INDIVIDUAL, self.COACHING_MODE_BOTH}
+        if self.coaching_mode in {self.COACHING_MODE_INDIVIDUAL, self.COACHING_MODE_BOTH}:
+            return True
+        return self.offers.filter(is_active=True, grants_individual_coaching=True).exists()
 
     @property
     def allows_group_coaching(self):
-        return self.coaching_mode in {self.COACHING_MODE_GROUP, self.COACHING_MODE_BOTH}
+        if self.coaching_mode in {self.COACHING_MODE_GROUP, self.COACHING_MODE_BOTH}:
+            return True
+        return self.offers.filter(is_active=True, grants_group_coaching=True).exists()
+
+    @property
+    def active_offers(self):
+        return self.offers.filter(is_active=True).order_by("name")
 
     def coaching_rights_payload(self):
         return {
@@ -87,7 +164,16 @@ class SubscriptionPlan(models.Model):
             "level_label": self.get_coaching_level_display(),
             "allows_individual": self.allows_individual_coaching,
             "allows_group": self.allows_group_coaching,
-            "has_any_access": self.coaching_mode != self.COACHING_MODE_NONE,
+            "has_any_access": self.allows_individual_coaching or self.allows_group_coaching,
+            "offers": [
+                {
+                    "id": offer.id,
+                    "name": offer.name,
+                    "category": offer.category,
+                    "category_label": offer.get_category_display(),
+                }
+                for offer in self.active_offers
+            ],
         }
 
 
