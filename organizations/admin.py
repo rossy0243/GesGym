@@ -2,7 +2,13 @@ from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
 
 from .models import Gym, GymModule, Module, Organization
-from .module_packs import DEFAULT_MODULE_CODES, ensure_default_gym_modules, ensure_gym_modules_for_pack
+from .module_packs import (
+    DEFAULT_MODULE_CODES,
+    PACK_CLUB,
+    PACK_PREMIUM,
+    ensure_default_gym_modules,
+    ensure_gym_modules_for_pack,
+)
 
 
 class OwnerInline(admin.TabularInline):
@@ -44,6 +50,7 @@ class OrganizationAdmin(admin.ModelAdmin):
     fields = ("name", "slug", "subscription_pack", "logo", "address", "phone", "email", "is_active")
     inlines = (OwnerInline, GymInline)
     readonly_fields = ("created_at",)
+    actions = ("switch_to_club_pack", "switch_to_premium_pack")
 
     def owners_count(self, obj):
         return obj.owners.count()
@@ -59,6 +66,42 @@ class OrganizationAdmin(admin.ModelAdmin):
         super().save_related(request, form, formsets, change)
         for gym in form.instance.gyms.all():
             ensure_gym_modules_for_pack(gym, form.instance.subscription_pack)
+
+    def _switch_pack(self, request, queryset, pack_code, success_message):
+        updated = 0
+        gyms_synced = 0
+        for organization in queryset:
+            if organization.subscription_pack != pack_code:
+                organization.subscription_pack = pack_code
+                organization.save(update_fields=["subscription_pack"])
+            gyms = list(organization.gyms.all())
+            for gym in gyms:
+                ensure_gym_modules_for_pack(gym, pack_code)
+            updated += 1
+            gyms_synced += len(gyms)
+        self.message_user(
+            request,
+            success_message.format(organizations=updated, gyms=gyms_synced),
+            messages.SUCCESS,
+        )
+
+    @admin.action(description="Basculer les organisations selectionnees vers le Pack Club")
+    def switch_to_club_pack(self, request, queryset):
+        self._switch_pack(
+            request,
+            queryset,
+            PACK_CLUB,
+            "{organizations} organisation(s) basculee(s) vers le Pack Club, {gyms} gym(s) resynchronise(s).",
+        )
+
+    @admin.action(description="Basculer les organisations selectionnees vers le Pack Premium")
+    def switch_to_premium_pack(self, request, queryset):
+        self._switch_pack(
+            request,
+            queryset,
+            PACK_PREMIUM,
+            "{organizations} organisation(s) basculee(s) vers le Pack Premium, {gyms} gym(s) resynchronise(s).",
+        )
 
 
 class GymModuleInline(admin.TabularInline):

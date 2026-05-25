@@ -1,6 +1,6 @@
 # Etat du projet GesGym
 
-Version de reference: etat du depot au 22/05/2026.
+Version de reference: etat du depot au 25/05/2026.
 
 ## 1. Niveau actuel
 
@@ -18,6 +18,26 @@ Les grands acquis a retenir:
 - les rapports intègrent la lecture RH `brut / net`
 - les controles role + multi-tenant ont ete revalidés avant beta
 - le manuel utilisateur a ete remis a jour en fonction de l'etat reel du produit
+
+## 1.1 Packs SaaS et activation
+
+La logique d'activation des modules a evolue :
+
+- le `pack` est choisi au niveau `Organization`
+- les modules restent stockes au niveau `GymModule`
+- une synchronisation automatique applique le pack choisi sur tous les gyms de l'organisation
+- les verifications runtime continuent de passer par `module_required(...)`
+
+Packs actuellement poses :
+
+- `Pack Club` : `MEMBERS`, `SUBSCRIPTIONS`, `POS`, `ACCESS`, `NOTIFICATIONS`, `CORE`
+- `Pack Premium` : `Pack Club` + `PRODUCTS`, `RH`, `MACHINES`, `COACHING`
+
+Valeur produit :
+
+- l'offre commerciale devient lisible
+- l'admin SaaS n'a plus a cocher les modules un par un
+- un changement de pack peut etre propage proprement sur tout le client
 
 ## 2. Sprints deja livres
 
@@ -260,14 +280,17 @@ Disponible:
 
 Fichier a jour:
 
-- [MANUEL_UTILISATEUR_GESGYM.md](D:\GesGym\MANUEL_UTILISATEUR_GESGYM.md)
+- [MANUEL_ADMIN_SAAS_GESGYM.md](D:/GesGym/MANUEL_ADMIN_SAAS_GESGYM.md)
+- [MANUEL_CLIENT_GESGYM.md](D:/GesGym/MANUEL_CLIENT_GESGYM.md)
+- [MANUEL_UTILISATEUR_GESGYM.md](D:/GesGym/MANUEL_UTILISATEUR_GESGYM.md)
 - [README.md](D:\GesGym\README.md)
 - [docs\kpi-test-coverage.md](D:\GesGym\docs\kpi-test-coverage.md)
 - [docs\reporting-test-coverage.md](D:\GesGym\docs\reporting-test-coverage.md)
 
-Le manuel a ete mis a jour sur:
+Les manuels ont ete mis a jour sur:
 
 - roles et acces
+- logique packs organisation / activation modules
 - formules et droits coaching
 - espace membre
 - module coaching

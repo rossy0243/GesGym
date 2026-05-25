@@ -1,0 +1,14 @@
+{% extends "admin/base.html" %}
+{% load i18n static %}
+
+{% block extrahead %}
+{{ block.super }}
+<link rel="icon" type="image/png" href="{% static 'images/favicon-smartclub.png' %}">
+<link rel="shortcut icon" type="image/png" href="{% static 'images/favicon-smartclub.png' %}">
+{% endblock %}
+
+{% block branding %}
+<h1 id="site-name">
+  <a href="{% url 'admin:index' %}">{% translate 'Administration de Django' %}</a>
+</h1>
+{% endblock %}
