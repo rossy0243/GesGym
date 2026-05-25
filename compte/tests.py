@@ -9,6 +9,7 @@ from compte.forms import CreateUserForm
 from compte.models import User, UserGymRole
 from members.models import Member
 from organizations.models import Gym, GymModule, Module, Organization
+from organizations.module_packs import get_pack_module_codes
 
 
 class OwnerLoginAndGymSwitchTests(TestCase):
@@ -598,8 +599,6 @@ class SuperAdminOwnerCreationTests(TestCase):
             password="superpass123",
             email="superadmin@example.com",
         )
-        self.module_members, _ = Module.objects.get_or_create(code="MEMBERS", defaults={"name": "Membres"})
-        self.module_pos, _ = Module.objects.get_or_create(code="POS", defaults={"name": "Point de vente"})
 
     def test_superadmin_can_open_owner_creation_view(self):
         self.client.force_login(self.superuser)
@@ -608,8 +607,9 @@ class SuperAdminOwnerCreationTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Creer un Owner + organisation + gyms")
-        self.assertContains(response, "MEMBERS - Membres")
-        self.assertContains(response, "POS - Point de vente")
+        self.assertContains(response, "Pack client")
+        self.assertContains(response, "Pack Club")
+        self.assertContains(response, "Pack Premium")
 
     def test_superadmin_can_create_owner_organization_gyms_and_modules(self):
         self.client.force_login(self.superuser)
@@ -625,8 +625,8 @@ class SuperAdminOwnerCreationTests(TestCase):
                 "organization_phone": "+243900111222",
                 "organization_email": "contact@client-demo.test",
                 "organization_address": "Kinshasa",
+                "subscription_pack": Organization.PACK_CLUB,
                 "gyms": "Gombe Premium\nLimete Express",
-                "modules": [self.module_members.id, self.module_pos.id],
             },
         )
 
@@ -646,21 +646,31 @@ class SuperAdminOwnerCreationTests(TestCase):
         organization = Organization.objects.get(slug="client-demo-admin")
         owner = User.objects.get(email="owner.client@example.com")
         self.assertEqual(owner.owned_organization, organization)
+        self.assertEqual(organization.subscription_pack, Organization.PACK_CLUB)
         self.assertFalse(owner.is_staff)
         self.assertTrue(owner.force_password_change)
 
         gyms = Gym.objects.filter(organization=organization).order_by("name")
         self.assertEqual(gyms.count(), 2)
         self.assertEqual(UserGymRole.objects.filter(user=owner, role="owner", gym__in=gyms).count(), 2)
+        expected_codes = get_pack_module_codes(Organization.PACK_CLUB)
         self.assertEqual(
             GymModule.objects.filter(
                 gym__in=gyms,
-                module__code__in=["MEMBERS", "POS"],
+                module__code__in=expected_codes,
                 is_active=True,
             ).count(),
-            4,
+            len(expected_codes) * 2,
+        )
+        self.assertFalse(
+            GymModule.objects.filter(
+                gym__in=gyms,
+                module__code="COACHING",
+                is_active=True,
+            ).exists()
         )
         self.assertContains(response, "Login pret : Oui")
+        self.assertContains(response, "Pack Club")
         self.assertContains(response, owner.username)
 
     def test_owner_creation_blocks_duplicate_gym_names_in_same_submission(self):
@@ -674,8 +684,8 @@ class SuperAdminOwnerCreationTests(TestCase):
                 "email": "owner.duplicate@example.com",
                 "organization_name": "Client Duplicate",
                 "organization_slug": "client-duplicate",
+                "subscription_pack": Organization.PACK_PREMIUM,
                 "gyms": "Gombe\ngombe",
-                "modules": [self.module_members.id],
             },
         )
 

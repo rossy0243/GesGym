@@ -234,6 +234,103 @@ class SubscriptionTenantSafetyTests(TestCase):
         plan = SubscriptionPlan.objects.get(gym=self.gym_a, name="Pack hybride")
         self.assertEqual(list(plan.offers.values_list("id", flat=True)), [self.offer_a.id])
 
+    def test_create_offer_creates_offer_for_current_gym(self):
+        self.client.force_login(self.owner)
+        session = self.client.session
+        session["current_gym_id"] = self.gym_a.id
+        session.save()
+
+        response = self.client.post(
+            reverse("subscriptions:create_subscription_offer"),
+            {
+                "offer-name": "Pack nutrition",
+                "offer-category": SubscriptionOffer.CATEGORY_OTHER,
+                "offer-description": "Conseils alimentaires inclus",
+                "offer-grants_individual_coaching": "on",
+                "offer-is_active": "on",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        offer = SubscriptionOffer.objects.get(gym=self.gym_a, name="Pack nutrition")
+        self.assertEqual(offer.category, SubscriptionOffer.CATEGORY_OTHER)
+        self.assertTrue(offer.grants_individual_coaching)
+        self.assertFalse(offer.grants_group_coaching)
+
+    def test_edit_offer_returns_json_payload_for_modal(self):
+        self.client.force_login(self.owner)
+        session = self.client.session
+        session["current_gym_id"] = self.gym_a.id
+        session.save()
+
+        response = self.client.get(
+            reverse("subscriptions:edit_subscription_offer", args=[self.offer_a.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["name"], self.offer_a.name)
+        self.assertTrue(response.json()["grants_individual_coaching"])
+
+    def test_edit_offer_updates_existing_offer(self):
+        self.client.force_login(self.owner)
+        session = self.client.session
+        session["current_gym_id"] = self.gym_a.id
+        session.save()
+
+        response = self.client.post(
+            reverse("subscriptions:edit_subscription_offer", args=[self.offer_a.id]),
+            {
+                "offer-name": "Acces coach elite",
+                "offer-category": SubscriptionOffer.CATEGORY_COACHING,
+                "offer-description": "Version renforcee",
+                "offer-grants_group_coaching": "on",
+                "offer-is_active": "on",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.offer_a.refresh_from_db()
+        self.assertEqual(self.offer_a.name, "Acces coach elite")
+        self.assertFalse(self.offer_a.grants_individual_coaching)
+        self.assertTrue(self.offer_a.grants_group_coaching)
+
+    def test_edit_plan_updates_assigned_offers_and_mode(self):
+        self.client.force_login(self.owner)
+        session = self.client.session
+        session["current_gym_id"] = self.gym_a.id
+        session.save()
+        group_offer = SubscriptionOffer.objects.create(
+            gym=self.gym_a,
+            name="Acces groupe",
+            category=SubscriptionOffer.CATEGORY_CLASS,
+            grants_group_coaching=True,
+        )
+        self.plan_a.offers.add(self.offer_a)
+
+        response = self.client.post(
+            reverse("subscriptions:edit_subscription_plan", args=[self.plan_a.id]),
+            {
+                "name": "Mensuel optimise",
+                "duration_days": 60,
+                "price": 150,
+                "description": "Formule mise a jour",
+                "offers": [str(group_offer.id)],
+                "coaching_mode": SubscriptionPlan.COACHING_MODE_NONE,
+                "coaching_level": SubscriptionPlan.COACHING_LEVEL_STANDARD,
+                "is_active": "on",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.plan_a.refresh_from_db()
+        self.assertEqual(self.plan_a.name, "Mensuel optimise")
+        self.assertEqual(self.plan_a.duration_days, 60)
+        self.assertEqual(list(self.plan_a.offers.values_list("id", flat=True)), [group_offer.id])
+        self.assertEqual(self.plan_a.coaching_mode, SubscriptionPlan.COACHING_MODE_GROUP)
+
     def test_create_subscription_shows_consistent_success_message(self):
         self.client.force_login(self.owner)
         session = self.client.session

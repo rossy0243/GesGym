@@ -4,6 +4,7 @@ from django.test import RequestFactory, TestCase
 from compte.models import User
 from organizations.admin import DEFAULT_MODULE_CODES, ensure_default_gym_modules
 from organizations.models import Gym, GymModule, Module, Organization
+from organizations.module_packs import ensure_gym_modules_for_pack, get_pack_module_codes
 from smartclub.access_control import module_is_active, permission_flags
 
 
@@ -46,6 +47,20 @@ class OrganizationModuleSetupTests(TestCase):
                 slug="gym-test",
                 subdomain="gym-duplicate",
             )
+
+    def test_ensure_gym_modules_for_club_pack_activates_only_expected_modules(self):
+        self.organization.subscription_pack = Organization.PACK_CLUB
+        self.organization.save(update_fields=["subscription_pack"])
+
+        for code in DEFAULT_MODULE_CODES:
+            Module.objects.get_or_create(code=code, defaults={"name": code.title()})
+
+        ensure_gym_modules_for_pack(self.gym)
+
+        active_codes = set(
+            GymModule.objects.filter(gym=self.gym, is_active=True).values_list("module__code", flat=True)
+        )
+        self.assertEqual(active_codes, set(get_pack_module_codes(Organization.PACK_CLUB)))
 
 
 class OrganizationAccessContextTests(TestCase):

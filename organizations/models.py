@@ -7,6 +7,13 @@ class Organization(models.Model):
     Une organisation peut posséder plusieurs gyms.
     """
 
+    PACK_CLUB = "club"
+    PACK_PREMIUM = "premium"
+    PACK_CHOICES = (
+        (PACK_CLUB, "Pack Club"),
+        (PACK_PREMIUM, "Pack Premium"),
+    )
+
     name = models.CharField(max_length=255)
 
     slug = models.SlugField(unique=True)
@@ -22,6 +29,12 @@ class Organization(models.Model):
     phone = models.CharField(max_length=30, blank=True, null=True)
 
     email = models.EmailField(blank=True, null=True)
+
+    subscription_pack = models.CharField(
+        max_length=20,
+        choices=PACK_CHOICES,
+        default=PACK_PREMIUM,
+    )
 
     is_active = models.BooleanField(default=True)
 

@@ -18,6 +18,7 @@
         <div class="form-row"><strong>Mode :</strong> {% if preview.uses_existing_organization %}Organisation existante{% else %}Nouvelle organisation{% endif %}</div>
         <div class="form-row"><strong>Nom :</strong> {{ preview.organization_name }}</div>
         <div class="form-row"><strong>Slug :</strong> {{ preview.organization_slug }}</div>
+        <div class="form-row"><strong>Pack :</strong> {{ preview.subscription_pack_label }}</div>
         <div class="form-row"><strong>Email :</strong> {{ preview.organization_email|default:"-" }}</div>
         <div class="form-row"><strong>Telephone :</strong> {{ preview.organization_phone|default:"-" }}</div>
         <div class="form-row"><strong>Adresse :</strong> {{ preview.organization_address|default:"-" }}</div>

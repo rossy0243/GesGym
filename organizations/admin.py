@@ -2,32 +2,7 @@ from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
 
 from .models import Gym, GymModule, Module, Organization
-
-
-DEFAULT_MODULE_CODES = [
-    "MEMBERS",
-    "SUBSCRIPTIONS",
-    "POS",
-    "ACCESS",
-    "PRODUCTS",
-    "MACHINES",
-    "COACHING",
-    "RH",
-    "CORE",
-    "COMPTE",
-    "WEBSITE",
-    "NOTIFICATIONS",
-]
-
-
-def ensure_default_gym_modules(gym):
-    modules = Module.objects.filter(code__in=DEFAULT_MODULE_CODES)
-    for module in modules:
-        GymModule.objects.get_or_create(
-            gym=gym,
-            module=module,
-            defaults={"is_active": True},
-        )
+from .module_packs import DEFAULT_MODULE_CODES, ensure_default_gym_modules, ensure_gym_modules_for_pack
 
 
 class OwnerInline(admin.TabularInline):
@@ -62,11 +37,11 @@ class ModuleAdmin(admin.ModelAdmin):
 
 @admin.register(Organization)
 class OrganizationAdmin(admin.ModelAdmin):
-    list_display = ("name", "slug", "owners_count", "gyms_count", "is_active", "created_at")
-    list_filter = ("is_active", "created_at")
+    list_display = ("name", "slug", "subscription_pack", "owners_count", "gyms_count", "is_active", "created_at")
+    list_filter = ("subscription_pack", "is_active", "created_at")
     search_fields = ("name", "slug", "email", "phone")
     prepopulated_fields = {"slug": ("name",)}
-    fields = ("name", "slug", "logo", "address", "phone", "email", "is_active")
+    fields = ("name", "slug", "subscription_pack", "logo", "address", "phone", "email", "is_active")
     inlines = (OwnerInline, GymInline)
     readonly_fields = ("created_at",)
 
@@ -83,7 +58,7 @@ class OrganizationAdmin(admin.ModelAdmin):
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)
         for gym in form.instance.gyms.all():
-            ensure_default_gym_modules(gym)
+            ensure_gym_modules_for_pack(gym, form.instance.subscription_pack)
 
 
 class GymModuleInline(admin.TabularInline):
@@ -107,7 +82,7 @@ class GymAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
-        ensure_default_gym_modules(obj)
+        ensure_gym_modules_for_pack(obj)
 
     def active_modules_count(self, obj):
         return obj.modules.filter(is_active=True).count()

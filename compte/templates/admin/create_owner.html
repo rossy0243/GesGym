@@ -37,12 +37,14 @@
             <p class="help">Un gym par ligne. Les doublons sont bloques et les slugs/subdomains seront generes automatiquement.</p>
         </fieldset>
 
-        <fieldset class="module">
-            <h2>Modules a activer</h2>
-            {{ form.modules.errors }}
-            <div class="checkbox-grid">
-                {{ form.modules }}
-            </div>
+        <fieldset class="module aligned">
+            <h2>Pack et activation automatique</h2>
+            <div class="form-row">{{ form.subscription_pack.errors }}{{ form.subscription_pack.label_tag }}{{ form.subscription_pack }}</div>
+            <p class="help">
+                Le pack active automatiquement les modules metier du client.
+                `Pack Club` = Membres, Abonnements, POS, Acces, Notifications, Rapports.
+                `Pack Premium` = Pack Club + Produits, RH, Machines, Coaching.
+            </p>
         </fieldset>
 
         <div class="submit-row">
@@ -59,18 +61,6 @@
     #content-main textarea {
         min-width: 420px;
         max-width: 760px;
-    }
-
-    .checkbox-grid ul {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-        gap: 8px 16px;
-        margin-left: 0;
-        padding-left: 0;
-    }
-
-    .checkbox-grid li {
-        list-style: none;
     }
 </style>
 {% endblock %}

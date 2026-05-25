@@ -20,6 +20,7 @@
         <h2>Organisation et gyms</h2>
         <div class="form-row"><strong>Organisation :</strong> {{ result.organization_name }}</div>
         <div class="form-row"><strong>Slug :</strong> {{ result.organization_slug }}</div>
+        <div class="form-row"><strong>Pack :</strong> {{ result.subscription_pack_label }}</div>
         <div class="form-row"><strong>Gyms crees :</strong></div>
         <ul>
             {% for gym_name in result.gym_names %}

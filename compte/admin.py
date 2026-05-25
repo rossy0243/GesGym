@@ -6,8 +6,15 @@ from django.template.response import TemplateResponse
 from django.urls import path
 from django.utils.text import slugify
 
-from organizations.admin import DEFAULT_MODULE_CODES, ensure_default_gym_modules
 from organizations.models import Gym, GymModule, Module, Organization
+from organizations.module_packs import (
+    PACK_CHOICES,
+    PACK_PREMIUM,
+    ensure_gym_modules_for_pack,
+    ensure_modules_exist,
+    get_pack_label,
+    get_pack_module_codes,
+)
 
 from .models import User, UserGymRole
 from .utils import generate_temporary_password, generate_username
@@ -42,18 +49,15 @@ class OwnerCreationForm(forms.Form):
         help_text="Un gym par ligne. Exemple: Gombe Premium",
         widget=forms.Textarea(attrs={"rows": 4}),
     )
-    modules = forms.ModelMultipleChoiceField(
-        label="Modules a activer sur les gyms",
-        queryset=Module.objects.none(),
-        required=False,
-        widget=forms.CheckboxSelectMultiple,
+    subscription_pack = forms.ChoiceField(
+        label="Pack client",
+        choices=PACK_CHOICES,
+        initial=PACK_PREMIUM,
     )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["organization"].queryset = Organization.objects.order_by("name")
-        self.fields["modules"].queryset = Module.objects.filter(code__in=DEFAULT_MODULE_CODES).order_by("code")
-        self.fields["modules"].initial = list(self.fields["modules"].queryset)
 
     def clean_gyms(self):
         raw_value = self.cleaned_data.get("gyms", "")
@@ -189,6 +193,7 @@ class UserAdmin(BaseUserAdmin):
                 "temporary_password": temporary_password,
                 "organization_name": organization.name,
                 "organization_slug": organization.slug,
+                "subscription_pack_label": get_pack_label(organization.subscription_pack),
                 "gym_names": [gym.name for gym in gyms],
                 "module_codes": [module.code for module in modules],
                 "verification": verification,
@@ -244,7 +249,6 @@ class UserAdmin(BaseUserAdmin):
     def _build_preview_payload(self, form):
         organization = form.cleaned_data["organization"]
         gym_names = form.cleaned_data["gyms"]
-        modules = list(form.cleaned_data["modules"] or Module.objects.filter(code__in=DEFAULT_MODULE_CODES).order_by("code"))
         return {
             "first_name": form.cleaned_data["first_name"].strip(),
             "last_name": form.cleaned_data["last_name"].strip(),
@@ -255,9 +259,10 @@ class UserAdmin(BaseUserAdmin):
             "organization_phone": organization.phone if organization else (form.cleaned_data["organization_phone"] or "").strip(),
             "organization_email": organization.email if organization else (form.cleaned_data["organization_email"] or form.cleaned_data["email"]).strip(),
             "organization_address": organization.address if organization else (form.cleaned_data["organization_address"] or "").strip(),
+            "subscription_pack": form.cleaned_data["subscription_pack"],
+            "subscription_pack_label": get_pack_label(form.cleaned_data["subscription_pack"]),
             "gym_names": gym_names,
-            "module_ids": [module.id for module in modules],
-            "module_codes": [module.code for module in modules],
+            "module_codes": get_pack_module_codes(form.cleaned_data["subscription_pack"]),
             "uses_existing_organization": bool(organization),
             "existing_active_gym_names": list(organization.gyms.filter(is_active=True).order_by("name").values_list("name", flat=True))
             if organization
@@ -277,8 +282,8 @@ class UserAdmin(BaseUserAdmin):
             "organization_phone": "" if preview.get("organization_id") else preview.get("organization_phone", ""),
             "organization_email": "" if preview.get("organization_id") else preview.get("organization_email", ""),
             "organization_address": "" if preview.get("organization_id") else preview.get("organization_address", ""),
+            "subscription_pack": preview.get("subscription_pack", PACK_PREMIUM),
             "gyms": "\n".join(preview.get("gym_names", [])),
-            "modules": preview.get("module_ids", []),
         }
 
     def _create_owner_package(self, preview):
@@ -293,8 +298,12 @@ class UserAdmin(BaseUserAdmin):
                 phone=preview["organization_phone"],
                 email=preview["organization_email"] or preview["email"],
                 address=preview["organization_address"],
+                subscription_pack=preview["subscription_pack"],
                 is_active=True,
             )
+        elif organization.subscription_pack != preview["subscription_pack"]:
+            organization.subscription_pack = preview["subscription_pack"]
+            organization.save(update_fields=["subscription_pack"])
 
         username = generate_username(preview["first_name"], preview["last_name"])
         temporary_password = generate_temporary_password()
@@ -314,13 +323,11 @@ class UserAdmin(BaseUserAdmin):
         if not gyms:
             gyms = list(organization.gyms.filter(is_active=True))
 
-        modules = list(Module.objects.filter(id__in=preview["module_ids"]).order_by("code"))
+        module_codes = get_pack_module_codes(preview["subscription_pack"])
+        ensure_modules_exist()
+        modules = list(Module.objects.filter(code__in=module_codes).order_by("code"))
         for gym in gyms:
-            if modules:
-                for module in modules:
-                    GymModule.objects.get_or_create(gym=gym, module=module, defaults={"is_active": True})
-            else:
-                ensure_default_gym_modules(gym)
+            ensure_gym_modules_for_pack(gym, preview["subscription_pack"])
             UserGymRole.objects.update_or_create(
                 user=owner,
                 gym=gym,
@@ -343,7 +350,7 @@ class UserAdmin(BaseUserAdmin):
                 subdomain=subdomain,
                 is_active=True,
             )
-            ensure_default_gym_modules(gym)
+            ensure_gym_modules_for_pack(gym, organization.subscription_pack)
             gyms.append(gym)
         return gyms
 
