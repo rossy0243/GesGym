@@ -39,7 +39,7 @@ class PublicRouteTests(TestCase):
     def test_landing_uses_versioned_script_to_avoid_stale_browser_cache(self):
         response = self.client.get("/")
 
-        self.assertContains(response, "script_accueil.js?v=landing-v2-demo-form")
+        self.assertContains(response, "script_accueil.js?v=landing-v5-mobile-menu-fallback")
 
     def test_demo_request_sends_email_to_contact_address(self):
         response = self.client.post(
@@ -73,7 +73,7 @@ class PublicRouteTests(TestCase):
         self.assertContains(response, "Pack Club")
         self.assertContains(
             response,
-            "Je souhaite une demonstration du Pack Club",
+            "je souhaite decouvrir le Pack Club a travers une demonstration",
         )
         self.assertContains(response, 'value="club"')
 
@@ -84,7 +84,7 @@ class PublicRouteTests(TestCase):
         self.assertContains(response, "Pack Premium")
         self.assertContains(
             response,
-            "Je souhaite une demonstration du Pack Premium",
+            "je souhaite decouvrir le Pack Premium a travers une demonstration",
         )
         self.assertContains(response, 'value="premium"')
 

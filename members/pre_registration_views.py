@@ -160,10 +160,12 @@ def confirm_pre_registration(request, pre_registration_id):
         return redirect("members:pre_registration_list")
 
     username = member.user.username if member.user else "genere automatiquement"
+    temporary_password = getattr(member, "_temporary_password", "")
     messages.success(
         request,
         f"Preinscription confirmee. Membre cree : {member.first_name} {member.last_name}. "
-        f"Identifiant : {username}. Mot de passe temporaire : 12345."
+        f"Identifiant : {username}. Mot de passe temporaire : {temporary_password}. "
+        "Ce mot de passe devra etre change a la premiere connexion."
     )
     return redirect("members:pre_registration_list")
 

@@ -2,6 +2,7 @@ from decimal import Decimal
 from datetime import date, datetime, time, timedelta
 from io import BytesIO
 from unittest.mock import patch
+from unittest.mock import patch
 from zipfile import ZipFile
 
 from django.http import QueryDict
@@ -595,7 +596,8 @@ class AccountingReportExportTests(TestCase):
         self.assertIn("rapport-comptable-gym-a-", response["Content-Disposition"])
         self.assertTrue(response["Content-Disposition"].endswith(".csv\""))
 
-    def test_settings_owner_can_create_internal_employee_for_selected_gym(self):
+    @patch("core.views.generate_temporary_password", return_value="EmployeeTemp123!")
+    def test_settings_owner_can_create_internal_employee_for_selected_gym(self, _mock_password):
         response = self.client.post(
             reverse("core:settings"),
             {
@@ -614,6 +616,8 @@ class AccountingReportExportTests(TestCase):
         self.assertEqual(employee_role.role, "manager")
         self.assertTrue(employee_role.is_active)
         self.assertNotEqual(employee_role.role, "owner")
+        self.assertTrue(employee_role.user.force_password_change)
+        self.assertTrue(employee_role.user.check_password("EmployeeTemp123!"))
         self.assertTrue(
             SensitiveActivityLog.objects.filter(
                 organization=self.org_a,

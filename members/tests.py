@@ -1,5 +1,6 @@
 from datetime import timedelta
 from io import StringIO
+from unittest.mock import patch
 
 from django.core.management import call_command
 from django.test import TestCase
@@ -227,7 +228,8 @@ class MemberPreRegistrationTests(TestCase):
         self.assertGreater(pre_registration.expires_at, timezone.now() + timedelta(days=6, hours=23))
         self.assertFalse(Member.objects.filter(phone="+243810000001").exists())
 
-    def test_confirm_pre_registration_creates_member_and_default_user(self):
+    @patch("members.signals.generate_temporary_password", return_value="TempPass123!")
+    def test_confirm_pre_registration_creates_member_and_default_user(self, _mock_password):
         pre_registration = MemberPreRegistration.objects.create(
             gym=self.gym,
             first_name="Bob",
@@ -248,7 +250,8 @@ class MemberPreRegistrationTests(TestCase):
         member = pre_registration.member
         self.assertEqual(member.gym, self.gym)
         self.assertIsNotNone(member.user)
-        self.assertTrue(member.user.check_password("12345"))
+        self.assertTrue(member.user.check_password("TempPass123!"))
+        self.assertTrue(member.user.force_password_change)
         self.assertFalse(UserGymRole.objects.filter(user=member.user, gym=self.gym, is_active=True).exists())
 
     def test_pre_registration_list_is_scoped_to_current_gym(self):
@@ -313,6 +316,9 @@ class MemberPortalTests(TestCase):
             phone="+243810000101",
             email="maya.mobile@example.com",
         )
+        self.member.user.set_password("MemberPortal123!")
+        self.member.user.force_password_change = False
+        self.member.user.save(update_fields=["password", "force_password_change"])
         self.plan = SubscriptionPlan.objects.create(
             gym=self.gym,
             name="Mensuel",
@@ -365,7 +371,7 @@ class MemberPortalTests(TestCase):
             reverse("compte:login"),
             {
                 "username": self.member.user.username,
-                "password": "12345",
+                "password": "MemberPortal123!",
             },
         )
 
@@ -739,7 +745,7 @@ class MemberPortalTests(TestCase):
         response = self.client.post(
             reverse("members:member_change_password"),
             {
-                "old_password": "12345",
+                "old_password": "MemberPortal123!",
                 "new_password1": "NouveauPass123!",
                 "new_password2": "NouveauPass123!",
             },

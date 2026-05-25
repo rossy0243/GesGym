@@ -932,7 +932,8 @@ def create_member(request):
                         <span class="opacity-90">
                             {member.first_name} {member.last_name}<br>
                             Identifiant : <strong>{member.user.username}</strong><br>
-                            Mot de passe temporaire : <strong>12345</strong><br>
+                            Mot de passe temporaire : <strong>{getattr(member, "_temporary_password", "Genere automatiquement")}</strong><br>
+                            Changement obligatoire a la premiere connexion.<br>
                             Espace membre : <strong>{reverse("members:member_portal")}</strong>
                         </span>
                     </div>

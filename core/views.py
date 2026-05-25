@@ -14,7 +14,7 @@ import json
 from access.models import AccessLog
 from compte.models import UserGymRole
 from compte.models import User
-from compte.utils import generate_username, has_other_active_access
+from compte.utils import generate_temporary_password, generate_username, has_other_active_access
 from coaching.models import CoachSpecialty
 from organizations.models import SensitiveActivityLog
 from .audit import log_sensitive_action
@@ -496,12 +496,14 @@ def settings_dashboard(request):
                     employee_form.cleaned_data["first_name"],
                     employee_form.cleaned_data["last_name"],
                 )
+                temporary_password = generate_temporary_password()
                 employee = User.objects.create(
                     username=username,
                     first_name=employee_form.cleaned_data["first_name"],
                     last_name=employee_form.cleaned_data["last_name"],
                     email=employee_form.cleaned_data["email"],
-                    password=make_password("12345"),
+                    password=make_password(temporary_password),
+                    force_password_change=True,
                     is_active=employee_form.cleaned_data["is_active"],
                     is_staff=False,
                 )
@@ -521,7 +523,8 @@ def settings_dashboard(request):
                 )
                 messages.success(
                     request,
-                    f"Employe cree : {username}. Mot de passe par defaut : 12345",
+                    f"Employe cree : {username}. Mot de passe temporaire : {temporary_password}. "
+                    "Changement obligatoire a la premiere connexion.",
                 )
                 return redirect("core:settings")
 
@@ -542,7 +545,8 @@ def settings_dashboard(request):
                         "Ce compte est partage avec un autre acces actif. Utilisez une reinitialisation globale supervisee.",
                     )
                     return redirect("core:settings")
-                role.user.password = make_password("12345")
+                temporary_password = generate_temporary_password()
+                role.user.password = make_password(temporary_password)
                 role.user.force_password_change = True
                 role.user.save(update_fields=["password", "force_password_change"])
                 log_sensitive_action(
@@ -553,7 +557,11 @@ def settings_dashboard(request):
                     metadata={"employee_id": role.user_id},
                     gym=role.gym,
                 )
-                messages.success(request, f"Mot de passe reinitialise pour {role.user.username} : 12345")
+                messages.success(
+                    request,
+                    f"Mot de passe reinitialise pour {role.user.username} : {temporary_password}. "
+                    "Changement obligatoire a la premiere connexion.",
+                )
                 return redirect("core:settings")
 
             if role.user_id == request.user.id:

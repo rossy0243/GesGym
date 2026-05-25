@@ -89,7 +89,10 @@ class ProductsTenantTests(TestCase):
         self.assertNotContains(response, "6993,00 USD")
 
     def test_general_dashboard_includes_scoped_product_kpis(self):
-        response = self.client.get(reverse("core:gym_dashboard", args=[self.gym_a.id]))
+        response = self.client.get(
+            reverse("core:gym_dashboard", args=[self.gym_a.id]),
+            {"view": "analytics"},
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "KPI produits")
