@@ -84,6 +84,13 @@ Bon reflexe :
 
 - verifier la salle active des le debut de session
 
+Gestion des mots de passe temporaires :
+
+- certains comptes peuvent etre crees avec un mot de passe temporaire
+- ce mot de passe doit etre communique immediatement a la personne concernee
+- a la premiere connexion, l'utilisateur devra definir son propre mot de passe
+- tant que ce changement n'est pas fait, l'acces complet a l'application reste limite
+
 Capture de reference :
 
 ![Ecran de connexion client](D:/GesGym/docs/screenshots/client-login-final.png)
@@ -123,6 +130,12 @@ Le module Membres permet de :
 - suspendre ou reactiver son acces
 - generer et utiliser son QR code
 
+Lors de la creation d'un membre :
+
+- un identifiant utilisateur est genere automatiquement
+- un mot de passe temporaire peut etre affiche dans le message de succes
+- ce mot de passe doit etre transmis au membre pour sa premiere connexion
+
 ### 6.2 Espace membre mobile
 
 Le membre connecte dispose d'un espace mobile dedie avec :
@@ -148,6 +161,13 @@ Ce lien permet :
 
 - de collecter les demandes avant inscription
 - de confirmer ensuite un prospect en vrai membre
+
+Lors de la confirmation d'une preinscription :
+
+- le membre est cree dans la salle
+- un identifiant peut etre genere automatiquement
+- un mot de passe temporaire peut etre affiche juste apres confirmation
+- il faut le communiquer au membre sans attendre
 
 ### 6.4 Abonnements
 
@@ -260,6 +280,12 @@ Le module Parametres permet aux owners et managers autorises de gerer :
 - les roles
 - certaines briques de configuration locale
 
+Pour les utilisateurs internes :
+
+- la creation ou la reinitialisation d'un compte peut produire un mot de passe temporaire
+- ce mot de passe doit etre communique au collaborateur concerne
+- le collaborateur devra le remplacer a sa prochaine connexion
+
 ## 7. Regles metier importantes
 
 - un membre ne peut avoir qu'un seul abonnement actif a la fois
@@ -317,3 +343,15 @@ Verifier :
 
 - qu'une caisse est ouverte
 - qu'un taux USD-CDF a ete saisi
+
+### 9.4 "Je vois un message, mais pas en toast"
+
+Selon l'ecran utilise, les messages peuvent apparaitre :
+
+- sous forme de toast visuel
+- ou sous forme de message affiche directement dans la page
+
+Regle pratique :
+
+- si une action importante vient d'etre faite, lire attentivement le message affiche avant de quitter l'ecran
+- c'est particulierement important apres une creation de compte ou une reinitialisation de mot de passe

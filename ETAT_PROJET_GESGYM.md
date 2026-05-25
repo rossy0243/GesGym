@@ -39,6 +39,26 @@ Valeur produit :
 - l'admin SaaS n'a plus a cocher les modules un par un
 - un changement de pack peut etre propage proprement sur tout le client
 
+## 1.2 Comptes temporaires et messages applicatifs
+
+Le comportement actuel sur les identifiants temporaires et les messages utilisateur est le suivant :
+
+- les creations et reinitialisations sensibles utilisent des mots de passe temporaires forts et uniques
+- le changement de mot de passe a la premiere connexion est force via `force_password_change`
+- les mots de passe temporaires sont affiches au moment du succes pour plusieurs flux critiques : owner SaaS, employes internes, membres et confirmations de preinscription
+- le flux owner gym de creation ou reinitialisation d'utilisateur interne reste incomplet : le mot de passe y est genere mais n'est pas encore restitue visuellement
+
+Concernant les messages :
+
+- le systeme n'a pas encore un comportement toast parfaitement homogene sur toute l'application
+- le back-office principal s'appuie sur un conteneur toast dans le layout principal
+- les ecrans d'authentification et le portail membre utilisent encore des messages inline
+
+Implication produit :
+
+- les messages fonctionnent, mais l'experience visuelle n'est pas encore totalement uniformisee
+- pour les flux de communication de credentials, il faut se fier au message affiche sur l'ecran de succes prevu par le workflow
+
 ## 2. Sprints deja livres
 
 ### Sprint 1 - Fondations Coaching

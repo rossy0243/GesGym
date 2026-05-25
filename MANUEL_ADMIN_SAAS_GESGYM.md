@@ -151,6 +151,29 @@ Verifier systematiquement :
 - que les gyms attendus existent
 - que les modules actifs correspondent au pack choisi
 
+### 5.4 Recuperer les mots de passe temporaires
+
+Les comptes crees par la plateforme utilisent maintenant un mot de passe temporaire fort et unique.
+
+Principe :
+
+- le mot de passe temporaire doit etre communique juste apres creation ou reinitialisation
+- l'utilisateur devra le remplacer a la premiere connexion
+- le systeme positionne `force_password_change=True` sur ces comptes
+
+Ou recuperer le mot de passe selon le flux :
+
+- creation d'un `Owner` client par l'admin SaaS : le mot de passe apparait dans la page de recapitulatif [D:/GesGym/compte/templates/admin/create_owner_success.html](D:/GesGym/compte/templates/admin/create_owner_success.html)
+- creation d'un employe interne depuis les parametres : le mot de passe apparait dans le message de succes genere par [D:/GesGym/core/views.py](D:/GesGym/core/views.py)
+- reinitialisation d'un employe interne : le mot de passe apparait aussi dans le message de succes genere par [D:/GesGym/core/views.py](D:/GesGym/core/views.py)
+- creation d'un membre : le mot de passe apparait dans le message de succes genere par [D:/GesGym/members/views.py](D:/GesGym/members/views.py)
+- confirmation d'une preinscription : le mot de passe apparait dans le message de succes genere par [D:/GesGym/members/pre_registration_views.py](D:/GesGym/members/pre_registration_views.py)
+
+Limite connue :
+
+- pour la creation ou la reinitialisation d'un utilisateur interne depuis l'espace owner gym, le mot de passe temporaire est bien genere mais n'est pas encore restitue a l'ecran dans [D:/GesGym/compte/views.py](D:/GesGym/compte/views.py)
+- dans ce flux precis, il ne faut donc pas promettre une communication immediate du mot de passe tant que ce point n'a pas ete complete
+
 ## 6. Changement de pack
 
 ### 6.1 Depuis l'admin Organization
@@ -243,3 +266,19 @@ Rappel :
 
 - les menus dependent a la fois du pack, des `GymModule`, du role et de la salle active
 - un module techniquement actif ne sera pas visible si le role courant n'a pas les droits
+
+### 9.4 "Le message de succes n'apparait pas comme un toast"
+
+Le comportement actuel des messages n'est pas uniforme sur toute l'application.
+
+Etat reel :
+
+- le back-office principal rend les messages dans un conteneur Bootstrap toast via [D:/GesGym/templates/base.html](D:/GesGym/templates/base.html)
+- certaines pages affichent effectivement les messages en toast, par exemple la liste des membres
+- les pages d'authentification utilisent des messages inline dans [D:/GesGym/compte/templates/compte/auth_base.html](D:/GesGym/compte/templates/compte/auth_base.html)
+- le portail membre utilise aussi des messages inline dans [D:/GesGym/members/templates/members/member_portal.html](D:/GesGym/members/templates/members/member_portal.html)
+
+Conclusion admin :
+
+- il faut verifier la presence du message, pas seulement son format visuel
+- en cas de doute sur un flux sensible, controler le contenu du message affiche avant de quitter l'ecran
