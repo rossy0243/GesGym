@@ -23,11 +23,13 @@ from django.http import HttpResponse
 from django.views.generic import RedirectView
 from core.views import health_details
 from notifications.views import notification_dashboard
-from website.views import landing
+from website.views import landing, robots_txt, sitemap_xml
 
 
 urlpatterns = [
     path('', landing, name='landing'),
+    path('robots.txt', robots_txt, name='robots_txt'),
+    path('sitemap.xml', sitemap_xml, name='sitemap_xml'),
     path('health/', lambda request: HttpResponse("ok", content_type="text/plain"), name='health'),
     path('health/details/', health_details, name='health_details'),
     path('login/', RedirectView.as_view(pattern_name='compte:login', permanent=False), name='login'),

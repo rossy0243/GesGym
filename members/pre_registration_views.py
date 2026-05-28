@@ -58,6 +58,13 @@ def public_pre_registration(request, token):
             "gym": gym,
             "organization": gym.organization,
             "saved_pre_registration": saved_pre_registration,
+            "seo_title": f"Preinscription membre | {gym.name}",
+            "seo_description": (
+                f"Formulaire de preinscription membre pour {gym.name}. "
+                "Page reservee aux prospects du club."
+            ),
+            "seo_robots": "noindex, nofollow, noarchive",
+            "seo_canonical_url": request.build_absolute_uri(),
         },
     )
 

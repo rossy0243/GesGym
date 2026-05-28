@@ -118,6 +118,29 @@ class PublicRouteTests(TestCase):
 
         self.assertTemplateUsed(response, "compte/accueil.html")
 
+    def test_landing_includes_primary_seo_tags(self):
+        response = self.client.get("/")
+
+        self.assertContains(response, '<meta name="description"')
+        self.assertContains(response, '<meta property="og:title"')
+        self.assertContains(response, '<link rel="canonical" href="http://testserver/"')
+        self.assertContains(response, '<script type="application/ld+json">', html=False)
+
+    def test_robots_txt_exposes_sitemap_and_sensitive_disallow_rules(self):
+        response = self.client.get("/robots.txt")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "text/plain; charset=utf-8")
+        self.assertIn("Disallow: /admin/", response.content.decode("utf-8"))
+        self.assertIn("Sitemap: http://testserver/sitemap.xml", response.content.decode("utf-8"))
+
+    def test_sitemap_xml_lists_landing_page(self):
+        response = self.client.get("/sitemap.xml")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/xml; charset=utf-8")
+        self.assertIn("<loc>http://testserver/</loc>", response.content.decode("utf-8"))
+
     def test_health_details_route_requires_staff_authentication(self):
         response = self.client.get("/health/details/")
 

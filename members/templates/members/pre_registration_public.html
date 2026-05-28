@@ -4,7 +4,10 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Preinscription - {{ gym.name }}</title>
+    <title>{{ seo_title|default:'Preinscription membre' }}</title>
+    <meta name="description" content="{{ seo_description|default:'Formulaire de preinscription membre.' }}">
+    <meta name="robots" content="{{ seo_robots|default:'noindex, nofollow, noarchive' }}">
+    <link rel="canonical" href="{{ seo_canonical_url|default:request.build_absolute_uri }}">
     <link rel="stylesheet" type="text/css" href="{% static 'css/bootstrap.min.css' %}">
     <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
     <style>
