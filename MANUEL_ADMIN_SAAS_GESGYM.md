@@ -2,6 +2,8 @@
 
 Version du manuel : basee sur l'application actuellement presente dans ce depot.
 
+Derniere actualisation : 09/06/2026.
+
 ## 1. Objectif
 
 Ce document est reserve a l'equipe qui administre la plateforme GesGym.
@@ -242,9 +244,53 @@ Commandes utiles :
 - documenter toute bascule de pack commerciale importante
 - verifier les modules sur au moins une salle apres changement
 
-## 9. Depannage rapide
+## 9. Images, logos et medias
 
-### 9.1 "Le client ne voit pas un module vendu"
+### 9.1 Images gerees par la plateforme
+
+Les images uploadables importantes pour l'administration SaaS sont :
+
+- le logo de l'organisation : `Organization.logo`
+- la photo d'un membre : `Member.photo`
+- le logo du site public d'une salle : `GymWebsite.logo`
+
+Le logo organisation est visible notamment :
+
+- sur l'ecran de bienvenue apres connexion
+- dans l'espace membre
+- dans les preinscriptions publiques
+- dans les parametres de l'organisation
+- dans la generation de carte membre cote back-office
+
+### 9.2 Etat actuel du stockage
+
+Pour l'instant, les medias utilisateurs sont stockes avec le storage local Django :
+
+```text
+MEDIA_ROOT = BASE_DIR / "media"
+MEDIA_URL = "/media/"
+```
+
+En production, Django ne sert ces medias que si `DJANGO_SERVE_MEDIA=True`.
+
+Cette configuration est acceptable pour le local, la recette ou une demonstration courte. Pour une exploitation durable, il faut utiliser un stockage objet externe.
+
+### 9.3 Backblaze B2 prevu
+
+Backblaze B2 est retenu comme prochaine cible pour rendre les images persistantes.
+
+Regles de securite :
+
+- ne jamais partager la Master Application Key dans un chat ou un depot
+- creer une Application Key limitee au bucket GesGym
+- stocker `B2_KEY_ID` et `B2_APPLICATION_KEY` uniquement dans Render ou dans un `.env` local prive
+- conserver WhiteNoise pour les fichiers statiques du theme
+
+Le detail technique est documente dans [docs/MEDIA_STORAGE_GESGYM.md](D:/GesGym/docs/MEDIA_STORAGE_GESGYM.md).
+
+## 10. Depannage rapide
+
+### 10.1 "Le client ne voit pas un module vendu"
 
 Verifier :
 
@@ -252,7 +298,7 @@ Verifier :
 - les `GymModule` de la salle active
 - la presence d'un role autorise pour l'utilisateur
 
-### 9.2 "Le client voit encore un module retire"
+### 10.2 "Le client voit encore un module retire"
 
 Verifier :
 
@@ -260,14 +306,14 @@ Verifier :
 - que la salle concernee appartient bien a cette organisation
 - qu'une resynchronisation a bien eu lieu
 
-### 9.3 "Les menus ne correspondent pas au pack"
+### 10.3 "Les menus ne correspondent pas au pack"
 
 Rappel :
 
 - les menus dependent a la fois du pack, des `GymModule`, du role et de la salle active
 - un module techniquement actif ne sera pas visible si le role courant n'a pas les droits
 
-### 9.4 "Le message de succes n'apparait pas comme un toast"
+### 10.4 "Le message de succes n'apparait pas comme un toast"
 
 Le comportement actuel des messages n'est pas uniforme sur toute l'application.
 

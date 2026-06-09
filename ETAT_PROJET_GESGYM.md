@@ -1,6 +1,6 @@
 # Etat du projet GesGym
 
-Version de reference: etat du depot au 25/05/2026.
+Version de reference: etat du depot actualise au 09/06/2026.
 
 ## 1. Niveau actuel
 
@@ -18,6 +18,7 @@ Les grands acquis a retenir:
 - les rapports intègrent la lecture RH `brut / net`
 - les controles role + multi-tenant ont ete revalidés avant beta
 - le manuel utilisateur a ete remis a jour en fonction de l'etat reel du produit
+- l'inventaire des images et medias a ete clarifie pour preparer Backblaze B2
 
 ## 1.1 Packs SaaS et activation
 
@@ -58,6 +59,36 @@ Implication produit :
 
 - les messages fonctionnent, mais l'experience visuelle n'est pas encore totalement uniformisee
 - pour les flux de communication de credentials, il faut se fier au message affiche sur l'ecran de succes prevu par le workflow
+
+## 1.3 Images et stockage media
+
+Le projet utilise aujourd'hui deux familles d'images :
+
+- les fichiers statiques du produit : logos SmartClub, favicon, avatars par defaut, icones PWA
+- les medias utilisateurs : photos membres, logos organisations, logos de site public de salle
+
+Etat actuel :
+
+- les statiques restent servis par WhiteNoise apres `collectstatic`
+- les medias utilisateurs utilisent encore le storage local Django
+- `DJANGO_SERVE_MEDIA=True` peut servir les medias via Django, mais ce n'est pas la cible ideale en production
+- Backblaze B2 est identifie comme prochaine solution de stockage persistant des medias
+
+Champs uploadables identifies :
+
+- `Member.photo`
+- `Organization.logo`
+- `GymWebsite.logo`
+
+Decision de securite :
+
+- ne jamais utiliser ni transmettre la Master Application Key Backblaze dans le chat ou le depot
+- creer plus tard une Application Key limitee au bucket de medias GesGym
+- injecter les secrets uniquement via Render ou un `.env` local prive
+
+Documentation dediee :
+
+- [docs/MEDIA_STORAGE_GESGYM.md](D:/GesGym/docs/MEDIA_STORAGE_GESGYM.md)
 
 ## 2. Sprints deja livres
 
@@ -304,8 +335,10 @@ Fichier a jour:
 - [MANUEL_CLIENT_GESGYM.md](D:/GesGym/MANUEL_CLIENT_GESGYM.md)
 - [MANUEL_UTILISATEUR_GESGYM.md](D:/GesGym/MANUEL_UTILISATEUR_GESGYM.md)
 - [README.md](D:\GesGym\README.md)
+- [docs\MEDIA_STORAGE_GESGYM.md](D:\GesGym\docs\MEDIA_STORAGE_GESGYM.md)
 - [docs\kpi-test-coverage.md](D:\GesGym\docs\kpi-test-coverage.md)
 - [docs\reporting-test-coverage.md](D:\GesGym\docs\reporting-test-coverage.md)
+- [static\README_IMAGES.md](D:\GesGym\static\README_IMAGES.md)
 
 Les manuels ont ete mis a jour sur:
 
@@ -317,6 +350,7 @@ Les manuels ont ete mis a jour sur:
 - module RH
 - rapports RH
 - routines manager et coach
+- images, medias utilisateurs et preparation Backblaze B2
 
 ## 6. Pistes logiques pour la suite
 
@@ -327,6 +361,7 @@ Les prochaines evolutions les plus naturelles sont:
 - dashboard manager plus analytique
 - support propre d'un meme compte staff sur plusieurs salles si ce besoin devient reel
 - stockage persistant des medias utilisateurs
+- configuration Backblaze B2 avec `django-storages` et `boto3`
 - recommandations intelligentes de coach/programme selon objectif membre
 - gestion plus fine des changements de coach ou de programme
 - monetisation plus poussee des offres coaching
@@ -345,5 +380,6 @@ Si on reprend le projet plus tard, le meilleur point de reprise est:
    - monetisation
    - experience membre
    - industrialisation RH
+   - stockage media Backblaze B2
 
 Ce fichier sert de memoire projet rapide pour repartir sans perdre le niveau atteint.

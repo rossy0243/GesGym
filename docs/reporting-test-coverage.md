@@ -1,5 +1,9 @@
 # Reporting Test Coverage
 
+Derniere actualisation : 09/06/2026.
+
+Cette note documente la couverture canonique des rapports. Elle ne decrit pas le stockage des medias ; pour les images et Backblaze B2, voir [MEDIA_STORAGE_GESGYM.md](D:/GesGym/docs/MEDIA_STORAGE_GESGYM.md).
+
 ## Coverage Matrix
 
 Axes covered by the canonical reporting suite:

@@ -2,6 +2,8 @@
 
 Application Django de gestion de salle de sport.
 
+Etat de reference documentation : 09/06/2026.
+
 ## Etat fonctionnel resume
 
 L'application couvre aujourd'hui les blocs suivants :
@@ -41,6 +43,7 @@ Les manuels sont maintenant separes :
 - [MANUEL_ADMIN_SAAS_GESGYM.md](D:/GesGym/MANUEL_ADMIN_SAAS_GESGYM.md) : administration de la plateforme SaaS
 - [MANUEL_CLIENT_GESGYM.md](D:/GesGym/MANUEL_CLIENT_GESGYM.md) : utilisation cote client / salle
 - [MANUEL_UTILISATEUR_GESGYM.md](D:/GesGym/MANUEL_UTILISATEUR_GESGYM.md) : page d'orientation vers les deux manuels
+- [docs/MEDIA_STORAGE_GESGYM.md](D:/GesGym/docs/MEDIA_STORAGE_GESGYM.md) : inventaire des images et preparation Backblaze B2
 
 ## Roles et multi-salle
 
@@ -239,6 +242,40 @@ gunicorn smartclub.wsgi --log-file - --access-logfile -
 
 - Les medias utilisateurs peuvent etre servis directement par Django seulement si `DJANGO_SERVE_MEDIA=True`.
 - Pour un deploiement plus solide, preferer un vrai service de medias (Nginx, bucket objet, CDN, etc.).
+
+### Images actuellement gerees comme medias utilisateurs
+
+Les champs uploadables qui doivent rester persistants entre les deploiements sont :
+
+- `Member.photo` dans [members/models.py](D:/GesGym/members/models.py)
+- `Organization.logo` dans [organizations/models.py](D:/GesGym/organizations/models.py)
+- `GymWebsite.logo` dans [website/models.py](D:/GesGym/website/models.py)
+
+Aujourd'hui ces fichiers utilisent le storage Django local par defaut. Cela suffit en local et pour une demonstration courte, mais ce n'est pas ideal sur une plateforme cloud ou le disque peut etre ephemere.
+
+### Preparation Backblaze B2
+
+La bascule vers Backblaze B2 est prevue mais non bloquante pour l'utilisation actuelle.
+
+Principe retenu :
+
+- conserver WhiteNoise pour les fichiers statiques (`static/`)
+- envoyer uniquement les medias utilisateurs vers Backblaze B2
+- utiliser une Application Key limitee au bucket, jamais la Master Application Key
+- configurer les secrets uniquement dans l'environnement local ou Render
+
+Variables attendues lors de la future configuration :
+
+```env
+B2_BUCKET_NAME=
+B2_REGION=
+B2_ENDPOINT_URL=
+B2_KEY_ID=
+B2_APPLICATION_KEY=
+B2_CUSTOM_DOMAIN=
+```
+
+Voir l'inventaire complet dans [docs/MEDIA_STORAGE_GESGYM.md](D:/GesGym/docs/MEDIA_STORAGE_GESGYM.md).
 
 ## Verification recommandee avant beta
 

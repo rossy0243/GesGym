@@ -1,22 +1,43 @@
-# Où placer les images (static)
+# Images statiques GesGym
 
-Les templates et scripts utilisent les chemins suivants. Placez vos fichiers dans les dossiers indiqués.
+Derniere actualisation : 09/06/2026.
 
-## Structure
+Ce dossier contient les images statiques du produit. Elles font partie du code applicatif et sont servies par WhiteNoise en production apres `collectstatic`.
 
-| Fichier à placer | Dossier | Utilisé dans |
-|------------------|--------|--------------|
-| **1.png** (photo profil / avatar par défaut) | `personnel/static/avatar/` | Header, Profil, Paiements, Accès |
-| **2.png** (avatar secondaire) | `personnel/static/avatar/` | Accès (liste membres) |
-| **logo_smartclub.png** | `personnel/static/avatar/` | Accès (logo) |
-| **favicon.ico** | `personnel/static/images/` | Base (favicon de l’onglet) |
+Ces fichiers ne sont pas les medias utilisateurs. Les photos membres et logos clients sont documentes dans [../docs/MEDIA_STORAGE_GESGYM.md](../docs/MEDIA_STORAGE_GESGYM.md).
 
-## Chemins utilisés dans le projet
+## Structure actuelle
 
-- **base.html** : `{% static 'images/favicon.ico' %}`
-- **include/header.html** : `{% static 'avatar/1.png' %}` (photo utilisateur)
-- **profil.html** : `{% static 'avatar/1.png' %}`
-- **paiements.html** : `{% static 'avatar/1.png' %}` (photo client)
-- **acces.html** + **script_acces.js** : `avatar/1.png`, `avatar/2.png`, `avatar/logo_smartclub.png`
+| Dossier | Usage |
+| --- | --- |
+| `static/avatar/` | avatars par defaut, logo SmartClub de fallback |
+| `static/icons/` | icones PWA et icones applicatives |
+| `static/icons/line-icon/` | icones graphiques du theme |
+| `static/images/` | favicon et logo SmartClub complet |
 
-Tant que les fichiers ne sont pas présents, les balises `<img>` utilisent un `onerror` qui affiche un placeholder (cercle coloré avec initiales ou icône).
+## Fichiers importants
+
+| Fichier | Usage principal |
+| --- | --- |
+| `static/avatar/1.png` | avatar par defaut membre/utilisateur |
+| `static/avatar/logo_smartclub.png` | logo fallback dans l'espace membre et les cartes |
+| `static/images/favicon-smartclub.png` | favicon des pages d'authentification |
+| `static/images/smartclub-logo-full.png` | image SEO/Open Graph et logo produit |
+| `static/icons/1.png` | icone PWA principale de l'espace membre |
+
+## Regle de maintenance
+
+- ne pas placer les photos membres dans `static/`
+- ne pas placer les logos clients dans `static/`
+- ne pas supprimer les avatars de fallback sans verifier les templates et scripts
+- lancer `collectstatic` apres changement d'image statique en production
+
+## Difference avec les medias utilisateurs
+
+Les medias utilisateurs sont aujourd'hui dans `media/` en local et seront plus tard stockes dans Backblaze B2.
+
+Champs concernes :
+
+- `Member.photo`
+- `Organization.logo`
+- `GymWebsite.logo`

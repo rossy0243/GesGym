@@ -2,6 +2,8 @@
 
 Version du manuel : basee sur l'application actuellement presente dans ce depot.
 
+Derniere actualisation : 09/06/2026.
+
 ## 1. Presentation generale
 
 GesGym est une application de gestion de salle de sport pensee pour le pilotage quotidien d'une salle ou d'un reseau de salles.
@@ -276,6 +278,7 @@ Le module Produits permet :
 Le module Parametres permet aux owners et managers autorises de gerer :
 
 - les informations de l'organisation
+- le logo de l'organisation
 - les utilisateurs internes
 - les roles
 - certaines briques de configuration locale
@@ -285,6 +288,27 @@ Pour les utilisateurs internes :
 - la creation ou la reinitialisation d'un compte peut produire un mot de passe temporaire
 - ce mot de passe doit etre communique au collaborateur concerne
 - le collaborateur devra le remplacer a sa prochaine connexion
+
+### 6.14 Images et logos
+
+L'application utilise deux familles d'images :
+
+- les images propres au client : logo de l'organisation, photos des membres, logo du site public de salle
+- les images du produit : favicon, logo SmartClub, avatars par defaut, icones PWA
+
+Les images propres au client apparaissent notamment :
+
+- dans l'espace membre mobile
+- dans les listes et fiches membres
+- sur les cartes membres generees depuis le back-office
+- sur les preinscriptions publiques
+- dans les parametres de l'organisation
+
+Etat actuel :
+
+- les images uploadables fonctionnent deja en local et en demonstration
+- le stockage distant Backblaze B2 est prevu pour rendre ces fichiers persistants en production cloud
+- ce point ne bloque pas l'utilisation courante de l'application
 
 ## 7. Regles metier importantes
 
@@ -355,3 +379,16 @@ Regle pratique :
 
 - si une action importante vient d'etre faite, lire attentivement le message affiche avant de quitter l'ecran
 - c'est particulierement important apres une creation de compte ou une reinitialisation de mot de passe
+
+### 9.5 "Une photo ou un logo n'apparait pas"
+
+Verifier :
+
+- que l'image a bien ete envoyee depuis le formulaire
+- que le fichier est bien associe au membre ou a l'organisation
+- que l'environnement de production sert correctement les medias
+
+Note :
+
+- les images statiques SmartClub ne dependent pas des medias utilisateurs
+- la future configuration Backblaze B2 concernera surtout les photos membres et logos clients
