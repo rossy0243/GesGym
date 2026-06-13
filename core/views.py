@@ -4,6 +4,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.hashers import make_password
 from django.shortcuts import get_object_or_404, redirect, render
 from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseForbidden, JsonResponse
+from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.db.models import Q, Count, Sum, Exists, OuterRef
 from django.db.models.functions import ExtractHour, ExtractMonth, TruncDate
@@ -444,6 +445,10 @@ def _scoped_identity_change_blocked(user, role):
     return has_other_active_access(user, exclude_role_ids=[role.id])
 
 
+def _settings_redirect(tab):
+    return redirect(f"{reverse('core:settings')}?tab={tab}")
+
+
 @login_required
 def settings_dashboard(request):
     if not _settings_allowed(request):
@@ -458,6 +463,9 @@ def settings_dashboard(request):
     active_tab = request.GET.get("tab", "organization" if can_manage_organization else "employees")
     if active_tab == "organization" and not can_manage_organization:
         active_tab = "employees"
+    employee_credentials = None
+    if request.method == "GET":
+        employee_credentials = request.session.pop("settings_employee_credentials", None)
 
     accessible_gyms = (
         organization.gyms.filter(is_active=True).order_by("name")
@@ -485,7 +493,7 @@ def settings_dashboard(request):
                     organization.name,
                 )
                 messages.success(request, "Informations de l'organisation mises a jour.")
-                return redirect("core:settings")
+                return _settings_redirect("organization")
 
         elif action == "employee_create":
             active_tab = "employees"
@@ -526,7 +534,12 @@ def settings_dashboard(request):
                     f"Employe cree : {username}. Mot de passe temporaire : {temporary_password}. "
                     "Changement obligatoire a la premiere connexion.",
                 )
-                return redirect("core:settings")
+                request.session["settings_employee_credentials"] = {
+                    "title": "Identifiants du nouvel employe",
+                    "username": username,
+                    "password": temporary_password,
+                }
+                return _settings_redirect("employees")
 
         elif action in ["employee_activate", "employee_deactivate", "employee_reset_password"]:
             active_tab = "employees"
@@ -544,7 +557,7 @@ def settings_dashboard(request):
                         request,
                         "Ce compte est partage avec un autre acces actif. Utilisez une reinitialisation globale supervisee.",
                     )
-                    return redirect("core:settings")
+                    return _settings_redirect("employees")
                 temporary_password = generate_temporary_password()
                 role.user.password = make_password(temporary_password)
                 role.user.force_password_change = True
@@ -562,11 +575,16 @@ def settings_dashboard(request):
                     f"Mot de passe reinitialise pour {role.user.username} : {temporary_password}. "
                     "Changement obligatoire a la premiere connexion.",
                 )
-                return redirect("core:settings")
+                request.session["settings_employee_credentials"] = {
+                    "title": "Nouveau mot de passe temporaire",
+                    "username": role.user.username,
+                    "password": temporary_password,
+                }
+                return _settings_redirect("employees")
 
             if role.user_id == request.user.id:
                 messages.error(request, "Vous ne pouvez pas vous desactiver vous-meme.")
-                return redirect("core:settings")
+                return _settings_redirect("employees")
 
             should_activate = action == "employee_activate"
             role.is_active = should_activate
@@ -588,7 +606,7 @@ def settings_dashboard(request):
             )
             status_label = "active" if should_activate else "desactive"
             messages.success(request, f"Employe {role.user.username} {status_label}.")
-            return redirect("core:settings")
+            return _settings_redirect("employees")
 
         elif action == "specialty_create":
             active_tab = "specialties"
@@ -611,7 +629,7 @@ def settings_dashboard(request):
                     gym=gym,
                 )
                 messages.success(request, f"Specialite coach enregistree : {specialty.name}")
-                return redirect("core:settings")
+                return _settings_redirect("specialties")
 
         elif action in ["specialty_activate", "specialty_deactivate"]:
             active_tab = "specialties"
@@ -626,7 +644,7 @@ def settings_dashboard(request):
                 gym=gym,
             )
             messages.success(request, f"Specialite {specialty.name} mise a jour.")
-            return redirect("core:settings")
+            return _settings_redirect("specialties")
 
     employee_roles = (
         UserGymRole.objects.filter(gym__in=accessible_gyms)
@@ -645,6 +663,7 @@ def settings_dashboard(request):
         "gym": gym,
         "organization_form": organization_form,
         "employee_form": employee_form,
+        "employee_credentials": employee_credentials,
         "specialty_form": specialty_form,
         "employee_roles": employee_roles,
         "specialties": specialties,

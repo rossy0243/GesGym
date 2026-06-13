@@ -609,15 +609,19 @@ class AccountingReportExportTests(TestCase):
                 "role": "manager",
                 "is_active": "on",
             },
+            follow=True,
         )
 
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.redirect_chain, [(f"{reverse('core:settings')}?tab=employees", 302)])
         employee_role = UserGymRole.objects.get(user__email="marc@example.com", gym=self.gym_a)
         self.assertEqual(employee_role.role, "manager")
         self.assertTrue(employee_role.is_active)
         self.assertNotEqual(employee_role.role, "owner")
         self.assertTrue(employee_role.user.force_password_change)
         self.assertTrue(employee_role.user.check_password("EmployeeTemp123!"))
+        self.assertContains(response, "Identifiants du nouvel employe")
+        self.assertContains(response, employee_role.user.username)
+        self.assertContains(response, "EmployeeTemp123!")
         self.assertTrue(
             SensitiveActivityLog.objects.filter(
                 organization=self.org_a,
@@ -649,6 +653,7 @@ class AccountingReportExportTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], f"{reverse('core:settings')}?tab=organization")
         self.org_a.refresh_from_db()
         self.assertEqual(self.org_a.name, "Org A Updated")
         self.assertEqual(self.org_a.email, "org@example.com")
@@ -669,6 +674,7 @@ class AccountingReportExportTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], f"{reverse('core:settings')}?tab=specialties")
         self.assertTrue(CoachSpecialty.objects.filter(gym=self.gym_a, name="Crossfit").exists())
         form = CoachForm(gym=self.gym_a)
         self.assertIn(("Crossfit", "Crossfit"), form.fields["specialty"].choices)
@@ -831,7 +837,7 @@ class RoleAccessMatrixTests(TestCase):
             },
         )
 
-        self.assertRedirects(response, reverse("core:settings"), fetch_redirect_response=False)
+        self.assertRedirects(response, f"{reverse('core:settings')}?tab=employees", fetch_redirect_response=False)
         shared_user.refresh_from_db()
         self.assertFalse(shared_user.force_password_change)
         self.assertTrue(shared_user.check_password("InitialPass123!"))
@@ -854,7 +860,7 @@ class RoleAccessMatrixTests(TestCase):
             },
         )
 
-        self.assertRedirects(response, reverse("core:settings"), fetch_redirect_response=False)
+        self.assertRedirects(response, f"{reverse('core:settings')}?tab=employees", fetch_redirect_response=False)
         current_role.refresh_from_db()
         other_role.refresh_from_db()
         shared_user.refresh_from_db()

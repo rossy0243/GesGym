@@ -260,6 +260,38 @@
                             </div>
                         </div>
 
+                        {% if employee_credentials %}
+                        <div class="alert alert-warning border-0 shadow-sm mb-3">
+                            <div class="d-flex align-items-start gap-2">
+                                <span class="material-icons text-warning" style="font-size:22px;">key</span>
+                                <div class="w-100">
+                                    <div class="fw-semibold mb-2">{{ employee_credentials.title }}</div>
+                                    <div class="small text-muted mb-2">A communiquer a l'employe maintenant. Le mot de passe ne sera plus affiche apres fermeture ou rechargement.</div>
+                                    <div class="settings-muted-box p-2 mb-2 bg-white">
+                                        <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+                                            <div>
+                                                <div class="small text-muted">Username</div>
+                                                <code>{{ employee_credentials.username }}</code>
+                                            </div>
+                                            <button type="button" class="btn btn-sm btn-light" data-copy-value="{{ employee_credentials.username }}">
+                                                Copier
+                                            </button>
+                                        </div>
+                                        <div class="d-flex justify-content-between align-items-center gap-2">
+                                            <div>
+                                                <div class="small text-muted">Mot de passe temporaire</div>
+                                                <code>{{ employee_credentials.password }}</code>
+                                            </div>
+                                            <button type="button" class="btn btn-sm btn-light" data-copy-value="{{ employee_credentials.password }}">
+                                                Copier
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
                         <form method="post">
                             {% csrf_token %}
                             <input type="hidden" name="action" value="employee_create">
@@ -536,6 +568,27 @@ document.addEventListener("DOMContentLoaded", function () {
     buttons.forEach(button => {
         button.addEventListener("click", function () {
             showTab(this.dataset.tabTarget);
+        });
+    });
+
+    document.querySelectorAll("[data-copy-value]").forEach(button => {
+        button.addEventListener("click", async function () {
+            const value = this.dataset.copyValue || "";
+            if (!value) {
+                return;
+            }
+            try {
+                await navigator.clipboard.writeText(value);
+                this.textContent = "Copie";
+            } catch (error) {
+                const temporaryInput = document.createElement("input");
+                temporaryInput.value = value;
+                document.body.appendChild(temporaryInput);
+                temporaryInput.select();
+                document.execCommand("copy");
+                temporaryInput.remove();
+                this.textContent = "Copie";
+            }
         });
     });
 
