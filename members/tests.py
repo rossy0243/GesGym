@@ -139,6 +139,50 @@ class MemberPreRegistrationTests(TestCase):
         self.assertEqual(member.last_name, "Updated")
         self.assertEqual(member.address, "Gombe")
 
+    @patch("members.views.generate_temporary_password", return_value="MemberTemp123!")
+    def test_reception_can_reset_member_password_and_view_temporary_credentials(self, _mock_password):
+        member = Member.objects.create(
+            gym=self.gym,
+            first_name="Reset",
+            last_name="Target",
+            phone="+243810000108",
+            email="reset.target@example.com",
+        )
+        self.client.force_login(self.reception)
+
+        response = self.client.post(
+            reverse("members:reset_member_password", args=[member.id]),
+            follow=True,
+        )
+
+        self.assertEqual(response.redirect_chain, [(reverse("members:member_list"), 302)])
+        member.user.refresh_from_db()
+        self.assertTrue(member.user.force_password_change)
+        self.assertTrue(member.user.check_password("MemberTemp123!"))
+        self.assertContains(response, "Nouveau mot de passe temporaire")
+        self.assertContains(response, member.user.username)
+        self.assertContains(response, "MemberTemp123!")
+
+    def test_cashier_cannot_reset_member_password(self):
+        member = Member.objects.create(
+            gym=self.gym,
+            first_name="Denied",
+            last_name="Reset",
+            phone="+243810000110",
+            email="denied.reset@example.com",
+        )
+        member.user.set_password("InitialMember123!")
+        member.user.force_password_change = False
+        member.user.save(update_fields=["password", "force_password_change"])
+        self.client.force_login(self.cashier)
+
+        response = self.client.post(reverse("members:reset_member_password", args=[member.id]))
+
+        self.assertEqual(response.status_code, 403)
+        member.user.refresh_from_db()
+        self.assertFalse(member.user.force_password_change)
+        self.assertTrue(member.user.check_password("InitialMember123!"))
+
     def test_only_manager_can_suspend_and_reactivate_member(self):
         member = Member.objects.create(
             gym=self.gym,

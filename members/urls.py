@@ -20,6 +20,7 @@ from .views import (
     member_qr,
     member_list,
     reactivate_member,
+    reset_member_password,
     suspend_member,
 )
 from .pre_registration_views import (
@@ -52,6 +53,7 @@ urlpatterns = [
     path('edit/<int:member_id>/', edit_member, name='edit_member'),
     path("<int:member_id>/delete/", delete_member, name="delete_member"),
     path('suspend/<int:member_id>/', suspend_member, name='suspend_member'),
+    path("<int:member_id>/reset-password/", reset_member_password, name="reset_member_password"),
     path("<int:member_id>/", member_detail, name="member_detail"),
     path("qr/<uuid:uuid>/", member_qr, name="member_qr"),
     path('reactivate/<int:member_id>/', reactivate_member, name='reactivate_member'),

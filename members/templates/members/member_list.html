@@ -116,6 +116,40 @@ body.members-screen .modal-dialog {
 
 <!-- Vue principale : Liste des membres (contenu aligné sur une même largeur) -->
 <div id="membersListView" class="px-0 mx-2">
+    {% if member_password_credentials %}
+    <div class="alert alert-warning border-0 shadow-sm mb-4">
+        <div class="d-flex align-items-start gap-2">
+            <span class="material-icons text-warning" style="font-size:24px;">key</span>
+            <div class="w-100">
+                <div class="fw-semibold mb-1">Nouveau mot de passe temporaire</div>
+                <div class="small text-muted mb-3">
+                    A remettre maintenant a {{ member_password_credentials.member_name }}. Le mot de passe ne sera plus affiche apres fermeture ou rechargement.
+                </div>
+                <div class="row g-2">
+                    <div class="col-md-6">
+                        <div class="p-2 bg-white rounded border d-flex justify-content-between align-items-center gap-2">
+                            <div>
+                                <div class="small text-muted">Username</div>
+                                <code>{{ member_password_credentials.username }}</code>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-light" data-copy-value="{{ member_password_credentials.username }}">Copier</button>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="p-2 bg-white rounded border d-flex justify-content-between align-items-center gap-2">
+                            <div>
+                                <div class="small text-muted">Mot de passe temporaire</div>
+                                <code>{{ member_password_credentials.password }}</code>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-light" data-copy-value="{{ member_password_credentials.password }}">Copier</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Filtres et recherche -->
     <form method="get">
 
@@ -389,6 +423,15 @@ body.members-screen .modal-dialog {
                                     <a onclick="openEditMemberModal({{ member.id }})" class="dropdown-item">
                                         <span class="material-icons me-2">edit</span>Modifier
                                     </a>
+                                    <a href="#"
+                                        onclick="if(confirm('Reinitialiser le mot de passe de ce membre ?')) { document.getElementById('reset-password-form-{{ member.id }}').submit(); } return false;"
+                                        class="dropdown-item">
+                                        <span class="material-icons me-2">key</span>Reinitialiser mot de passe
+                                    </a>
+                                    <form id="reset-password-form-{{ member.id }}" method="POST"
+                                        action="{% url 'members:reset_member_password' member.id %}" style="display:none;">
+                                        {% csrf_token %}
+                                    </form>
                                     {% endif %}
                                     {% if request.role == "owner" %}
                                     <div class="dropdown-divider"></div>
@@ -1010,6 +1053,23 @@ body.members-screen .modal-dialog {
             if (!actionDropdown) return;
             const row = actionDropdown.closest('tr');
             if (row) row.classList.remove('dropdown-row-active');
+        });
+
+        document.querySelectorAll("[data-copy-value]").forEach(function (button) {
+            button.addEventListener("click", function () {
+                const value = this.dataset.copyValue || "";
+                if (!value) return;
+                navigator.clipboard.writeText(value)
+                    .catch(function () {
+                        const temporaryInput = document.createElement("input");
+                        temporaryInput.value = value;
+                        document.body.appendChild(temporaryInput);
+                        temporaryInput.select();
+                        document.execCommand("copy");
+                        temporaryInput.remove();
+                    });
+                this.textContent = "Copie";
+            });
         });
     });
 

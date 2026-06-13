@@ -19,6 +19,7 @@ import qrcode
 from access.models import AccessLog
 from coaching.forms import CoachingFeedbackForm
 from coaching.models import Coach, CoachingFeedback, GroupCoachingProgram
+from compte.utils import generate_temporary_password
 from smartclub.access_control import (
     MEMBER_ROLES,
     MEMBER_STATUS_ROLES,
@@ -886,6 +887,7 @@ def member_list(request):
         status=MemberPreRegistration.STATUS_PENDING,
         expires_at__gt=timezone.now(),
     ).count()
+    member_password_credentials = request.session.pop("member_password_credentials", None)
 
     context = {
         "page_obj": page_obj,
@@ -903,6 +905,7 @@ def member_list(request):
         "pre_registration_link": pre_registration_link,
         "pre_registration_url": pre_registration_url,
         "pending_pre_registrations_count": pending_pre_registrations_count,
+        "member_password_credentials": member_password_credentials,
     }
 
     return render(request, "members/member_list.html", context)
@@ -1090,6 +1093,39 @@ def member_detail(request, member_id):
     }
 
     return JsonResponse(data)
+
+
+@login_required
+@require_POST
+def reset_member_password(request, member_id):
+    if not _member_write_allowed(request):
+        raise PermissionDenied
+
+    member = get_object_or_404(
+        Member.objects.select_related("user"),
+        id=member_id,
+        gym=request.gym,
+    )
+
+    if not member.user:
+        messages.error(request, "Ce membre n'a pas encore de compte utilisateur associe.")
+        return redirect("members:member_list")
+
+    temporary_password = generate_temporary_password()
+    member.user.set_password(temporary_password)
+    member.user.force_password_change = True
+    member.user.save(update_fields=["password", "force_password_change"])
+
+    request.session["member_password_credentials"] = {
+        "member_name": f"{member.first_name} {member.last_name}".strip(),
+        "username": member.user.username,
+        "password": temporary_password,
+    }
+    messages.success(
+        request,
+        f"Mot de passe temporaire regenere pour {member.first_name} {member.last_name}.",
+    )
+    return redirect("members:member_list")
 
 
 @login_required
