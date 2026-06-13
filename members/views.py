@@ -115,6 +115,7 @@ def _member_tab_config(unread_notification_count):
     badge = str(unread_notification_count) if unread_notification_count else ""
     return [
         {"key": "home", "label": "Accueil", "icon": "home"},
+        {"key": "goal", "label": "Objectif", "icon": "goal"},
         {"key": "messages", "label": "Messages", "icon": "mail", "badge": badge},
         {"key": "subscription", "label": "Abonnement", "icon": "subscription"},
         {"key": "plans", "label": "Formules", "icon": "plans"},
@@ -268,11 +269,12 @@ def member_portal(request):
     member_notifications_list = list(member_notifications)
     unread_notifications = [item for item in member_notifications_list if not item.read_at]
     read_notifications = [item for item in member_notifications_list if item.read_at]
-    if active_tab not in {tab["key"] for tab in _member_tab_config(unread_notification_count)}:
+    visible_tabs = _member_tab_config(unread_notification_count)
+    if active_tab not in {tab["key"] for tab in visible_tabs} | {"password"}:
         active_tab = "home"
 
     member_tabs = []
-    for tab in _member_tab_config(unread_notification_count):
+    for tab in visible_tabs:
         member_tabs.append(
             {
                 **tab,
@@ -373,12 +375,12 @@ def member_goal_create(request):
 
     if member.active_goal:
         messages.error(request, "Un objectif actif existe deja sur ce compte.")
-        return redirect(f"{reverse('members:member_portal')}?tab=home")
+        return redirect(f"{reverse('members:member_portal')}?tab=goal")
 
     form = MemberGoalForm(request.POST)
     if not form.is_valid():
         messages.error(request, "L'objectif n'a pas pu etre enregistre. Verifiez les champs saisis.")
-        return redirect(f"{reverse('members:member_portal')}?tab=home")
+        return redirect(f"{reverse('members:member_portal')}?tab=goal")
 
     goal = form.save(commit=False)
     goal.gym = member.gym
@@ -388,7 +390,7 @@ def member_goal_create(request):
 
     starter_label = "vous" if goal.measurement_starter == MemberGoal.STARTER_MEMBER else "votre coach"
     messages.success(request, f"Objectif cree. La premiere pesee doit maintenant etre enregistree par {starter_label}.")
-    return redirect(f"{reverse('members:member_portal')}?tab=home")
+    return redirect(f"{reverse('members:member_portal')}?tab=goal")
 
 
 @login_required
@@ -412,12 +414,12 @@ def member_goal_measurement_create(request):
     goal_access = _member_goal_access(goal)
     if not goal_access["can_member_record"]:
         messages.error(request, "La premiere pesee doit etre enregistree par le coach.")
-        return redirect(f"{reverse('members:member_portal')}?tab=home")
+        return redirect(f"{reverse('members:member_portal')}?tab=goal")
 
     form = MemberWeightMeasurementForm(request.POST)
     if not form.is_valid():
         messages.error(request, "La pesee n'a pas pu etre enregistree. Verifiez les champs saisis.")
-        return redirect(f"{reverse('members:member_portal')}?tab=home")
+        return redirect(f"{reverse('members:member_portal')}?tab=goal")
 
     measurement = form.save(commit=False)
     measurement.gym = member.gym
@@ -429,7 +431,7 @@ def member_goal_measurement_create(request):
     goal.refresh_status_from_progress()
 
     messages.success(request, "Pesee enregistree dans votre suivi.")
-    return redirect(f"{reverse('members:member_portal')}?tab=home")
+    return redirect(f"{reverse('members:member_portal')}?tab=goal")
 
 
 @login_required
@@ -505,7 +507,7 @@ def member_change_password(request):
             for error in field_errors:
                 messages.error(request, error)
 
-    return redirect(f"{reverse('members:member_portal')}?tab=home")
+    return redirect(f"{reverse('members:member_portal')}?tab=password")
 
 
 @login_required

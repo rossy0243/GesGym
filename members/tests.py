@@ -443,13 +443,22 @@ class MemberPortalTests(TestCase):
         self.assertContains(response, "Coaching individuel et groupe")
         self.assertContains(response, "Premium")
         self.assertContains(response, "Derniers acces")
-        self.assertContains(response, "Changer mon mot de passe")
         self.assertContains(response, "Mot de passe")
         self.assertContains(response, f"MEM-{self.member.id:05d}")
         self.assertContains(response, self.member.user.username)
         self.assertContains(response, reverse("members:member_portal_qr"))
+        self.assertContains(response, f"{reverse('members:member_portal')}?tab=password")
+        self.assertNotContains(response, "Changer mon mot de passe")
+        self.assertNotContains(response, "Mon objectif poids")
+        self.assertNotContains(response, "Actions rapides")
         self.assertNotContains(response, "Imprimer carte")
         self.assertNotContains(response, "window.print")
+
+        goal_response = self.client.get(reverse("members:member_portal"), {"tab": "goal"})
+        self.assertContains(goal_response, "Mon objectif poids")
+
+        password_response = self.client.get(reverse("members:member_portal"), {"tab": "password"})
+        self.assertContains(password_response, "Changer mon mot de passe")
 
         subscription_response = self.client.get(reverse("members:member_portal"), {"tab": "subscription"})
         self.assertContains(subscription_response, "Mensuel")
@@ -531,7 +540,7 @@ class MemberPortalTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response["Location"], f"{reverse('members:member_portal')}?tab=home")
+        self.assertEqual(response["Location"], f"{reverse('members:member_portal')}?tab=goal")
         goal = MemberGoal.objects.get(member=self.member, status=MemberGoal.STATUS_ACTIVE)
         self.assertEqual(goal.gym, self.gym)
         self.assertEqual(goal.goal_type, MemberGoal.GOAL_GAIN_WEIGHT)
@@ -559,7 +568,7 @@ class MemberPortalTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response["Location"], f"{reverse('members:member_portal')}?tab=home")
+        self.assertEqual(response["Location"], f"{reverse('members:member_portal')}?tab=goal")
         measurement = MemberWeightMeasurement.objects.get(goal=goal)
         self.assertEqual(measurement.member, self.member)
         self.assertEqual(measurement.source, MemberWeightMeasurement.SOURCE_MEMBER)
@@ -601,7 +610,7 @@ class MemberPortalTests(TestCase):
         )
         self.client.force_login(self.member.user)
 
-        response = self.client.get(reverse("members:member_portal"))
+        response = self.client.get(reverse("members:member_portal"), {"tab": "goal"})
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Le coach doit lancer la premiere pesee")
@@ -796,7 +805,7 @@ class MemberPortalTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response["Location"], f"{reverse('members:member_portal')}?tab=home")
+        self.assertEqual(response["Location"], f"{reverse('members:member_portal')}?tab=password")
         self.member.user.refresh_from_db()
         self.assertTrue(self.member.user.check_password("NouveauPass123!"))
 

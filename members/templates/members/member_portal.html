@@ -11,7 +11,7 @@
     <title>{{ gym.name }} | Espace membre</title>
     <link rel="manifest" href="{{ pwa_manifest_url }}">
     <link rel="apple-touch-icon" href="{% static 'icons/1.png' %}">
-    <link rel="stylesheet" href="{% static 'css/member-portal.css' %}?v=20260430a">
+    <link rel="stylesheet" href="{% static 'css/member-portal.css' %}?v=20260613b">
 </head>
 <body data-service-worker-url="{{ pwa_service_worker_url }}">
     <main class="member-app-shell">
@@ -24,67 +24,96 @@
         {% endif %}
 
         <header class="member-topbar">
-            <div>
-                <p class="eyebrow">{{ organization.name }}</p>
-                <h1>{{ gym.name }}</h1>
+            <div class="member-brand">
+                {% if organization.logo %}
+                    <img src="{{ organization.logo.url }}" alt="{{ organization.name }}">
+                {% else %}
+                    <img src="{% static 'avatar/logo_smartclub.png' %}" alt="SmartClub">
+                {% endif %}
+                <div>
+                    <p class="eyebrow">{{ organization.name }}</p>
+                    <h1>{{ gym.name }}</h1>
+                </div>
             </div>
             <div class="topbar-actions" id="memberQuickActions">
-                <button type="button" class="install-button" id="installAppBtn" hidden>
-                    <span aria-hidden="true">+</span>
-                    Installer l'app
-                </button>
-                <a class="security-button" href="{% url 'members:member_portal' %}?tab=home#security">
+                <a class="icon-action security-button" href="{% url 'members:member_portal' %}?tab=password" aria-label="Changer le mot de passe" title="Mot de passe">
                     <span aria-hidden="true">&#128274;</span>
-                    Mot de passe
                 </a>
-                <button type="button" class="refresh-button" id="refreshAppBtn" aria-label="Actualiser la page">
-                    <span aria-hidden="true">&#8635;</span>
-                    Actualiser
+                <button type="button" class="icon-action install-button" id="installAppBtn" hidden aria-label="Installer l'application" title="Installer">
+                    <span aria-hidden="true">+</span>
                 </button>
-                <a class="logout-button" href="{% url 'compte:logout' %}" aria-label="Se deconnecter" title="Se deconnecter">
+                <button type="button" class="icon-action refresh-button" id="refreshAppBtn" aria-label="Actualiser la page" title="Actualiser">
+                    <span aria-hidden="true">&#8635;</span>
+                </button>
+                <a class="icon-action logout-button" href="{% url 'compte:logout' %}" aria-label="Se deconnecter" title="Deconnexion">
                     <span aria-hidden="true">-></span>
-                    Deconnexion
                 </a>
             </div>
         </header>
 
         {% if active_tab == "home" %}
             <section class="hero-panel {{ status_class }}" id="card">
-                <div class="member-identity">
-                    <div class="avatar">
-                        {% if member.photo %}
-                            <img src="{{ member.photo.url }}" alt="{{ member.first_name }} {{ member.last_name }}">
-                        {% else %}
-                            <div class="avatar-placeholder" aria-hidden="true">
-                                <span class="avatar-head"></span>
-                                <span class="avatar-body"></span>
+                <div class="member-hero-grid">
+                    <div class="member-identity">
+                        <div class="avatar">
+                            {% if member.photo %}
+                                <img src="{{ member.photo.url }}" alt="{{ member.first_name }} {{ member.last_name }}">
+                            {% else %}
+                                <div class="avatar-placeholder" aria-hidden="true">
+                                    <span class="avatar-head"></span>
+                                    <span class="avatar-body"></span>
+                                </div>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <span class="status-pill">{{ status_label }}</span>
+                            <h2>{{ member.first_name }} {{ member.last_name }}</h2>
+                            <p>{{ member_code }}</p>
+                        </div>
+                    </div>
+
+                    <div class="hero-status-grid" aria-label="Resume membre">
+                        <article>
+                            <span>Abonnement</span>
+                            <strong>
+                                {% if days_remaining != None %}
+                                    {% if days_remaining >= 0 %}{{ days_remaining }} j{% else %}Expire{% endif %}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </strong>
+                            <small>Restant</small>
+                        </article>
+                        <article>
+                            <span>Messages</span>
+                            <strong>{{ unread_notification_count }}</strong>
+                            <small>Non lus</small>
+                        </article>
+                        <article>
+                            <span>Acces</span>
+                            <strong>{{ granted_access_count }}</strong>
+                            <small>Valides recents</small>
+                        </article>
+                    </div>
+
+                    {% if subscription %}
+                        <div class="mini-progress">
+                            <div>
+                                <span>Cycle abonnement</span>
+                                <strong>{{ subscription.start_date|date:"d/m" }} - {{ subscription.end_date|date:"d/m" }}</strong>
                             </div>
-                        {% endif %}
-                    </div>
-                    <div>
-                        <span class="status-pill">{{ status_label }}</span>
-                        <h2>{{ member.first_name }} {{ member.last_name }}</h2>
-                        <p>{{ member_code }}</p>
-                    </div>
+                            <div class="progress-track" aria-label="Progression de l'abonnement">
+                                <span style="width: {{ subscription_progress }}%;"></span>
+                            </div>
+                        </div>
+                    {% endif %}
                 </div>
 
                 <div class="access-card">
-                    <div class="access-card-head">
-                        <div>
-                            <span>Carte membre</span>
-                            <strong>{{ gym.name }}</strong>
-                        </div>
-                        {% if organization.logo %}
-                            <img src="{{ organization.logo.url }}" alt="{{ organization.name }}">
-                        {% else %}
-                            <img src="{% static 'avatar/logo_smartclub.png' %}" alt="SmartClub">
-                        {% endif %}
-                    </div>
-
                     <div class="qr-zone">
                         <img src="{% url 'members:member_portal_qr' %}" alt="QR code membre">
                         <div>
-                            <p>Code d'acces</p>
+                            <p>Carte membre</p>
                             <strong>{{ member_code }}</strong>
                             <small>Presentez ce QR code a l'accueil.</small>
                         </div>
@@ -106,147 +135,6 @@
                     <span>Email</span>
                     <strong>{{ member.email|default:"-" }}</strong>
                 </article>
-            </section>
-
-            <section class="content-panel" id="goal">
-                <div class="section-heading">
-                    <div>
-                        <p class="eyebrow">Objectif personnel</p>
-                        <h2>Mon objectif poids</h2>
-                    </div>
-                </div>
-
-                {% if active_goal %}
-                    <div class="access-summary-grid">
-                        <article class="summary-card">
-                            <span>Objectif</span>
-                            <strong>{{ active_goal.get_goal_type_display }}</strong>
-                            <small>Poids cible: {{ active_goal.target_weight|floatformat:1 }} kg</small>
-                        </article>
-                        <article class="summary-card">
-                            <span>Progression</span>
-                            <strong>{{ active_goal.progress_percent }}%</strong>
-                            <small>
-                                {% if active_goal.current_weight %}
-                                    {{ goal_direction_label }}: {{ active_goal.remaining_weight|floatformat:1 }} kg
-                                {% else %}
-                                    En attente de premiere pesee
-                                {% endif %}
-                            </small>
-                        </article>
-                    </div>
-
-                    <div class="detail-list" style="margin-top: 1rem;">
-                        <div>
-                            <dt>Demarrage</dt>
-                            <dd>{{ active_goal.get_measurement_starter_display }}</dd>
-                        </div>
-                        <div>
-                            <dt>Premiere pesee</dt>
-                            <dd>{% if active_goal.initial_weight %}{{ active_goal.initial_weight|floatformat:1 }} kg{% else %}-{% endif %}</dd>
-                        </div>
-                        <div>
-                            <dt>Poids actuel</dt>
-                            <dd>{% if active_goal.current_weight %}{{ active_goal.current_weight|floatformat:1 }} kg{% else %}-{% endif %}</dd>
-                        </div>
-                        <div>
-                            <dt>Date cible</dt>
-                            <dd>{{ active_goal.target_date|date:"d/m/Y"|default:"Non definie" }}</dd>
-                        </div>
-                    </div>
-
-                    {% if active_goal.note %}
-                        <div class="pending-box" style="margin-top: 1rem;">
-                            <strong>Note de l'objectif</strong>
-                            <small>{{ active_goal.note }}</small>
-                        </div>
-                    {% endif %}
-
-                    {% if can_member_record_goal_measurement %}
-                        <form method="post" action="{% url 'members:member_goal_measurement_create' %}" class="member-password-form" style="margin-top: 1.25rem;">
-                            {% csrf_token %}
-                            <div class="section-heading" style="margin-bottom: 0;">
-                                <div>
-                                    <p class="eyebrow">Pesee</p>
-                                    <h2>{% if active_goal.is_started %}Ajouter une mesure{% else %}Commencer les releves{% endif %}</h2>
-                                </div>
-                            </div>
-                            {% for field in goal_measurement_form %}
-                                <label class="form-field">
-                                    <span>{{ field.label }}</span>
-                                    {{ field }}
-                                </label>
-                            {% endfor %}
-                            <button type="submit" class="install-button">Enregistrer ma pesee</button>
-                        </form>
-                    {% elif goal_waiting_for == "coach" %}
-                        <div class="empty-panel" style="margin-top: 1.25rem;">
-                            <span class="empty-panel__eyebrow">En attente</span>
-                            <strong>Le coach doit lancer la premiere pesee</strong>
-                            <p>Votre objectif est cree. Le suivi demarrera des que le coach enregistrera le premier releve.</p>
-                        </div>
-                    {% endif %}
-
-                    {% if goal_measurements %}
-                        <div class="section-heading payment-heading">
-                            <div>
-                                <p class="eyebrow">Historique</p>
-                                <h2>Dernieres pesees</h2>
-                            </div>
-                        </div>
-                        <div class="payment-compact-list">
-                            {% for measurement in goal_measurements|slice:":4" %}
-                                <article class="payment-compact-card">
-                                    <div class="payment-compact-head">
-                                        <strong>{{ measurement.weight|floatformat:1 }} kg</strong>
-                                        <span>{{ measurement.get_source_display }}</span>
-                                    </div>
-                                    <div class="payment-compact-meta">
-                                        <small>{{ measurement.measured_at|date:"d/m/Y" }}</small>
-                                        <p>{{ measurement.note|default:"Mesure enregistree" }}</p>
-                                    </div>
-                                </article>
-                            {% endfor %}
-                        </div>
-                    {% endif %}
-                {% else %}
-                    <form method="post" action="{% url 'members:member_goal_create' %}" class="member-password-form">
-                        {% csrf_token %}
-                        {% for field in goal_form %}
-                            <label class="form-field">
-                                <span>{{ field.label }}</span>
-                                {{ field }}
-                            </label>
-                        {% endfor %}
-                        <button type="submit" class="install-button">Creer mon objectif</button>
-                    </form>
-                {% endif %}
-            </section>
-
-            <section class="content-panel" id="security">
-                <div class="section-heading">
-                    <div>
-                        <p class="eyebrow">Securite</p>
-                        <h2>Changer mon mot de passe</h2>
-                    </div>
-                </div>
-
-                <form method="post" action="{% url 'members:member_change_password' %}" class="member-password-form">
-                    {% csrf_token %}
-                    <label class="form-field">
-                        <span>{{ password_form.old_password.label }}</span>
-                        {{ password_form.old_password }}
-                    </label>
-                    <label class="form-field">
-                        <span>{{ password_form.new_password1.label }}</span>
-                        {{ password_form.new_password1 }}
-                    </label>
-                    <label class="form-field">
-                        <span>{{ password_form.new_password2.label }}</span>
-                        {{ password_form.new_password2 }}
-                    </label>
-                    <button type="submit" class="install-button">Mettre a jour</button>
-                </form>
             </section>
 
             <section class="content-panel">
@@ -607,6 +495,147 @@
                     <p class="empty-state">Aucun acces enregistre pour le moment.</p>
                 {% endif %}
             </section>
+        {% elif active_tab == "goal" %}
+            <section class="content-panel" id="goal">
+                <div class="section-heading">
+                    <div>
+                        <p class="eyebrow">Objectif personnel</p>
+                        <h2>Mon objectif poids</h2>
+                    </div>
+                </div>
+
+                {% if active_goal %}
+                    <div class="access-summary-grid">
+                        <article class="summary-card">
+                            <span>Objectif</span>
+                            <strong>{{ active_goal.get_goal_type_display }}</strong>
+                            <small>Poids cible: {{ active_goal.target_weight|floatformat:1 }} kg</small>
+                        </article>
+                        <article class="summary-card">
+                            <span>Progression</span>
+                            <strong>{{ active_goal.progress_percent }}%</strong>
+                            <small>
+                                {% if active_goal.current_weight %}
+                                    {{ goal_direction_label }}: {{ active_goal.remaining_weight|floatformat:1 }} kg
+                                {% else %}
+                                    En attente de premiere pesee
+                                {% endif %}
+                            </small>
+                        </article>
+                    </div>
+
+                    <div class="detail-list" style="margin-top: 1rem;">
+                        <div>
+                            <dt>Demarrage</dt>
+                            <dd>{{ active_goal.get_measurement_starter_display }}</dd>
+                        </div>
+                        <div>
+                            <dt>Premiere pesee</dt>
+                            <dd>{% if active_goal.initial_weight %}{{ active_goal.initial_weight|floatformat:1 }} kg{% else %}-{% endif %}</dd>
+                        </div>
+                        <div>
+                            <dt>Poids actuel</dt>
+                            <dd>{% if active_goal.current_weight %}{{ active_goal.current_weight|floatformat:1 }} kg{% else %}-{% endif %}</dd>
+                        </div>
+                        <div>
+                            <dt>Date cible</dt>
+                            <dd>{{ active_goal.target_date|date:"d/m/Y"|default:"Non definie" }}</dd>
+                        </div>
+                    </div>
+
+                    {% if active_goal.note %}
+                        <div class="pending-box" style="margin-top: 1rem;">
+                            <strong>Note de l'objectif</strong>
+                            <small>{{ active_goal.note }}</small>
+                        </div>
+                    {% endif %}
+
+                    {% if can_member_record_goal_measurement %}
+                        <form method="post" action="{% url 'members:member_goal_measurement_create' %}" class="member-password-form" style="margin-top: 1.25rem;">
+                            {% csrf_token %}
+                            <div class="section-heading" style="margin-bottom: 0;">
+                                <div>
+                                    <p class="eyebrow">Pesee</p>
+                                    <h2>{% if active_goal.is_started %}Ajouter une mesure{% else %}Commencer les releves{% endif %}</h2>
+                                </div>
+                            </div>
+                            {% for field in goal_measurement_form %}
+                                <label class="form-field">
+                                    <span>{{ field.label }}</span>
+                                    {{ field }}
+                                </label>
+                            {% endfor %}
+                            <button type="submit" class="install-button">Enregistrer ma pesee</button>
+                        </form>
+                    {% elif goal_waiting_for == "coach" %}
+                        <div class="empty-panel" style="margin-top: 1.25rem;">
+                            <span class="empty-panel__eyebrow">En attente</span>
+                            <strong>Le coach doit lancer la premiere pesee</strong>
+                            <p>Votre objectif est cree. Le suivi demarrera des que le coach enregistrera le premier releve.</p>
+                        </div>
+                    {% endif %}
+
+                    {% if goal_measurements %}
+                        <div class="section-heading payment-heading">
+                            <div>
+                                <p class="eyebrow">Historique</p>
+                                <h2>Dernieres pesees</h2>
+                            </div>
+                        </div>
+                        <div class="payment-compact-list">
+                            {% for measurement in goal_measurements|slice:":4" %}
+                                <article class="payment-compact-card">
+                                    <div class="payment-compact-head">
+                                        <strong>{{ measurement.weight|floatformat:1 }} kg</strong>
+                                        <span>{{ measurement.get_source_display }}</span>
+                                    </div>
+                                    <div class="payment-compact-meta">
+                                        <small>{{ measurement.measured_at|date:"d/m/Y" }}</small>
+                                        <p>{{ measurement.note|default:"Mesure enregistree" }}</p>
+                                    </div>
+                                </article>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                {% else %}
+                    <form method="post" action="{% url 'members:member_goal_create' %}" class="member-password-form">
+                        {% csrf_token %}
+                        {% for field in goal_form %}
+                            <label class="form-field">
+                                <span>{{ field.label }}</span>
+                                {{ field }}
+                            </label>
+                        {% endfor %}
+                        <button type="submit" class="install-button">Creer mon objectif</button>
+                    </form>
+                {% endif %}
+            </section>
+        {% elif active_tab == "password" %}
+            <section class="content-panel" id="security">
+                <div class="section-heading">
+                    <div>
+                        <p class="eyebrow">Securite</p>
+                        <h2>Changer mon mot de passe</h2>
+                    </div>
+                </div>
+
+                <form method="post" action="{% url 'members:member_change_password' %}" class="member-password-form">
+                    {% csrf_token %}
+                    <label class="form-field">
+                        <span>{{ password_form.old_password.label }}</span>
+                        {{ password_form.old_password }}
+                    </label>
+                    <label class="form-field">
+                        <span>{{ password_form.new_password1.label }}</span>
+                        {{ password_form.new_password1 }}
+                    </label>
+                    <label class="form-field">
+                        <span>{{ password_form.new_password2.label }}</span>
+                        {{ password_form.new_password2 }}
+                    </label>
+                    <button type="submit" class="install-button">Mettre a jour</button>
+                </form>
+            </section>
         {% elif active_tab == "messages" %}
             <section class="content-panel">
                 <div class="section-heading">
@@ -892,6 +921,7 @@
     <nav class="mobile-dock" aria-label="Navigation membre">
         {% for tab in member_tabs %}
             <a href="{{ tab.url }}" class="{% if tab.is_active %}is-active{% endif %}">
+                <i aria-hidden="true" class="dock-icon dock-icon-{{ tab.icon }}"></i>
                 <span>{{ tab.label }}</span>
                 {% if tab.badge %}
                     <em>{{ tab.badge }}</em>
@@ -901,6 +931,6 @@
     </nav>
 
     <div class="copy-toast" id="copyToast" role="status" aria-live="polite">Copie</div>
-    <script src="{% static 'js/member-portal.js' %}?v=20260430a"></script>
+    <script src="{% static 'js/member-portal.js' %}?v=20260613b"></script>
 </body>
 </html>
