@@ -833,14 +833,6 @@ body.members-screen .modal-dialog {
                                         <td class="fw-semibold">Offres :</td>
                                         <td id="viewSubscriptionOffers">-</td>
                                     </tr>
-                                    <tr>
-                                        <td class="fw-semibold">Payé :</td>
-                                        <td id="viewPaid">0</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="fw-semibold">Reste :</td>
-                                        <td id="viewRemaining">0</td>
-                                    </tr>
                                 </table>
                             </div>
                         </div>
@@ -1159,8 +1151,6 @@ body.members-screen .modal-dialog {
 
                 // === PAIEMENTS ===
                 document.getElementById("viewPrice").innerText = (data.price || 0) + " USD";
-                document.getElementById("viewPaid").innerText = (data.paid || 0) + " CDF";
-                document.getElementById("viewRemaining").innerText = (data.remaining || 0) + " CDF";
 
                 // Remplir le tableau des paiements
                 let paymentTable = document.getElementById("paymentHistory");

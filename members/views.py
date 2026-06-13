@@ -1084,10 +1084,6 @@ def member_detail(request, member_id):
             offer.name for offer in subscription.plan.active_offers
         ] if subscription and subscription.plan else [],
 
-        # paiements
-        "paid": member.amount_paid if hasattr(member, "amount_paid") else 0,
-        "remaining": member.amount_remaining if hasattr(member, "amount_remaining") else 0,
-        
         "payments": payments_data,
         "access_logs": access_data,
     }
