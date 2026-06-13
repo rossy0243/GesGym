@@ -122,6 +122,24 @@
     color: #94a3b8;
 }
 
+.access-result-alert {
+    border: 0;
+    border-radius: 16px;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.10);
+    padding: 18px;
+}
+
+.access-result-alert .result-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    background: rgba(255, 255, 255, 0.65);
+}
+
 .cards-row {
     display: flex;
     gap: 16px;
@@ -484,6 +502,18 @@
                     </div>
                 </div>
 
+                <div class="mt-3">
+                    <label class="form-label fw-semibold">Lecteur QR USB/Bluetooth</label>
+                    <input
+                        type="text"
+                        class="form-control form-control-lg"
+                        id="hardwareQrInput"
+                        autocomplete="off"
+                        placeholder="Scannez avec le lecteur puis validez automatiquement"
+                    >
+                    <small class="text-muted">Compatible avec les lecteurs qui fonctionnent comme un clavier et envoient EntrÃ©e aprÃ¨s le scan.</small>
+                </div>
+
                 <div id="scanResult" style="display:none;" class="mt-4"></div>
             </div>
         </div>
@@ -576,7 +606,10 @@ let html5QrCode = null;
 function openScannerModal() {
     const modal = new bootstrap.Modal(document.getElementById("scannerModal"));
     modal.show();
-    setTimeout(startScanner, 500);
+    setTimeout(() => {
+        document.getElementById("hardwareQrInput")?.focus();
+        startScanner();
+    }, 500);
 }
 
 function stopScanner() {
@@ -590,30 +623,6 @@ function stopScanner() {
     }
 }
 
-function legacyOnScanSuccess(decodedText) {
-    return onScanSuccess(decodedText);
-
-    html5QrCode.stop();
-
-    fetch(`/access/access/${decodedText}/`)
-        .then(res => res.json())
-        .then(data => {
-            let result = document.getElementById("scanResult");
-
-            result.innerHTML = `
-                <div class="alert ${data.access ? "alert-success" : "alert-danger"}">
-                    <h4>${data.member}</h4>
-                    <p>${data.access ? "Accès autorisé" : "Accès refusé"}</p>
-                    ${data.reason ? `<small>${data.reason}</small>` : ""}
-                </div>
-            `;
-
-            result.style.display = "block";
-
-            document.getElementById("todayEntries").innerText = data.stats.entries;
-            document.getElementById("todayDenied").innerText = data.stats.denied;
-        });
-}
 </script>
 
 <script>
@@ -669,11 +678,7 @@ function manualEntry(memberId) {
     })
     .then(res => res.json())
     .then(data => {
-        alert(
-            data.access
-                ? "Accès autorisé : " + data.member
-                : "Accès refusé : " + data.reason
-        );
+        showAccessResult(data, "scanResult");
 
         document.getElementById("todayEntries").innerText = data.stats.entries;
         document.getElementById("todayDenied").innerText = data.stats.denied;
@@ -720,18 +725,84 @@ document.addEventListener("DOMContentLoaded", function () {
 </script>
 
 <script>
-function showScanResult(data) {
-    const result = document.getElementById("scanResult");
-    if (!result) return;
+function renderAccessResult(data) {
+    const allowed = Boolean(data.access);
+    const alertClass = allowed ? "alert-success" : "alert-warning";
+    const icon = allowed ? "check_circle" : "warning";
+    const title = allowed ? "Acces autorise" : "Acces refuse";
+    const reason = data.reason ? `<div class="small mt-1">${escapeHtml(data.reason)}</div>` : "";
+    const member = data.member ? escapeHtml(data.member) : "-";
 
-    result.innerHTML = `
-        <div class="alert ${data.access ? "alert-success" : "alert-danger"}">
-            <h4>${data.member}</h4>
-            <p>${data.access ? "Acces autorise" : "Acces refuse"}</p>
-            ${data.reason ? `<small>${data.reason}</small>` : ""}
+    return `
+        <div class="alert ${alertClass} access-result-alert mb-0">
+            <div class="d-flex align-items-center gap-3">
+                <span class="result-icon">
+                    <span class="material-icons" style="font-size:28px;">${icon}</span>
+                </span>
+                <div>
+                    <div class="fw-bold fs-5">${title}</div>
+                    <div>${member}</div>
+                    ${reason}
+                </div>
+            </div>
         </div>
     `;
+}
+
+function showAccessResult(data, targetId) {
+    const result = document.getElementById(targetId);
+    if (!result) return;
+
+    result.innerHTML = renderAccessResult(data);
     result.style.display = "block";
+}
+
+function showScanResult(data) {
+    showAccessResult(data, "scanResult");
+}
+
+function extractQrCode(rawValue) {
+    const value = String(rawValue || "").trim();
+    const match = value.match(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i);
+    return match ? match[0] : value;
+}
+
+function submitQrCode(rawValue) {
+    const qrCode = extractQrCode(rawValue);
+    if (!qrCode) {
+        showScanResult({
+            access: false,
+            member: "QR code invalide",
+            reason: "Aucune donnee exploitable n'a ete lue."
+        });
+        return;
+    }
+
+    fetch(`/access/access/${encodeURIComponent(qrCode)}/`, {
+        method: "POST",
+        headers: {
+            "X-CSRFToken": getCookie("csrftoken"),
+            "X-Requested-With": "XMLHttpRequest"
+        }
+    })
+        .then(res => {
+            if (!res.ok) throw new Error("Invalid QR code");
+            return res.json();
+        })
+        .then(data => {
+            showScanResult(data);
+            document.getElementById("todayEntries").innerText = data.stats.entries;
+            document.getElementById("todayDenied").innerText = data.stats.denied;
+            loadRealtimeAccess();
+            prependHistoryLog(data.log);
+        })
+        .catch(() => {
+            showScanResult({
+                access: false,
+                member: "QR code invalide",
+                reason: "Ce QR code ne correspond pas a un membre de ce gym."
+            });
+        });
 }
 
 function startScanner() {
@@ -763,31 +834,7 @@ function onScanSuccess(decodedText) {
         html5QrCode.stop();
     }
 
-    fetch(`/access/access/${decodedText}/`, {
-        method: "POST",
-        headers: {
-            "X-CSRFToken": getCookie("csrftoken"),
-            "X-Requested-With": "XMLHttpRequest"
-        }
-    })
-        .then(res => {
-            if (!res.ok) throw new Error("Invalid QR code");
-            return res.json();
-        })
-        .then(data => {
-            showScanResult(data);
-            document.getElementById("todayEntries").innerText = data.stats.entries;
-            document.getElementById("todayDenied").innerText = data.stats.denied;
-            loadRealtimeAccess();
-            prependHistoryLog(data.log);
-        })
-        .catch(() => {
-            showScanResult({
-                access: false,
-                member: "QR code invalide",
-                reason: "Ce QR code ne correspond pas a un membre de ce gym."
-            });
-        });
+    submitQrCode(decodedText);
 }
 
 function renderHistorique() {
@@ -906,6 +953,14 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const scannerModal = document.getElementById("scannerModal");
     scannerModal?.addEventListener("hidden.bs.modal", stopScanner);
+
+    const hardwareInput = document.getElementById("hardwareQrInput");
+    hardwareInput?.addEventListener("keydown", function (event) {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        submitQrCode(this.value);
+        this.value = "";
+    });
 });
 </script>
 
