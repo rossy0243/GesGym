@@ -104,7 +104,7 @@ def role_home_route(request):
             ("can_access", "ACCESS", "access:acces_dashboard"),
             ("can_members", "MEMBERS", "members:member_list"),
             ("can_pos_cashier", "POS", "pos:cashier_dashboard"),
-            ("can_rh_attendance", "RH", "rh:attendance_bulk"),
+            ("can_rh_attendance", "RH", "rh:attendance_list"),
         ]
     elif role == "coach":
         route_candidates = [
@@ -115,7 +115,7 @@ def role_home_route(request):
             ("can_members", "MEMBERS", "members:member_list"),
             ("can_pos_cashier", "POS", "pos:cashier_dashboard"),
             ("can_access", "ACCESS", "access:acces_dashboard"),
-            ("can_rh_attendance", "RH", "rh:attendance_bulk"),
+            ("can_rh_attendance", "RH", "rh:attendance_list"),
         ]
     for flag_name, module_code, route_name in route_candidates:
         has_flag = True if flag_name is None else flags.get(flag_name, False)
