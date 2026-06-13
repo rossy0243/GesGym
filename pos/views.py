@@ -61,7 +61,7 @@ def search_members(request):
 @module_required("POS")
 def cashier_dashboard(request):
     gym = request.gym
-    register = CashRegister.objects.filter(gym=gym, is_closed=False).first()
+    register = CashRegister.objects.filter(gym=gym, is_closed=False, opened_by=request.user).first()
 
     if request.method == "POST":
         if not register:
@@ -232,9 +232,9 @@ def open_register(request):
     if request.method != "POST":
         return redirect("pos:cashier_dashboard")
 
-    existing = CashRegister.objects.filter(gym=request.gym, is_closed=False).first()
+    existing = CashRegister.objects.filter(gym=request.gym, is_closed=False, opened_by=request.user).first()
     if existing:
-        messages.warning(request, "Une caisse est deja ouverte.")
+        messages.warning(request, "Vous avez deja une caisse ouverte.")
         return redirect("pos:cashier_dashboard")
 
     try:
@@ -286,6 +286,7 @@ def close_register(request, register_id):
         CashRegister,
         id=register_id,
         gym=request.gym,
+        opened_by=request.user,
         is_closed=False,
     )
 
@@ -399,7 +400,7 @@ def register_detail(request, register_id):
     register = get_object_or_404(CashRegister, id=register_id, gym=request.gym)
     payments = (
         Payment.objects.filter(gym=request.gym, cash_register=register)
-        .select_related("member", "subscription", "subscription__plan", "product")
+        .select_related("member", "subscription", "subscription__plan", "product", "created_by")
         .order_by("-created_at")
     )
 

@@ -293,9 +293,119 @@ class PosAccountingTests(TestCase):
             ).exists()
         )
 
+    def test_each_user_can_have_their_own_open_register(self):
+        cashier_register = CashRegister.objects.create(
+            gym=self.gym_a,
+            opened_by=self.cashier,
+            opening_amount=Decimal("100.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+        manager_register = CashRegister.objects.create(
+            gym=self.gym_a,
+            opened_by=self.manager,
+            opening_amount=Decimal("200.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+
+        self.assertNotEqual(cashier_register.id, manager_register.id)
+        with self.assertRaises(ValidationError):
+            CashRegister.objects.create(
+                gym=self.gym_a,
+                opened_by=self.cashier,
+                opening_amount=Decimal("300.00"),
+                exchange_rate=Decimal("2800.00"),
+            )
+
+    def test_cashier_dashboard_uses_only_current_users_register(self):
+        cashier_register = CashRegister.objects.create(
+            gym=self.gym_a,
+            opened_by=self.cashier,
+            opening_amount=Decimal("100.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+        manager_register = CashRegister.objects.create(
+            gym=self.gym_a,
+            opened_by=self.manager,
+            opening_amount=Decimal("200.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+        self.client.login(username="cashier-pos", password="test-pass")
+
+        response = self.client.get(reverse("pos:cashier_dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["register"], cashier_register)
+        self.assertContains(response, cashier_register.session_code)
+        self.assertNotContains(response, manager_register.session_code)
+
+    def test_pos_payment_uses_current_users_register(self):
+        CashRegister.objects.create(
+            gym=self.gym_a,
+            opened_by=self.cashier,
+            opening_amount=Decimal("100.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+        manager_register = CashRegister.objects.create(
+            gym=self.gym_a,
+            opened_by=self.manager,
+            opening_amount=Decimal("200.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+        product = Product.objects.create(
+            gym=self.gym_a,
+            name="Energy Drink",
+            price=Decimal("3.00"),
+            quantity=5,
+        )
+
+        payment = record_product_sale(
+            gym=self.gym_a,
+            product=product,
+            quantity=1,
+            currency="USD",
+            method="cash",
+            created_by=self.manager,
+        )
+
+        self.assertEqual(payment.cash_register_id, manager_register.id)
+        self.assertEqual(payment.created_by_id, self.manager.id)
+
+    def test_user_cannot_close_another_users_register(self):
+        cashier_register = CashRegister.objects.create(
+            gym=self.gym_a,
+            opened_by=self.cashier,
+            opening_amount=Decimal("100.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+        self.client.login(username="manager-pos", password="test-pass")
+
+        response = self.client.post(
+            reverse("pos:close_register", args=[cashier_register.id]),
+            {"real_amount": "100.00"},
+        )
+
+        self.assertEqual(response.status_code, 404)
+        cashier_register.refresh_from_db()
+        self.assertFalse(cashier_register.is_closed)
+
+    def test_manager_can_supervise_register_history(self):
+        cashier_register = CashRegister.objects.create(
+            gym=self.gym_a,
+            opened_by=self.cashier,
+            opening_amount=Decimal("100.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+        self.client.login(username="manager-pos", password="test-pass")
+
+        response = self.client.get(reverse("pos:register_history"), {"status": "open"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, cashier_register.session_code)
+
     def test_cashier_dashboard_labels_machine_maintenance_payments(self):
         register = CashRegister.objects.create(
             gym=self.gym_a,
+            opened_by=self.cashier,
             opening_amount=Decimal("0.00"),
             exchange_rate=Decimal("2800.00"),
         )
@@ -347,6 +457,7 @@ class PosAccountingTests(TestCase):
     def test_cashier_dashboard_labels_salary_payments(self):
         register = CashRegister.objects.create(
             gym=self.gym_a,
+            opened_by=self.cashier,
             opening_amount=Decimal("0.00"),
             exchange_rate=Decimal("2800.00"),
         )

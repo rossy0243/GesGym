@@ -247,6 +247,7 @@
                         <th>Date</th>
                         <th>Type</th>
                         <th>Client</th>
+                        <th>Operateur</th>
                         <th>Montant</th>
                         <th>Mode</th>
                     </tr>
@@ -319,6 +320,15 @@
                         </td>
 
                         <td>
+                            {% if p.created_by %}
+                                <div class="fw-semibold">{{ p.created_by.get_full_name|default:p.created_by.username }}</div>
+                                <small class="text-muted">{{ p.created_by.username }}</small>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+
+                        <td>
                             <div class="fw-semibold">{{ p.amount }} {{ p.currency }}</div>
                             <small class="d-block text-muted">{{ p.amount_cdf }} CDF comptable</small>
                             {% if p.amount_usd %}
@@ -334,7 +344,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="5" class="text-center py-5">
+                        <td colspan="6" class="text-center py-5">
                             <div class="d-flex flex-column align-items-center justify-content-center">
                                 <span class="material-icons empty-state-icon">payments</span>
                                 <p class="mt-3 mb-1 fw-semibold text-muted">Aucune opération trouvée</p>

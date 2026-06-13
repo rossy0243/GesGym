@@ -1,6 +1,6 @@
 from django.db import models
 from django.conf import settings
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.core.exceptions import ValidationError
 from decimal import Decimal, ROUND_HALF_UP
 from organizations.models import Gym
@@ -87,6 +87,13 @@ class CashRegister(models.Model):
             models.Index(fields=["gym"]),
             models.Index(fields=["gym", "is_closed"]),
         ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["gym", "opened_by"],
+                condition=Q(is_closed=False),
+                name="unique_open_register_per_user_and_gym",
+            )
+        ]
 
     def save(self, *args, **kwargs):
 
@@ -119,16 +126,21 @@ class CashRegister(models.Model):
     def clean(self):
 
         if not self.is_closed:
-            exists = CashRegister.objects.filter(
+            open_registers = CashRegister.objects.filter(
                 gym=self.gym,
                 is_closed=False
-            ).exclude(pk=self.pk).exists()
+            ).exclude(pk=self.pk)
+
+            if self.opened_by_id:
+                open_registers = open_registers.filter(opened_by_id=self.opened_by_id)
+            else:
+                open_registers = open_registers.filter(opened_by__isnull=True)
 
             if not self.exchange_rate or self.exchange_rate <= 0:
                 raise ValidationError("Le taux USD-CDF est obligatoire pour ouvrir la caisse.")
 
-            if exists:
-                raise ValidationError("Une caisse est déjà ouverte pour ce gym.")
+            if open_registers.exists():
+                raise ValidationError("Une caisse est deja ouverte pour cet utilisateur dans ce gym.")
         if self.opening_amount < 0:
             raise ValidationError("Le fonds d'ouverture ne peut pas etre negatif.")
 

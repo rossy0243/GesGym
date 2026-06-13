@@ -18,9 +18,14 @@ def _to_decimal(value, field_label="Montant"):
         raise ValidationError(f"{field_label} invalide.") from exc
 
 
-def get_open_register(gym):
-    register = CashRegister.objects.filter(gym=gym, is_closed=False).first()
+def get_open_register(gym, user=None):
+    registers = CashRegister.objects.filter(gym=gym, is_closed=False)
+    if user is not None:
+        registers = registers.filter(opened_by=user)
+    register = registers.first()
     if not register:
+        if user is not None:
+            raise ValidationError("Aucune caisse ouverte pour cet utilisateur. Ouvrez votre session POS avant tout mouvement financier.")
         raise ValidationError("Aucune caisse ouverte. Ouvrez une session POS avant tout mouvement financier.")
     if not register.exchange_rate or register.exchange_rate <= 0:
         raise ValidationError("La caisse ouverte n'a pas de taux USD-CDF valide.")
@@ -47,7 +52,7 @@ def record_payment(
     source_id=None,
     status="success",
 ):
-    register = register or get_open_register(gym)
+    register = register or get_open_register(gym, created_by)
     if register.gym_id != gym.id:
         raise ValidationError("La caisse n'appartient pas a ce gym.")
     if register.is_closed:
@@ -93,7 +98,7 @@ def record_subscription_payment(
     if not member.is_active:
         raise ValidationError("Le membre doit etre actif pour acheter un abonnement.")
 
-    register = get_open_register(gym)
+    register = get_open_register(gym, created_by)
     today = timezone.localdate()
     start = start_date or today
     if start > today:
@@ -148,7 +153,7 @@ def record_product_sale(*, gym, product, quantity, currency, method, created_by=
     if quantity <= 0:
         raise ValidationError("La quantite vendue doit etre superieure a zero.")
 
-    register = get_open_register(gym)
+    register = get_open_register(gym, created_by)
 
     with transaction.atomic():
         try:
