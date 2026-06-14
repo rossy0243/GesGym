@@ -47,3 +47,21 @@ services:
         value: "True"
       - key: DJANGO_SERVE_MEDIA
         value: "False"
+      - key: DJANGO_EMAIL_BACKEND
+        value: django.core.mail.backends.smtp.EmailBackend
+      - key: DJANGO_EMAIL_HOST
+        value: mail.smartclubpro.org
+      - key: DJANGO_EMAIL_PORT
+        value: "465"
+      - key: DJANGO_EMAIL_HOST_USER
+        value: noreply@smartclubpro.org
+      - key: DJANGO_EMAIL_HOST_PASSWORD
+        sync: false
+      - key: DJANGO_EMAIL_USE_TLS
+        value: "False"
+      - key: DJANGO_EMAIL_USE_SSL
+        value: "True"
+      - key: DJANGO_DEFAULT_FROM_EMAIL
+        value: noreply@smartclubpro.org
+      - key: DJANGO_SERVER_EMAIL
+        value: noreply@smartclubpro.org
