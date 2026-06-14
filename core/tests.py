@@ -5,8 +5,10 @@ from unittest.mock import patch
 from unittest.mock import patch
 from zipfile import ZipFile
 
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.management import call_command
 from django.http import QueryDict
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -18,6 +20,7 @@ from compte.models import UserGymRole
 from coaching.forms import CoachForm
 from coaching.models import CoachSpecialty
 from compte.forms import CreateUserForm
+from core.forms import OrganizationSettingsForm
 from members.models import Member
 from machines.kpis import build_machine_kpis
 from machines.models import Machine, MaintenanceLog
@@ -37,6 +40,14 @@ from .accounting_reports import (
 from .views import _get_period_window
 from organizations.models import Gym, GymModule, Module, Organization, SensitiveActivityLog
 from pos.models import CashRegister, Payment
+
+
+class SeedDemoDataSafetyTests(TestCase):
+    @override_settings(DEBUG=False)
+    def test_seed_demo_data_refuses_to_run_in_production_without_opt_in(self):
+        call_command("seed_demo_data")
+
+        self.assertFalse(Organization.objects.filter(slug__startswith="demo-").exists())
 
 
 class AccountingReportExportTests(TestCase):
@@ -629,6 +640,26 @@ class AccountingReportExportTests(TestCase):
                 target_label__icontains="manager",
             ).exists()
         )
+
+    def test_organization_logo_upload_rejects_non_image_file(self):
+        uploaded = SimpleUploadedFile(
+            "logo.html",
+            b"<script>alert(1)</script>",
+            content_type="text/html",
+        )
+        form = OrganizationSettingsForm(
+            data={
+                "name": self.org_a.name,
+                "address": "",
+                "phone": "",
+                "email": "",
+            },
+            files={"logo": uploaded},
+            instance=self.org_a,
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("logo", form.errors)
 
     def test_settings_dashboard_renders_v1_sections(self):
         response = self.client.get(reverse("core:settings"))

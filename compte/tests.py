@@ -181,6 +181,19 @@ class OwnerScopedUserManagementTests(TestCase):
         self.assertFalse(self.shared_user.force_password_change)
         self.assertTrue(self.shared_user.check_password("SharedUser123!"))
 
+    def test_user_management_actions_require_post(self):
+        reset_response = self.client.get(reverse("compte:reset_password", args=[self.shared_user.id]))
+        deactivate_response = self.client.get(reverse("compte:deactivate_user", args=[self.shared_user.id]))
+        activate_response = self.client.get(reverse("compte:activate_user", args=[self.shared_user.id]))
+
+        self.assertEqual(reset_response.status_code, 405)
+        self.assertEqual(deactivate_response.status_code, 405)
+        self.assertEqual(activate_response.status_code, 405)
+        self.shared_user.refresh_from_db()
+        self.role_a.refresh_from_db()
+        self.assertTrue(self.shared_user.check_password("SharedUser123!"))
+        self.assertTrue(self.role_a.is_active)
+
     def test_owner_deactivation_only_disables_current_gym_role(self):
         response = self.client.post(reverse("compte:deactivate_user", args=[self.shared_user.id]))
 

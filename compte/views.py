@@ -9,6 +9,7 @@ from django.contrib.auth.views import LoginView
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
+from django.views.decorators.http import require_POST
 
 from compte.utils import generate_temporary_password, generate_username, has_other_active_access
 from organizations.models import Gym
@@ -273,6 +274,7 @@ def user_list(request):
 
 
 @login_required
+@require_POST
 def reset_password(request, user_id):
     gym = request.gym
     user_role = UserGymRole.objects.filter(user=request.user, gym=gym, is_active=True).first()
@@ -306,6 +308,7 @@ def reset_password(request, user_id):
 
 
 @login_required
+@require_POST
 def deactivate_user(request, user_id):
     gym = request.gym
     user_role = UserGymRole.objects.filter(user=request.user, gym=gym, is_active=True).first()
@@ -337,6 +340,7 @@ def deactivate_user(request, user_id):
 
 
 @login_required
+@require_POST
 def activate_user(request, user_id):
     gym = request.gym
     user_role = UserGymRole.objects.filter(user=request.user, gym=gym, is_active=True).first()

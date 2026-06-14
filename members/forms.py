@@ -1,6 +1,8 @@
 from django import forms
 from django.utils import timezone
 
+from core.validators import validate_safe_image_upload
+
 from .models import Member, MemberGoal, MemberPreRegistration, MemberWeightMeasurement
 
 
@@ -46,6 +48,11 @@ class MemberCreationForm(forms.ModelForm):
                 "class": "form-control"
             }),
         }
+
+    def clean_photo(self):
+        photo = self.cleaned_data.get("photo")
+        validate_safe_image_upload(photo)
+        return photo
 
 
 class MemberPreRegistrationForm(forms.ModelForm):

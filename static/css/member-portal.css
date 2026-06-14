@@ -39,15 +39,15 @@ a {
 }
 
 .member-app-shell {
-    width: min(100%, 760px);
+    width: min(100%, 820px);
     margin: 0 auto;
-    padding: max(22px, env(safe-area-inset-top)) 18px calc(118px + env(safe-area-inset-bottom));
+    padding: max(28px, env(safe-area-inset-top)) 20px calc(132px + env(safe-area-inset-bottom));
 }
 
 .message-stack {
     display: grid;
     gap: 12px;
-    margin-bottom: 18px;
+    margin-bottom: 24px;
 }
 
 .message-card {
@@ -72,13 +72,14 @@ a {
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    margin-bottom: 22px;
+    margin-bottom: 28px;
+    padding: 0 2px;
 }
 
 .member-brand {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 14px;
     min-width: 0;
 }
 
@@ -246,10 +247,10 @@ a {
 .hero-panel {
     position: relative;
     display: grid;
-    gap: 20px;
+    gap: 26px;
     overflow: hidden;
     border-radius: 28px;
-    padding: 22px;
+    padding: 26px;
     background: linear-gradient(180deg, #ffffff, #f8fbfa);
 }
 
@@ -277,13 +278,13 @@ a {
 
 .member-hero-grid {
     display: grid;
-    gap: 20px;
+    gap: 24px;
 }
 
 .member-identity {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 18px;
 }
 
 .avatar {
@@ -376,7 +377,7 @@ a {
     border-radius: 22px;
     background: #17211d;
     color: #fff;
-    padding: 20px;
+    padding: 24px;
     box-shadow: 0 18px 36px rgba(23, 33, 29, 0.18);
 }
 
@@ -409,14 +410,14 @@ a {
 
 .qr-zone {
     display: grid;
-    grid-template-columns: 132px 1fr;
-    gap: 18px;
+    grid-template-columns: 148px 1fr;
+    gap: 22px;
     align-items: center;
 }
 
 .qr-zone img {
-    width: 132px;
-    height: 132px;
+    width: 148px;
+    height: 148px;
     border-radius: 18px;
     background: #fff;
     padding: 8px;
@@ -437,7 +438,7 @@ a {
 .hero-status-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
+    gap: 16px;
 }
 
 .hero-status-grid article {
@@ -449,7 +450,8 @@ a {
 
 .hero-status-grid article {
     min-width: 0;
-    padding: 15px 14px;
+    min-height: 112px;
+    padding: 18px 16px;
 }
 
 .hero-status-grid span,
@@ -479,11 +481,11 @@ a {
 
 .mini-progress {
     display: grid;
-    gap: 12px;
+    gap: 14px;
     border: 1px solid rgba(22, 93, 99, 0.12);
     border-radius: 18px;
     background: rgba(230, 244, 241, 0.66);
-    padding: 15px;
+    padding: 18px;
 }
 
 .mini-progress strong {
@@ -515,14 +517,14 @@ a {
 .info-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px;
-    margin: 20px 0;
+    gap: 16px;
+    margin: 26px 0 0;
 }
 
 .info-block {
-    min-height: 116px;
+    min-height: 126px;
     border-radius: 20px;
-    padding: 17px;
+    padding: 20px;
 }
 
 .info-block.wide {
@@ -558,8 +560,8 @@ a {
 
 .content-panel {
     border-radius: 22px;
-    padding: 20px;
-    margin-top: 18px;
+    padding: 24px;
+    margin-top: 26px;
 }
 
 .section-heading {
@@ -567,7 +569,7 @@ a {
     align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
-    margin-bottom: 18px;
+    margin-bottom: 22px;
 }
 
 .section-heading h2 {
@@ -614,29 +616,29 @@ a {
 .message-summary-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-    margin-bottom: 16px;
+    gap: 16px;
+    margin-bottom: 20px;
 }
 
 .access-summary-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-    margin-bottom: 16px;
+    gap: 16px;
+    margin-bottom: 20px;
 }
 
 .payment-summary-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-    margin-bottom: 16px;
+    gap: 16px;
+    margin-bottom: 20px;
 }
 
 .summary-card {
     border: 1px solid var(--line);
     border-radius: 18px;
     background: #fbfcfb;
-    padding: 14px;
+    padding: 16px;
 }
 
 .summary-card span {
@@ -664,7 +666,7 @@ a {
 
 .message-group + .message-group,
 .message-archive {
-    margin-top: 18px;
+    margin-top: 24px;
 }
 
 .message-group-head {
@@ -673,38 +675,38 @@ a {
 
 .message-compact-list {
     display: grid;
-    gap: 10px;
+    gap: 14px;
 }
 
 .access-compact-list {
     display: grid;
-    gap: 10px;
+    gap: 14px;
 }
 
 .payment-compact-list {
     display: grid;
-    gap: 10px;
+    gap: 14px;
 }
 
 .message-compact-card {
     border: 1px solid var(--line);
     border-radius: 14px;
     background: #fbfcfb;
-    padding: 12px 14px;
+    padding: 15px 16px;
 }
 
 .access-compact-card {
     border: 1px solid var(--line);
     border-radius: 14px;
     background: #fbfcfb;
-    padding: 12px 14px;
+    padding: 15px 16px;
 }
 
 .payment-compact-card {
     border: 1px solid var(--line);
     border-radius: 14px;
     background: #fbfcfb;
-    padding: 12px 14px;
+    padding: 15px 16px;
 }
 
 .access-compact-card.is-ok {
@@ -857,7 +859,7 @@ a {
 .member-message-list,
 .plan-list {
     display: grid;
-    gap: 12px;
+    gap: 16px;
 }
 
 .member-message-card {
@@ -866,7 +868,7 @@ a {
     border: 1px solid var(--line);
     border-radius: 16px;
     background: #fbfcfb;
-    padding: 14px;
+    padding: 17px;
 }
 
 .member-message-card.is-unread {
@@ -924,8 +926,8 @@ a {
 .plan-card {
     display: flex;
     align-items: flex-start;
-    gap: 12px;
-    padding: 12px;
+    gap: 14px;
+    padding: 15px;
     border: 1px solid var(--line);
     border-radius: 16px;
     background: #fbfcfb;
@@ -989,8 +991,8 @@ a {
     border: 1px solid rgba(255, 140, 0, 0.24);
     border-radius: 16px;
     background: rgba(255, 140, 0, 0.09);
-    padding: 12px;
-    margin-bottom: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
 }
 
 .pending-box strong {
@@ -1027,7 +1029,7 @@ a {
 }
 
 .plan-main {
-    padding: 16px;
+    padding: 20px;
 }
 
 .plan-title-row {
@@ -1127,7 +1129,7 @@ a {
 }
 
 .plan-action {
-    padding: 0 16px 16px;
+    padding: 0 20px 20px;
 }
 
 .plan-action form {
@@ -1164,7 +1166,7 @@ a {
     border: 1px dashed rgba(16, 40, 32, 0.16);
     border-radius: 18px;
     background: linear-gradient(180deg, rgba(246, 247, 242, 0.88), rgba(255, 255, 255, 0.96));
-    padding: 18px 16px;
+    padding: 22px 18px;
     text-align: left;
 }
 
@@ -1194,13 +1196,13 @@ a {
     left: 50%;
     bottom: max(12px, env(safe-area-inset-bottom));
     z-index: 20;
-    width: min(calc(100% - 24px), 560px);
+    width: min(calc(100% - 28px), 600px);
     transform: translateX(-50%);
     display: grid;
     grid-auto-flow: column;
-    grid-auto-columns: minmax(72px, 1fr);
-    gap: 6px;
-    padding: 7px;
+    grid-auto-columns: minmax(76px, 1fr);
+    gap: 8px;
+    padding: 8px;
     border: 1px solid rgba(219, 227, 221, 0.92);
     border-radius: 22px;
     background: rgba(255, 255, 255, 0.94);
@@ -1218,13 +1220,13 @@ a {
     display: grid;
     justify-items: center;
     align-content: center;
-    min-height: 56px;
+    min-height: 60px;
     border-radius: 16px;
     color: var(--ink);
     text-decoration: none;
     font-size: 0.72rem;
     font-weight: 900;
-    padding: 7px 8px;
+    padding: 8px 9px;
     position: relative;
     gap: 4px;
 }
@@ -1386,34 +1388,32 @@ a {
 
 @media (min-width: 740px) {
     .member-app-shell {
-        padding-top: 36px;
+        padding-top: 42px;
     }
 
     .hero-panel {
-        padding: 26px;
+        padding: 30px;
     }
 
     .access-card {
-        padding: 22px;
+        padding: 28px;
     }
 
     .member-hero-grid {
-        grid-template-columns: 1.2fr 0.8fr;
-        align-items: stretch;
-    }
-
-    .access-card {
-        display: grid;
-        align-items: center;
+        gap: 26px;
     }
 
     .qr-zone {
-        grid-template-columns: 136px 1fr;
+        grid-template-columns: 156px 1fr;
     }
 
     .qr-zone img {
-        width: 136px;
-        height: 136px;
+        width: 156px;
+        height: 156px;
+    }
+
+    .content-panel {
+        padding: 28px;
     }
 }
 
@@ -1434,18 +1434,21 @@ a {
     }
 
     .hero-panel {
-        padding: 20px;
-        gap: 22px;
+        padding: 22px;
+        gap: 24px;
     }
 
     .qr-zone {
-        grid-template-columns: 128px 1fr;
-        gap: 16px;
+        grid-template-columns: 1fr;
+        gap: 14px;
+        justify-items: center;
+        text-align: center;
     }
 
     .qr-zone img {
-        width: 128px;
-        height: 128px;
+        width: min(100%, 184px);
+        height: auto;
+        aspect-ratio: 1;
     }
 
     .hero-status-grid {
@@ -1458,7 +1461,7 @@ a {
     }
 
     .hero-status-grid article {
-        padding: 15px;
+        padding: 17px;
     }
 
     .hero-status-grid strong {

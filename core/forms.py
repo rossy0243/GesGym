@@ -2,6 +2,7 @@ from django import forms
 
 from coaching.models import CoachSpecialty
 from compte.models import UserGymRole
+from core.validators import validate_safe_image_upload
 from organizations.models import Gym, Organization
 
 
@@ -30,6 +31,11 @@ class OrganizationSettingsForm(forms.ModelForm):
             "phone": "Telephone",
             "email": "Email",
         }
+
+    def clean_logo(self):
+        logo = self.cleaned_data.get("logo")
+        validate_safe_image_upload(logo)
+        return logo
 
 
 class InternalEmployeeForm(forms.Form):

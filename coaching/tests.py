@@ -260,6 +260,18 @@ class CoachingTenantTests(TestCase):
             ).exists()
         )
 
+    def test_member_assignment_actions_require_post(self):
+        self.coach_a.members.add(self.member_a)
+
+        assign_response = self.client.get(reverse("coaching:assign_member", args=[self.coach_a.id]))
+        remove_response = self.client.get(
+            reverse("coaching:remove_member", args=[self.coach_a.id, self.member_a.id])
+        )
+
+        self.assertEqual(assign_response.status_code, 405)
+        self.assertEqual(remove_response.status_code, 405)
+        self.assertTrue(self.coach_a.members.filter(id=self.member_a.id).exists())
+
     def test_form_pages_render_without_gym_id_urls(self):
         urls = [
             reverse("coaching:create"),

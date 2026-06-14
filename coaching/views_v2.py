@@ -460,6 +460,7 @@ def coach_delete(request, coach_id):
 
 
 @login_required
+@require_POST
 @module_required("COACHING")
 @role_required(COACHING_ROLES)
 def assign_member(request, coach_id):
@@ -484,6 +485,7 @@ def assign_member(request, coach_id):
 
 
 @login_required
+@require_POST
 @module_required("COACHING")
 @role_required(COACHING_ROLES)
 def remove_member(request, coach_id, member_id):

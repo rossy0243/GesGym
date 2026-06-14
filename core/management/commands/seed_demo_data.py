@@ -2,6 +2,7 @@ from datetime import datetime, time, timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
+from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
@@ -118,8 +119,21 @@ class Command(BaseCommand):
             action="store_true",
             help="Supprime uniquement les organisations demo avant de les recreer.",
         )
+        parser.add_argument(
+            "--allow-production",
+            action="store_true",
+            help="Autorise explicitement le seed demo meme avec DJANGO_DEBUG=False.",
+        )
 
     def handle(self, *args, **options):
+        if not settings.DEBUG and not options["allow_production"]:
+            self.stderr.write(
+                self.style.ERROR(
+                    "Seed demo refuse en production. Relancez avec --allow-production si c'est intentionnel."
+                )
+            )
+            return
+
         if options["reset"]:
             self._reset_demo_data()
 

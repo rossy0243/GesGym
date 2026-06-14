@@ -9,6 +9,7 @@ from django.db.models import Count, Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.views.decorators.http import require_POST
 
 from core.audit import log_sensitive_action
 from pos.services import record_subscription_payment
@@ -209,6 +210,7 @@ def edit_plan(request, plan_id):
 
 
 @login_required
+@require_POST
 @module_required("SUBSCRIPTIONS")
 def delete_plan(request, plan_id):
     _require_gym_role(request, PLAN_MANAGEMENT_ROLES)

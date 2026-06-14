@@ -234,6 +234,17 @@ class SubscriptionTenantSafetyTests(TestCase):
         plan = SubscriptionPlan.objects.get(gym=self.gym_a, name="Pack hybride")
         self.assertEqual(list(plan.offers.values_list("id", flat=True)), [self.offer_a.id])
 
+    def test_delete_plan_requires_post(self):
+        self.client.force_login(self.owner)
+        session = self.client.session
+        session["current_gym_id"] = self.gym_a.id
+        session.save()
+
+        response = self.client.get(reverse("subscriptions:delete_subscription_plan", args=[self.plan_a.id]))
+
+        self.assertEqual(response.status_code, 405)
+        self.assertTrue(SubscriptionPlan.objects.filter(id=self.plan_a.id).exists())
+
     def test_create_offer_creates_offer_for_current_gym(self):
         self.client.force_login(self.owner)
         session = self.client.session

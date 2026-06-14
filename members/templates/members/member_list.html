@@ -1077,6 +1077,48 @@ body.members-screen .modal-dialog {
 <script>
     const DEFAULT_ORG_LOGO_URL = "{% static 'avatar/logo_smartclub.png' %}";
 
+    function setImagePreview(container, src, alt, fallbackHtml) {
+        if (!container) return;
+        container.replaceChildren();
+        if (src) {
+            const image = document.createElement("img");
+            image.src = src;
+            image.alt = alt || "";
+            image.style.width = "100%";
+            image.style.height = "100%";
+            image.style.objectFit = "cover";
+            image.classList.add("rounded-circle");
+            container.appendChild(image);
+            return;
+        }
+        container.innerHTML = fallbackHtml;
+    }
+
+    function appendCell(row, value) {
+        const cell = document.createElement("td");
+        cell.textContent = value == null || value === "" ? "-" : String(value);
+        row.appendChild(cell);
+        return cell;
+    }
+
+    function appendStatusCell(row, isSuccess) {
+        const cell = document.createElement("td");
+        const badge = document.createElement("span");
+        badge.className = isSuccess ? "badge bg-success" : "badge bg-danger";
+        badge.textContent = isSuccess ? "Valide" : "Refuse";
+        cell.appendChild(badge);
+        row.appendChild(cell);
+    }
+
+    function escapeHtml(value) {
+        return String(value == null ? "" : value)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
     function openMemberModal(memberId) {
         fetch(`/members/${memberId}/`)
             .then(response => {
@@ -1088,17 +1130,12 @@ body.members-screen .modal-dialog {
                 console.log("QR Code reçu :", data.qr_code); // ← Ajoute cette ligne
                 // === PHOTO ===
                 const photoContainer = document.getElementById("viewMemberPhoto");
-                if (data.photo_url) {
-                    photoContainer.innerHTML = `
-                    <img src="${data.photo_url}" 
-                         alt="Photo du membre" 
-                         class="rounded-circle" 
-                         style="width:100%; height:100%; object-fit: cover;">
-                `;
-                } else {
-                    photoContainer.innerHTML =
-                        `<span class="material-icons" style="font-size:48px; color:#adb5bd;">person</span>`;
-                }
+                setImagePreview(
+                    photoContainer,
+                    data.photo_url,
+                    "Photo du membre",
+                    `<span class="material-icons" style="font-size:48px; color:#adb5bd;">person</span>`
+                );
 
                 // === USERNAME ===
                 document.getElementById("viewMemberUsername").innerText = data.username || "Non défini";
@@ -1162,9 +1199,9 @@ body.members-screen .modal-dialog {
 
                     paymentTable.innerHTML += `
                     <tr>
-                        <td>${p.date}</td>
-                        <td>${p.amount} CDF</td>
-                        <td>${p.method}</td>
+                        <td>${escapeHtml(p.date)}</td>
+                        <td>${escapeHtml(p.amount)} CDF</td>
+                        <td>${escapeHtml(p.method)}</td>
                         <td>${statusBadge}</td>
                     </tr>
                 `;
@@ -1182,9 +1219,9 @@ body.members-screen .modal-dialog {
 
                     accessTable.innerHTML += `
                     <tr>
-                        <td>${log.date}</td>
-                        <td>${log.time}</td>
-                        <td>${log.device}</td>
+                        <td>${escapeHtml(log.date)}</td>
+                        <td>${escapeHtml(log.time)}</td>
+                        <td>${escapeHtml(log.device)}</td>
                     </tr>
                 `;
 
@@ -1584,13 +1621,12 @@ body.members-screen .modal-dialog {
 
                 // Prévisualisation photo
                 const preview = document.getElementById("editPhotoPreview");
-                if (data.photo_url) {
-                    preview.innerHTML =
-                        `<img src="${data.photo_url}" style="width:100%; height:100%; object-fit: cover;">`;
-                } else {
-                    preview.innerHTML =
-                        `<span class="material-icons" style="font-size:48px;color:#aaa;">add_a_photo</span>`;
-                }
+                setImagePreview(
+                    preview,
+                    data.photo_url,
+                    "Photo du membre",
+                    `<span class="material-icons" style="font-size:48px;color:#aaa;">add_a_photo</span>`
+                );
 
                 // Ouvrir le modal
                 const modal = new bootstrap.Modal(document.getElementById('editMemberModal'));

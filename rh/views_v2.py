@@ -10,6 +10,7 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.views.decorators.http import require_POST
 
 from pos.services import record_expense
 from smartclub.access_control import RH_ATTENDANCE_ROLES, RH_EMPLOYEE_ROLES, RH_PAYROLL_ROLES
@@ -390,6 +391,7 @@ def payroll_dashboard(request):
 
 
 @login_required
+@require_POST
 @module_required("RH")
 @role_required(RH_PAYROLL_ROLES)
 def add_contribution_rule(request):
@@ -406,6 +408,7 @@ def add_contribution_rule(request):
 
 
 @login_required
+@require_POST
 @module_required("RH")
 @role_required(RH_PAYROLL_ROLES)
 def toggle_contribution_rule(request, rule_id):
@@ -418,6 +421,7 @@ def toggle_contribution_rule(request, rule_id):
 
 
 @login_required
+@require_POST
 @module_required("RH")
 @role_required(RH_PAYROLL_ROLES)
 def add_adjustment(request, employee_id, year, month):
@@ -442,6 +446,7 @@ def add_adjustment(request, employee_id, year, month):
 
 
 @login_required
+@require_POST
 @module_required("RH")
 @role_required(RH_PAYROLL_ROLES)
 def add_leave_request(request, employee_id, year, month):
@@ -464,6 +469,7 @@ def add_leave_request(request, employee_id, year, month):
 
 
 @login_required
+@require_POST
 @module_required("RH")
 @role_required(RH_PAYROLL_ROLES)
 def add_overtime_entry(request, employee_id, year, month):
@@ -486,6 +492,7 @@ def add_overtime_entry(request, employee_id, year, month):
 
 
 @login_required
+@require_POST
 @module_required("RH")
 @role_required(RH_PAYROLL_ROLES)
 def review_payroll_slip(request, employee_id, year, month):
@@ -503,6 +510,7 @@ def review_payroll_slip(request, employee_id, year, month):
 
 
 @login_required
+@require_POST
 @module_required("RH")
 @role_required(RH_PAYROLL_ROLES)
 def approve_payroll_slip(request, employee_id, year, month):

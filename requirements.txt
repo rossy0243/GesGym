@@ -1,11 +1,11 @@
 asgiref==3.11.1
 colorama==0.4.6
-Django==6.0.3
+Django==6.0.6
 django-jazzmin==3.0.3
 gunicorn==25.3.0
-pillow==12.1.1
+pillow==12.2.0
 psycopg2-binary==2.9.11
 qrcode==8.2
 sqlparse==0.5.5
-tzdata==2025.3
+tzdata==2026.2
 whitenoise==6.12.0

@@ -2,6 +2,7 @@ from datetime import timedelta
 from io import StringIO
 from unittest.mock import patch
 
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
@@ -9,6 +10,7 @@ from django.utils import timezone
 
 from coaching.models import Coach, CoachAssignment, CoachingFeedback, GroupCoachingProgram
 from compte.models import User, UserGymRole
+from members.forms import MemberCreationForm
 from members.models import (
     Member,
     MemberGoal,
@@ -163,6 +165,30 @@ class MemberPreRegistrationTests(TestCase):
         self.assertContains(response, member.user.username)
         self.assertContains(response, "MemberTemp123!")
 
+    def test_sensitive_member_actions_require_post(self):
+        member = Member.objects.create(
+            gym=self.gym,
+            first_name="Post",
+            last_name="Only",
+            phone="+243810000111",
+            email="post.only@example.com",
+        )
+
+        self.client.force_login(self.reception)
+        reset_response = self.client.get(reverse("members:reset_member_password", args=[member.id]))
+        self.assertEqual(reset_response.status_code, 405)
+
+        self.client.force_login(self.manager)
+        suspend_response = self.client.get(reverse("members:suspend_member", args=[member.id]))
+        reactivate_response = self.client.get(reverse("members:reactivate_member", args=[member.id]))
+        self.assertEqual(suspend_response.status_code, 405)
+        self.assertEqual(reactivate_response.status_code, 405)
+
+        self.client.force_login(self.owner)
+        delete_response = self.client.get(reverse("members:delete_member", args=[member.id]))
+        self.assertEqual(delete_response.status_code, 405)
+        self.assertTrue(Member.objects.filter(id=member.id).exists())
+
     def test_cashier_cannot_reset_member_password(self):
         member = Member.objects.create(
             gym=self.gym,
@@ -249,6 +275,26 @@ class MemberPreRegistrationTests(TestCase):
         self.client.force_login(self.owner)
         owner_response = self.client.get(reverse("members:member_list"))
         self.assertNotContains(owner_response, 'id="statusToggleBtn"', html=False)
+
+    def test_member_photo_upload_rejects_non_image_file(self):
+        uploaded = SimpleUploadedFile(
+            "payload.txt",
+            b"<script>alert(1)</script>",
+            content_type="text/plain",
+        )
+        form = MemberCreationForm(
+            data={
+                "first_name": "Bad",
+                "last_name": "Upload",
+                "phone": "+243810000120",
+                "email": "bad.upload@example.com",
+                "address": "Kinshasa",
+            },
+            files={"photo": uploaded},
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("photo", form.errors)
 
     def test_public_pre_registration_creates_pending_request_for_link_gym(self):
         link = MemberPreRegistrationLink.objects.get(gym=self.gym)

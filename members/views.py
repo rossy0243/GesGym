@@ -1127,6 +1127,7 @@ def reset_member_password(request, member_id):
 
 
 @login_required
+@require_POST
 def delete_member(request, member_id):
 
     if not has_role(request, {"owner"}):
@@ -1146,6 +1147,7 @@ def delete_member(request, member_id):
 
 
 @login_required
+@require_POST
 def suspend_member(request, member_id):
     if not has_role(request, MEMBER_STATUS_ROLES):
         raise PermissionDenied
@@ -1168,6 +1170,7 @@ def suspend_member(request, member_id):
 
 
 @login_required
+@require_POST
 def reactivate_member(request, member_id):
     if not has_role(request, MEMBER_STATUS_ROLES):
         raise PermissionDenied

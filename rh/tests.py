@@ -46,6 +46,7 @@ class RhTenantTests(TestCase):
         UserGymRole.objects.create(user=self.user, gym=self.gym_a, role="manager")
         self.register_a = CashRegister.objects.create(
             gym=self.gym_a,
+            opened_by=self.user,
             opening_amount=Decimal("0.00"),
             exchange_rate=Decimal("2800.00"),
         )
@@ -130,6 +131,40 @@ class RhTenantTests(TestCase):
         response = self.client.get(reverse("rh:process_payment", args=[self.employee_b.id, self.today.year, self.today.month]))
 
         self.assertEqual(response.status_code, 404)
+
+    def test_payroll_action_endpoints_require_post(self):
+        rule = PayrollContributionRule.objects.create(
+            gym=self.gym_a,
+            name="CNSS",
+            party=PayrollContributionRule.PARTY_EMPLOYEE_CONTRIBUTION,
+            calculation_type=PayrollContributionRule.CALC_PERCENTAGE,
+            rate_percent=Decimal("5.00"),
+        )
+
+        endpoints = [
+            reverse("rh:add_contribution_rule"),
+            reverse("rh:toggle_contribution_rule", args=[rule.id]),
+            reverse("rh:add_adjustment", args=[self.employee_a.id, self.today.year, self.today.month]),
+            reverse("rh:add_leave_request", args=[self.employee_a.id, self.today.year, self.today.month]),
+            reverse("rh:add_overtime_entry", args=[self.employee_a.id, self.today.year, self.today.month]),
+            reverse("rh:review_payroll_slip", args=[self.employee_a.id, self.today.year, self.today.month]),
+            reverse("rh:approve_payroll_slip", args=[self.employee_a.id, self.today.year, self.today.month]),
+        ]
+
+        for endpoint in endpoints:
+            with self.subTest(endpoint=endpoint):
+                response = self.client.get(endpoint)
+                self.assertEqual(response.status_code, 405)
+
+        rule.refresh_from_db()
+        self.assertTrue(rule.is_active)
+        self.assertFalse(
+            PayrollAdjustment.objects.filter(
+                employee=self.employee_a,
+                year=self.today.year,
+                month=self.today.month,
+            ).exists()
+        )
 
     def test_salary_payment_creates_pos_expense(self):
         self.client.post(reverse("rh:review_payroll_slip", args=[self.employee_a.id, self.today.year, self.today.month]))
