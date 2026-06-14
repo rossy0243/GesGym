@@ -9,7 +9,7 @@ from organizations.models import Gym, Organization
 INTERNAL_ROLE_CHOICES = [
     (value, label)
     for value, label in UserGymRole.ROLE_CHOICES
-    if value not in {"owner", "accountant"}
+    if value != "owner"
 ]
 
 
@@ -71,7 +71,7 @@ class InternalEmployeeForm(forms.Form):
         label="Actif",
     )
 
-    def __init__(self, *args, organization=None, gyms=None, **kwargs):
+    def __init__(self, *args, organization=None, gyms=None, allowed_roles=None, **kwargs):
         super().__init__(*args, **kwargs)
         if gyms is not None:
             self.fields["gym"].queryset = gyms
@@ -79,6 +79,13 @@ class InternalEmployeeForm(forms.Form):
             self.fields["gym"].queryset = organization.gyms.filter(is_active=True).order_by("name")
         else:
             self.fields["gym"].queryset = Gym.objects.none()
+        if allowed_roles is not None:
+            allowed_roles = set(allowed_roles)
+            self.fields["role"].choices = [
+                (value, label)
+                for value, label in INTERNAL_ROLE_CHOICES
+                if value in allowed_roles
+            ]
 
     def clean_role(self):
         role = self.cleaned_data["role"]

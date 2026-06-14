@@ -641,6 +641,36 @@ class AccountingReportExportTests(TestCase):
             ).exists()
         )
 
+    @patch("core.views.generate_temporary_password", return_value="OwnerReset123!")
+    def test_settings_owner_can_manage_employee_across_organization_gyms(self, _mock_password):
+        gym_c = Gym.objects.create(
+            organization=self.org_a,
+            name="Gym C",
+            slug="gym-c",
+            subdomain="gym-c",
+        )
+        employee = User.objects.create_user(
+            username="org-cashier",
+            password="InitialPass123!",
+            email="org-cashier@example.com",
+        )
+        employee_role = UserGymRole.objects.create(user=employee, gym=gym_c, role="cashier")
+
+        response = self.client.post(
+            reverse("core:settings"),
+            {
+                "action": "employee_reset_password",
+                "role_id": employee_role.id,
+            },
+            follow=True,
+        )
+
+        self.assertRedirects(response, f"{reverse('core:settings')}?tab=employees")
+        employee.refresh_from_db()
+        self.assertTrue(employee.force_password_change)
+        self.assertTrue(employee.check_password("OwnerReset123!"))
+        self.assertContains(response, "Nouveau mot de passe temporaire")
+
     def test_organization_logo_upload_rejects_non_image_file(self):
         uploaded = SimpleUploadedFile(
             "logo.html",
@@ -850,6 +880,71 @@ class RoleAccessMatrixTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(UserGymRole.objects.filter(user__email="bad-scope@example.com").exists())
 
+    def test_manager_cannot_create_another_manager(self):
+        self.client.force_login(self.manager)
+
+        response = self.client.post(
+            reverse("core:settings"),
+            {
+                "action": "employee_create",
+                "first_name": "Peer",
+                "last_name": "Manager",
+                "email": "peer-manager@example.com",
+                "gym": self.gym.id,
+                "role": "manager",
+                "is_active": "on",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(UserGymRole.objects.filter(user__email="peer-manager@example.com").exists())
+
+    def test_manager_settings_hides_manager_creation_and_manager_rows(self):
+        peer_manager = User.objects.create_user(
+            username="peer-manager",
+            password="pass",
+            first_name="Peer",
+            last_name="Manager",
+        )
+        UserGymRole.objects.create(user=peer_manager, gym=self.gym, role="manager")
+        cashier = User.objects.create_user(
+            username="visible-cashier",
+            password="pass",
+            first_name="Visible",
+            last_name="Cashier",
+        )
+        UserGymRole.objects.create(user=cashier, gym=self.gym, role="cashier")
+        self.client.force_login(self.manager)
+
+        response = self.client.get(reverse("core:settings"), {"tab": "employees"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, '<option value="manager"', html=False)
+        self.assertNotContains(response, "peer-manager")
+        self.assertContains(response, "visible-cashier")
+
+    def test_manager_cannot_reset_password_for_manager_role(self):
+        peer_manager = User.objects.create_user(
+            username="protected-manager",
+            password="InitialPass123!",
+            email="protected-manager@example.com",
+        )
+        manager_role = UserGymRole.objects.create(user=peer_manager, gym=self.gym, role="manager")
+        self.client.force_login(self.manager)
+
+        response = self.client.post(
+            reverse("core:settings"),
+            {
+                "action": "employee_reset_password",
+                "role_id": manager_role.id,
+            },
+        )
+
+        self.assertEqual(response.status_code, 403)
+        peer_manager.refresh_from_db()
+        self.assertFalse(peer_manager.force_password_change)
+        self.assertTrue(peer_manager.check_password("InitialPass123!"))
+
     def test_manager_cannot_reset_password_for_shared_user_identity(self):
         shared_user = User.objects.create_user(
             username="shared-employee",
@@ -916,6 +1011,14 @@ class RoleChoiceCleanupTests(TestCase):
 
         self.assertNotIn("accountant", role_values)
         self.assertNotIn("owner", role_values)
+
+    def test_internal_employee_form_can_limit_roles_for_manager_scope(self):
+        form = InternalEmployeeForm(allowed_roles=["coach", "reception", "cashier"])
+
+        role_values = [value for value, _label in form.fields["role"].choices]
+
+        self.assertNotIn("manager", role_values)
+        self.assertEqual(role_values, ["coach", "reception", "cashier"])
 
     def test_owner_create_user_form_excludes_accountant_role(self):
         form = CreateUserForm()

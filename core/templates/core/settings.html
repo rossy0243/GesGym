@@ -255,7 +255,11 @@
                     <div class="settings-form-scroll">
                         <div class="settings-muted-box p-3 mb-3">
                             <div class="small text-muted">
-                                Le role Owner n'est pas disponible ici. Ce formulaire ne cree pas un membre.
+                                {% if can_manage_organization %}
+                                Le role Owner n'est pas disponible ici. Vous pouvez gerer les employes de toutes les salles de l'organisation.
+                                {% else %}
+                                Vous pouvez gerer les employes internes de votre salle active. La creation d'un autre manager est reservee a l'Owner.
+                                {% endif %}
                                 Un mot de passe temporaire unique sera genere et devra etre change a la premiere connexion.
                             </div>
                         </div>
@@ -324,7 +328,13 @@
             <div class="settings-card h-100">
                 <div class="card-header">
                     <h5 class="card-title mb-1">Utilisateurs internes</h5>
-                    <small class="text-muted">Activation/desactivation = restriction d'acces au site.</small>
+                    <small class="text-muted">
+                        {% if can_manage_organization %}
+                        Activation/desactivation = restriction d'acces au site pour les employes de l'organisation.
+                        {% else %}
+                        Activation/desactivation = restriction d'acces au site pour les employes de votre salle.
+                        {% endif %}
+                    </small>
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive settings-scroll-area">

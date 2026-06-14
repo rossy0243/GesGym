@@ -445,6 +445,12 @@ def _scoped_identity_change_blocked(user, role):
     return has_other_active_access(user, exclude_role_ids=[role.id])
 
 
+def _employee_role_values_for_request(request):
+    if current_role(request) == "owner":
+        return ["manager", "coach", "reception", "cashier"]
+    return ["coach", "reception", "cashier"]
+
+
 def _settings_redirect(tab):
     return redirect(f"{reverse('core:settings')}?tab={tab}")
 
@@ -472,8 +478,13 @@ def settings_dashboard(request):
         if can_manage_organization
         else Gym.objects.filter(id=gym.id, is_active=True)
     )
+    allowed_employee_roles = _employee_role_values_for_request(request)
     organization_form = OrganizationSettingsForm(instance=organization)
-    employee_form = InternalEmployeeForm(organization=organization, gyms=accessible_gyms)
+    employee_form = InternalEmployeeForm(
+        organization=organization,
+        gyms=accessible_gyms,
+        allowed_roles=allowed_employee_roles,
+    )
     specialty_form = CoachSpecialtyForm()
 
     if request.method == "POST":
@@ -497,7 +508,12 @@ def settings_dashboard(request):
 
         elif action == "employee_create":
             active_tab = "employees"
-            employee_form = InternalEmployeeForm(request.POST, organization=organization, gyms=accessible_gyms)
+            employee_form = InternalEmployeeForm(
+                request.POST,
+                organization=organization,
+                gyms=accessible_gyms,
+                allowed_roles=allowed_employee_roles,
+            )
             if employee_form.is_valid():
                 selected_gym = employee_form.cleaned_data["gym"]
                 username = generate_username(
@@ -550,6 +566,8 @@ def settings_dashboard(request):
             )
             if role.role == "owner":
                 return HttpResponseForbidden("Impossible de modifier un Owner ici.")
+            if role.role not in allowed_employee_roles:
+                return HttpResponseForbidden("Role non autorise pour votre niveau d'acces.")
 
             if action == "employee_reset_password":
                 if _scoped_identity_change_blocked(role.user, role):
@@ -649,6 +667,7 @@ def settings_dashboard(request):
     employee_roles = (
         UserGymRole.objects.filter(gym__in=accessible_gyms)
         .exclude(role="owner")
+        .filter(role__in=allowed_employee_roles)
         .select_related("user", "gym")
         .order_by("gym__name", "user__first_name", "user__last_name")
     )
@@ -670,6 +689,7 @@ def settings_dashboard(request):
         "activity_logs": activity_logs,
         "active_tab": active_tab,
         "can_manage_organization": can_manage_organization,
+        "allowed_employee_roles": allowed_employee_roles,
         "nav_active": "parametres",
     }
     return render(request, "core/settings.html", context)
