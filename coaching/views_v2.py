@@ -24,9 +24,19 @@ def _validation_message(exc):
     return exc.messages[0] if getattr(exc, "messages", None) else str(exc)
 
 
+def _linked_coach_profile(user):
+    try:
+        return user.coach_profile
+    except Coach.DoesNotExist:
+        return None
+
+
 def _resolve_current_coach(request):
-    if getattr(request.user, "coach_profile", None) and request.user.coach_profile.gym_id == request.gym.id:
-        return request.user.coach_profile
+    linked_profile = _linked_coach_profile(request.user)
+    if linked_profile and linked_profile.gym_id == request.gym.id:
+        return linked_profile
+    if linked_profile:
+        return None
 
     candidate = Coach.objects.filter(gym=request.gym, user=request.user).first()
     if candidate:
@@ -53,14 +63,15 @@ def _resolve_current_coach(request):
         if candidate:
             return candidate
 
-    candidate = Coach.objects.create(
-        gym=request.gym,
-        user=request.user,
-        name=" ".join(part for part in [first_name, last_name] if part).strip() or username or "Coach",
-        phone="",
-        specialty="Coach sportif",
-        is_active=True,
-    )
+    coach_data = {
+        "gym": request.gym,
+        "name": " ".join(part for part in [first_name, last_name] if part).strip() or username or "Coach",
+        "phone": "",
+        "specialty": "Coach sportif",
+        "is_active": True,
+    }
+    coach_data["user"] = request.user
+    candidate = Coach.objects.create(**coach_data)
     return candidate
 
 
@@ -627,6 +638,7 @@ def coach_portal(request):
         latest_follow_up_at=Max("coaching_follow_ups__created_at")
     )
     active_assignments = CoachAssignment.objects.filter(gym=request.gym, coach=coach, ended_at__isnull=True)
+    active_member_ids = members.values_list("id", flat=True)
     programs = (
         GroupCoachingProgram.objects.filter(gym=request.gym, coach=coach, is_active=True)
         .annotate(participants_total=Count("participants", distinct=True))
@@ -636,12 +648,14 @@ def coach_portal(request):
     coach_overdue_follow_ups = CoachingFollowUp.objects.filter(
         gym=request.gym,
         coach=coach,
+        member_id__in=active_member_ids,
         next_follow_up_at__isnull=False,
         next_follow_up_at__lte=today,
     ).select_related("member").order_by("next_follow_up_at", "-created_at")
     due_follow_ups_count = coach_overdue_follow_ups.count()
     sensitive_feedbacks = (
         CoachingFeedback.objects.filter(gym=request.gym, coach=coach)
+        .filter(member_id__in=active_member_ids)
         .filter(Q(overall_rating__lte=2) | Q(wants_contact=True))
         .select_related("member", "group_program")
         .order_by("-wants_contact", "overall_rating", "-created_at")[:5]

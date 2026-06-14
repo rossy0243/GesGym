@@ -1,4 +1,5 @@
 #compte/models.py
+from django.core.exceptions import ValidationError
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from organizations.models import Gym, Organization
@@ -113,3 +114,21 @@ class UserGymRole(models.Model):
 
     def __str__(self):
         return f"{self.user} - {self.role} ({self.gym})"
+
+    def clean(self):
+        super().clean()
+        if self.role == "coach" and self.is_active and self.user_id:
+            existing_coach_role = UserGymRole.objects.filter(
+                user_id=self.user_id,
+                role="coach",
+                is_active=True,
+            ).exclude(pk=self.pk)
+            if existing_coach_role.exists():
+                raise ValidationError(
+                    "Un meme compte coach ne peut pas etre rattache a plusieurs gyms. "
+                    "Creez des identifiants separes pour chaque gym."
+                )
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)

@@ -318,6 +318,59 @@ class CoachingTenantTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "Alice Member")
 
+    def test_coach_portal_hides_alerts_for_members_without_current_coaching_access(self):
+        self.client.logout()
+        self.client.login(username="coach-mobile", password="test-pass")
+        self.coach_a.members.add(self.member_a)
+        CoachingFollowUp.objects.create(
+            gym=self.gym_a,
+            coach=self.coach_a,
+            member=self.member_a,
+            interaction_type=CoachingFollowUp.INTERACTION_FOLLOW_UP,
+            summary="Ancien suivi",
+            next_action="Relance expiree",
+            next_follow_up_at=timezone.localdate(),
+        )
+        CoachingFeedback.objects.create(
+            gym=self.gym_a,
+            member=self.member_a,
+            coach=self.coach_a,
+            overall_rating=2,
+            listening_rating=2,
+            clarity_rating=2,
+            motivation_rating=2,
+            availability_rating=2,
+            comment="Feedback hors acces actif",
+            wants_contact=True,
+        )
+        self.subscription_a.is_active = False
+        self.subscription_a.save(update_fields=["is_active"])
+
+        response = self.client.get(reverse("coaching:coach_portal"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["members_count"], 0)
+        self.assertEqual(response.context["due_follow_ups_count"], 0)
+        self.assertEqual(response.context["sensitive_feedback_count"], 0)
+        self.assertEqual(response.context["coach_priority_queue"], [])
+        self.assertNotContains(response, "Relance expiree")
+        self.assertNotContains(response, "Feedback hors acces actif")
+
+    def test_same_user_cannot_be_active_coach_in_two_gyms(self):
+        gym_c = Gym.objects.create(
+            organization=self.org_a,
+            name="Gym C",
+            slug="coaching-gym-c",
+            subdomain="coaching-gym-c",
+        )
+        module = Module.objects.get(code="COACHING")
+        GymModule.objects.create(gym=gym_c, module=module, is_active=True)
+
+        with self.assertRaises(ValidationError):
+            UserGymRole.objects.create(user=self.coach_user, gym=gym_c, role="coach")
+
+        self.assertFalse(UserGymRole.objects.filter(user=self.coach_user, gym=gym_c, role="coach").exists())
+
     def test_group_program_pages_are_scoped_to_current_gym(self):
         program = GroupCoachingProgram.objects.create(
             gym=self.gym_a,
