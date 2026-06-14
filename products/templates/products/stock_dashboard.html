@@ -1,172 +1,325 @@
 {% extends 'base.html' %}
 
+{% block page_titre %}Dashboard stock{% endblock %}
+
 {% block content %}
-<div class="container mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1>Dashboard des stocks - {{ gym.name }}</h1>
-        <div>
-            <a href="{% url 'products:list' %}" class="btn btn-primary">
-                <i class="fas fa-box"></i> Produits
-            </a>
-            <a href="{% url 'products:movement_list' %}" class="btn btn-secondary">
-                <i class="fas fa-history"></i> Mouvements
-            </a>
-        </div>
-    </div>
-    
-    <!-- Cartes statistiques -->
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card text-white bg-primary">
-                <div class="card-body">
-                    <h5 class="card-title">Produits actifs</h5>
-                    <h2 class="card-text">{{ total_products }}</h2>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-white bg-success">
-                <div class="card-body">
-                    <h5 class="card-title">Valeur du stock</h5>
-                    <h2 class="card-text">{{ total_value|floatformat:2 }} USD</h2>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-white bg-warning">
-                <div class="card-body">
-                    <h5 class="card-title">Stock bas (&le;5)</h5>
-                    <h2 class="card-text">{{ low_stock_products|length }}</h2>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-white bg-danger">
-                <div class="card-body">
-                    <h5 class="card-title">Rupture de stock</h5>
-                    <h2 class="card-text">{{ out_of_stock_products|length }}</h2>
-                </div>
+<div class="page-header mb-4">
+    <div class="page-header-left d-flex align-items-center">
+        <div class="page-header-title d-flex align-items-center gap-2">
+            <span class="material-icons text-primary" style="font-size:28px;">inventory_2</span>
+            <div>
+                <h5 class="mb-0">Dashboard stock</h5>
+                <small class="text-muted">{{ gym.name }}</small>
             </div>
         </div>
     </div>
-    
-    <div class="row">
-        <!-- Produits en stock bas -->
-        <div class="col-md-6 mb-4">
-            <div class="card">
-                <div class="card-header bg-warning">
-                    <h5 class="mb-0">⚠️ Produits en stock bas (&le;5)</h5>
+
+    <div class="page-header-right ms-auto">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <a href="{% url 'products:list' %}" class="btn btn-light-brand d-flex align-items-center gap-2">
+                <span class="material-icons" style="font-size:18px;">category</span>
+                Produits
+            </a>
+            <a href="{% url 'products:movement_list' %}" class="btn btn-primary d-flex align-items-center gap-2">
+                <span class="material-icons" style="font-size:18px;">sync_alt</span>
+                Mouvements
+            </a>
+        </div>
+    </div>
+</div>
+
+<style>
+.stock-stat-card,
+.stock-panel {
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+}
+
+.stock-stat-card {
+    height: 100%;
+    padding: 16px;
+}
+
+.stock-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.stock-panel {
+    height: 100%;
+}
+
+.stock-panel .card-header {
+    background: transparent;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.stock-list-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 14px 0;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.stock-list-item:last-child {
+    border-bottom: 0;
+}
+
+.stock-product-link {
+    color: #0f172a;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.stock-product-link:hover {
+    color: #3454d1;
+}
+
+.stock-meta {
+    color: #64748b;
+    font-size: 0.86rem;
+}
+
+.stock-empty {
+    min-height: 150px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: #64748b;
+}
+
+.stock-empty .material-icons {
+    font-size: 44px;
+    color: #94a3b8;
+    margin-bottom: 10px;
+}
+
+@media (max-width: 768px) {
+    .page-header {
+        flex-direction: column;
+        gap: 12px;
+        align-items: flex-start !important;
+    }
+
+    .page-header-right,
+    .page-header-right .d-flex {
+        width: 100%;
+    }
+
+    .page-header-right a {
+        flex: 1 1 140px;
+    }
+
+    .stock-list-item {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+}
+</style>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6 col-xl-3">
+        <div class="stock-stat-card">
+            <div class="d-flex align-items-center gap-3">
+                <div class="stock-icon" style="background: rgba(13, 110, 253, 0.08); color:#0d6efd;">
+                    <span class="material-icons">inventory_2</span>
                 </div>
-                <div class="card-body">
-                    {% if low_stock_products %}
-                    <ul class="list-group">
-                        {% for product in low_stock_products %}
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <a href="{% url 'products:detail' product.id %}">
+                <div>
+                    <div class="fs-12 text-muted">Produits actifs</div>
+                    <h4 class="mb-0">{{ total_products }}</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6 col-xl-3">
+        <div class="stock-stat-card">
+            <div class="d-flex align-items-center gap-3">
+                <div class="stock-icon" style="background: rgba(25, 135, 84, 0.08); color:#198754;">
+                    <span class="material-icons">payments</span>
+                </div>
+                <div>
+                    <div class="fs-12 text-muted">Valeur du stock</div>
+                    <h4 class="mb-0">{{ total_value|floatformat:0 }} USD</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6 col-xl-3">
+        <div class="stock-stat-card">
+            <div class="d-flex align-items-center gap-3">
+                <div class="stock-icon" style="background: rgba(255, 193, 7, 0.12); color:#b78103;">
+                    <span class="material-icons">warning</span>
+                </div>
+                <div>
+                    <div class="fs-12 text-muted">Stock bas</div>
+                    <h4 class="mb-0">{{ low_stock_products|length }}</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6 col-xl-3">
+        <div class="stock-stat-card">
+            <div class="d-flex align-items-center gap-3">
+                <div class="stock-icon" style="background: rgba(220, 53, 69, 0.08); color:#dc3545;">
+                    <span class="material-icons">report</span>
+                </div>
+                <div>
+                    <div class="fs-12 text-muted">Rupture</div>
+                    <h4 class="mb-0">{{ out_of_stock_products|length }}</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-xl-6">
+        <div class="card stock-panel">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <div>
+                    <h5 class="card-title mb-1">Produits en stock bas</h5>
+                    <small class="text-muted">Quantite inferieure ou egale a 5.</small>
+                </div>
+                <span class="badge bg-warning text-dark">{{ low_stock_products|length }}</span>
+            </div>
+            <div class="card-body">
+                {% if low_stock_products %}
+                    {% for product in low_stock_products %}
+                    <div class="stock-list-item">
+                        <div>
+                            <a class="stock-product-link" href="{% url 'products:detail' product.id %}">
                                 {{ product.name }}
                             </a>
-                            <div>
-                                <span class="badge bg-warning">Stock: {{ product.quantity }}</span>
-                                <span class="ms-2">{{ product.price }} USD</span>
-                            </div>
-                        </li>
-                        {% endfor %}
-                    </ul>
-                    {% else %}
-                    <p class="text-muted text-center mb-0">Aucun produit en stock bas</p>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-        
-        <!-- Produits en rupture -->
-        <div class="col-md-6 mb-4">
-            <div class="card">
-                <div class="card-header bg-danger text-white">
-                    <h5 class="mb-0">🚫 Produits en rupture de stock</h5>
-                </div>
-                <div class="card-body">
-                    {% if out_of_stock_products %}
-                    <ul class="list-group">
-                        {% for product in out_of_stock_products %}
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <a href="{% url 'products:detail' product.id %}">
-                                {{ product.name }}
-                            </a>
-                            <a href="{% url 'products:add_movement' product.id %}" class="btn btn-sm btn-success">
-                                <i class="fas fa-plus"></i> Réapprovisionner
-                            </a>
-                        </li>
-                        {% endfor %}
-                    </ul>
-                    {% else %}
-                    <p class="text-muted text-center mb-0">Aucune rupture de stock</p>
-                    {% endif %}
-                </div>
+                            <div class="stock-meta">{{ product.price|floatformat:2 }} USD</div>
+                        </div>
+                        <span class="badge bg-warning text-dark">Stock {{ product.quantity }}</span>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="stock-empty">
+                        <span class="material-icons">check_circle</span>
+                        <div class="fw-semibold">Aucun produit en stock bas</div>
+                        <small>Les seuils critiques sont sous controle.</small>
+                    </div>
+                {% endif %}
             </div>
         </div>
     </div>
-    
-    <div class="row">
-        <!-- Top produits par valeur -->
-        <div class="col-md-6 mb-4">
-            <div class="card">
-                <div class="card-header bg-info text-white">
-                    <h5 class="mb-0">💰 Top produits par valeur de stock</h5>
+
+    <div class="col-xl-6">
+        <div class="card stock-panel">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <div>
+                    <h5 class="card-title mb-1">Ruptures de stock</h5>
+                    <small class="text-muted">Produits actifs avec quantite a zero.</small>
                 </div>
-                <div class="card-body">
-                    {% if top_value_products %}
-                    <ul class="list-group">
-                        {% for product in top_value_products %}
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            {{ product.name }}
-                            <div>
-                                <span class="badge bg-info">{{ product.quantity }} unités</span>
-                                <span class="ms-2 fw-bold">{{ product.stock_value|floatformat:2 }} USD</span>
-                            </div>
-                        </li>
-                        {% endfor %}
-                    </ul>
-                    {% else %}
-                    <p class="text-muted text-center mb-0">Aucune donnée</p>
-                    {% endif %}
-                </div>
+                <span class="badge bg-danger">{{ out_of_stock_products|length }}</span>
+            </div>
+            <div class="card-body">
+                {% if out_of_stock_products %}
+                    {% for product in out_of_stock_products %}
+                    <div class="stock-list-item">
+                        <div>
+                            <a class="stock-product-link" href="{% url 'products:detail' product.id %}">
+                                {{ product.name }}
+                            </a>
+                            <div class="stock-meta">Rupture totale</div>
+                        </div>
+                        <a href="{% url 'products:add_movement' product.id %}" class="btn btn-sm btn-outline-success d-flex align-items-center gap-1">
+                            <span class="material-icons" style="font-size:16px;">add</span>
+                            Reapprovisionner
+                        </a>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="stock-empty">
+                        <span class="material-icons">verified</span>
+                        <div class="fw-semibold">Aucune rupture</div>
+                        <small>Tous les produits actifs ont du stock disponible.</small>
+                    </div>
+                {% endif %}
             </div>
         </div>
-        
-        <!-- Derniers mouvements -->
-        <div class="col-md-6 mb-4">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">📋 Derniers mouvements</h5>
-                </div>
-                <div class="card-body">
-                    {% if recent_movements %}
-                    <div class="list-group">
-                        {% for movement in recent_movements %}
-                        <div class="list-group-item">
-                            <div class="d-flex justify-content-between">
-                                <div>
-                                    <strong>{{ movement.product.name }}</strong>
-                                    <span class="badge {% if movement.movement_type == 'in' %}bg-success{% else %}bg-danger{% endif %} ms-2">
-                                        {{ movement.get_movement_type_display }}
-                                    </span>
-                                </div>
-                                <span class="text-muted">{{ movement.created_at|date:"d/m/Y H:i" }}</span>
-                            </div>
-                            <div class="mt-1">
-                                <span>Quantité: {{ movement.quantity }}</span>
-                                {% if movement.reason %}
-                                <span class="ms-3 text-muted">Raison: {{ movement.reason }}</span>
-                                {% endif %}
+    </div>
+
+    <div class="col-xl-6">
+        <div class="card stock-panel">
+            <div class="card-header">
+                <h5 class="card-title mb-1">Top valeur de stock</h5>
+                <small class="text-muted">Produits qui immobilisent le plus de valeur.</small>
+            </div>
+            <div class="card-body">
+                {% if top_value_products %}
+                    {% for product in top_value_products %}
+                    <div class="stock-list-item">
+                        <div>
+                            <a class="stock-product-link" href="{% url 'products:detail' product.id %}">
+                                {{ product.name }}
+                            </a>
+                            <div class="stock-meta">{{ product.quantity }} unite{{ product.quantity|pluralize }}</div>
+                        </div>
+                        <span class="fw-bold text-dark">{{ product.stock_value|floatformat:2 }} USD</span>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="stock-empty">
+                        <span class="material-icons">bar_chart</span>
+                        <div class="fw-semibold">Aucune valeur a afficher</div>
+                        <small>Ajoute des produits actifs pour suivre la valeur du stock.</small>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-6">
+        <div class="card stock-panel">
+            <div class="card-header">
+                <h5 class="card-title mb-1">Derniers mouvements</h5>
+                <small class="text-muted">Entrees et sorties les plus recentes.</small>
+            </div>
+            <div class="card-body">
+                {% if recent_movements %}
+                    {% for movement in recent_movements %}
+                    <div class="stock-list-item">
+                        <div>
+                            <a class="stock-product-link" href="{% url 'products:detail' movement.product.id %}">
+                                {{ movement.product.name }}
+                            </a>
+                            <div class="stock-meta">
+                                {{ movement.created_at|date:"d/m/Y H:i" }}
+                                {% if movement.reason %} - {{ movement.reason }}{% endif %}
                             </div>
                         </div>
-                        {% endfor %}
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge {% if movement.movement_type == 'in' %}bg-success{% else %}bg-danger{% endif %}">
+                                {{ movement.get_movement_type_display }}
+                            </span>
+                            <span class="fw-semibold">{{ movement.quantity }}</span>
+                        </div>
                     </div>
-                    {% else %}
-                    <p class="text-muted text-center mb-0">Aucun mouvement</p>
-                    {% endif %}
-                </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="stock-empty">
+                        <span class="material-icons">history</span>
+                        <div class="fw-semibold">Aucun mouvement</div>
+                        <small>Les mouvements de stock apparaitront ici.</small>
+                    </div>
+                {% endif %}
             </div>
         </div>
     </div>
