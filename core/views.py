@@ -479,11 +479,13 @@ def settings_dashboard(request):
         else Gym.objects.filter(id=gym.id, is_active=True)
     )
     allowed_employee_roles = _employee_role_values_for_request(request)
+    locked_employee_gym = None if can_manage_organization else gym
     organization_form = OrganizationSettingsForm(instance=organization)
     employee_form = InternalEmployeeForm(
         organization=organization,
         gyms=accessible_gyms,
         allowed_roles=allowed_employee_roles,
+        locked_gym=locked_employee_gym,
     )
     specialty_form = CoachSpecialtyForm()
 
@@ -513,6 +515,7 @@ def settings_dashboard(request):
                 organization=organization,
                 gyms=accessible_gyms,
                 allowed_roles=allowed_employee_roles,
+                locked_gym=locked_employee_gym,
             )
             if employee_form.is_valid():
                 selected_gym = employee_form.cleaned_data["gym"]

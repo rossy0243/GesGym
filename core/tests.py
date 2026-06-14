@@ -923,6 +923,17 @@ class RoleAccessMatrixTests(TestCase):
         self.assertNotContains(response, "peer-manager")
         self.assertContains(response, "visible-cashier")
 
+    def test_manager_settings_locks_gym_choice_to_active_gym(self):
+        self.client.force_login(self.manager)
+
+        response = self.client.get(reverse("core:settings"), {"tab": "employees"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Salle active")
+        self.assertContains(response, self.gym.name)
+        self.assertContains(response, f'<input type="hidden" name="gym" value="{self.gym.id}"', html=False)
+        self.assertNotContains(response, '<select name="gym"', html=False)
+
     def test_manager_cannot_reset_password_for_manager_role(self):
         peer_manager = User.objects.create_user(
             username="protected-manager",
@@ -1019,6 +1030,21 @@ class RoleChoiceCleanupTests(TestCase):
 
         self.assertNotIn("manager", role_values)
         self.assertEqual(role_values, ["coach", "reception", "cashier"])
+
+    def test_internal_employee_form_hides_locked_gym_field(self):
+        organization = Organization.objects.create(name="Form Org", slug="form-org")
+        gym = Gym.objects.create(
+            organization=organization,
+            name="Form Gym",
+            slug="form-gym",
+            subdomain="form-gym",
+        )
+
+        form = InternalEmployeeForm(organization=organization, locked_gym=gym)
+
+        self.assertEqual(form.fields["gym"].initial, gym)
+        self.assertEqual(form.locked_gym, gym)
+        self.assertEqual(form.fields["gym"].widget.input_type, "hidden")
 
     def test_owner_create_user_form_excludes_accountant_role(self):
         form = CreateUserForm()

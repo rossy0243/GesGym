@@ -71,7 +71,15 @@ class InternalEmployeeForm(forms.Form):
         label="Actif",
     )
 
-    def __init__(self, *args, organization=None, gyms=None, allowed_roles=None, **kwargs):
+    def __init__(
+        self,
+        *args,
+        organization=None,
+        gyms=None,
+        allowed_roles=None,
+        locked_gym=None,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         if gyms is not None:
             self.fields["gym"].queryset = gyms
@@ -79,6 +87,11 @@ class InternalEmployeeForm(forms.Form):
             self.fields["gym"].queryset = organization.gyms.filter(is_active=True).order_by("name")
         else:
             self.fields["gym"].queryset = Gym.objects.none()
+        self.locked_gym = locked_gym
+        if locked_gym is not None:
+            self.fields["gym"].queryset = Gym.objects.filter(id=locked_gym.id)
+            self.fields["gym"].initial = locked_gym
+            self.fields["gym"].widget = forms.HiddenInput()
         if allowed_roles is not None:
             allowed_roles = set(allowed_roles)
             self.fields["role"].choices = [
