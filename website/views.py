@@ -12,8 +12,8 @@ from .forms import DemoRequestForm
 
 
 PACK_PRESET_MESSAGES = {
-    "club": "Bonjour, je souhaite découvrir le Pack Club à travers une démonstration, en particulier pour la gestion des membres, des abonnements, des paiements, des accès et des rapports.",
-    "premium": "Bonjour, je souhaite découvrir le Pack Premium à travers une démonstration, notamment pour les modules avancés comme le stock, les employés, les équipements et le coaching.",
+    "club": "Bonjour, je souhaite découvrir le Pack Club à travers une démonstration, en particulier pour la gestion des membres, des abonnements, des paiements, des accès QR code et des rapports.",
+    "premium": "Bonjour, je souhaite découvrir le Pack Premium à travers une démonstration, notamment pour les modules avancés comme le stock, les employés, les équipements, le coaching et le pilotage multi-site.",
 }
 
 PACK_LABELS = {
@@ -22,13 +22,13 @@ PACK_LABELS = {
 }
 LANDING_META_DESCRIPTION = (
     "SmartClub Pro est un logiciel de gestion pour salles de sport : membres, "
-    "abonnements, paiements, contrôle d’accès, coaching et rapports dans une "
-    "plateforme unique."
+    "abonnements, paiements, contrôle d’accès QR code, coaching et rapports "
+    "dans une plateforme unique pour réduire les pertes et mieux piloter."
 )
 LANDING_OG_IMAGE = "/static/images/smartclub-logo-full.png"
 LANDING_KEYWORDS = (
     "logiciel salle de sport, logiciel gestion salle de sport, gestion club fitness, "
-    "application salle de sport, logiciel abonnement fitness, contrôle accès gym"
+    "application salle de sport, logiciel abonnement fitness, contrôle accès QR code gym"
 )
 
 
