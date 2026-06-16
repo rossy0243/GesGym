@@ -12,8 +12,8 @@ from .forms import DemoRequestForm
 
 
 PACK_PRESET_MESSAGES = {
-    "club": "Bonjour, je souhaite decouvrir le Pack Club a travers une demonstration, en particulier pour la gestion des membres, des abonnements, des paiements, des acces et des rapports.",
-    "premium": "Bonjour, je souhaite decouvrir le Pack Premium a travers une demonstration, notamment pour les modules avances comme le stock, les employes, les equipements et le coaching.",
+    "club": "Bonjour, je souhaite découvrir le Pack Club à travers une démonstration, en particulier pour la gestion des membres, des abonnements, des paiements, des accès et des rapports.",
+    "premium": "Bonjour, je souhaite découvrir le Pack Premium à travers une démonstration, notamment pour les modules avancés comme le stock, les employés, les équipements et le coaching.",
 }
 
 PACK_LABELS = {
@@ -21,14 +21,14 @@ PACK_LABELS = {
     "premium": "Pack Premium",
 }
 LANDING_META_DESCRIPTION = (
-    "SmartClub Pro est un logiciel de gestion pour salles de sport: membres, "
-    "abonnements, paiements, controle d'acces, coaching et rapports dans une "
+    "SmartClub Pro est un logiciel de gestion pour salles de sport : membres, "
+    "abonnements, paiements, contrôle d’accès, coaching et rapports dans une "
     "plateforme unique."
 )
 LANDING_OG_IMAGE = "/static/images/smartclub-logo-full.png"
 LANDING_KEYWORDS = (
     "logiciel salle de sport, logiciel gestion salle de sport, gestion club fitness, "
-    "application salle de sport, logiciel abonnement fitness, controle acces gym"
+    "application salle de sport, logiciel abonnement fitness, contrôle accès gym"
 )
 
 
@@ -48,13 +48,13 @@ def _build_landing_seo_context(request):
         "mainEntity": [
             {
                 "@type": "Question",
-                "name": "Quelle est la difference entre le Pack Club et le Pack Premium ?",
+                "name": "Quelle est la différence entre le Pack Club et le Pack Premium ?",
                 "acceptedAnswer": {
                     "@type": "Answer",
                     "text": (
                         "Le Pack Club couvre l'exploitation essentielle. Le Pack Premium "
-                        "ajoute les besoins avances lies aux produits, aux employes, aux "
-                        "equipements et au coaching."
+                        "ajoute les besoins avancés liés aux produits, aux employés, aux "
+                        "équipements et au coaching."
                     ),
                 },
             },
@@ -64,8 +64,8 @@ def _build_landing_seo_context(request):
                 "acceptedAnswer": {
                     "@type": "Answer",
                     "text": (
-                        "Le prix mensuel depend du pack choisi et du nombre de sites actifs "
-                        "equipes. Chaque site actif beneficie du pack retenu."
+                        "Le prix mensuel dépend du pack choisi et du nombre de sites actifs "
+                        "équipés. Chaque site actif bénéficie du pack retenu."
                     ),
                 },
             },
@@ -75,8 +75,8 @@ def _build_landing_seo_context(request):
                 "acceptedAnswer": {
                     "@type": "Answer",
                     "text": (
-                        "Oui. Tout pack inclut un espace membre mobile PWA avec carte, QR code, "
-                        "abonnement, coach, acces, paiements et messages de la salle."
+                        "Oui. Chaque pack inclut un espace membre mobile PWA avec carte, QR code, "
+                        "abonnement, coach, accès, paiements et messages de la salle."
                     ),
                 },
             },
@@ -143,18 +143,18 @@ def landing(request):
             cleaned_data = form.cleaned_data
             sites_count = cleaned_data["sites_count"]
             pack_key = cleaned_data.get("selected_pack", "")
-            pack_label = PACK_LABELS.get(pack_key, "Non precise")
-            subject = f"Nouvelle demande de demo SmartClub Pro - {cleaned_data['club_name']}"
+            pack_label = PACK_LABELS.get(pack_key, "Non précisé")
+            subject = f"Nouvelle demande de démo SmartClub Pro - {cleaned_data['club_name']}"
             message = (
-                "Une nouvelle demande de demo a ete envoyee depuis la landing page.\n\n"
+                "Une nouvelle demande de démo a été envoyée depuis la landing page.\n\n"
                 f"Pack choisi : {pack_label}\n"
                 f"Nom complet : {cleaned_data['full_name']}\n"
                 f"Email : {cleaned_data['email']}\n"
-                f"Telephone : {cleaned_data['phone']}\n"
+                f"Téléphone : {cleaned_data['phone']}\n"
                 f"Club : {cleaned_data['club_name']}\n"
                 f"Nombre de sites actifs : {sites_count}\n\n"
-                "Besoin exprime :\n"
-                f"{cleaned_data['message'] or 'Aucun message complementaire.'}\n"
+                "Besoin exprimé :\n"
+                f"{cleaned_data['message'] or 'Aucun message complémentaire.'}\n"
             )
             email = EmailMessage(
                 subject=subject,

@@ -14,7 +14,7 @@ class PublicRouteTests(TestCase):
         self.assertContains(response, "SmartClub")
         self.assertContains(response, "Espace membre PWA")
         self.assertContains(response, "Messages membres")
-        self.assertContains(response, "Envoyer ma demande de demo")
+        self.assertContains(response, "Envoyer ma demande de démo")
         self.assertContains(response, reverse("compte:login"))
         self.assertNotContains(response, "{% url 'compte:login' %}")
 
@@ -51,7 +51,7 @@ class PublicRouteTests(TestCase):
                 "phone": "+243821000000",
                 "club_name": "Club Horizon",
                 "sites_count": 2,
-                "message": "Nous voulons une demo pour la gestion multi-sites.",
+                "message": "Nous voulons une démo pour la gestion multi-sites.",
             },
         )
 
@@ -69,11 +69,11 @@ class PublicRouteTests(TestCase):
         response = self.client.get("/?pack=club")
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Vous avez selectionne")
+        self.assertContains(response, "Vous avez sélectionné")
         self.assertContains(response, "Pack Club")
         self.assertContains(
             response,
-            "je souhaite decouvrir le Pack Club a travers une demonstration",
+            "je souhaite découvrir le Pack Club à travers une démonstration",
         )
         self.assertContains(response, 'value="club"')
 
@@ -84,7 +84,7 @@ class PublicRouteTests(TestCase):
         self.assertContains(response, "Pack Premium")
         self.assertContains(
             response,
-            "je souhaite decouvrir le Pack Premium a travers une demonstration",
+            "je souhaite découvrir le Pack Premium à travers une démonstration",
         )
         self.assertContains(response, 'value="premium"')
 

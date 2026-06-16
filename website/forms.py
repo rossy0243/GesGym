@@ -3,7 +3,7 @@ from django import forms
 
 class DemoRequestForm(forms.Form):
     PACK_CHOICES = (
-        ("", "Non precise"),
+        ("", "Non précisé"),
         ("club", "Pack Club"),
         ("premium", "Pack Premium"),
     )
@@ -22,7 +22,7 @@ class DemoRequestForm(forms.Form):
         max_length=254,
     )
     phone = forms.CharField(
-        label="Telephone",
+        label="Téléphone",
         max_length=30,
     )
     club_name = forms.CharField(
