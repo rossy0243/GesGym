@@ -16,6 +16,8 @@ class PublicRouteTests(TestCase):
         self.assertContains(response, "Messages membres")
         self.assertContains(response, "Envoyer ma demande de démo")
         self.assertContains(response, reverse("compte:login"))
+        self.assertNotContains(response, "fa-facebook")
+        self.assertNotContains(response, "fa-instagram")
         self.assertNotContains(response, "{% url 'compte:login' %}")
 
     def test_short_login_route_redirects_to_login_page(self):
@@ -64,6 +66,26 @@ class PublicRouteTests(TestCase):
         self.assertIn("Pack Premium", sent_email.body)
         self.assertIn("Rosette Mukendi", sent_email.body)
         self.assertIn("2", sent_email.body)
+
+    def test_demo_request_can_be_signaled_on_whatsapp_after_email(self):
+        response = self.client.post(
+            "/",
+            {
+                "selected_pack": "club",
+                "full_name": "Mila Kanku",
+                "email": "mila@example.com",
+                "phone": "+243979000000",
+                "club_name": "Smart Fit",
+                "sites_count": 1,
+                "message": "Je veux une démo rapide.",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Signaler aussi sur WhatsApp")
+        self.assertContains(response, "https://wa.me/243842616570?text=")
+        self.assertContains(response, "Mila%20Kanku")
 
     def test_pack_links_prefill_demo_form_for_club(self):
         response = self.client.get("/?pack=club")

@@ -1,4 +1,5 @@
 import json
+from urllib.parse import quote
 
 from django.conf import settings
 from django.core.mail import EmailMessage
@@ -20,6 +21,7 @@ PACK_LABELS = {
     "club": "Pack Club",
     "premium": "Pack Premium",
 }
+DEMO_WHATSAPP_NUMBER = "243842616570"
 LANDING_META_DESCRIPTION = (
     "SmartClub Pro est un logiciel de gestion pour salles de sport : membres, "
     "abonnements, paiements, contrôle d’accès QR code, coaching et rapports "
@@ -30,6 +32,25 @@ LANDING_KEYWORDS = (
     "logiciel salle de sport, logiciel gestion salle de sport, gestion club fitness, "
     "application salle de sport, logiciel abonnement fitness, contrôle accès QR code gym"
 )
+
+
+def _build_whatsapp_url(message):
+    if message:
+        return f"https://wa.me/{DEMO_WHATSAPP_NUMBER}?text={quote(message)}"
+    return f"https://wa.me/{DEMO_WHATSAPP_NUMBER}"
+
+
+def _build_demo_whatsapp_message(cleaned_data, pack_label):
+    return (
+        "Bonjour SmartClub Pro, je viens de faire une demande de démo.\n\n"
+        f"Pack choisi : {pack_label}\n"
+        f"Nom complet : {cleaned_data['full_name']}\n"
+        f"Email : {cleaned_data['email']}\n"
+        f"Téléphone : {cleaned_data['phone']}\n"
+        f"Club : {cleaned_data['club_name']}\n"
+        f"Nombre de sites actifs : {cleaned_data['sites_count']}\n\n"
+        f"Besoin : {cleaned_data['message'] or 'Aucun message complémentaire.'}"
+    )
 
 
 def _absolute_url(request, path=""):
@@ -109,7 +130,7 @@ def _build_landing_seo_context(request):
             "@type": "Organization",
             "name": "SmartClub Pro",
             "email": "contact@smartclubpro.org",
-            "telephone": "+243821886995",
+            "telephone": "+243979710633",
             "address": {
                 "@type": "PostalAddress",
                 "streetAddress": "01 bis, route de Matadi, Ngaliema",
@@ -133,6 +154,9 @@ def _build_landing_seo_context(request):
 
 def landing(request):
     demo_sent = request.GET.get("demo") == "sent"
+    demo_whatsapp_message = ""
+    if demo_sent:
+        demo_whatsapp_message = request.session.pop("demo_whatsapp_message", "")
     selected_pack = request.GET.get("pack", "").strip().lower()
     if selected_pack not in PACK_PRESET_MESSAGES:
         selected_pack = ""
@@ -164,6 +188,10 @@ def landing(request):
                 reply_to=[cleaned_data["email"]],
             )
             email.send(fail_silently=False)
+            request.session["demo_whatsapp_message"] = _build_demo_whatsapp_message(
+                cleaned_data,
+                pack_label,
+            )
             return redirect(f"{reverse('landing')}?demo=sent#demo-form")
     else:
         initial = {}
@@ -178,6 +206,8 @@ def landing(request):
         {
             "demo_form": form,
             "demo_sent": demo_sent,
+            "demo_whatsapp_link": _build_whatsapp_url(demo_whatsapp_message),
+            "whatsapp_contact_url": _build_whatsapp_url(""),
             "selected_pack_label": PACK_LABELS.get(selected_pack, ""),
             **_build_landing_seo_context(request),
         },
