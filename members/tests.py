@@ -1,3 +1,4 @@
+import json
 from datetime import timedelta
 from io import StringIO
 from unittest.mock import patch
@@ -8,6 +9,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from access.models import AccessLog
 from coaching.models import Coach, CoachAssignment, CoachingFeedback, GroupCoachingProgram
 from compte.models import User, UserGymRole
 from members.forms import MemberCreationForm
@@ -1005,3 +1007,119 @@ class MemberPortalTests(TestCase):
         self.assertEqual(worker_response["Service-Worker-Allowed"], "/members/")
         self.assertIn("service-worker", reverse("members:member_app_service_worker"))
         self.assertNotIn("/members/me/", worker_response.content.decode("utf-8"))
+
+    def test_member_api_login_and_me_payload(self):
+        AccessLog.objects.create(gym=self.gym, member=self.member, access_granted=True)
+
+        response = self.client.post(
+            reverse("members:member_api_login"),
+            data=json.dumps(
+                {
+                    "username": self.member.user.username,
+                    "password": "MemberPortal123!",
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertFalse(payload["force_password_change"])
+        self.assertEqual(payload["data"]["member"]["qr_data"], str(self.member.qr_code))
+        self.assertEqual(payload["data"]["member"]["code"], f"MEM-{self.member.id:05d}")
+        self.assertEqual(payload["data"]["subscription"]["plan"]["name"], "Mensuel")
+        self.assertEqual(payload["data"]["access"]["granted_count"], 1)
+        self.assertIn("plans", payload["data"])
+
+        me_response = self.client.get(reverse("members:member_api_me"))
+
+        self.assertEqual(me_response.status_code, 200)
+        self.assertEqual(me_response.json()["data"]["member"]["username"], self.member.user.username)
+
+    def test_member_api_rejects_non_member_account(self):
+        staff_user = User.objects.create_user(username="staff-api", password="pass12345")
+
+        response = self.client.post(
+            reverse("members:member_api_login"),
+            data=json.dumps({"username": staff_user.username, "password": "pass12345"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(response.json()["ok"])
+
+    def test_member_api_me_scopes_to_current_member_gym(self):
+        other_org = Organization.objects.create(name="Other Portal Org", slug="other-portal-org")
+        other_gym = Gym.objects.create(
+            organization=other_org,
+            name="Other Portal Gym",
+            slug="other-portal-gym",
+            subdomain="other-portal-gym",
+        )
+        other_plan = SubscriptionPlan.objects.create(
+            gym=other_gym,
+            name="Plan autre gym",
+            duration_days=90,
+            price=100,
+        )
+        other_member = Member.objects.create(
+            gym=other_gym,
+            first_name="Other",
+            last_name="Member",
+            phone="+243810099999",
+            email="other.member@example.com",
+        )
+        Notification.objects.create(
+            gym=other_gym,
+            member=other_member,
+            title="Message autre gym",
+            message="Invisible depuis le membre courant",
+            channel=Notification.CHANNEL_IN_APP,
+            status=Notification.STATUS_SENT,
+            sent_at=timezone.now(),
+        )
+        self.client.force_login(self.member.user)
+
+        response = self.client.get(reverse("members:member_api_me"))
+
+        self.assertEqual(response.status_code, 200)
+        encoded_payload = json.dumps(response.json()["data"])
+        self.assertNotIn(other_plan.name, encoded_payload)
+        self.assertNotIn("Message autre gym", encoded_payload)
+
+    def test_member_api_actions_update_existing_portal_models(self):
+        notification = Notification.objects.create(
+            gym=self.gym,
+            member=self.member,
+            title="Action API",
+            message="Lecture depuis mobile",
+            channel=Notification.CHANNEL_IN_APP,
+            status=Notification.STATUS_SENT,
+            sent_at=timezone.now(),
+        )
+        self.client.force_login(self.member.user)
+
+        subscription_response = self.client.post(
+            reverse("members:member_api_subscription_request"),
+            data=json.dumps({"plan_id": self.year_plan.id}),
+            content_type="application/json",
+        )
+        read_response = self.client.post(
+            reverse("members:member_api_notification_read", args=[notification.id]),
+            data=json.dumps({}),
+            content_type="application/json",
+        )
+        coach_response = self.client.post(
+            reverse("members:member_api_choose_coach"),
+            data=json.dumps({"coach_id": self.second_coach.id}),
+            content_type="application/json",
+        )
+
+        self.assertIn(subscription_response.status_code, [200, 201])
+        self.assertEqual(read_response.status_code, 200)
+        self.assertEqual(coach_response.status_code, 200)
+        self.assertTrue(SubscriptionRequest.objects.filter(member=self.member, plan=self.year_plan).exists())
+        notification.refresh_from_db()
+        self.assertIsNotNone(notification.read_at)
+        self.assertTrue(self.second_coach.members.filter(id=self.member.id).exists())

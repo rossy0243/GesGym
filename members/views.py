@@ -1,9 +1,11 @@
 #members/views.py
+import json
 from datetime import date, timedelta
 from io import BytesIO
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.contrib import messages
+from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.forms import PasswordChangeForm
 from django.shortcuts import render, get_object_or_404
@@ -14,7 +16,9 @@ from django.db.models import Q, Exists, OuterRef, Count
 from django.core.paginator import Paginator
 from django.urls import reverse
 from django.templatetags.static import static
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_http_methods
 import qrcode
 from access.models import AccessLog
 from coaching.forms import CoachingFeedbackForm
@@ -158,6 +162,371 @@ def _goal_direction_label(goal):
     if not goal:
         return ""
     return "Encore a gagner" if goal.goal_type == MemberGoal.GOAL_GAIN_WEIGHT else "Encore a perdre"
+
+
+def _json_error(message, status=400, errors=None):
+    payload = {"ok": False, "error": message}
+    if errors:
+        payload["errors"] = errors
+    return JsonResponse(payload, status=status)
+
+
+def _json_success(data=None, status=200):
+    payload = {"ok": True}
+    if data:
+        payload.update(data)
+    return JsonResponse(payload, status=status)
+
+
+def _json_body(request):
+    if not request.body:
+        return {}
+    try:
+        return json.loads(request.body.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        raise ValueError("JSON invalide.")
+
+
+def _form_errors(form):
+    return {
+        field: [str(error) for error in errors]
+        for field, errors in form.errors.items()
+    }
+
+
+def _api_current_member(request):
+    if not request.user.is_authenticated:
+        return None, _json_error("Authentification requise.", status=401)
+    member = _get_current_member(request.user)
+    if not member:
+        return None, _json_error("Ce compte n'est pas un compte membre.", status=403)
+    member = get_object_or_404(
+        Member.objects.select_related("user", "gym", "gym__organization"),
+        id=member.id,
+        user=request.user,
+    )
+    return member, None
+
+
+def _absolute_media_url(request, file_field):
+    if not file_field:
+        return ""
+    try:
+        return request.build_absolute_uri(file_field.url)
+    except ValueError:
+        return ""
+
+
+def _subscription_payload(subscription):
+    if not subscription:
+        return None
+    plan = subscription.plan
+    return {
+        "id": subscription.id,
+        "start_date": subscription.start_date.isoformat(),
+        "end_date": subscription.end_date.isoformat(),
+        "progress": _subscription_progress(subscription),
+        "plan": {
+            "id": plan.id if plan else None,
+            "name": plan.name if plan else "-",
+            "price": float(plan.price) if plan else 0,
+            "duration_days": plan.duration_days if plan else 0,
+            "offers": [
+                {
+                    "id": offer.id,
+                    "name": offer.name,
+                    "category": offer.category,
+                    "category_label": offer.get_category_display(),
+                }
+                for offer in plan.active_offers
+            ] if plan else [],
+        },
+    }
+
+
+def _payment_payload(payment):
+    return {
+        "id": payment.id,
+        "description": payment.description or "Paiement",
+        "amount_cdf": float(payment.amount_cdf or 0),
+        "amount_usd": float(payment.amount_usd or payment.amount or 0),
+        "currency": payment.currency,
+        "method": payment.method,
+        "method_label": payment.get_method_display(),
+        "status": payment.status,
+        "status_label": payment.get_status_display(),
+        "category": payment.category,
+        "category_label": payment.get_category_display(),
+        "created_at": payment.created_at.isoformat(),
+    }
+
+
+def _access_log_payload(log):
+    return {
+        "id": log.id,
+        "access_granted": log.access_granted,
+        "status_label": "Autorise" if log.access_granted else "Refuse",
+        "denial_reason": log.denial_reason or "",
+        "device_used": log.device_used or "",
+        "check_in_time": log.check_in_time.isoformat(),
+    }
+
+
+def _notification_payload(notification):
+    return {
+        "id": notification.id,
+        "title": notification.title or "Message de la salle",
+        "message": notification.message,
+        "is_read": bool(notification.read_at),
+        "created_at": notification.created_at.isoformat(),
+        "read_at": notification.read_at.isoformat() if notification.read_at else None,
+    }
+
+
+def _plan_payload(plan, current_plan_id, pending_plan_ids, top_plan_sales_count):
+    return {
+        "id": plan.id,
+        "name": plan.name,
+        "description": plan.description or "",
+        "duration_days": plan.duration_days,
+        "price": float(plan.price),
+        "is_current": plan.id == current_plan_id,
+        "is_pending": plan.id in pending_plan_ids,
+        "is_featured": bool(top_plan_sales_count and plan.total_sales_count == top_plan_sales_count),
+        "sales_count": plan.total_sales_count,
+        "coaching_rights": plan.coaching_rights_payload(),
+        "offers": [
+            {
+                "id": offer.id,
+                "name": offer.name,
+                "category": offer.category,
+                "category_label": offer.get_category_display(),
+            }
+            for offer in plan.active_offers
+        ],
+    }
+
+
+def _coach_payload(coach, current_coach_id=None):
+    return {
+        "id": coach.id,
+        "name": coach.name,
+        "phone": coach.phone or "",
+        "specialty": coach.specialty or "Coach sportif",
+        "is_current": coach.id == current_coach_id,
+        "member_count": getattr(coach, "member_count", coach.members.count()),
+    }
+
+
+def _group_program_payload(program, current_group_program_id=None):
+    participants_total = getattr(program, "participants_total", program.participants.count())
+    return {
+        "id": program.id,
+        "name": program.name,
+        "objective": program.objective or "",
+        "description": program.description or "",
+        "coach": _coach_payload(program.coach),
+        "capacity": program.capacity,
+        "participants_total": participants_total,
+        "is_current": program.id == current_group_program_id,
+        "is_full": participants_total >= program.capacity,
+    }
+
+
+def _goal_payload(goal, goal_access):
+    if not goal:
+        return None
+    return {
+        "id": goal.id,
+        "goal_type": goal.goal_type,
+        "goal_type_label": goal.get_goal_type_display(),
+        "target_weight": float(goal.target_weight),
+        "target_date": goal.target_date.isoformat() if goal.target_date else None,
+        "measurement_starter": goal.measurement_starter,
+        "measurement_starter_label": goal.get_measurement_starter_display(),
+        "initial_weight": float(goal.initial_weight) if goal.initial_weight is not None else None,
+        "current_weight": float(goal.current_weight) if goal.current_weight is not None else None,
+        "remaining_weight": float(goal.remaining_weight) if goal.current_weight is not None else None,
+        "progress_percent": goal.progress_percent,
+        "status": goal.status,
+        "note": goal.note or "",
+        "can_member_record": goal_access["can_member_record"],
+        "waiting_for": goal_access["waiting_for"],
+        "direction_label": _goal_direction_label(goal),
+        "measurements": [
+            {
+                "id": measurement.id,
+                "weight": float(measurement.weight),
+                "measured_at": measurement.measured_at.isoformat(),
+                "source": measurement.source,
+                "source_label": measurement.get_source_display(),
+                "note": measurement.note or "",
+            }
+            for measurement in goal.measurements_ordered[:8]
+        ],
+    }
+
+
+def _member_mobile_payload(request, member):
+    subscription = member.active_subscription
+    payments = list(
+        Payment.objects.filter(member=member, gym=member.gym)
+        .select_related("subscription", "subscription__plan", "product")
+        .order_by("-created_at")[:6]
+    )
+    access_logs = list(
+        AccessLog.objects.filter(member=member, gym=member.gym)
+        .select_related("scanned_by")
+        .order_by("-check_in_time")[:8]
+    )
+    can_choose_individual_coach = _member_can_choose_individual_coach(member, subscription)
+    can_choose_group_program = _member_can_choose_group_program(member, subscription)
+    coaches = list(
+        Coach.objects.filter(gym=member.gym, members=member, is_active=True).order_by("name")
+        if can_choose_individual_coach
+        else []
+    )
+    selected_group_programs = list(
+        GroupCoachingProgram.objects.filter(
+            gym=member.gym,
+            participants=member,
+            is_active=True,
+        ).select_related("coach").order_by("name")
+        if can_choose_group_program
+        else []
+    )
+    notifications = list(
+        Notification.objects.filter(
+            gym=member.gym,
+            member=member,
+            channel=Notification.CHANNEL_IN_APP,
+            status=Notification.STATUS_SENT,
+        ).select_related("sent_by").order_by("-created_at")[:18]
+    )
+    unread_count = sum(1 for notification in notifications if not notification.read_at)
+    available_plans_queryset = SubscriptionPlan.objects.filter(
+        gym=member.gym,
+        is_active=True,
+    ).prefetch_related("offers").annotate(
+        total_sales_count=Count(
+            "subscriptions",
+            filter=Q(subscriptions__gym=member.gym),
+            distinct=True,
+        )
+    )
+    top_plan_sales_count = max((plan.total_sales_count for plan in available_plans_queryset), default=0)
+    available_plans = list(available_plans_queryset.order_by("-total_sales_count", "price", "duration_days", "name"))
+    available_coaches = list(
+        Coach.objects.filter(gym=member.gym, is_active=True)
+        .annotate(member_count=Count("members", distinct=True))
+        .order_by("name")
+        if can_choose_individual_coach
+        else []
+    )
+    available_group_programs = list(
+        GroupCoachingProgram.objects.filter(gym=member.gym, is_active=True)
+        .select_related("coach")
+        .annotate(participants_total=Count("participants", distinct=True))
+        .order_by("name")
+        if can_choose_group_program
+        else []
+    )
+    pending_requests = list(
+        SubscriptionRequest.objects.filter(
+            gym=member.gym,
+            member=member,
+            status__in=[
+                SubscriptionRequest.STATUS_PENDING,
+                SubscriptionRequest.STATUS_AWAITING_PAYMENT,
+            ],
+        ).select_related("plan").order_by("-created_at")
+    )
+    pending_plan_ids = [request_item.plan_id for request_item in pending_requests]
+    active_goal = member.active_goal
+    goal_access = _member_goal_access(active_goal)
+    status = member.computed_status
+    current_coach_id = coaches[0].id if coaches else None
+    current_group_program_id = selected_group_programs[0].id if selected_group_programs else None
+    granted_access_count = sum(1 for log in access_logs if log.access_granted)
+    denied_access_count = len(access_logs) - granted_access_count
+
+    return {
+        "member": {
+            "id": member.id,
+            "code": _member_code(member),
+            "first_name": member.first_name,
+            "last_name": member.last_name,
+            "full_name": f"{member.first_name} {member.last_name}".strip(),
+            "username": member.user.username,
+            "phone": member.phone or "",
+            "email": member.email or "",
+            "photo_url": _absolute_media_url(request, member.photo),
+            "qr_data": member.get_qr_data(),
+            "status": status,
+            "status_label": _status_label(status),
+            "status_class": _status_class(status),
+            "days_remaining": member.days_remaining,
+        },
+        "organization": {
+            "id": member.gym.organization_id,
+            "name": member.gym.organization.name,
+            "logo_url": _absolute_media_url(request, member.gym.organization.logo),
+        },
+        "gym": {
+            "id": member.gym_id,
+            "name": member.gym.name,
+        },
+        "subscription": _subscription_payload(subscription),
+        "coaching_rights": _member_coaching_rights(subscription),
+        "payments": [_payment_payload(payment) for payment in payments],
+        "access": {
+            "granted_count": granted_access_count,
+            "denied_count": denied_access_count,
+            "logs": [_access_log_payload(log) for log in access_logs],
+        },
+        "messages": {
+            "unread_count": unread_count,
+            "items": [_notification_payload(notification) for notification in notifications],
+        },
+        "plans": {
+            "items": [
+                _plan_payload(
+                    plan,
+                    subscription.plan_id if subscription and subscription.plan_id else None,
+                    pending_plan_ids,
+                    top_plan_sales_count,
+                )
+                for plan in available_plans
+            ],
+            "pending_requests": [
+                {
+                    "id": request_item.id,
+                    "plan_id": request_item.plan_id,
+                    "plan_name": request_item.plan.name if request_item.plan_id else "-",
+                    "price_usd": float(request_item.price_usd),
+                    "status": request_item.status,
+                    "status_label": request_item.get_status_display(),
+                    "created_at": request_item.created_at.isoformat(),
+                }
+                for request_item in pending_requests
+            ],
+        },
+        "coaching": {
+            "current_coaches": [_coach_payload(coach, current_coach_id) for coach in coaches],
+            "available_coaches": [_coach_payload(coach, current_coach_id) for coach in available_coaches],
+            "selected_group_programs": [
+                _group_program_payload(program, current_group_program_id)
+                for program in selected_group_programs
+            ],
+            "available_group_programs": [
+                _group_program_payload(program, current_group_program_id)
+                for program in available_group_programs
+            ],
+            "can_choose_individual_coach": can_choose_individual_coach,
+            "can_choose_group_program": can_choose_group_program,
+        },
+        "goal": _goal_payload(active_goal, goal_access),
+    }
 
 
 @login_required
@@ -740,6 +1109,305 @@ self.addEventListener("fetch", (event) => {
     response = HttpResponse(content, content_type="application/javascript")
     response["Service-Worker-Allowed"] = "/members/"
     return response
+
+
+@csrf_exempt
+@require_POST
+def member_api_login(request):
+    try:
+        data = _json_body(request)
+    except ValueError as exc:
+        return _json_error(str(exc), status=400)
+
+    username = (data.get("username") or "").strip()
+    password = data.get("password") or ""
+    if not username or not password:
+        return _json_error("Identifiant et mot de passe requis.", status=400)
+
+    user = authenticate(request, username=username, password=password)
+    if not user:
+        return _json_error("Identifiants invalides.", status=401)
+
+    member = _get_current_member(user)
+    if not member:
+        return _json_error("Ce compte n'est pas un compte membre.", status=403)
+    if not member.is_active or not member.gym.is_active or not member.gym.organization.is_active:
+        return _json_error("Ce compte membre n'est pas actif.", status=403)
+
+    login(request, user)
+    member = get_object_or_404(
+        Member.objects.select_related("user", "gym", "gym__organization"),
+        id=member.id,
+        user=user,
+    )
+    return _json_success(
+        {
+            "force_password_change": bool(user.force_password_change),
+            "data": _member_mobile_payload(request, member),
+        }
+    )
+
+
+@csrf_exempt
+@require_POST
+def member_api_logout(request):
+    logout(request)
+    return _json_success()
+
+
+@require_http_methods(["GET"])
+def member_api_me(request):
+    member, error = _api_current_member(request)
+    if error:
+        return error
+    return _json_success({"data": _member_mobile_payload(request, member)})
+
+
+@csrf_exempt
+@require_POST
+def member_api_password(request):
+    member, error = _api_current_member(request)
+    if error:
+        return error
+    try:
+        data = _json_body(request)
+    except ValueError as exc:
+        return _json_error(str(exc), status=400)
+
+    form = PasswordChangeForm(user=request.user, data=data)
+    if not form.is_valid():
+        return _json_error("Mot de passe non modifie.", status=400, errors=_form_errors(form))
+
+    user = form.save()
+    if user.force_password_change:
+        user.force_password_change = False
+        user.save(update_fields=["force_password_change"])
+    update_session_auth_hash(request, user)
+    return _json_success({"data": _member_mobile_payload(request, member)})
+
+
+@csrf_exempt
+@require_POST
+def member_api_notification_read(request, notification_id):
+    member, error = _api_current_member(request)
+    if error:
+        return error
+
+    notification = get_object_or_404(
+        Notification,
+        id=notification_id,
+        gym=member.gym,
+        member=member,
+        channel=Notification.CHANNEL_IN_APP,
+        status=Notification.STATUS_SENT,
+    )
+    if not notification.read_at:
+        notification.read_at = timezone.now()
+        notification.save(update_fields=["read_at"])
+    return _json_success({"data": _member_mobile_payload(request, member)})
+
+
+@csrf_exempt
+@require_POST
+def member_api_subscription_request(request):
+    member, error = _api_current_member(request)
+    if error:
+        return error
+    try:
+        data = _json_body(request)
+    except ValueError as exc:
+        return _json_error(str(exc), status=400)
+
+    plan = get_object_or_404(
+        SubscriptionPlan,
+        id=data.get("plan_id"),
+        gym=member.gym,
+        is_active=True,
+    )
+    SubscriptionRequest.objects.filter(
+        gym=member.gym,
+        member=member,
+        status=SubscriptionRequest.STATUS_PENDING,
+    ).exclude(plan=plan).update(
+        status=SubscriptionRequest.STATUS_CANCELLED,
+        notes="Remplacee par une nouvelle demande depuis l'application membre.",
+    )
+    request_obj, created = SubscriptionRequest.objects.get_or_create(
+        gym=member.gym,
+        member=member,
+        plan=plan,
+        status=SubscriptionRequest.STATUS_PENDING,
+        defaults={
+            "requested_by": request.user,
+            "price_usd": plan.price,
+        },
+    )
+    if not created and request_obj.price_usd != plan.price:
+        request_obj.price_usd = plan.price
+        request_obj.requested_by = request.user
+        request_obj.save(update_fields=["price_usd", "requested_by", "updated_at"])
+    return _json_success({"data": _member_mobile_payload(request, member)}, status=201 if created else 200)
+
+
+@csrf_exempt
+@require_POST
+def member_api_goal_create(request):
+    member, error = _api_current_member(request)
+    if error:
+        return error
+    if member.active_goal:
+        return _json_error("Un objectif actif existe deja sur ce compte.", status=400)
+    try:
+        data = _json_body(request)
+    except ValueError as exc:
+        return _json_error(str(exc), status=400)
+
+    form = MemberGoalForm(data)
+    if not form.is_valid():
+        return _json_error("L'objectif n'a pas pu etre enregistre.", status=400, errors=_form_errors(form))
+
+    goal = form.save(commit=False)
+    goal.gym = member.gym
+    goal.member = member
+    goal.created_by = request.user
+    goal.save()
+    return _json_success({"data": _member_mobile_payload(request, member)}, status=201)
+
+
+@csrf_exempt
+@require_POST
+def member_api_goal_measurement_create(request):
+    member, error = _api_current_member(request)
+    if error:
+        return error
+    goal = get_object_or_404(
+        MemberGoal.objects.prefetch_related("measurements"),
+        member=member,
+        gym=member.gym,
+        status=MemberGoal.STATUS_ACTIVE,
+    )
+    goal_access = _member_goal_access(goal)
+    if not goal_access["can_member_record"]:
+        return _json_error("La premiere pesee doit etre enregistree par le coach.", status=403)
+    try:
+        data = _json_body(request)
+    except ValueError as exc:
+        return _json_error(str(exc), status=400)
+
+    form = MemberWeightMeasurementForm(data)
+    if not form.is_valid():
+        return _json_error("La pesee n'a pas pu etre enregistree.", status=400, errors=_form_errors(form))
+
+    measurement = form.save(commit=False)
+    measurement.gym = member.gym
+    measurement.goal = goal
+    measurement.member = member
+    measurement.source = MemberWeightMeasurement.SOURCE_MEMBER
+    measurement.recorded_by = request.user
+    measurement.save()
+    goal.refresh_status_from_progress()
+    return _json_success({"data": _member_mobile_payload(request, member)}, status=201)
+
+
+@csrf_exempt
+@require_POST
+def member_api_choose_coach(request):
+    member, error = _api_current_member(request)
+    if error:
+        return error
+    subscription = member.active_subscription
+    if not _member_can_choose_individual_coach(member, subscription):
+        return _json_error("Votre formule actuelle ne permet pas de choisir un coach individuel.", status=403)
+    try:
+        data = _json_body(request)
+    except ValueError as exc:
+        return _json_error(str(exc), status=400)
+
+    coach = get_object_or_404(
+        Coach,
+        id=data.get("coach_id"),
+        gym=member.gym,
+        is_active=True,
+    )
+    for existing_coach in Coach.objects.filter(gym=member.gym, members=member).exclude(id=coach.id):
+        existing_coach.members.remove(member)
+    coach.members.add(member)
+    return _json_success({"data": _member_mobile_payload(request, member)})
+
+
+@csrf_exempt
+@require_POST
+def member_api_choose_group_program(request):
+    member, error = _api_current_member(request)
+    if error:
+        return error
+    subscription = member.active_subscription
+    if not _member_can_choose_group_program(member, subscription):
+        return _json_error("Votre formule actuelle ne permet pas de rejoindre un programme groupe.", status=403)
+    try:
+        data = _json_body(request)
+    except ValueError as exc:
+        return _json_error(str(exc), status=400)
+
+    program = get_object_or_404(
+        GroupCoachingProgram.objects.select_related("coach"),
+        id=data.get("program_id"),
+        gym=member.gym,
+        is_active=True,
+    )
+    try:
+        program.join_member(member)
+    except ValidationError as exc:
+        return _json_error(exc.messages[0] if getattr(exc, "messages", None) else str(exc), status=400)
+
+    for existing_program in GroupCoachingProgram.objects.filter(gym=member.gym, participants=member).exclude(id=program.id):
+        existing_program.participants.remove(member)
+    return _json_success({"data": _member_mobile_payload(request, member)})
+
+
+@csrf_exempt
+@require_POST
+def member_api_coaching_feedback(request):
+    member, error = _api_current_member(request)
+    if error:
+        return error
+    try:
+        data = _json_body(request)
+    except ValueError as exc:
+        return _json_error(str(exc), status=400)
+
+    feedback_kind = data.get("feedback_kind")
+    coach_id = data.get("coach_id")
+    program_id = data.get("program_id")
+    form = CoachingFeedbackForm(data)
+    if not form.is_valid():
+        return _json_error("Votre avis n'a pas pu etre enregistre.", status=400, errors=_form_errors(form))
+
+    subscription = member.active_subscription
+    if feedback_kind == "group_program":
+        if not _member_can_choose_group_program(member, subscription):
+            return _json_error("Votre formule actuelle ne permet pas de laisser un avis sur un programme groupe.", status=403)
+    elif not _member_can_choose_individual_coach(member, subscription):
+        return _json_error("Votre formule actuelle ne permet pas de laisser un avis coaching individuel.", status=403)
+
+    coach = get_object_or_404(Coach, id=coach_id, gym=member.gym, is_active=True)
+    feedback = form.save(commit=False)
+    feedback.gym = member.gym
+    feedback.member = member
+    feedback.coach = coach
+    if feedback_kind == "group_program":
+        feedback.group_program = get_object_or_404(
+            GroupCoachingProgram.objects.select_related("coach"),
+            id=program_id,
+            gym=member.gym,
+            is_active=True,
+        )
+
+    try:
+        feedback.save()
+    except ValidationError as exc:
+        return _json_error(exc.messages[0] if getattr(exc, "messages", None) else str(exc), status=400)
+    return _json_success({"data": _member_mobile_payload(request, member)}, status=201)
 
 #######   liste  ######
 @login_required
