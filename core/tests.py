@@ -1,6 +1,6 @@
 from decimal import Decimal
 from datetime import date, datetime, time, timedelta
-from io import BytesIO
+from io import BytesIO, StringIO
 from unittest.mock import patch
 from unittest.mock import patch
 from zipfile import ZipFile
@@ -14,21 +14,37 @@ from django.utils import timezone
 
 from access.models import AccessLog
 from coaching.kpis import build_coaching_kpis
-from coaching.models import Coach, CoachingFeedback, CoachingFollowUp
+from coaching.models import Coach, CoachingFeedback, CoachingFollowUp, GroupCoachingProgram
 from compte.models import User
 from compte.models import UserGymRole
 from coaching.forms import CoachForm
 from coaching.models import CoachSpecialty
 from compte.forms import CreateUserForm
 from core.forms import OrganizationSettingsForm
-from members.models import Member
+from members.models import Member, MemberGoal, MemberPreRegistration, MemberWeightMeasurement
 from machines.kpis import build_machine_kpis
 from machines.models import Machine, MaintenanceLog
 from products.kpis import build_product_kpis
 from products.models import Product, StockMovement
 from rh.kpis import build_rh_kpis
-from rh.models import Attendance, Employee, PaymentRecord, PayrollContributionRule, PayrollSlip
-from subscriptions.models import MemberSubscription, SubscriptionPlan
+from notifications.models import Notification
+from rh.models import (
+    Attendance,
+    Employee,
+    LeaveRequest,
+    OvertimeEntry,
+    PaymentRecord,
+    PayrollAdjustment,
+    PayrollContributionRule,
+    PayrollSlip,
+    PayrollWorkflowLog,
+)
+from subscriptions.models import (
+    MemberSubscription,
+    SubscriptionOffer,
+    SubscriptionPlan,
+    SubscriptionRequest,
+)
 from .forms import InternalEmployeeForm
 from .accounting_reports import (
     CUSTOM_COLUMNS,
@@ -39,7 +55,7 @@ from .accounting_reports import (
 )
 from .views import _get_period_window
 from organizations.models import Gym, GymModule, Module, Organization, SensitiveActivityLog
-from pos.models import CashRegister, Payment
+from pos.models import CashRegister, ExchangeRate, Payment
 
 
 class SeedDemoDataSafetyTests(TestCase):
@@ -48,6 +64,122 @@ class SeedDemoDataSafetyTests(TestCase):
         call_command("seed_demo_data")
 
         self.assertFalse(Organization.objects.filter(slug__startswith="demo-").exists())
+
+    @override_settings(DEBUG=True)
+    def test_seed_demo_data_creates_complete_module_kpi_dataset(self):
+        out = StringIO()
+        call_command("seed_demo_data", "--reset", stdout=out)
+
+        self.assertIn("Base de demonstration prete", out.getvalue())
+        expected_modules = {
+            "ACCESS",
+            "COACHING",
+            "COMPTE",
+            "CORE",
+            "MACHINES",
+            "MEMBERS",
+            "NOTIFICATIONS",
+            "POS",
+            "PRODUCTS",
+            "RH",
+            "SUBSCRIPTIONS",
+            "WEBSITE",
+        }
+        gyms = Gym.objects.filter(organization__slug__startswith="demo-").order_by("slug")
+        self.assertEqual(gyms.count(), 3)
+
+        for gym in gyms:
+            with self.subTest(gym=gym.slug):
+                active_module_codes = set(
+                    GymModule.objects.filter(gym=gym, is_active=True).values_list("module__code", flat=True)
+                )
+                self.assertTrue(expected_modules.issubset(active_module_codes))
+
+                self.assertTrue(gym.members.filter(status="active").exists())
+                self.assertTrue(gym.members.filter(status="suspended").exists())
+                self.assertGreaterEqual(MemberSubscription.objects.filter(gym=gym).count(), gym.members.count())
+                self.assertTrue(SubscriptionOffer.objects.filter(gym=gym, grants_individual_coaching=True).exists())
+                self.assertTrue(SubscriptionOffer.objects.filter(gym=gym, grants_group_coaching=True).exists())
+                self.assertEqual(
+                    set(SubscriptionRequest.objects.filter(gym=gym).values_list("status", flat=True)),
+                    {
+                        SubscriptionRequest.STATUS_PENDING,
+                        SubscriptionRequest.STATUS_AWAITING_PAYMENT,
+                        SubscriptionRequest.STATUS_PAID,
+                        SubscriptionRequest.STATUS_CANCELLED,
+                        SubscriptionRequest.STATUS_FAILED,
+                    },
+                )
+
+                self.assertTrue(CashRegister.objects.filter(gym=gym, is_closed=False).exists())
+                self.assertTrue(CashRegister.objects.filter(gym=gym, is_closed=True).exists())
+                self.assertTrue(ExchangeRate.objects.filter(gym=gym).exists())
+                self.assertTrue(Payment.objects.filter(gym=gym, status="success", type="in").exists())
+                self.assertTrue(Payment.objects.filter(gym=gym, status="success", type="out").exists())
+                self.assertTrue(Payment.objects.filter(gym=gym, status="pending").exists())
+                self.assertTrue(Payment.objects.filter(gym=gym, status="failed").exists())
+                self.assertTrue(Payment.objects.filter(gym=gym, category="subscription").exists())
+                self.assertTrue(Payment.objects.filter(gym=gym, category="product").exists())
+                self.assertTrue(Payment.objects.filter(gym=gym, category="maintenance").exists())
+                self.assertTrue(Payment.objects.filter(gym=gym, category="salary").exists())
+
+                self.assertTrue(AccessLog.objects.filter(gym=gym, access_granted=True).exists())
+                self.assertTrue(AccessLog.objects.filter(gym=gym, access_granted=False).exists())
+                self.assertTrue(Product.objects.filter(gym=gym, is_active=True, quantity__gt=3).exists())
+                self.assertTrue(Product.objects.filter(gym=gym, is_active=True, quantity__lte=3, quantity__gt=0).exists())
+                self.assertTrue(Product.objects.filter(gym=gym, is_active=True, quantity=0).exists())
+                self.assertTrue(Product.objects.filter(gym=gym, is_active=False).exists())
+                self.assertTrue(StockMovement.objects.filter(gym=gym, movement_type="in").exists())
+                self.assertTrue(StockMovement.objects.filter(gym=gym, movement_type="out").exists())
+
+                self.assertTrue(Machine.objects.filter(gym=gym, status="ok").exists())
+                self.assertTrue(Machine.objects.filter(gym=gym, status="maintenance").exists())
+                self.assertTrue(Machine.objects.filter(gym=gym, status="broken").exists())
+                self.assertTrue(MaintenanceLog.objects.filter(machine__gym=gym).exists())
+
+                self.assertTrue(Coach.objects.filter(gym=gym, is_active=True).exists())
+                self.assertTrue(GroupCoachingProgram.objects.filter(gym=gym, participants__isnull=False).distinct().exists())
+                self.assertTrue(CoachingFollowUp.objects.filter(gym=gym).exists())
+                self.assertTrue(CoachingFeedback.objects.filter(gym=gym, wants_contact=True).exists())
+                self.assertTrue(MemberGoal.objects.filter(gym=gym, status=MemberGoal.STATUS_ACTIVE).exists())
+                self.assertTrue(MemberGoal.objects.filter(gym=gym, status=MemberGoal.STATUS_ACHIEVED).exists())
+                self.assertTrue(MemberGoal.objects.filter(gym=gym, status=MemberGoal.STATUS_CANCELLED).exists())
+                self.assertTrue(MemberWeightMeasurement.objects.filter(gym=gym).exists())
+
+                self.assertTrue(Employee.objects.filter(gym=gym, compensation_type=Employee.COMPENSATION_DAILY).exists())
+                self.assertTrue(Employee.objects.filter(gym=gym, compensation_type=Employee.COMPENSATION_MONTHLY).exists())
+                self.assertTrue(Attendance.objects.filter(gym=gym, status="present").exists())
+                self.assertTrue(Attendance.objects.filter(gym=gym, status="absent").exists())
+                self.assertTrue(LeaveRequest.objects.filter(gym=gym).exists())
+                self.assertTrue(OvertimeEntry.objects.filter(gym=gym).exists())
+                self.assertTrue(PayrollAdjustment.objects.filter(gym=gym).exists())
+                self.assertTrue(PayrollContributionRule.objects.filter(gym=gym).exists())
+                self.assertTrue(PaymentRecord.objects.filter(gym=gym, is_paid=True).exists())
+                self.assertTrue(PayrollSlip.objects.filter(gym=gym, status=PayrollSlip.STATUS_PAID).exists())
+                self.assertTrue(PayrollWorkflowLog.objects.filter(slip__gym=gym).exists())
+
+                self.assertEqual(
+                    set(Notification.objects.filter(gym=gym).values_list("status", flat=True)),
+                    {Notification.STATUS_PENDING, Notification.STATUS_SENT, Notification.STATUS_FAILED},
+                )
+                self.assertTrue(Notification.objects.filter(gym=gym, read_at__isnull=False).exists())
+                self.assertTrue(MemberPreRegistration.objects.filter(gym=gym, status=MemberPreRegistration.STATUS_PENDING).exists())
+                self.assertTrue(MemberPreRegistration.objects.filter(gym=gym, status=MemberPreRegistration.STATUS_CONFIRMED).exists())
+                self.assertTrue(MemberPreRegistration.objects.filter(gym=gym, status=MemberPreRegistration.STATUS_CANCELLED).exists())
+
+                dashboard_period = _get_period_window("month", timezone.localdate())
+                self.assertGreaterEqual(build_machine_kpis(gym, dashboard_period)["total_machines"], 3)
+                self.assertGreaterEqual(build_product_kpis(gym, dashboard_period)["total_products"], 3)
+                self.assertGreaterEqual(build_coaching_kpis(gym, dashboard_period)["assigned_members_count"], 1)
+                self.assertGreaterEqual(build_rh_kpis(gym, dashboard_period)["total_employees"], 3)
+
+                accounting_report = build_accounting_report(
+                    gym,
+                    get_report_period({"period": "month"}, today=timezone.localdate()),
+                )
+                self.assertGreater(accounting_report["transaction_count"], 0)
+                self.assertGreater(accounting_report["total_entries_cdf"], 0)
+                self.assertGreater(accounting_report["total_exits_cdf"], 0)
 
 
 class AccountingReportExportTests(TestCase):
@@ -257,6 +389,95 @@ class AccountingReportExportTests(TestCase):
         self.assertIn("Synthese du fichier comptable", content)
         self.assertIn("Alice", content)
         self.assertNotIn("Other Tenant Subscription", content)
+
+    def test_report_page_exposes_accounting_chart_data_and_visual_blocks(self):
+        response = self.client.get(reverse("core:rapport"), {"period": "month"})
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        self.assertIn("accountingCategoryChart", content)
+        self.assertIn("accountingMethodChart", content)
+        chart_data = response.context["report_chart_data"]
+        accounting_report = response.context["accounting_report"]
+
+        self.assertEqual(chart_data["totals"]["transactions"], accounting_report["transaction_count"])
+        self.assertEqual(chart_data["totals"]["entries"], float(accounting_report["total_entries_cdf"]))
+        self.assertEqual(chart_data["totals"]["exits"], float(accounting_report["total_exits_cdf"]))
+        self.assertNotIn("Other Tenant Subscription", content)
+
+    def test_dashboard_chart_data_is_scoped_and_matches_existing_kpis(self):
+        today = timezone.localdate()
+        self.member_a.status = "active"
+        self.member_a.save(update_fields=["status"])
+        plan_a = SubscriptionPlan.objects.create(
+            gym=self.gym_a,
+            name="Pack A",
+            duration_days=30,
+            price=Decimal("10.00"),
+        )
+        plan_b = SubscriptionPlan.objects.create(
+            gym=self.gym_b,
+            name="Leak Pack",
+            duration_days=30,
+            price=Decimal("99.00"),
+        )
+        MemberSubscription.objects.create(
+            gym=self.gym_a,
+            member=self.member_a,
+            plan=plan_a,
+            start_date=today,
+            end_date=today + timedelta(days=30),
+            is_active=True,
+        )
+        MemberSubscription.objects.create(
+            gym=self.gym_b,
+            member=self.member_b,
+            plan=plan_b,
+            start_date=today,
+            end_date=today + timedelta(days=30),
+            is_active=True,
+        )
+        self._create_access_log_at(self.gym_a, self.member_a, 18)
+        self._create_access_log_at(self.gym_a, self.member_a, 19, granted=False)
+        self._create_access_log_at(self.gym_b, self.member_b, 20)
+
+        response = self.client.get(
+            reverse("core:gym_dashboard", args=[self.gym_a.id]),
+            {"view": "analytics", "period": "month"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        self.assertIn("dashboard-chart-data", content)
+        self.assertIn("accessDecisionChart", content)
+        chart_data = response.context["dashboard_chart_data"]
+
+        self.assertEqual(sum(chart_data["member_status"]["values"]), response.context["total_members"])
+        self.assertEqual(sum(chart_data["attendance"]["values"]), response.context["visits_period"])
+        self.assertEqual(chart_data["access"]["values"], [response.context["visits_period"], response.context["denied_period"]])
+        self.assertEqual(sum(chart_data["revenue"]["values"]), float(response.context["period_revenue"]))
+        self.assertIn("Pack A", chart_data["plans"]["labels"])
+        self.assertNotIn("Leak Pack", chart_data["plans"]["labels"])
+
+    def test_dashboard_chart_data_has_valid_series_for_supported_periods(self):
+        for period in ["day", "week", "month", "year"]:
+            with self.subTest(period=period):
+                response = self.client.get(
+                    reverse("core:gym_dashboard", args=[self.gym_a.id]),
+                    {"view": "analytics", "period": period},
+                )
+
+                self.assertEqual(response.status_code, 200)
+                chart_data = response.context["dashboard_chart_data"]
+                self.assertEqual(
+                    len(chart_data["revenue"]["labels"]),
+                    len(chart_data["revenue"]["values"]),
+                )
+                self.assertEqual(
+                    len(chart_data["attendance"]["labels"]),
+                    len(chart_data["attendance"]["values"]),
+                )
+                self.assertEqual(chart_data["expirations"]["labels"], ["J-1", "J-3", "J-7", "J-15"])
 
     def test_journalier_report_defaults_to_today_period(self):
         response = self.client.get(reverse("core:rapport"), {"section": "journalier"})

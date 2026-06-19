@@ -112,6 +112,39 @@
     color: #64748b;
     font-size: .8rem;
 }
+
+.analytics-kpi-card {
+    height: 100%;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 14px;
+    background: #fff;
+    padding: 14px;
+}
+
+.analytics-kpi-card__label {
+    color: #64748b;
+    font-size: .74rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.analytics-kpi-card__value {
+    margin: 6px 0 2px;
+    color: #0f172a;
+    font-size: 1.35rem;
+    font-weight: 800;
+}
+
+.analytics-kpi-card__meta {
+    color: #64748b;
+    font-size: .76rem;
+}
+
+.dashboard-empty-note {
+    color: #94a3b8;
+    font-size: .78rem;
+    text-align: center;
+}
 </style>
 
 <div class="page-header">
@@ -494,6 +527,51 @@
 
     {% if context_view == "analytics" %}
     <div class="row g-3 mb-4">
+        <div class="col-xxl-2 col-md-4 col-sm-6">
+            <div class="analytics-kpi-card">
+                <div class="analytics-kpi-card__label">Revenus periode</div>
+                <div class="analytics-kpi-card__value">{{ period_revenue|floatformat:0 }} CDF</div>
+                <div class="analytics-kpi-card__meta">{{ revenue_trend.display }} vs periode precedente</div>
+            </div>
+        </div>
+        <div class="col-xxl-2 col-md-4 col-sm-6">
+            <div class="analytics-kpi-card">
+                <div class="analytics-kpi-card__label">Entrees QR</div>
+                <div class="analytics-kpi-card__value">{{ visits_period }}</div>
+                <div class="analytics-kpi-card__meta">{{ unique_visitors_period }} visiteur(s) unique(s)</div>
+            </div>
+        </div>
+        <div class="col-xxl-2 col-md-4 col-sm-6">
+            <div class="analytics-kpi-card">
+                <div class="analytics-kpi-card__label">Membres actifs</div>
+                <div class="analytics-kpi-card__value">{{ active_members }}</div>
+                <div class="analytics-kpi-card__meta">{{ active_member_rate }}% du portefeuille</div>
+            </div>
+        </div>
+        <div class="col-xxl-2 col-md-4 col-sm-6">
+            <div class="analytics-kpi-card">
+                <div class="analytics-kpi-card__label">Abonnements actifs</div>
+                <div class="analytics-kpi-card__value">{{ total_subscriptions }}</div>
+                <div class="analytics-kpi-card__meta">{{ renewals_period }} renouvellement(s)</div>
+            </div>
+        </div>
+        <div class="col-xxl-2 col-md-4 col-sm-6">
+            <div class="analytics-kpi-card">
+                <div class="analytics-kpi-card__label">A risque J-15</div>
+                <div class="analytics-kpi-card__value">{{ expiry_soon }}</div>
+                <div class="analytics-kpi-card__meta">J-7 {{ expiry_7_days }} | J-3 {{ expiry_3_days }}</div>
+            </div>
+        </div>
+        <div class="col-xxl-2 col-md-4 col-sm-6">
+            <div class="analytics-kpi-card">
+                <div class="analytics-kpi-card__label">Refus d'acces</div>
+                <div class="analytics-kpi-card__value">{{ denied_period }}</div>
+                <div class="analytics-kpi-card__meta">Aujourd'hui {{ denied_today }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
         <div class="col-xl-3">
             <div class="card stretch stretch-full">
                 <div class="card-header">
@@ -514,47 +592,31 @@
         <div class="col-xl-3">
             <div class="card stretch stretch-full">
                 <div class="card-header">
-                    <h5 class="card-title">Inscriptions {{ period_label_lower }}</h5>
+                    <h5 class="card-title">Acces QR {{ period_label_lower }}</h5>
                 </div>
                 <div class="card-body">
                     <div class="member-analytics-chart compact">
-                        <canvas id="memberGrowthChart"></canvas>
+                        <canvas id="accessDecisionChart"></canvas>
                     </div>
-                    <div class="fs-12 text-muted mt-3">Nouveaux membres sur la periode: <strong>{{ new_members_period }}</strong></div>
+                    <div class="d-flex justify-content-between text-muted fs-12 mt-3">
+                        <span>Autorises {{ visits_period }}</span>
+                        <span>Refuses {{ denied_period }}</span>
+                    </div>
                 </div>
             </div>
         </div>
         <div class="col-xl-3">
             <div class="card stretch stretch-full">
                 <div class="card-header">
-                    <h5 class="card-title">KPI RH</h5>
+                    <h5 class="card-title">Expirations proches</h5>
                 </div>
                 <div class="card-body">
-                    <div class="vstack gap-3">
-                        <div class="d-flex justify-content-between">
-                            <span>Employes actifs</span>
-                            <strong>{{ active_employees|default:0 }}</strong>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <span>Presence aujourd'hui</span>
-                            <strong>{{ attendance_today_rate|default:0 }}%</strong>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <span>Presence {{ period_label_lower }}</span>
-                            <strong>{{ attendance_period_rate|default:0 }}%</strong>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <span>Masse brute / nette</span>
-                            <strong>{{ monthly_payroll_gross|default:0|floatformat:0 }} / {{ monthly_payroll|default:0|floatformat:0 }} CDF</strong>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <span>Paie en attente</span>
-                            <strong>{{ monthly_payroll_pending|default:0|floatformat:0 }} CDF</strong>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <span>Payee {{ period_label_lower }}</span>
-                            <strong>{{ salary_paid_period|default:0|floatformat:0 }} CDF</strong>
-                        </div>
+                    <div class="member-analytics-chart compact">
+                        <canvas id="expirationAlertsChart"></canvas>
+                    </div>
+                    <div class="d-flex justify-content-between text-muted fs-12 mt-3">
+                        <span>Demain {{ expiry_1_day }}</span>
+                        <span>Sous 15j {{ expiry_soon }}</span>
                     </div>
                 </div>
             </div>
@@ -975,12 +1037,35 @@
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{{ dashboard_chart_data|json_script:"dashboard-chart-data" }}
 <script>
 const chartColors = ["#3454d1", "#17c666", "#ffa21d", "#3dc7be", "#ea4d4d", "#64748b", "#6610f2"];
 const mutedGrid = "rgba(100, 116, 139, 0.12)";
+const dashboardChartNode = document.getElementById("dashboard-chart-data");
+const dashboardChartData = dashboardChartNode ? JSON.parse(dashboardChartNode.textContent) : {};
 
 Chart.defaults.font.family = "Inter, sans-serif";
 Chart.defaults.color = "#64748b";
+
+function series(path, fallback) {
+    return path.split(".").reduce((value, key) => value && value[key], dashboardChartData) || fallback;
+}
+
+function formatNumber(value) {
+    return Number(value || 0).toLocaleString("fr-FR");
+}
+
+function formatCurrency(value) {
+    return `${formatNumber(value)} CDF`;
+}
+
+function withAlpha(hexColor, alpha) {
+    const clean = hexColor.replace("#", "");
+    const red = parseInt(clean.slice(0, 2), 16);
+    const green = parseInt(clean.slice(2, 4), 16);
+    const blue = parseInt(clean.slice(4, 6), 16);
+    return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
 
 function normalizeDoughnutData(labels, values, emptyLabel) {
     const numericValues = values.map(value => Number(value || 0));
@@ -999,13 +1084,35 @@ function normalizeDoughnutData(labels, values, emptyLabel) {
     };
 }
 
-function lineOptions(formatTick) {
+function normalizeSeries(labels, values, emptyLabel) {
+    const numericValues = values.map(value => Number(value || 0));
+    const total = numericValues.reduce((sum, value) => sum + value, 0);
+    if (!labels.length || total === 0) {
+        return {
+            labels: [emptyLabel],
+            values: [0],
+            isEmpty: true
+        };
+    }
+    return {
+        labels,
+        values: numericValues,
+        isEmpty: false
+    };
+}
+
+function lineOptions(formatTick, formatTooltip) {
     return {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
             legend: {
                 display: false
+            },
+            tooltip: {
+                callbacks: {
+                    label: context => formatTooltip ? formatTooltip(context.raw) : formatNumber(context.raw)
+                }
             }
         },
         scales: {
@@ -1028,7 +1135,33 @@ function lineOptions(formatTick) {
     };
 }
 
-function renderDoughnutChart(canvasId, labels, values, emptyLabel) {
+function barOptions(formatTick, formatTooltip) {
+    return {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                callbacks: {
+                    label: context => formatTooltip ? formatTooltip(context.raw) : formatNumber(context.raw)
+                }
+            }
+        },
+        scales: {
+            x: { grid: { display: false } },
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    precision: 0,
+                    callback: formatTick || undefined
+                },
+                grid: { color: mutedGrid }
+            }
+        }
+    };
+}
+
+function renderDoughnutChart(canvasId, labels, values, emptyLabel, formatter) {
     const canvas = document.getElementById(canvasId);
     if (!canvas) return;
 
@@ -1058,23 +1191,88 @@ function renderDoughnutChart(canvasId, labels, values, emptyLabel) {
                         padding: 14
                     }
                 }
+            },
+            tooltip: {
+                callbacks: {
+                    label: context => `${context.label}: ${formatter ? formatter(context.raw) : formatNumber(context.raw)}`
+                }
             }
         }
     });
 }
 
+function renderLineChart(canvasId, labels, values, label, color, formatter) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+
+    const data = normalizeSeries(labels, values, "Aucune donnee");
+    new Chart(canvas, {
+        type: "line",
+        data: {
+            labels: data.labels,
+            datasets: [{
+                label,
+                data: data.values,
+                borderColor: data.isEmpty ? "#cbd5e1" : color,
+                backgroundColor: data.isEmpty ? "rgba(203, 213, 225, 0.18)" : withAlpha(color, 0.12),
+                fill: true,
+                tension: 0.35,
+                pointRadius: data.isEmpty ? 0 : 3,
+                pointBackgroundColor: color
+            }]
+        },
+        options: lineOptions(formatter, formatter)
+    });
+}
+
+function renderBarChart(canvasId, labels, values, label, color, formatter) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+
+    const data = normalizeSeries(labels, values, "Aucune donnee");
+    new Chart(canvas, {
+        type: "bar",
+        data: {
+            labels: data.labels,
+            datasets: [{
+                label,
+                data: data.values,
+                backgroundColor: data.isEmpty ? "#e5e7eb" : color,
+                borderRadius: 8,
+                maxBarThickness: 42
+            }]
+        },
+        options: barOptions(formatter, formatter)
+    });
+}
+
 renderDoughnutChart(
     "memberStatusChart",
-    {{ status_chart_labels|default:"[]"|safe }},
-    {{ status_chart_values|default:"[]"|safe }},
+    series("member_status.labels", []),
+    series("member_status.values", []),
     "Aucun membre"
 );
 
 renderDoughnutChart(
     "planDistributionChart",
-    {{ plan_chart_labels|default:"[]"|safe }},
-    {{ plan_chart_values|default:"[]"|safe }},
+    series("plans.labels", []),
+    series("plans.values", []),
     "Aucune formule"
+);
+
+renderDoughnutChart(
+    "accessDecisionChart",
+    series("access.labels", []),
+    series("access.values", []),
+    "Aucun acces"
+);
+
+renderBarChart(
+    "expirationAlertsChart",
+    series("expirations.labels", []),
+    series("expirations.values", []),
+    "Expirations",
+    "rgba(255, 162, 29, 0.78)"
 );
 
 renderDoughnutChart(
@@ -1107,19 +1305,7 @@ if (coachingWorkloadCanvas) {
                 maxBarThickness: 34
             }]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: {
-                x: { grid: { display: false } },
-                y: {
-                    beginAtZero: true,
-                    grid: { color: mutedGrid },
-                    ticks: { precision: 0 }
-                }
-            }
-        }
+        options: barOptions()
     });
 }
 
@@ -1146,7 +1332,7 @@ if (stockValueCanvas) {
                 legend: { display: false },
                 tooltip: {
                     callbacks: {
-                        label: context => `${Number(context.raw || 0).toLocaleString("fr-FR")} USD`
+                        label: context => `${formatNumber(context.raw)} USD`
                     }
                 }
             },
@@ -1156,7 +1342,7 @@ if (stockValueCanvas) {
                     beginAtZero: true,
                     grid: { color: mutedGrid },
                     ticks: {
-                        callback: value => `${Number(value).toLocaleString("fr-FR")} USD`
+                        callback: value => `${formatNumber(value)} USD`
                     }
                 }
             }
@@ -1183,45 +1369,22 @@ if (memberGrowthCanvas) {
 }
 
 const attendanceCanvas = document.getElementById("attendanceTrendChart");
-if (attendanceCanvas) {
-    new Chart(attendanceCanvas, {
-        type: "line",
-        data: {
-            labels: {{ attendance_chart_labels|default:"[]"|safe }},
-            datasets: [{
-                label: "Visites",
-                data: {{ attendance_chart_values|default:"[]"|safe }},
-                borderColor: "#17c666",
-                backgroundColor: "rgba(23, 198, 102, 0.12)",
-                fill: true,
-                tension: 0.35,
-                pointRadius: 3,
-                pointBackgroundColor: "#17c666"
-            }]
-        },
-        options: lineOptions()
-    });
-}
+renderLineChart(
+    "attendanceTrendChart",
+    series("attendance.labels", []),
+    series("attendance.values", []),
+    "Visites",
+    "#17c666"
+);
 
 const revenueCanvas = document.getElementById("monthlyRevenueChart");
-if (revenueCanvas) {
-    new Chart(revenueCanvas, {
-        type: "line",
-        data: {
-            labels: {{ sales_chart_labels|default:"[]"|safe }},
-            datasets: [{
-                label: "Revenus",
-                data: {{ sales_chart_values|default:"[]"|safe }},
-                borderColor: "#0d6efd",
-                backgroundColor: "rgba(13, 110, 253, 0.12)",
-                fill: true,
-                tension: 0.3,
-                pointRadius: 3,
-                pointBackgroundColor: "#0d6efd"
-            }]
-        },
-        options: lineOptions(value => `${Number(value).toLocaleString("fr-FR")} CDF`)
-    });
-}
+renderLineChart(
+    "monthlyRevenueChart",
+    series("revenue.labels", []),
+    series("revenue.values", []),
+    "Revenus",
+    "#0d6efd",
+    formatCurrency
+);
 </script>
 {% endblock %}

@@ -8,15 +8,43 @@ from django.db import transaction
 from django.utils import timezone
 
 from access.models import AccessLog
-from coaching.models import Coach, CoachSpecialty
+from coaching.models import (
+    Coach,
+    CoachSpecialty,
+    CoachingFeedback,
+    CoachingFollowUp,
+    GroupCoachingProgram,
+)
 from compte.models import UserGymRole
 from machines.models import Machine, MaintenanceLog
-from members.models import Member, MemberPreRegistration, MemberPreRegistrationLink
+from members.models import (
+    Member,
+    MemberGoal,
+    MemberPreRegistration,
+    MemberPreRegistrationLink,
+    MemberWeightMeasurement,
+)
+from notifications.models import Notification
 from organizations.models import Gym, GymModule, Module, Organization, SensitiveActivityLog
 from pos.models import CashRegister, ExchangeRate, Payment
 from products.models import Product, StockMovement
-from rh.models import Attendance, Employee, PaymentRecord
-from subscriptions.models import MemberSubscription, SubscriptionPlan
+from rh.models import (
+    Attendance,
+    Employee,
+    LeaveRequest,
+    OvertimeEntry,
+    PaymentRecord,
+    PayrollAdjustment,
+    PayrollContributionRule,
+    PayrollSlip,
+    PayrollWorkflowLog,
+)
+from subscriptions.models import (
+    MemberSubscription,
+    SubscriptionOffer,
+    SubscriptionPlan,
+    SubscriptionRequest,
+)
 
 
 User = get_user_model()
@@ -169,6 +197,7 @@ class Command(BaseCommand):
         slugs = [org["slug"] for org in DEMO_ORGS]
         gyms = Gym.objects.filter(organization__slug__in=slugs)
         MaintenanceLog.objects.filter(machine__gym__in=gyms).delete()
+        SubscriptionRequest.objects.filter(gym__in=gyms).delete()
         PaymentRecord.objects.filter(gym__in=gyms).delete()
         Payment.objects.filter(gym__in=gyms).delete()
         Organization.objects.filter(slug__in=slugs).delete()
@@ -265,12 +294,15 @@ class Command(BaseCommand):
         members = self._seed_members(gym, gym_key, plans)
         register = self._seed_pos(gym, cashier)
         self._seed_subscription_payments(gym, register, members, cashier)
+        self._seed_subscription_requests(gym, members, plans, cashier)
         products = self._seed_products(gym, register, cashier)
         self._seed_access_logs(gym, members, reception)
-        self._seed_coaching(gym, gym_key, members)
+        coaches = self._seed_coaching(gym, gym_key, members)
+        self._seed_member_goals(gym, members, coaches, staff["coach"])
         self._seed_machines(gym, register, manager)
         self._seed_rh(gym, register, manager)
-        self._seed_pre_registrations(gym)
+        self._seed_notifications(gym, members, manager)
+        self._seed_pre_registrations(gym, members, manager)
 
         SensitiveActivityLog.objects.get_or_create(
             organization=gym.organization,
@@ -282,14 +314,87 @@ class Command(BaseCommand):
         )
 
     def _seed_plans(self, gym):
+        offers = {}
+        offer_specs = [
+            (
+                "Acces plateau",
+                SubscriptionOffer.CATEGORY_ACCESS,
+                "Acces libre a la salle et aux vestiaires.",
+                False,
+                False,
+            ),
+            (
+                "Coaching individuel",
+                SubscriptionOffer.CATEGORY_COACHING,
+                "Suivi coach dedie avec objectifs et bilans.",
+                True,
+                False,
+            ),
+            (
+                "Programme groupe",
+                SubscriptionOffer.CATEGORY_CLASS,
+                "Participation aux sessions collectives encadrees.",
+                False,
+                True,
+            ),
+            (
+                "Suivi premium",
+                SubscriptionOffer.CATEGORY_COACHING,
+                "Coaching individuel et groupe avec priorite manager.",
+                True,
+                True,
+            ),
+        ]
+        for name, category, description, individual, group in offer_specs:
+            offer, _ = SubscriptionOffer.objects.update_or_create(
+                gym=gym,
+                name=name,
+                defaults={
+                    "description": description,
+                    "category": category,
+                    "grants_individual_coaching": individual,
+                    "grants_group_coaching": group,
+                    "is_active": True,
+                },
+            )
+            offers[name] = offer
+
         specs = [
-            ("Journalier", 1, "5.00"),
-            ("Mensuel Standard", 30, "30.00"),
-            ("Trimestriel Plus", 90, "80.00"),
-            ("Annuel VIP", 365, "280.00"),
+            (
+                "Journalier",
+                1,
+                "5.00",
+                SubscriptionPlan.COACHING_MODE_NONE,
+                SubscriptionPlan.COACHING_LEVEL_STANDARD,
+                ["Acces plateau"],
+            ),
+            (
+                "Mensuel Standard",
+                30,
+                "30.00",
+                SubscriptionPlan.COACHING_MODE_INDIVIDUAL,
+                SubscriptionPlan.COACHING_LEVEL_STANDARD,
+                ["Acces plateau", "Coaching individuel"],
+            ),
+            (
+                "Trimestriel Plus",
+                90,
+                "80.00",
+                SubscriptionPlan.COACHING_MODE_GROUP,
+                SubscriptionPlan.COACHING_LEVEL_PREMIUM,
+                ["Acces plateau", "Programme groupe"],
+            ),
+            (
+                "Annuel VIP",
+                365,
+                "280.00",
+                SubscriptionPlan.COACHING_MODE_BOTH,
+                SubscriptionPlan.COACHING_LEVEL_INTENSIVE,
+                ["Acces plateau", "Coaching individuel", "Programme groupe", "Suivi premium"],
+            ),
         ]
         plans = {}
-        for name, duration, price in specs:
+        for name, duration, price, coaching_mode, coaching_level, offer_names in specs:
             plan, _ = SubscriptionPlan.objects.update_or_create(
                 gym=gym,
                 name=name,
@@ -297,9 +402,12 @@ class Command(BaseCommand):
                     "duration_days": duration,
                     "price": Decimal(price),
                     "description": f"Formule demo {name}",
+                    "coaching_mode": coaching_mode,
+                    "coaching_level": coaching_level,
                     "is_active": True,
                 },
             )
+            plan.offers.set([offers[offer_name] for offer_name in offer_names])
             plans[name] = plan
         return plans
 
@@ -329,7 +437,7 @@ class Command(BaseCommand):
                 is_paused = False
             elif status == "expiring":
                 start = today - timedelta(days=27)
-                end = today + timedelta(days=3)
+                end = today + timedelta(days=3 if index % 2 else 7)
                 plan = plans["Mensuel Standard"]
                 is_paused = False
             elif status == "suspended":
@@ -340,8 +448,22 @@ class Command(BaseCommand):
             else:
                 start = today - timedelta(days=(index % 12))
                 end = today + timedelta(days=30 + (index % 20))
-                plan = plans["Trimestriel Plus"] if index % 4 == 0 else plans["Mensuel Standard"]
+                if index in {6, 7}:
+                    plan = plans["Annuel VIP"] if index == 6 else plans["Trimestriel Plus"]
+                elif index % 5 == 0:
+                    plan = plans["Annuel VIP"]
+                elif index % 4 == 0:
+                    plan = plans["Trimestriel Plus"]
+                else:
+                    plan = plans["Mensuel Standard"]
                 is_paused = False
+
+            if index == 1:
+                end = today + timedelta(days=1)
+            elif index == 2:
+                end = today + timedelta(days=7)
+            elif index == 6:
+                end = today + timedelta(days=15)
 
             MemberSubscription.objects.create(
                 gym=gym,
@@ -354,6 +476,18 @@ class Command(BaseCommand):
                 paused_at=timezone.now() - timedelta(days=2) if is_paused else None,
                 auto_renew=index % 2 == 0,
             )
+            if status in {"active", "expiring"} and index % 2 == 0:
+                previous = MemberSubscription(
+                    gym=gym,
+                    member=member,
+                    plan=plans["Mensuel Standard"],
+                    start_date=start - timedelta(days=35),
+                    end_date=start - timedelta(days=5),
+                    is_active=False,
+                    auto_renew=False,
+                )
+                previous._skip_active_collision_validation = True
+                previous.save()
             members.append(member)
         return members
 
@@ -444,33 +578,103 @@ class Command(BaseCommand):
             Payment.objects.filter(pk=payment.pk).update(
                 created_at=timezone.now() - timedelta(days=index)
             )
+        pending_member = members[2] if len(members) > 2 else None
+        if pending_member:
+            subscription = pending_member.latest_active_subscription
+            for status, method, label, age in [
+                ("pending", "mobile_money", "Mobile money en attente", 0),
+                ("failed", "card", "Carte refusee", 2),
+            ]:
+                description = f"Demo paiement {label} {pending_member.first_name}"
+                payment, created = Payment.objects.get_or_create(
+                    gym=gym,
+                    source_app="demo",
+                    description=description,
+                    defaults={
+                        "cash_register": register,
+                        "member": pending_member,
+                        "subscription": subscription,
+                        "amount": Decimal("30.00"),
+                        "amount_usd": Decimal("30.00"),
+                        "currency": "USD",
+                        "method": method,
+                        "status": status,
+                        "type": "in",
+                        "category": "subscription",
+                        "source_model": "MemberSubscription",
+                        "source_id": subscription.id if subscription else None,
+                        "created_by": cashier,
+                    },
+                )
+                if created:
+                    Payment.objects.filter(pk=payment.pk).update(created_at=timezone.now() - timedelta(days=age))
+
+    def _seed_subscription_requests(self, gym, members, plans, cashier):
+        SubscriptionRequest.objects.filter(gym=gym).delete()
+        statuses = [
+            SubscriptionRequest.STATUS_PENDING,
+            SubscriptionRequest.STATUS_AWAITING_PAYMENT,
+            SubscriptionRequest.STATUS_PAID,
+            SubscriptionRequest.STATUS_CANCELLED,
+            SubscriptionRequest.STATUS_FAILED,
+        ]
+        request_plans = [
+            plans["Mensuel Standard"],
+            plans["Trimestriel Plus"],
+            plans["Annuel VIP"],
+            plans["Journalier"],
+            plans["Mensuel Standard"],
+        ]
+        for index, (member, status, plan) in enumerate(zip(members, statuses, request_plans), start=1):
+            request = SubscriptionRequest.objects.create(
+                gym=gym,
+                member=member,
+                plan=plan,
+                requested_by=member.user,
+                status=status,
+                price_usd=plan.price,
+                aggregator_reference=f"DEMO-SUBREQ-{gym.id}-{index:02d}" if status != SubscriptionRequest.STATUS_PENDING else "",
+                notes=f"Demande demo {status}",
+            )
+            SubscriptionRequest.objects.filter(pk=request.pk).update(
+                created_at=timezone.now() - timedelta(days=index),
+                updated_at=timezone.now() - timedelta(days=max(index - 1, 0)),
+            )
 
     def _seed_products(self, gym, register, cashier):
         specs = [
-            ("Eau minerale 500ml", "1.00", 80),
-            ("Boisson energetique", "2.50", 35),
-            ("Proteine Shake", "8.00", 18),
-            ("Serviette sport", "6.00", 12),
-            ("Gants musculation", "15.00", 6),
+            ("Eau minerale 500ml", "1.00", 80, True),
+            ("Boisson energetique", "2.50", 35, True),
+            ("Proteine Shake", "8.00", 18, True),
+            ("Serviette sport", "6.00", 2, True),
+            ("Gants musculation", "15.00", 0, True),
+            ("Ancienne barre proteinee", "3.00", 4, False),
         ]
         products = []
-        for name, price, quantity in specs:
+        for name, price, quantity, is_active in specs:
             product = Product.objects.filter(gym=gym, name=name).first()
             if product:
                 product.price = Decimal(price)
                 product.quantity = quantity
-                product.is_active = True
+                product.is_active = is_active
                 product.save()
             else:
-                product = Product.objects.create(gym=gym, name=name, price=Decimal(price), quantity=quantity)
+                product = Product.objects.create(
+                    gym=gym,
+                    name=name,
+                    price=Decimal(price),
+                    quantity=quantity,
+                    is_active=is_active,
+                )
             products.append(product)
-            StockMovement.objects.get_or_create(
-                gym=gym,
-                product=product,
-                movement_type="in",
-                reason="Stock initial demo",
-                defaults={"quantity": quantity},
-            )
+            if quantity > 0:
+                StockMovement.objects.get_or_create(
+                    gym=gym,
+                    product=product,
+                    movement_type="in",
+                    reason="Stock initial demo",
+                    defaults={"quantity": quantity},
+                )
 
         for index, product in enumerate(products[:3], start=1):
             description = f"Demo vente produit {product.name}"
@@ -521,6 +725,10 @@ class Command(BaseCommand):
                     AccessLog.objects.filter(pk=log.pk).update(check_in_time=checked_at)
 
     def _seed_coaching(self, gym, gym_key, members):
+        CoachingFeedback.objects.filter(gym=gym).delete()
+        CoachingFollowUp.objects.filter(gym=gym).delete()
+        GroupCoachingProgram.objects.filter(gym=gym).delete()
+
         specialties = ["Musculation", "Perte de poids", "Cardio", "Functional training"]
         for name in specialties:
             CoachSpecialty.objects.update_or_create(
@@ -550,7 +758,120 @@ class Command(BaseCommand):
                 coach.save(update_fields=["user"])
             coach.members.clear()
             for member in members[index::2][:4]:
-                coach.assign_member(member)
+                if member.has_individual_coaching_access:
+                    coach.assign_member(member)
+
+        coaches = list(Coach.objects.filter(gym=gym).order_by("id"))
+        if not coaches:
+            return []
+
+        group_coach = coaches[-1]
+        program, _ = GroupCoachingProgram.objects.update_or_create(
+            gym=gym,
+            name=f"Transformation 8 semaines {gym_key.title()}",
+            defaults={
+                "coach": group_coach,
+                "objective": "Perte de poids et endurance",
+                "description": "Programme collectif demo avec suivi cardio et nutrition.",
+                "capacity": 8,
+                "is_active": True,
+            },
+        )
+        program.participants.clear()
+        for member in members:
+            if member.has_group_coaching_access and not program.is_full:
+                program.join_member(member)
+
+        follow_up_types = [
+            CoachingFollowUp.INTERACTION_ASSESSMENT,
+            CoachingFollowUp.INTERACTION_SESSION,
+            CoachingFollowUp.INTERACTION_MESSAGE,
+        ]
+        tracked_members = [member for coach in coaches for member in coach.members.all()]
+        for index, member in enumerate(tracked_members[:6], start=1):
+            coach = member.coaches.filter(gym=gym).first()
+            follow_up = CoachingFollowUp.objects.create(
+                gym=gym,
+                coach=coach,
+                member=member,
+                interaction_type=follow_up_types[index % len(follow_up_types)],
+                summary=f"Suivi demo {member.first_name}: charge adaptee et objectif confirme.",
+                next_action="Planifier un bilan" if index % 2 else "Envoyer programme maison",
+                next_follow_up_at=timezone.localdate() + timedelta(days=index),
+            )
+            CoachingFollowUp.objects.filter(pk=follow_up.pk).update(
+                created_at=timezone.now() - timedelta(days=index)
+            )
+
+            feedback = CoachingFeedback.objects.create(
+                gym=gym,
+                coach=coach,
+                member=member,
+                group_program=program if program.participants.filter(id=member.id).exists() and coach == program.coach else None,
+                overall_rating=2 if index == 1 else 4,
+                listening_rating=2 if index == 1 else 4,
+                clarity_rating=3 if index == 1 else 5,
+                motivation_rating=2 if index == 1 else 4,
+                availability_rating=2 if index == 1 else 4,
+                comment="Besoin d'un rappel manager" if index == 1 else "Progression visible sur la semaine.",
+                wants_contact=index == 1,
+            )
+            CoachingFeedback.objects.filter(pk=feedback.pk).update(
+                created_at=timezone.now() - timedelta(days=max(index - 1, 0))
+            )
+
+        return coaches
+
+    def _seed_member_goals(self, gym, members, coaches, coach_user):
+        MemberGoal.objects.filter(gym=gym).delete()
+        if not members:
+            return
+
+        goal_specs = [
+            (members[0], MemberGoal.GOAL_LOSE_WEIGHT, Decimal("72.00"), [Decimal("82.00"), Decimal("78.50"), Decimal("75.20")], MemberGoal.STATUS_ACTIVE),
+            (members[1], MemberGoal.GOAL_GAIN_WEIGHT, Decimal("86.00"), [Decimal("78.00"), Decimal("81.00"), Decimal("84.00")], MemberGoal.STATUS_ACTIVE),
+            (members[2], MemberGoal.GOAL_LOSE_WEIGHT, Decimal("68.00"), [Decimal("75.00"), Decimal("70.00"), Decimal("67.80")], MemberGoal.STATUS_ACHIEVED),
+        ]
+        for index, (member, goal_type, target_weight, weights, expected_status) in enumerate(goal_specs, start=1):
+            goal = MemberGoal.objects.create(
+                gym=gym,
+                member=member,
+                goal_type=goal_type,
+                target_weight=target_weight,
+                target_date=timezone.localdate() + timedelta(days=45 + index * 15),
+                measurement_starter=MemberGoal.STARTER_COACH if index % 2 else MemberGoal.STARTER_MEMBER,
+                note=f"Objectif demo {index} avec suivi de progression.",
+                created_by=coach_user,
+                status=MemberGoal.STATUS_ACTIVE,
+            )
+            for offset, weight in enumerate(weights):
+                MemberWeightMeasurement.objects.create(
+                    gym=gym,
+                    goal=goal,
+                    member=member,
+                    weight=weight,
+                    measured_at=timezone.localdate() - timedelta(days=(len(weights) - offset) * 7),
+                    note="Mesure demo",
+                    source=MemberWeightMeasurement.SOURCE_COACH if offset == 0 else MemberWeightMeasurement.SOURCE_MEMBER,
+                    recorded_by=coach_user,
+                )
+            goal.refresh_status_from_progress()
+            if goal.status != expected_status:
+                goal.status = expected_status
+                goal.save(update_fields=["status", "updated_at"])
+
+        if len(members) > 3:
+            MemberGoal.objects.create(
+                gym=gym,
+                member=members[3],
+                goal_type=MemberGoal.GOAL_GAIN_WEIGHT,
+                target_weight=Decimal("90.00"),
+                target_date=timezone.localdate() + timedelta(days=90),
+                measurement_starter=MemberGoal.STARTER_COACH,
+                note="Objectif annule demo pour verifier les etats historiques.",
+                created_by=coach_user,
+                status=MemberGoal.STATUS_CANCELLED,
+            )
 
     def _seed_machines(self, gym, register, manager):
         specs = [
@@ -597,26 +918,53 @@ class Command(BaseCommand):
 
     def _seed_rh(self, gym, register, manager):
         today = timezone.localdate()
+        PayrollWorkflowLog.objects.filter(slip__gym=gym).delete()
+        PayrollSlip.objects.filter(gym=gym).delete()
+        LeaveRequest.objects.filter(gym=gym).delete()
+        OvertimeEntry.objects.filter(gym=gym).delete()
+        PayrollAdjustment.objects.filter(gym=gym).delete()
+        PayrollContributionRule.objects.filter(gym=gym).delete()
+
         specs = [
-            ("Chef de salle", "manager", "18000.00"),
-            ("Agent accueil", "reception", "12000.00"),
-            ("Caissier", "cashier", "13000.00"),
-            ("Coach plateau", "coach", "15000.00"),
-            ("Entretien", "cleaner", "9000.00"),
+            ("Chef de salle", "manager", Employee.COMPENSATION_MONTHLY, "0.00", "520000.00"),
+            ("Agent accueil", "reception", Employee.COMPENSATION_DAILY, "12000.00", "0.00"),
+            ("Caissier", "cashier", Employee.COMPENSATION_DAILY, "13000.00", "0.00"),
+            ("Coach plateau", "coach", Employee.COMPENSATION_MONTHLY, "0.00", "450000.00"),
+            ("Entretien", "cleaner", Employee.COMPENSATION_DAILY, "9000.00", "0.00"),
         ]
         employees = []
-        for index, (name, role, salary) in enumerate(specs, start=1):
+        for index, (name, role, compensation_type, daily_salary, monthly_salary) in enumerate(specs, start=1):
             employee, _ = Employee.objects.update_or_create(
                 gym=gym,
                 name=f"{name} {gym.name}",
                 defaults={
                     "role": role,
                     "phone": f"877{gym.id:03d}{index:03d}",
-                    "daily_salary": Decimal(salary),
+                    "compensation_type": compensation_type,
+                    "daily_salary": Decimal(daily_salary),
+                    "monthly_salary": Decimal(monthly_salary),
                     "is_active": True,
                 },
             )
             employees.append(employee)
+
+        contribution_specs = [
+            ("IPR demo", PayrollContributionRule.PARTY_EMPLOYEE_TAX, PayrollContributionRule.CALC_PERCENTAGE, Decimal("3.00"), Decimal("0.00"), 1),
+            ("INSS salarie demo", PayrollContributionRule.PARTY_EMPLOYEE_CONTRIBUTION, PayrollContributionRule.CALC_PERCENTAGE, Decimal("1.50"), Decimal("0.00"), 2),
+            ("INSS employeur demo", PayrollContributionRule.PARTY_EMPLOYER_CONTRIBUTION, PayrollContributionRule.CALC_PERCENTAGE, Decimal("5.00"), Decimal("0.00"), 3),
+            ("Transport fixe demo", PayrollContributionRule.PARTY_EMPLOYER_CONTRIBUTION, PayrollContributionRule.CALC_FIXED, Decimal("0.00"), Decimal("15000.00"), 4),
+        ]
+        for name, party, calculation_type, rate_percent, fixed_amount, display_order in contribution_specs:
+            PayrollContributionRule.objects.create(
+                gym=gym,
+                name=name,
+                party=party,
+                calculation_type=calculation_type,
+                rate_percent=rate_percent,
+                fixed_amount=fixed_amount,
+                display_order=display_order,
+                is_active=True,
+            )
 
         for employee_index, employee in enumerate(employees):
             for day_offset in range(0, 12):
@@ -628,6 +976,70 @@ class Command(BaseCommand):
                     date=attendance_date,
                     defaults={"status": status},
                 )
+
+        LeaveRequest.objects.create(
+            gym=gym,
+            employee=employees[0],
+            leave_type=LeaveRequest.TYPE_PAID,
+            start_date=today - timedelta(days=3),
+            end_date=today - timedelta(days=2),
+            reason="Conge demo approuve",
+            status=LeaveRequest.STATUS_APPROVED,
+        )
+        LeaveRequest.objects.create(
+            gym=gym,
+            employee=employees[2],
+            leave_type=LeaveRequest.TYPE_UNPAID,
+            start_date=today - timedelta(days=1),
+            end_date=today,
+            reason="Absence administrative demo",
+            status=LeaveRequest.STATUS_PENDING,
+        )
+        OvertimeEntry.objects.create(
+            gym=gym,
+            employee=employees[1],
+            work_date=today - timedelta(days=4),
+            hours=Decimal("2.50"),
+            rate_multiplier=Decimal("1.50"),
+            reason="Fermeture tardive demo",
+            status=OvertimeEntry.STATUS_APPROVED,
+        )
+        OvertimeEntry.objects.create(
+            gym=gym,
+            employee=employees[3],
+            work_date=today - timedelta(days=5),
+            hours=Decimal("1.50"),
+            rate_multiplier=Decimal("1.25"),
+            reason="Session coach supplementaire",
+            status=OvertimeEntry.STATUS_PENDING,
+        )
+        PayrollAdjustment.objects.create(
+            gym=gym,
+            employee=employees[1],
+            year=today.year,
+            month=today.month,
+            adjustment_type=PayrollAdjustment.TYPE_BONUS,
+            label="Prime ponctualite demo",
+            amount=Decimal("25000.00"),
+        )
+        PayrollAdjustment.objects.create(
+            gym=gym,
+            employee=employees[2],
+            year=today.year,
+            month=today.month,
+            adjustment_type=PayrollAdjustment.TYPE_ADVANCE,
+            label="Avance salaire demo",
+            amount=Decimal("15000.00"),
+        )
+        PayrollAdjustment.objects.create(
+            gym=gym,
+            employee=employees[3],
+            year=today.year,
+            month=today.month,
+            adjustment_type=PayrollAdjustment.TYPE_DEDUCTION,
+            label="Retenue equipement demo",
+            amount=Decimal("10000.00"),
+        )
 
         employee = employees[1]
         amount = employee.calculate_monthly_salary(today.year, today.month)
@@ -665,19 +1077,72 @@ class Command(BaseCommand):
                 pos_payment=payment,
             )
 
-    def _seed_pre_registrations(self, gym):
+        for index, employee in enumerate(employees):
+            slip = PayrollSlip.ensure_for_period(employee, today.year, today.month)
+            if employee == employees[1]:
+                PayrollWorkflowLog.objects.create(slip=slip, actor=manager, action=PayrollWorkflowLog.ACTION_PAY, note="Paiement demo POS")
+            elif index == 0:
+                slip.review(manager)
+                slip.approve(manager)
+                slip.save(update_fields=["status", "reviewed_at", "reviewed_by", "approved_at", "approved_by", "updated_at"])
+                PayrollWorkflowLog.objects.create(slip=slip, actor=manager, action=PayrollWorkflowLog.ACTION_REVIEW, note="Controle manager demo")
+                PayrollWorkflowLog.objects.create(slip=slip, actor=manager, action=PayrollWorkflowLog.ACTION_APPROVE, note="Approbation demo")
+            elif index == 2:
+                slip.review(manager)
+                slip.save(update_fields=["status", "reviewed_at", "reviewed_by", "updated_at"])
+                PayrollWorkflowLog.objects.create(slip=slip, actor=manager, action=PayrollWorkflowLog.ACTION_REVIEW, note="Verification demo")
+
+    def _seed_notifications(self, gym, members, manager):
+        Notification.objects.filter(gym=gym).delete()
+        if not members:
+            return
+
+        specs = [
+            (members[0], "Abonnement proche expiration", "Votre abonnement expire bientot, passez a la reception.", Notification.CHANNEL_IN_APP, Notification.STATUS_SENT, True, ""),
+            (members[1], "Paiement en attente", "Votre paiement mobile money est en attente de confirmation.", Notification.CHANNEL_WHATSAPP, Notification.STATUS_PENDING, False, ""),
+            (members[2], "Acces refuse", "Votre dernier acces a ete refuse. Merci de regulariser.", Notification.CHANNEL_SMS, Notification.STATUS_SENT, False, ""),
+            (members[3], "Email non livre", "Votre notification email n'a pas pu etre envoyee.", Notification.CHANNEL_EMAIL, Notification.STATUS_FAILED, False, "Adresse email rejetee demo"),
+        ]
+        for index, (member, title, message, channel, status, is_read, error_message) in enumerate(specs, start=1):
+            notification = Notification.objects.create(
+                gym=gym,
+                member=member,
+                title=title,
+                message=message,
+                channel=channel,
+                status=status,
+                sent_at=timezone.now() - timedelta(hours=index) if status == Notification.STATUS_SENT else None,
+                read_at=timezone.now() - timedelta(minutes=index * 10) if is_read else None,
+                sent_by=manager,
+                error_message=error_message,
+            )
+            Notification.objects.filter(pk=notification.pk).update(
+                created_at=timezone.now() - timedelta(hours=index + 1)
+            )
+
+    def _seed_pre_registrations(self, gym, members, manager):
         link, _ = MemberPreRegistrationLink.objects.get_or_create(gym=gym)
-        for index in range(1, 3):
+        statuses = [
+            (MemberPreRegistration.STATUS_PENDING, None, timezone.now() + timedelta(days=6)),
+            (MemberPreRegistration.STATUS_PENDING, None, timezone.now() - timedelta(days=1)),
+            (MemberPreRegistration.STATUS_CANCELLED, None, timezone.now() + timedelta(days=4)),
+            (MemberPreRegistration.STATUS_CONFIRMED, members[-1] if members else None, timezone.now() + timedelta(days=2)),
+        ]
+        for index, (status, member, expires_at) in enumerate(statuses, start=1):
+            defaults = {
+                "link": link,
+                "first_name": f"Prospect{index}",
+                "last_name": gym.name.split()[0],
+                "email": f"prospect{index}.{gym.slug}@demo.gesgym.local",
+                "address": f"Adresse prospect {index}",
+                "status": status,
+                "expires_at": expires_at,
+                "member": member,
+                "confirmed_at": timezone.now() - timedelta(days=1) if status == MemberPreRegistration.STATUS_CONFIRMED else None,
+                "confirmed_by": manager if status == MemberPreRegistration.STATUS_CONFIRMED else None,
+            }
             MemberPreRegistration.objects.update_or_create(
                 gym=gym,
                 phone=f"844{gym.id:03d}{index:03d}",
-                defaults={
-                    "link": link,
-                    "first_name": f"Prospect{index}",
-                    "last_name": gym.name.split()[0],
-                    "email": f"prospect{index}.{gym.slug}@demo.gesgym.local",
-                    "address": f"Adresse prospect {index}",
-                    "status": MemberPreRegistration.STATUS_PENDING,
-                    "expires_at": timezone.now() + timedelta(days=7 - index),
-                },
+                defaults=defaults,
             )

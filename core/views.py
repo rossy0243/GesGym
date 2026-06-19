@@ -60,6 +60,144 @@ def _to_json(value):
     return json.dumps(value, ensure_ascii=False)
 
 
+def _chart_number(value):
+    if value is None:
+        return 0
+    return float(value)
+
+
+def _build_revenue_rows(payments_qs, period_data):
+    period_key = period_data["key"]
+    rows = []
+
+    if period_key == "day":
+        totals_by_slot = {}
+        for hour, amount in payments_qs.values_list("created_at__hour", "amount_cdf"):
+            slot_start = (hour // 4) * 4
+            totals_by_slot[slot_start] = totals_by_slot.get(slot_start, 0) + _chart_number(amount)
+
+        for slot_start in range(0, 24, 4):
+            slot_end = slot_start + 3
+            rows.append({
+                "label": f"{slot_start:02d}h-{slot_end:02d}h",
+                "total": totals_by_slot.get(slot_start, 0),
+            })
+
+    elif period_key == "week":
+        totals_by_day = {
+            item["day"]: _chart_number(item["total"])
+            for item in payments_qs.annotate(day=TruncDate("created_at"))
+            .values("day")
+            .annotate(total=Sum("amount_cdf"))
+        }
+        weekdays = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
+        for index in range(7):
+            current_day = period_data["start_date"] + timedelta(days=index)
+            rows.append({"label": weekdays[index], "total": totals_by_day.get(current_day, 0)})
+
+    elif period_key == "month":
+        totals_by_day = {
+            item["day"]: _chart_number(item["total"])
+            for item in payments_qs.annotate(day=TruncDate("created_at"))
+            .values("day")
+            .annotate(total=Sum("amount_cdf"))
+        }
+        week_start = period_data["start_date"]
+        week_index = 1
+        while week_start <= period_data["end_date"]:
+            week_end = min(week_start + timedelta(days=6), period_data["end_date"])
+            total = 0
+            current_day = week_start
+            while current_day <= week_end:
+                total += totals_by_day.get(current_day, 0)
+                current_day += timedelta(days=1)
+            rows.append({"label": f"Semaine {week_index}", "total": total})
+            week_start = week_end + timedelta(days=1)
+            week_index += 1
+
+    else:
+        totals_by_month = {
+            item["month"]: _chart_number(item["total"])
+            for item in payments_qs.annotate(month=ExtractMonth("created_at"))
+            .values("month")
+            .annotate(total=Sum("amount_cdf"))
+        }
+        for month_number in range(1, 13):
+            rows.append({
+                "label": MONTH_LABELS[month_number],
+                "total": totals_by_month.get(month_number, 0),
+            })
+
+    return rows
+
+
+def _build_dashboard_chart_data(
+    *,
+    revenue_rows,
+    attendance_rows,
+    status_chart_labels,
+    status_chart_values,
+    plan_labels,
+    plan_values,
+    expiry_1_day,
+    expiry_3_days,
+    expiry_7_days,
+    expiry_soon,
+    visits_period,
+    denied_period,
+):
+    return {
+        "revenue": {
+            "labels": [row["label"] for row in revenue_rows],
+            "values": [_chart_number(row["total"]) for row in revenue_rows],
+        },
+        "attendance": {
+            "labels": [row["label"] for row in attendance_rows],
+            "values": [int(row["count"]) for row in attendance_rows],
+        },
+        "member_status": {
+            "labels": status_chart_labels,
+            "values": [int(value) for value in status_chart_values],
+        },
+        "plans": {
+            "labels": plan_labels,
+            "values": [int(value) for value in plan_values],
+        },
+        "expirations": {
+            "labels": ["J-1", "J-3", "J-7", "J-15"],
+            "values": [expiry_1_day, expiry_3_days, expiry_7_days, expiry_soon],
+        },
+        "access": {
+            "labels": ["Autorises", "Refuses"],
+            "values": [visits_period, denied_period],
+        },
+    }
+
+
+def _build_report_chart_data(accounting_report):
+    category_rows = accounting_report.get("category_summary", [])
+    method_rows = accounting_report.get("method_summary", [])
+
+    return {
+        "categories": {
+            "labels": [row["label"] for row in category_rows],
+            "entries": [_chart_number(row.get("entries_cdf")) for row in category_rows],
+            "exits": [_chart_number(row.get("exits_cdf")) for row in category_rows],
+        },
+        "methods": {
+            "labels": [row["label"] for row in method_rows],
+            "entries": [_chart_number(row.get("entries_cdf")) for row in method_rows],
+            "exits": [_chart_number(row.get("exits_cdf")) for row in method_rows],
+        },
+        "totals": {
+            "entries": _chart_number(accounting_report.get("total_entries_cdf")),
+            "exits": _chart_number(accounting_report.get("total_exits_cdf")),
+            "net": _chart_number(accounting_report.get("net_total_cdf")),
+            "transactions": int(accounting_report.get("transaction_count") or 0),
+        },
+    }
+
+
 def _get_period_window(period_key, reference_date):
     period_key = period_key if period_key in PERIOD_LABELS else "month"
 
@@ -883,6 +1021,7 @@ def gym_dashboard(request, gym_id):
     monthly_revenue = 0
     period_revenue = 0
     previous_period_revenue = 0
+    revenue_rows = _build_revenue_rows(Payment.objects.none(), period_data)
     sales_labels = []
     sales_values = []
     if user_role in ["owner", "manager", "cashier"]:
@@ -904,6 +1043,12 @@ def gym_dashboard(request, gym_id):
         previous_period_revenue = successful_incoming_payments.filter(
             created_at__date__range=(period_data["previous_start"], period_data["previous_end"])
         ).aggregate(total=Sum("amount_cdf"))["total"] or 0
+        revenue_rows = _build_revenue_rows(
+            successful_incoming_payments.filter(
+                created_at__date__range=(period_data["start_date"], period_data["end_date"])
+            ),
+            period_data,
+        )
 
         monthly_sales = successful_incoming_payments.filter(
             created_at__year=current_year
@@ -941,6 +1086,20 @@ def gym_dashboard(request, gym_id):
     plan_values = [plan["total"] for plan in plans_stats]
     status_chart_labels = ["Actifs", "Expires", "Suspendus"]
     status_chart_values = [active_members, expired_members, suspended_members]
+    dashboard_chart_data = _build_dashboard_chart_data(
+        revenue_rows=revenue_rows,
+        attendance_rows=attendance_rows,
+        status_chart_labels=status_chart_labels,
+        status_chart_values=status_chart_values,
+        plan_labels=plan_labels,
+        plan_values=plan_values,
+        expiry_1_day=expiry_1_day,
+        expiry_3_days=expiry_3_days,
+        expiry_7_days=expiry_7_days,
+        expiry_soon=expiry_soon,
+        visits_period=visits_period,
+        denied_period=denied_period,
+    )
 
     recent_payments = []
     if user_role in ["owner", "manager", "cashier"]:
@@ -1089,6 +1248,7 @@ def gym_dashboard(request, gym_id):
         "period_label_lower": period_data["label"].lower(),
         "period_range_label": _format_period_range(period_data["start_date"], period_data["end_date"]),
         "period_days": period_data["days"],
+        "dashboard_chart_data": dashboard_chart_data,
         "total_members": total_members,
         "active_members": active_members,
         "active_member_rate": active_member_rate,
@@ -1347,6 +1507,7 @@ def reports_dashboard(request):
         default_period=default_period_by_section.get(section, "month"),
     )
     accounting_report = build_accounting_report(gym, period_data)
+    report_chart_data = _build_report_chart_data(accounting_report)
 
     payments_period = Payment.objects.filter(
         gym=gym,
@@ -1418,6 +1579,7 @@ def reports_dashboard(request):
         "date_to": period_data["date_to"],
         "report_period_label": period_data["label"],
         "accounting_report": accounting_report,
+        "report_chart_data": report_chart_data,
         "can_export_accounting": user_role in REPORT_ROLES,
         "custom_report": custom_report,
         "daily_revenue": daily_revenue,

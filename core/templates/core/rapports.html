@@ -86,6 +86,27 @@
     box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
 }
 
+.report-chart-box {
+    position: relative;
+    height: 230px;
+}
+
+.report-chart-box.compact {
+    height: 210px;
+}
+
+.report-chart-box canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.report-visual-title {
+    color: #0f172a;
+    font-size: .86rem;
+    font-weight: 700;
+    margin-bottom: 10px;
+}
+
 .report-switcher .btn {
     border-radius: 999px;
 }
@@ -176,6 +197,29 @@
                 <div class="report-stat-card p-3">
                     <div class="fs-12 text-muted">Solde net CDF</div>
                     <h4 class="mb-0 fw-bold">{{ accounting_report.net_total_cdf }} CDF</h4>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-3 mt-1">
+            <div class="col-xl-7">
+                <div class="report-stat-card p-3">
+                    <div class="report-visual-title">Entrees / sorties par categorie</div>
+                    <div class="report-chart-box">
+                        <canvas id="accountingCategoryChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-xl-5">
+                <div class="report-stat-card p-3">
+                    <div class="report-visual-title">Repartition par methode de paiement</div>
+                    <div class="report-chart-box compact">
+                        <canvas id="accountingMethodChart"></canvas>
+                    </div>
+                    <div class="d-flex justify-content-between text-muted fs-12 mt-3 flex-wrap gap-2">
+                        <span>Volume: <strong>{{ accounting_report.transaction_count }}</strong></span>
+                        <span>Net: <strong>{{ accounting_report.net_total_cdf }} CDF</strong></span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -434,7 +478,7 @@
         </div>
 
         <div class="row mt-4 g-3">
-            <div class="col-xxl-7">
+            <div class="col-12">
                 <div class="card report-section-card h-100">
                     <div class="card-header">
                         <h5 class="card-title d-flex align-items-center gap-2 mb-0">
@@ -473,20 +517,6 @@
                                 </tbody>
                             </table>
                         </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-xxl-5">
-                <div class="card report-section-card h-100">
-                    <div class="card-header">
-                        <h5 class="card-title d-flex align-items-center gap-2 mb-0">
-                            <span class="material-icons">show_chart</span>
-                            Tendance de la période
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        <canvas id="monthlySalesChart" height="180"></canvas>
                     </div>
                 </div>
             </div>
@@ -967,30 +997,128 @@
 {% endblock %}
 
 {% block extra_js %}
+{{ report_chart_data|json_script:"report-chart-data" }}
 <script>
-let sales_labels = {{ sales_labels|safe }};
-let sales_values = {{ sales_values|safe }};
-</script>
+const reportChartNode = document.getElementById("report-chart-data");
+const reportChartData = reportChartNode ? JSON.parse(reportChartNode.textContent) : {};
+const reportMutedGrid = "rgba(100, 116, 139, 0.12)";
 
-<script>
-const ctx = document.getElementById("monthlySalesChart");
+function reportFormatNumber(value) {
+    return Number(value || 0).toLocaleString("fr-FR");
+}
 
-if (ctx) {
-    new Chart(ctx, {
-        type: "line",
+function reportFormatCurrency(value) {
+    return `${reportFormatNumber(value)} CDF`;
+}
+
+function reportSeries(path, fallback) {
+    return path.split(".").reduce((value, key) => value && value[key], reportChartData) || fallback;
+}
+
+function reportHasData(values) {
+    return values.map(value => Number(value || 0)).reduce((sum, value) => sum + value, 0) > 0;
+}
+
+function renderAccountingCategoryChart() {
+    const canvas = document.getElementById("accountingCategoryChart");
+    if (!canvas) return;
+
+    const labels = reportSeries("categories.labels", []);
+    const entries = reportSeries("categories.entries", []);
+    const exits = reportSeries("categories.exits", []);
+    const hasData = reportHasData(entries) || reportHasData(exits);
+
+    new Chart(canvas, {
+        type: "bar",
         data: {
-            labels: sales_labels,
-            datasets: [{
-                label: "Chiffre d'affaires",
-                data: sales_values,
-                borderColor: "#3454d1",
-                backgroundColor: "rgba(52,84,209,0.1)",
-                fill: true,
-                tension: 0.4
-            }]
+            labels: hasData ? labels : ["Aucune donnee"],
+            datasets: [
+                {
+                    label: "Entrees",
+                    data: hasData ? entries : [0],
+                    backgroundColor: hasData ? "rgba(23, 198, 102, 0.78)" : "#e5e7eb",
+                    borderRadius: 8,
+                    maxBarThickness: 34
+                },
+                {
+                    label: "Sorties",
+                    data: hasData ? exits : [0],
+                    backgroundColor: hasData ? "rgba(234, 77, 77, 0.72)" : "#f1f5f9",
+                    borderRadius: 8,
+                    maxBarThickness: 34
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: "bottom",
+                    labels: { usePointStyle: true, boxWidth: 8 }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: context => `${context.dataset.label}: ${reportFormatCurrency(context.raw)}`
+                    }
+                }
+            },
+            scales: {
+                x: { grid: { display: false } },
+                y: {
+                    beginAtZero: true,
+                    ticks: { callback: value => reportFormatCurrency(value) },
+                    grid: { color: reportMutedGrid }
+                }
+            }
         }
     });
 }
+
+function renderAccountingMethodChart() {
+    const canvas = document.getElementById("accountingMethodChart");
+    if (!canvas) return;
+
+    const labels = reportSeries("methods.labels", []);
+    const entries = reportSeries("methods.entries", []);
+    const values = entries.map(value => Number(value || 0));
+    const hasData = reportHasData(values);
+
+    new Chart(canvas, {
+        type: "doughnut",
+        data: {
+            labels: hasData ? labels : ["Aucune entree"],
+            datasets: [{
+                data: hasData ? values : [1],
+                backgroundColor: hasData
+                    ? ["#3454d1", "#17c666", "#ffa21d", "#3dc7be", "#64748b", "#6610f2"]
+                    : ["#e5e7eb"],
+                borderColor: "#ffffff",
+                borderWidth: 4,
+                hoverOffset: 8
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: "68%",
+            plugins: {
+                legend: {
+                    position: "bottom",
+                    labels: { usePointStyle: true, boxWidth: 8 }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: context => `${context.label}: ${reportFormatCurrency(context.raw)}`
+                    }
+                }
+            }
+        }
+    });
+}
+
+renderAccountingCategoryChart();
+renderAccountingMethodChart();
 </script>
 
 <script>
