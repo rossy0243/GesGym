@@ -12,6 +12,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from core.creation_emails import notify_creation_email_failure, send_employee_creation_email
 from pos.services import record_expense
 from smartclub.access_control import RH_ATTENDANCE_ROLES, RH_EMPLOYEE_ROLES, RH_PAYROLL_ROLES
 from smartclub.decorators import module_required, role_required
@@ -229,7 +230,13 @@ def employee_create(request):
             employee = form.save(commit=False)
             employee.gym = gym
             employee.save()
-            messages.success(request, f'Employe "{employee.name}" cree avec succes.')
+            try:
+                email_sent = send_employee_creation_email(employee)
+            except Exception as exc:
+                notify_creation_email_failure(str(employee), exc)
+                email_sent = False
+            email_status = "Email envoye." if email_sent else "Aucun email envoye."
+            messages.success(request, f'Employe "{employee.name}" cree avec succes. {email_status}')
             return redirect("rh:detail", employee_id=employee.id)
     else:
         form = EmployeeForm()

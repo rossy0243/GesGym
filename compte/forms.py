@@ -5,8 +5,34 @@ from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.forms import PasswordResetForm
 from django.contrib.auth.forms import SetPasswordForm
 
+from core.creation_emails import organization_sender
+
 
 User = get_user_model()
+
+
+def _password_reset_organization_name(user):
+    organization = getattr(user, "owned_organization", None)
+    if organization:
+        return organization.name
+
+    member = getattr(user, "member_profile", None)
+    if member and member.gym_id:
+        return member.gym.organization.name
+
+    role = (
+        user.gym_roles.filter(
+            is_active=True,
+            gym__is_active=True,
+            gym__organization__is_active=True,
+        )
+        .select_related("gym__organization")
+        .first()
+    )
+    if role and role.gym_id:
+        return role.gym.organization.name
+
+    return ""
 
 
 class CustomAuthenticationForm(AuthenticationForm):
@@ -45,6 +71,26 @@ class StyledPasswordResetForm(PasswordResetForm):
             "placeholder": "Adresse email",
             "autocomplete": "email",
         })
+
+    def send_mail(
+        self,
+        subject_template_name,
+        email_template_name,
+        context,
+        from_email,
+        to_email,
+        html_email_template_name=None,
+    ):
+        organization_name = _password_reset_organization_name(context["user"])
+        context["brand_name"] = organization_name or "SmartClub Pro"
+        super().send_mail(
+            subject_template_name,
+            email_template_name,
+            context,
+            organization_sender(organization_name),
+            to_email,
+            html_email_template_name=html_email_template_name,
+        )
 
 
 class StyledSetPasswordForm(SetPasswordForm):

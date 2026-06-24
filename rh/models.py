@@ -48,6 +48,7 @@ class Employee(models.Model):
     name = models.CharField(max_length=255)
     role = models.CharField(max_length=50, choices=ROLE_CHOICES)
     phone = models.CharField(max_length=20, blank=True, null=True)
+    email = models.EmailField(blank=True, null=True, db_index=True)
     compensation_type = models.CharField(max_length=20, choices=COMPENSATION_TYPE_CHOICES, default=COMPENSATION_DAILY)
     daily_salary = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     monthly_salary = models.DecimalField(max_digits=10, decimal_places=2, default=0)

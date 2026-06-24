@@ -3,9 +3,10 @@ from datetime import timedelta
 from io import StringIO
 from unittest.mock import patch
 
+from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -142,6 +143,33 @@ class MemberPreRegistrationTests(TestCase):
         member.refresh_from_db()
         self.assertEqual(member.last_name, "Updated")
         self.assertEqual(member.address, "Gombe")
+
+    @override_settings(DEFAULT_FROM_EMAIL="noreply@smartclubpro.org")
+    @patch("members.signals.generate_temporary_password", return_value="ManualTemp123!")
+    def test_create_member_sends_credentials_email(self, _mock_password):
+        self.client.force_login(self.reception)
+
+        response = self.client.post(
+            reverse("members:create_member"),
+            {
+                "first_name": "Mail",
+                "last_name": "Target",
+                "phone": "+243810000198",
+                "email": "mail.target@example.com",
+                "address": "Kinshasa",
+            },
+        )
+
+        self.assertRedirects(response, reverse("members:member_list"), fetch_redirect_response=False)
+        self.assertEqual(len(mail.outbox), 1)
+        message = mail.outbox[0]
+        member = Member.objects.get(phone="+243810000198")
+        self.assertEqual(message.from_email, "Org Members <noreply@smartclubpro.org>")
+        self.assertEqual(message.to, ["mail.target@example.com"])
+        self.assertIn("Org Members - Vos coordonnees membre", message.subject)
+        self.assertIn(member.user.username, message.body)
+        self.assertIn("ManualTemp123!", message.body)
+        self.assertIn("Kinshasa", message.body)
 
     @patch("members.views.generate_temporary_password", return_value="MemberTemp123!")
     def test_reception_can_reset_member_password_and_view_temporary_credentials(self, _mock_password):
@@ -320,6 +348,7 @@ class MemberPreRegistrationTests(TestCase):
         self.assertGreater(pre_registration.expires_at, timezone.now() + timedelta(days=6, hours=23))
         self.assertFalse(Member.objects.filter(phone="+243810000001").exists())
 
+    @override_settings(DEFAULT_FROM_EMAIL="noreply@smartclubpro.org")
     @patch("members.signals.generate_temporary_password", return_value="TempPass123!")
     def test_confirm_pre_registration_creates_member_and_default_user(self, _mock_password):
         pre_registration = MemberPreRegistration.objects.create(
@@ -345,6 +374,13 @@ class MemberPreRegistrationTests(TestCase):
         self.assertTrue(member.user.check_password("TempPass123!"))
         self.assertTrue(member.user.force_password_change)
         self.assertFalse(UserGymRole.objects.filter(user=member.user, gym=self.gym, is_active=True).exists())
+        self.assertEqual(len(mail.outbox), 1)
+        message = mail.outbox[0]
+        self.assertEqual(message.from_email, "Org Members <noreply@smartclubpro.org>")
+        self.assertEqual(message.to, ["bob.ready@example.com"])
+        self.assertIn("Org Members - Vos coordonnees membre", message.subject)
+        self.assertIn(member.user.username, message.body)
+        self.assertIn("TempPass123!", message.body)
 
     def test_pre_registration_list_is_scoped_to_current_gym(self):
         MemberPreRegistration.objects.create(

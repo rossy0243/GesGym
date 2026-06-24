@@ -1,8 +1,9 @@
 from datetime import timedelta
 from decimal import Decimal
 
+from django.core import mail
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -304,6 +305,33 @@ class RhTenantTests(TestCase):
             with self.subTest(url=url):
                 response = self.client.get(url)
                 self.assertEqual(response.status_code, 200)
+
+    @override_settings(DEFAULT_FROM_EMAIL="noreply@smartclubpro.org")
+    def test_employee_create_sends_coordinates_email(self):
+        response = self.client.post(
+            reverse("rh:create"),
+            {
+                "name": "Eve Coach",
+                "role": "coach",
+                "phone": "+243810000220",
+                "email": "eve.coach@example.com",
+                "compensation_type": Employee.COMPENSATION_DAILY,
+                "daily_salary": "150.00",
+                "monthly_salary": "0",
+                "is_active": "on",
+            },
+        )
+
+        employee = Employee.objects.get(email="eve.coach@example.com")
+        self.assertRedirects(response, reverse("rh:detail", args=[employee.id]), fetch_redirect_response=False)
+        self.assertEqual(len(mail.outbox), 1)
+        message = mail.outbox[0]
+        self.assertEqual(message.from_email, "Org A <noreply@smartclubpro.org>")
+        self.assertEqual(message.to, ["eve.coach@example.com"])
+        self.assertIn("Org A - Vos coordonnees employe", message.subject)
+        self.assertIn("Eve Coach", message.body)
+        self.assertIn("+243810000220", message.body)
+        self.assertIn("Salaire journalier : 150.00 CDF", message.body)
 
     def test_payroll_slip_starts_as_draft_then_can_be_approved(self):
         detail_response = self.client.get(

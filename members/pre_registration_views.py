@@ -8,6 +8,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from core.creation_emails import notify_creation_email_failure, send_member_creation_email
 from smartclub.access_control import MEMBER_ROLES, has_role
 from .forms import MemberPreRegistrationForm
 from .models import Member, MemberPreRegistration, MemberPreRegistrationLink
@@ -168,11 +169,21 @@ def confirm_pre_registration(request, pre_registration_id):
 
     username = member.user.username if member.user else "genere automatiquement"
     temporary_password = getattr(member, "_temporary_password", "")
+    try:
+        email_sent = send_member_creation_email(
+            member,
+            temporary_password=temporary_password,
+            portal_url=request.build_absolute_uri(reverse("members:member_portal")),
+        )
+    except Exception as exc:
+        notify_creation_email_failure(str(member), exc)
+        email_sent = False
     messages.success(
         request,
         f"Preinscription confirmee. Membre cree : {member.first_name} {member.last_name}. "
         f"Identifiant : {username}. Mot de passe temporaire : {temporary_password}. "
-        "Ce mot de passe devra etre change a la premiere connexion."
+        "Ce mot de passe devra etre change a la premiere connexion. "
+        f"Email envoye : {'oui' if email_sent else 'non'}."
     )
     return redirect("members:pre_registration_list")
 

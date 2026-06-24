@@ -24,6 +24,7 @@ from access.models import AccessLog
 from coaching.forms import CoachingFeedbackForm
 from coaching.models import Coach, CoachingFeedback, GroupCoachingProgram
 from compte.utils import generate_temporary_password
+from core.creation_emails import notify_creation_email_failure, send_member_creation_email
 from smartclub.access_control import (
     MEMBER_ROLES,
     MEMBER_STATUS_ROLES,
@@ -1595,6 +1596,17 @@ def create_member(request):
             member.gym = request.gym
             member.save()  # déclenche signal → crée User automatiquement
 
+            temporary_password = getattr(member, "_temporary_password", "")
+            try:
+                email_sent = send_member_creation_email(
+                    member,
+                    temporary_password=temporary_password,
+                    portal_url=request.build_absolute_uri(reverse("members:member_portal")),
+                )
+            except Exception as exc:
+                notify_creation_email_failure(str(member), exc)
+                email_sent = False
+
             messages.success(
                 request,
                 f"""
@@ -1605,9 +1617,10 @@ def create_member(request):
                         <span class="opacity-90">
                             {member.first_name} {member.last_name}<br>
                             Identifiant : <strong>{member.user.username}</strong><br>
-                            Mot de passe temporaire : <strong>{getattr(member, "_temporary_password", "Genere automatiquement")}</strong><br>
+                            Mot de passe temporaire : <strong>{temporary_password or "Genere automatiquement"}</strong><br>
                             Changement obligatoire a la premiere connexion.<br>
-                            Espace membre : <strong>{reverse("members:member_portal")}</strong>
+                            Espace membre : <strong>{reverse("members:member_portal")}</strong><br>
+                            Email envoye : <strong>{"oui" if email_sent else "non"}</strong>
                         </span>
                     </div>
                 </div>

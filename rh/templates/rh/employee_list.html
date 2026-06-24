@@ -94,7 +94,8 @@
                         {% else %}
                         <strong>Salaire journalier :</strong> {{ employee.daily_salary }} CDF<br>
                         {% endif %}
-                        <strong>Telephone :</strong> {{ employee.phone|default:"Non renseigne" }}
+                        <strong>Telephone :</strong> {{ employee.phone|default:"Non renseigne" }}<br>
+                        <strong>Email :</strong> {{ employee.email|default:"Non renseigne" }}
                     </p>
 
                     <div class="mt-3">

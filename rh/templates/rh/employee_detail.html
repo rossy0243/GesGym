@@ -41,6 +41,7 @@
                 <div class="card-body rh-scroll-area">
                     <p><strong>Role :</strong> {{ employee.get_role_display }}</p>
                     <p><strong>Telephone :</strong> {{ employee.phone|default:"Non renseigne" }}</p>
+                    <p><strong>Email :</strong> {{ employee.email|default:"Non renseigne" }}</p>
                     <p><strong>Remuneration :</strong> {{ employee.get_compensation_label }}</p>
                     {% if employee.compensation_type == 'monthly' %}
                     <p><strong>Salaire mensuel :</strong> {{ employee.monthly_salary }} CDF</p>

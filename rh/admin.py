@@ -5,9 +5,9 @@ from .models import Attendance, Employee, PaymentRecord
 
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
-    list_display = ("name", "organization", "gym", "role", "phone", "daily_salary", "is_active", "created_at")
+    list_display = ("name", "organization", "gym", "role", "phone", "email", "daily_salary", "is_active", "created_at")
     list_filter = ("role", "is_active", "gym__organization", "gym")
-    search_fields = ("name", "phone", "gym__name", "gym__organization__name")
+    search_fields = ("name", "phone", "email", "gym__name", "gym__organization__name")
     autocomplete_fields = ("gym",)
     list_editable = ("is_active",)
     ordering = ("gym__organization__name", "gym__name", "name")

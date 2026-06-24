@@ -477,10 +477,45 @@ class PasswordResetFlowTests(TestCase):
         )
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].to, ["reset@example.com"])
+        self.assertEqual(mail.outbox[0].from_email, "noreply@example.com")
         self.assertEqual(mail.outbox[0].subject, "SmartClub Pro - Reinitialisez votre mot de passe")
         self.assertIn("/compte/reset/", mail.outbox[0].body)
         self.assertTrue(mail.outbox[0].alternatives)
         self.assertIn("Definir un nouveau mot de passe", mail.outbox[0].alternatives[0][0])
+
+    def test_password_reset_request_uses_organization_brand_for_staff_user(self):
+        organization = Organization.objects.create(name="Royal Gym", slug="royal-gym")
+        gym = Gym.objects.create(
+            organization=organization,
+            name="Royal Gym Gombe",
+            slug="royal-gym-gombe",
+            subdomain="royal-gym-gombe",
+        )
+        branded_user = User.objects.create_user(
+            username="royal-manager",
+            password="AncienPass123",
+            email="manager@royalgym.example",
+        )
+        UserGymRole.objects.create(user=branded_user, gym=gym, role="manager")
+
+        response = self.client.post(
+            reverse("compte:password_reset"),
+            {"email": "manager@royalgym.example"},
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("compte:password_reset_done"),
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(len(mail.outbox), 1)
+        message = mail.outbox[0]
+        self.assertEqual(message.to, ["manager@royalgym.example"])
+        self.assertEqual(message.from_email, "Royal Gym <noreply@example.com>")
+        self.assertEqual(message.subject, "Royal Gym - Reinitialisez votre mot de passe")
+        self.assertIn("compte Royal Gym", message.body)
+        self.assertIn("L'equipe Royal Gym", message.body)
+        self.assertIn("Royal Gym", message.alternatives[0][0])
 
     def test_password_reset_confirm_updates_password(self):
         uidb64 = urlsafe_base64_encode(force_bytes(self.user.pk))

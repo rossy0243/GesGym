@@ -18,6 +18,7 @@ class EmployeeForm(forms.ModelForm):
             "name",
             "role",
             "phone",
+            "email",
             "compensation_type",
             "daily_salary",
             "monthly_salary",
@@ -27,6 +28,7 @@ class EmployeeForm(forms.ModelForm):
             "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "Nom complet"}),
             "role": forms.Select(attrs={"class": "form-select"}),
             "phone": forms.TextInput(attrs={"class": "form-control", "placeholder": "Numero de telephone"}),
+            "email": forms.EmailInput(attrs={"class": "form-control", "placeholder": "Email"}),
             "compensation_type": forms.Select(attrs={"class": "form-select"}),
             "daily_salary": forms.NumberInput(
                 attrs={"class": "form-control", "step": "0.01", "placeholder": "Salaire journalier"}
@@ -40,6 +42,7 @@ class EmployeeForm(forms.ModelForm):
             "name": "Nom",
             "role": "Role",
             "phone": "Telephone",
+            "email": "Email",
             "compensation_type": "Mode de remuneration",
             "daily_salary": "Salaire journalier (CDF)",
             "monthly_salary": "Salaire mensuel fixe (CDF)",
