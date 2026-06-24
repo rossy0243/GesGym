@@ -41,7 +41,7 @@ class PublicRouteTests(TestCase):
     def test_landing_uses_versioned_script_to_avoid_stale_browser_cache(self):
         response = self.client.get("/")
 
-        self.assertContains(response, "script_accueil.js?v=landing-v5-mobile-menu-fallback")
+        self.assertContains(response, "script_accueil.js?v=landing-v6-mobile-menu-toggle")
 
     def test_demo_request_sends_email_to_contact_address(self):
         response = self.client.post(

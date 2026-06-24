@@ -19,32 +19,37 @@
         }
     }
 
-    function closeMobileMenu() {
+    function setMobileMenuOpen(isOpen) {
         if (!mobileMenu) {
             return;
         }
-        mobileMenu.classList.remove("open");
+
+        mobileMenu.classList.toggle("open", isOpen);
+        mobileMenu.setAttribute("aria-hidden", isOpen ? "false" : "true");
         if (menuBtn) {
-            menuBtn.setAttribute("aria-expanded", "false");
+            menuBtn.setAttribute("aria-expanded", isOpen ? "true" : "false");
+            menuBtn.setAttribute("aria-label", isOpen ? "Fermer le menu" : "Ouvrir le menu");
         }
-        updateMenuIcon(false);
+        updateMenuIcon(isOpen);
+    }
+
+    function closeMobileMenu() {
+        setMobileMenuOpen(false);
     }
 
     function toggleLandingMenu() {
         if (!mobileMenu) {
             return false;
         }
-        var isOpen = mobileMenu.classList.toggle("open");
-        if (menuBtn) {
-            menuBtn.setAttribute("aria-expanded", isOpen ? "true" : "false");
-        }
-        updateMenuIcon(isOpen);
+        setMobileMenuOpen(!mobileMenu.classList.contains("open"));
         return false;
     }
 
     window.toggleLandingMenu = toggleLandingMenu;
 
     if (menuBtn && mobileMenu) {
+        closeMobileMenu();
+
         menuBtn.addEventListener("click", function (event) {
             event.preventDefault();
             toggleLandingMenu();
@@ -56,6 +61,12 @@
                 closeMobileMenu();
             });
         }
+
+        window.addEventListener("resize", function () {
+            if (window.innerWidth >= 768) {
+                closeMobileMenu();
+            }
+        });
     }
 
     var elements = document.querySelectorAll(".animate-on-scroll");

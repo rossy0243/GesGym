@@ -22,8 +22,25 @@ body { font-family: 'Inter', sans-serif; }
 .delay-5 { transition-delay: 0.5s; }
 
 /* Mobile menu */
-.mobile-menu { display: none; max-height: 0; overflow: hidden; transition: max-height 0.4s ease-out; }
-.mobile-menu.open { display: block; max-height: 500px; }
+.mobile-menu {
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    visibility: hidden;
+    transition: max-height 0.3s ease, opacity 0.2s ease, visibility 0.2s ease;
+}
+
+.mobile-menu.open {
+    max-height: 520px;
+    opacity: 1;
+    visibility: visible;
+}
+
+@media (min-width: 768px) {
+    .mobile-menu {
+        display: none !important;
+    }
+}
 
 /* Styles pour les boutons dans le menu mobile */
 .mobile-auth-buttons {
