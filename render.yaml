@@ -47,6 +47,22 @@ services:
         value: "True"
       - key: DJANGO_SERVE_MEDIA
         value: "False"
+      - key: B2_BUCKET_NAME
+        sync: false
+      - key: B2_REGION
+        sync: false
+      - key: B2_ENDPOINT_URL
+        sync: false
+      - key: B2_KEY_ID
+        sync: false
+      - key: B2_APPLICATION_KEY
+        sync: false
+      - key: B2_MEDIA_LOCATION
+        value: media
+      - key: B2_CUSTOM_DOMAIN
+        sync: false
+      - key: B2_QUERYSTRING_AUTH
+        value: "False"
       - key: DJANGO_EMAIL_BACKEND
         value: django.core.mail.backends.smtp.EmailBackend
       - key: DJANGO_EMAIL_HOST

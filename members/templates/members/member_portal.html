@@ -10,7 +10,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>{{ gym.name }} | Espace membre</title>
     <link rel="manifest" href="{{ pwa_manifest_url }}">
-    <link rel="apple-touch-icon" href="{% static 'icons/1.png' %}">
+    <link rel="apple-touch-icon" href="{% if organization.logo %}{{ organization.logo.url }}{% else %}{% static 'icons/1.png' %}{% endif %}">
     <link rel="stylesheet" href="{% static 'css/member-portal.css' %}?v=20260614a">
 </head>
 <body data-service-worker-url="{{ pwa_service_worker_url }}">

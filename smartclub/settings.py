@@ -276,6 +276,43 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 SERVE_MEDIA = _env_bool("DJANGO_SERVE_MEDIA", False)
 
+B2_BUCKET_NAME = _env("B2_BUCKET_NAME", "")
+B2_REGION = _env("B2_REGION", "")
+B2_ENDPOINT_URL = _env("B2_ENDPOINT_URL", "")
+B2_KEY_ID = _env("B2_KEY_ID", "")
+B2_APPLICATION_KEY = _env("B2_APPLICATION_KEY", "")
+B2_CUSTOM_DOMAIN = _env("B2_CUSTOM_DOMAIN", "").strip().removeprefix("https://").removeprefix("http://").rstrip("/")
+B2_MEDIA_LOCATION = _env("B2_MEDIA_LOCATION", "media").strip("/")
+B2_QUERYSTRING_AUTH = _env_bool("B2_QUERYSTRING_AUTH", False)
+B2_ENABLED = all([B2_BUCKET_NAME, B2_ENDPOINT_URL, B2_KEY_ID, B2_APPLICATION_KEY])
+
+if B2_ENABLED:
+    b2_options = {
+        "access_key": B2_KEY_ID,
+        "secret_key": B2_APPLICATION_KEY,
+        "bucket_name": B2_BUCKET_NAME,
+        "endpoint_url": B2_ENDPOINT_URL,
+        "region_name": B2_REGION,
+        "location": B2_MEDIA_LOCATION,
+        "default_acl": None,
+        "querystring_auth": B2_QUERYSTRING_AUTH,
+        "file_overwrite": False,
+        "addressing_style": "path",
+        "object_parameters": {
+            "CacheControl": "max-age=86400",
+        },
+    }
+    if B2_CUSTOM_DOMAIN:
+        b2_options["custom_domain"] = B2_CUSTOM_DOMAIN
+
+    STORAGES["default"] = {
+        "BACKEND": "storages.backends.s3.S3Storage",
+        "OPTIONS": b2_options,
+    }
+    if B2_CUSTOM_DOMAIN:
+        MEDIA_URL = f"https://{B2_CUSTOM_DOMAIN}/{B2_MEDIA_LOCATION}/" if B2_MEDIA_LOCATION else f"https://{B2_CUSTOM_DOMAIN}/"
+    SERVE_MEDIA = False
+
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 USE_X_FORWARDED_HOST = _env_bool("DJANGO_USE_X_FORWARDED_HOST", False)
 

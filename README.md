@@ -205,6 +205,17 @@ Variables minimales :
 - `DJANGO_CSRF_TRUSTED_ORIGINS=https://ton-domaine.com,https://www.ton-domaine.com`
 - `DATABASE_URL=postgresql://user:password@host:5432/dbname?sslmode=require`
 
+Medias utilisateurs sur Backblaze B2 optionnel :
+
+- `B2_BUCKET_NAME`
+- `B2_REGION`
+- `B2_ENDPOINT_URL`
+- `B2_KEY_ID`
+- `B2_APPLICATION_KEY`
+- `B2_MEDIA_LOCATION=media`
+- `B2_CUSTOM_DOMAIN` si un domaine CDN/custom est utilise
+- `B2_QUERYSTRING_AUTH=False` pour des URLs publiques
+
 Bootstrap admin optionnel :
 
 - `DJANGO_BOOTSTRAP_SUPERUSER_USERNAME=admin-bootstrap`

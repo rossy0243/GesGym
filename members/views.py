@@ -1,5 +1,6 @@
 #members/views.py
 import json
+import mimetypes
 from datetime import date, timedelta
 from io import BytesIO
 from django.http import HttpResponse, JsonResponse
@@ -1040,11 +1041,40 @@ def member_portal_qr(request):
     return HttpResponse(buffer.getvalue(), content_type="image/png")
 
 
+def _pwa_icon_type(icon_url):
+    mime_type, _encoding = mimetypes.guess_type(icon_url)
+    return mime_type or "image/png"
+
+
+def _member_app_brand(request):
+    member = _get_current_member(request.user) if request.user.is_authenticated else None
+    if not member or not member.gym_id:
+        return {
+            "name": "SmartClub Membre",
+            "short_name": "SmartClub",
+            "description": "Carte membre, abonnement et acces SmartClub.",
+            "icon_url": static("icons/1.png"),
+            "icon_type": "image/png",
+        }
+
+    organization = member.gym.organization
+    logo_url = _absolute_media_url(request, organization.logo)
+    name = f"{organization.name} Membre"
+    return {
+        "name": name,
+        "short_name": organization.name[:12] or "SmartClub",
+        "description": f"Carte membre, abonnement et acces {organization.name}.",
+        "icon_url": logo_url or static("icons/1.png"),
+        "icon_type": _pwa_icon_type(logo_url) if logo_url else "image/png",
+    }
+
+
 def member_app_manifest(request):
+    brand = _member_app_brand(request)
     manifest = {
-        "name": "SmartClub Membre",
-        "short_name": "SmartClub",
-        "description": "Carte membre, abonnement et acces SmartClub.",
+        "name": brand["name"],
+        "short_name": brand["short_name"],
+        "description": brand["description"],
         "start_url": reverse("members:member_portal"),
         "scope": "/members/",
         "display": "standalone",
@@ -1053,10 +1083,16 @@ def member_app_manifest(request):
         "orientation": "portrait",
         "icons": [
             {
+                "src": brand["icon_url"],
+                "sizes": "512x512",
+                "type": brand["icon_type"],
+                "purpose": "any",
+            },
+            {
                 "src": static("icons/1.png"),
                 "sizes": "512x512",
                 "type": "image/png",
-                "purpose": "any maskable",
+                "purpose": "maskable",
             },
             {
                 "src": static("avatar/logo_smartclub.png"),
@@ -1065,7 +1101,9 @@ def member_app_manifest(request):
             },
         ],
     }
-    return JsonResponse(manifest)
+    response = JsonResponse(manifest)
+    response["Cache-Control"] = "private, no-store"
+    return response
 
 
 def member_app_service_worker(request):

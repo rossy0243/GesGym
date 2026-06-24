@@ -1044,6 +1044,23 @@ class MemberPortalTests(TestCase):
         self.assertIn("service-worker", reverse("members:member_app_service_worker"))
         self.assertNotIn("/members/me/", worker_response.content.decode("utf-8"))
 
+    def test_pwa_manifest_uses_authenticated_member_organization_logo(self):
+        self.organization.logo = "organizations/logos/portal-org.png"
+        self.organization.save(update_fields=["logo"])
+        self.client.force_login(self.member.user)
+
+        manifest_response = self.client.get(reverse("members:member_app_manifest"))
+        portal_response = self.client.get(reverse("members:member_portal"))
+
+        self.assertEqual(manifest_response.status_code, 200)
+        manifest = manifest_response.json()
+        self.assertEqual(manifest["name"], "Portal Org Membre")
+        self.assertEqual(manifest["short_name"], "Portal Org")
+        self.assertEqual(manifest_response["Cache-Control"], "private, no-store")
+        self.assertTrue(manifest["icons"][0]["src"].endswith("/media/organizations/logos/portal-org.png"))
+        self.assertEqual(manifest["icons"][0]["purpose"], "any")
+        self.assertContains(portal_response, 'rel="apple-touch-icon" href="/media/organizations/logos/portal-org.png"')
+
     def test_member_api_login_and_me_payload(self):
         AccessLog.objects.create(gym=self.gym, member=self.member, access_granted=True)
 

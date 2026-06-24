@@ -1,6 +1,6 @@
 # Images et stockage media GesGym
 
-Derniere actualisation : 09/06/2026.
+Derniere actualisation : 24/06/2026.
 
 ## 1. Objectif
 
@@ -10,7 +10,7 @@ La regle de base est simple :
 
 - les fichiers statiques du produit restent dans `static/` et sont servis par WhiteNoise
 - les images envoyees par les utilisateurs doivent aller vers un stockage persistant
-- Backblaze B2 est prevu pour les medias utilisateurs, mais n'est pas encore bloquant pour l'utilisation actuelle
+- Backblaze B2 est configure pour les medias utilisateurs via variables d'environnement
 
 ## 2. Images statiques du produit
 
@@ -106,11 +106,11 @@ En local, les fichiers sont presents dans `media/`.
 
 En production cloud, il faut eviter de compter sur le disque local pour des fichiers importants. Les images peuvent disparaitre lors d'un redeploiement ou d'un changement d'instance selon l'hebergeur.
 
-## 7. Preparation Backblaze B2
+## 7. Backblaze B2
 
-Backblaze B2 sera configure via son interface S3 compatible.
+Backblaze B2 est configure via son interface S3 compatible. Le stockage local reste le comportement par defaut tant que les variables B2 obligatoires ne sont pas renseignees.
 
-Dependances probables :
+Dependances :
 
 ```text
 django-storages
@@ -125,8 +125,17 @@ B2_REGION=
 B2_ENDPOINT_URL=
 B2_KEY_ID=
 B2_APPLICATION_KEY=
+B2_MEDIA_LOCATION=media
 B2_CUSTOM_DOMAIN=
+B2_QUERYSTRING_AUTH=False
 ```
+
+Activation :
+
+- le storage B2 s'active quand `B2_BUCKET_NAME`, `B2_ENDPOINT_URL`, `B2_KEY_ID` et `B2_APPLICATION_KEY` sont presents
+- les fichiers sont stockes sous le prefixe `B2_MEDIA_LOCATION`, `media` par defaut
+- avec `B2_CUSTOM_DOMAIN`, les URLs publiques des medias utilisent ce domaine
+- `B2_QUERYSTRING_AUTH=False` est recommande pour un bucket public ou un CDN; `True` genere des URLs signees, moins adaptees aux icones PWA et aux images publiques
 
 Regles de securite :
 
@@ -140,14 +149,11 @@ Regles de securite :
 
 1. Creer le bucket Backblaze B2.
 2. Creer une Application Key limitee au bucket.
-3. Ajouter `django-storages` et `boto3` aux dependances.
-4. Ajouter la configuration storage conditionnelle dans `smartclub/settings.py`.
-5. Ajouter les variables B2 dans `.env.example` sans valeurs secretes.
-6. Configurer les variables reelles dans Render.
-7. Tester un upload de logo organisation.
-8. Tester une photo membre.
-9. Verifier l'espace membre et la carte membre.
-10. Migrer les fichiers existants du dossier `media/` vers le bucket si necessaire.
+3. Configurer les variables reelles dans Render.
+4. Tester un upload de logo organisation.
+5. Tester une photo membre.
+6. Verifier l'espace membre et la carte membre.
+7. Migrer les fichiers existants du dossier `media/` vers le bucket si necessaire.
 
 ## 9. Fichiers existants a migrer plus tard
 
@@ -156,4 +162,4 @@ Au moment de cette actualisation, le dossier local `media/` contient deja :
 - des photos membres dans `media/members/`
 - un logo organisation dans `media/organizations/logos/`
 
-Ces fichiers devront etre copies dans Backblaze B2 lors de la bascule si on veut conserver les images deja associees aux objets en base.
+Ces fichiers devront etre copies dans Backblaze B2 sous le prefixe `media/` lors de la bascule si on veut conserver les images deja associees aux objets en base.
