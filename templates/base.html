@@ -111,7 +111,7 @@
                                         {% else %}
                                             <span class="material-icons" style="font-size:20px;">info</span>
                                         {% endif %}
-                                        {{ message }}
+                                        {% if 'safe' in message.tags %}{{ message|safe }}{% else %}{{ message }}{% endif %}
                                     </div>
                                     <button type="button" class="btn-close {% if 'warning' not in message.tags %}btn-close-white{% endif %} me-2 m-auto"
                                             data-bs-dismiss="toast" aria-label="Close"></button>
