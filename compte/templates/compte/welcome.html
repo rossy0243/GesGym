@@ -193,7 +193,9 @@
 
     <main class="welcome-shell">
         <div class="logo-wrap">
-            {% if organization and organization.logo %}
+            {% if organization_brand_logo_url %}
+                <img src="{{ organization_brand_logo_url }}" alt="{{ organization.name }}">
+            {% elif organization and organization.logo %}
                 <img src="{{ organization.logo.url }}" alt="{{ organization.name }}">
             {% else %}
                 <div class="logo-fallback">

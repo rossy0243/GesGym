@@ -1731,7 +1731,7 @@ def edit_member(request, member_id):
         'phone': member.phone,
         'email': member.email,
         'address': member.address,
-        'photo_url': member.photo.url if member.photo else None,
+        'photo_url': _absolute_media_url(request, member.photo) or None,
     }
 
     return JsonResponse(data)
@@ -1783,9 +1783,9 @@ def member_detail(request, member_id):
         })
     data = {
         "id": member.id,
-        "photo_url": member.photo.url if member.photo else None,
+        "photo_url": _absolute_media_url(request, member.photo) or None,
         "organization_name": organization.name if organization else "",
-        "organization_logo_url": organization.logo.url if organization and organization.logo else "",
+        "organization_logo_url": _absolute_media_url(request, organization.logo) if organization else "",
         "gym_name": request.gym.name if request.gym else "",
         "username": member.user.username if member.user else "Non défini",
         "first_name": member.first_name,

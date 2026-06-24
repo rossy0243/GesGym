@@ -20,6 +20,15 @@ from .models import CashRegister, ExchangeRate, Payment
 from .services import record_expense, record_product_sale, record_subscription_payment
 
 
+def _media_url(request, file_field, fallback=""):
+    if not file_field:
+        return fallback
+    try:
+        return request.build_absolute_uri(file_field.url)
+    except ValueError:
+        return fallback
+
+
 def _to_decimal(value, field_label):
     try:
         return Decimal(str(value or "0"))
@@ -48,7 +57,7 @@ def search_members(request):
             "name": f"{member.first_name} {member.last_name}",
             "phone": member.phone,
             "status": member.computed_status,
-            "photo": member.photo.url if member.photo else "/static/avatar/1.png",
+            "photo": _media_url(request, member.photo, "/static/avatar/1.png"),
         }
         for member in members
     ]

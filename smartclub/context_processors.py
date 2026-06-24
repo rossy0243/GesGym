@@ -5,6 +5,40 @@ from organizations.models import GymModule
 from .access_control import current_role, permission_flags
 
 
+def _safe_file_url(file_field):
+    if not file_field:
+        return ""
+    try:
+        return file_field.url
+    except ValueError:
+        return ""
+
+
+def organization_branding_processor(request):
+    organization = getattr(request, "organization", None)
+    gym = getattr(request, "gym", None)
+    if not organization and getattr(request, "user", None) and request.user.is_authenticated:
+        member_profile = getattr(request.user, "member_profile", None)
+        if member_profile and getattr(member_profile, "gym", None):
+            gym = gym or member_profile.gym
+            organization = member_profile.gym.organization
+
+    organization_name = getattr(organization, "name", "") or "SmartClub"
+    gym_name = getattr(gym, "name", "") or ""
+    initials = "".join(
+        item[:1].upper()
+        for item in (organization_name, gym_name or "Club")
+        if item
+    )[:2] or "SC"
+
+    return {
+        "organization_brand_logo_url": _safe_file_url(getattr(organization, "logo", None)),
+        "organization_brand_name": organization_name,
+        "organization_brand_gym_name": gym_name,
+        "organization_brand_initials": initials,
+    }
+
+
 def _safe_reverse(name):
     try:
         return reverse(name)

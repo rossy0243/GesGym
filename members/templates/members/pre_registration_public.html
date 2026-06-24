@@ -120,7 +120,9 @@
                 <div class="col-lg-5">
                     <aside class="pre-registration-hero">
                         <div class="pre-registration-hero-logo">
-                            {% if organization.logo %}
+                            {% if organization_brand_logo_url %}
+                                <img src="{{ organization_brand_logo_url }}" alt="{{ organization.name }}">
+                            {% elif organization.logo %}
                                 <img src="{{ organization.logo.url }}" alt="{{ organization.name }}">
                             {% else %}
                                 <span class="material-icons" style="font-size:42px;">fitness_center</span>

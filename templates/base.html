@@ -22,8 +22,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <!--! BEGIN: Favicon-->
+    {% if organization_brand_logo_url %}
+    <link rel="icon" href="{{ organization_brand_logo_url }}" />
+    <link rel="apple-touch-icon" href="{{ organization_brand_logo_url }}" />
+    {% else %}
     <link rel="icon" type="image/png" href="{% static 'images/favicon-smartclub.png' %}" />
     <link rel="shortcut icon" type="image/png" href="{% static 'images/favicon-smartclub.png' %}" />
+    {% endif %}
     <!--! END: Favicon-->
     <!--! BEGIN: Bootstrap CSS-->
     <link rel="stylesheet" type="text/css" href="{% static 'css/bootstrap.min.css' %}" />

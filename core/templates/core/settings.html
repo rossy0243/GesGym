@@ -193,7 +193,9 @@
                 <h5 class="card-title mb-1">Gerer l'organisation</h5>
                 <small class="text-muted">Ces informations seront reprises dans les rapports, cartes et recus.</small>
             </div>
-            {% if organization.logo %}
+            {% if organization_brand_logo_url %}
+            <img src="{{ organization_brand_logo_url }}" class="settings-logo-preview" alt="Logo">
+            {% elif organization.logo %}
             <img src="{{ organization.logo.url }}" class="settings-logo-preview" alt="Logo">
             {% endif %}
         </div>

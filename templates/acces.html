@@ -331,7 +331,7 @@
 window.STATIC_URLS = window.STATIC_URLS || {
     avatar1: "{% static 'avatar/1.png' %}",
     avatar2: "{% static 'avatar/2.png' %}",
-    logo: "{% static 'avatar/logo_smartclub.png' %}"
+    logo: "{% if organization_brand_logo_url %}{{ organization_brand_logo_url|escapejs }}{% else %}{% static 'avatar/logo_smartclub.png' %}{% endif %}"
 };
 </script>
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
