@@ -127,7 +127,7 @@ B2_KEY_ID=
 B2_APPLICATION_KEY=
 B2_MEDIA_LOCATION=media
 B2_CUSTOM_DOMAIN=
-B2_QUERYSTRING_AUTH=False
+B2_QUERYSTRING_AUTH=True
 ```
 
 Activation :
@@ -135,7 +135,7 @@ Activation :
 - le storage B2 s'active quand `B2_BUCKET_NAME`, `B2_ENDPOINT_URL`, `B2_KEY_ID` et `B2_APPLICATION_KEY` sont presents
 - les fichiers sont stockes sous le prefixe `B2_MEDIA_LOCATION`, `media` par defaut
 - avec `B2_CUSTOM_DOMAIN`, les URLs publiques des medias utilisent ce domaine
-- `B2_QUERYSTRING_AUTH=False` est recommande pour un bucket public ou un CDN; `True` genere des URLs signees, moins adaptees aux icones PWA et aux images publiques
+- `B2_QUERYSTRING_AUTH=True` est recommande pour un bucket prive. `False` ne doit etre utilise qu'avec un bucket public ou un CDN qui sert deja les fichiers publiquement.
 
 Regles de securite :
 

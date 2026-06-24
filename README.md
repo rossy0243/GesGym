@@ -214,7 +214,7 @@ Medias utilisateurs sur Backblaze B2 optionnel :
 - `B2_APPLICATION_KEY`
 - `B2_MEDIA_LOCATION=media`
 - `B2_CUSTOM_DOMAIN` si un domaine CDN/custom est utilise
-- `B2_QUERYSTRING_AUTH=False` pour des URLs publiques
+- `B2_QUERYSTRING_AUTH=True` pour un bucket prive, ou `False` uniquement avec un bucket/CDN public
 
 Bootstrap admin optionnel :
 

@@ -290,8 +290,10 @@ B2_KEY_ID = _env_clean("B2_KEY_ID")
 B2_APPLICATION_KEY = _env_clean("B2_APPLICATION_KEY")
 B2_CUSTOM_DOMAIN = _env_clean("B2_CUSTOM_DOMAIN").removeprefix("https://").removeprefix("http://").rstrip("/")
 B2_MEDIA_LOCATION = _env_clean("B2_MEDIA_LOCATION", "media").strip("/")
-B2_QUERYSTRING_AUTH = _env_bool("B2_QUERYSTRING_AUTH", False)
+B2_QUERYSTRING_AUTH = _env_bool("B2_QUERYSTRING_AUTH", True)
 B2_ENABLED = all([B2_BUCKET_NAME, B2_ENDPOINT_URL, B2_KEY_ID, B2_APPLICATION_KEY])
+if B2_ENABLED and not B2_CUSTOM_DOMAIN:
+    B2_QUERYSTRING_AUTH = True
 
 if B2_ENABLED:
     b2_options = {
