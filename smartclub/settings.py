@@ -308,7 +308,7 @@ if B2_ENABLED:
         b2_options["custom_domain"] = B2_CUSTOM_DOMAIN
 
     STORAGES["default"] = {
-        "BACKEND": "storages.backends.s3.S3Storage",
+        "BACKEND": "core.storage_backends.BackblazeMediaStorage",
         "OPTIONS": b2_options,
     }
     if B2_CUSTOM_DOMAIN:
