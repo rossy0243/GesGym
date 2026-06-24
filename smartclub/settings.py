@@ -278,7 +278,9 @@ SERVE_MEDIA = _env_bool("DJANGO_SERVE_MEDIA", False)
 
 B2_BUCKET_NAME = _env("B2_BUCKET_NAME", "")
 B2_REGION = _env("B2_REGION", "")
-B2_ENDPOINT_URL = _env("B2_ENDPOINT_URL", "")
+B2_ENDPOINT_URL = _env("B2_ENDPOINT_URL", "").strip()
+if B2_ENDPOINT_URL and not B2_ENDPOINT_URL.startswith(("http://", "https://")):
+    B2_ENDPOINT_URL = f"https://{B2_ENDPOINT_URL}"
 B2_KEY_ID = _env("B2_KEY_ID", "")
 B2_APPLICATION_KEY = _env("B2_APPLICATION_KEY", "")
 B2_CUSTOM_DOMAIN = _env("B2_CUSTOM_DOMAIN", "").strip().removeprefix("https://").removeprefix("http://").rstrip("/")
