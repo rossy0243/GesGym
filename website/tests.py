@@ -1,6 +1,6 @@
 from django.conf import settings
 from django.core import mail
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from compte.models import User
@@ -134,6 +134,48 @@ class PublicRouteTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "text/plain")
         self.assertEqual(response.content.decode("utf-8"), "ok")
+
+    @override_settings(
+        ALLOWED_HOSTS=["smartclubpro.org", "www.smartclubpro.org", ".onrender.com"],
+        CANONICAL_HOST="smartclubpro.org",
+        CANONICAL_HOST_EXEMPT_PATHS=(),
+        SECURE_SSL_REDIRECT=True,
+    )
+    def test_onrender_host_redirects_to_smartclubpro(self):
+        response = self.client.get(
+            "/compte/login/?next=/admin/",
+            HTTP_HOST="gesgym-web.onrender.com",
+        )
+
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(
+            response["Location"],
+            "https://smartclubpro.org/compte/login/?next=/admin/",
+        )
+
+    @override_settings(
+        ALLOWED_HOSTS=["smartclubpro.org", "www.smartclubpro.org", ".onrender.com"],
+        CANONICAL_HOST="smartclubpro.org",
+        CANONICAL_HOST_EXEMPT_PATHS=(),
+        SECURE_SSL_REDIRECT=False,
+    )
+    def test_www_host_redirects_to_root_smartclubpro_domain(self):
+        response = self.client.get("/?pack=club", HTTP_HOST="www.smartclubpro.org")
+
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response["Location"], "https://smartclubpro.org/?pack=club")
+
+    @override_settings(
+        ALLOWED_HOSTS=["smartclubpro.org", "www.smartclubpro.org", ".onrender.com"],
+        CANONICAL_HOST="smartclubpro.org",
+        CANONICAL_HOST_EXEMPT_PATHS=(),
+        SECURE_SSL_REDIRECT=False,
+    )
+    def test_health_route_on_render_host_redirects_to_smartclubpro(self):
+        response = self.client.get("/health/", HTTP_HOST="gesgym-web.onrender.com")
+
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response["Location"], "https://smartclubpro.org/health/")
 
     def test_root_route_uses_public_landing_template(self):
         response = self.client.get("/")

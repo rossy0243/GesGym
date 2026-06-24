@@ -28,9 +28,11 @@ services:
           name: gesgym-db-frankfurt
           property: connectionString
       - key: DJANGO_ALLOWED_HOSTS
-        value: ".onrender.com"
+        value: "smartclubpro.org,www.smartclubpro.org,.onrender.com"
       - key: DJANGO_CSRF_TRUSTED_ORIGINS
-        value: "https://*.onrender.com"
+        value: "https://smartclubpro.org,https://www.smartclubpro.org,https://*.onrender.com"
+      - key: DJANGO_CANONICAL_HOST
+        value: smartclubpro.org
       - key: DJANGO_USE_X_FORWARDED_HOST
         value: "True"
       - key: DJANGO_SECURE_SSL_REDIRECT

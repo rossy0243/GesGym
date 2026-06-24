@@ -125,6 +125,11 @@ if RENDER_EXTERNAL_HOSTNAME:
 if not DEBUG and not ALLOWED_HOSTS:
     raise ImproperlyConfigured("DJANGO_ALLOWED_HOSTS is required when DJANGO_DEBUG=False.")
 
+CANONICAL_HOST = _env("DJANGO_CANONICAL_HOST", "" if DEBUG else "smartclubpro.org")
+CANONICAL_HOST_EXEMPT_PATHS = tuple(
+    _env_list("DJANGO_CANONICAL_HOST_EXEMPT_PATHS", [])
+)
+
 
 # Application definition
 
@@ -151,6 +156,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'smartclub.middleware.CanonicalHostMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
