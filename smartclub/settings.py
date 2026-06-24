@@ -48,6 +48,11 @@ def _env_list(name, default=None):
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+def _env_clean(name, default=""):
+    value = os.environ.get(name, default)
+    return str(value or "").strip().strip('"').strip("'")
+
+
 def _env_admins(name="DJANGO_ADMINS"):
     admins = []
     for item in _env_list(name):
@@ -276,15 +281,15 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 SERVE_MEDIA = _env_bool("DJANGO_SERVE_MEDIA", False)
 
-B2_BUCKET_NAME = _env("B2_BUCKET_NAME", "")
-B2_REGION = _env("B2_REGION", "")
-B2_ENDPOINT_URL = _env("B2_ENDPOINT_URL", "").strip()
+B2_BUCKET_NAME = _env_clean("B2_BUCKET_NAME")
+B2_REGION = _env_clean("B2_REGION")
+B2_ENDPOINT_URL = _env_clean("B2_ENDPOINT_URL")
 if B2_ENDPOINT_URL and not B2_ENDPOINT_URL.startswith(("http://", "https://")):
     B2_ENDPOINT_URL = f"https://{B2_ENDPOINT_URL}"
-B2_KEY_ID = _env("B2_KEY_ID", "")
-B2_APPLICATION_KEY = _env("B2_APPLICATION_KEY", "")
-B2_CUSTOM_DOMAIN = _env("B2_CUSTOM_DOMAIN", "").strip().removeprefix("https://").removeprefix("http://").rstrip("/")
-B2_MEDIA_LOCATION = _env("B2_MEDIA_LOCATION", "media").strip("/")
+B2_KEY_ID = _env_clean("B2_KEY_ID")
+B2_APPLICATION_KEY = _env_clean("B2_APPLICATION_KEY")
+B2_CUSTOM_DOMAIN = _env_clean("B2_CUSTOM_DOMAIN").removeprefix("https://").removeprefix("http://").rstrip("/")
+B2_MEDIA_LOCATION = _env_clean("B2_MEDIA_LOCATION", "media").strip("/")
 B2_QUERYSTRING_AUTH = _env_bool("B2_QUERYSTRING_AUTH", False)
 B2_ENABLED = all([B2_BUCKET_NAME, B2_ENDPOINT_URL, B2_KEY_ID, B2_APPLICATION_KEY])
 
