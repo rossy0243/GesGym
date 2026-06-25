@@ -123,7 +123,6 @@ def _member_tab_config(unread_notification_count):
         {"key": "home", "label": "Accueil", "icon": "home"},
         {"key": "goal", "label": "Objectif", "icon": "goal"},
         {"key": "messages", "label": "Messages", "icon": "mail", "badge": badge},
-        {"key": "subscription", "label": "Abonnement", "icon": "subscription"},
         {"key": "plans", "label": "Formules", "icon": "plans"},
     ]
 

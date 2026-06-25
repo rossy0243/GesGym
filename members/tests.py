@@ -545,16 +545,17 @@ class MemberPortalTests(TestCase):
         self.assertContains(password_response, "Changer mon mot de passe")
 
         subscription_response = self.client.get(reverse("members:member_portal"), {"tab": "subscription"})
-        self.assertContains(subscription_response, "Mensuel")
-        self.assertContains(subscription_response, "Dernieres operations")
-        self.assertContains(subscription_response, "Acces coach premium")
+        self.assertContains(subscription_response, "Carte membre")
+        self.assertContains(subscription_response, "Premium")
+        self.assertNotContains(subscription_response, "Dernieres operations")
+        self.assertNotContains(subscription_response, "?tab=subscription")
 
         plans_response = self.client.get(reverse("members:member_portal"), {"tab": "plans"})
         self.assertContains(plans_response, "Choisir un abonnement")
         self.assertContains(plans_response, "Annuel")
         self.assertContains(plans_response, "Acces coach premium")
 
-    def test_member_portal_hides_future_subscription_from_active_subscription_tab(self):
+    def test_member_portal_hides_future_subscription_from_home_overview(self):
         self.subscription.is_active = False
         self.subscription.save(update_fields=["is_active"])
         today = timezone.now().date()
@@ -568,10 +569,11 @@ class MemberPortalTests(TestCase):
         )
         self.client.force_login(self.member.user)
 
-        response = self.client.get(reverse("members:member_portal"), {"tab": "subscription"})
+        response = self.client.get(reverse("members:member_portal"))
 
-        self.assertContains(response, "Aucun abonnement actif n'est rattache a ce compte.")
+        self.assertContains(response, "Abonnement")
         self.assertNotContains(response, "<dd>Mensuel</dd>", html=False)
+        self.assertNotContains(response, "Dernieres operations")
 
     def test_member_computed_status_is_expired_when_only_paused_subscription_exists(self):
         self.subscription.is_paused = True

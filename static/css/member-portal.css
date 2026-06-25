@@ -1311,25 +1311,6 @@ a {
     background: transparent;
 }
 
-.dock-icon-subscription::before {
-    left: 4px;
-    top: 3px;
-    width: 14px;
-    height: 17px;
-    border: 2px solid currentColor;
-    border-radius: 4px;
-}
-
-.dock-icon-subscription::after {
-    left: 8px;
-    top: 8px;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: currentColor;
-    box-shadow: 0 7px 0 currentColor;
-}
-
 .dock-icon-plans::before {
     left: 3px;
     top: 4px;
