@@ -250,8 +250,16 @@
         <div class="col-xl-4">
             <div class="settings-card h-100">
                 <div class="card-header">
-                    <h5 class="card-title mb-1">Creer un employe interne</h5>
-                    <small class="text-muted">Generation automatique du username et d'un mot de passe temporaire unique.</small>
+                    <h5 class="card-title mb-1">
+                        {% if employee_edit_form %}Modifier un employe interne{% else %}Creer un employe interne{% endif %}
+                    </h5>
+                    <small class="text-muted">
+                        {% if employee_edit_form %}
+                        Mise a jour du profil et de l'acces de {{ employee_edit_role.user.username }}.
+                        {% else %}
+                        Generation automatique du username et d'un mot de passe temporaire unique.
+                        {% endif %}
+                    </small>
                 </div>
                 <div class="card-body">
                     <div class="settings-form-scroll">
@@ -300,8 +308,47 @@
 
                         <form method="post">
                             {% csrf_token %}
+                            {% if employee_edit_form %}
+                            <input type="hidden" name="action" value="employee_update">
+                            <input type="hidden" name="role_id" value="{{ employee_edit_role.id }}">
+                            {% else %}
                             <input type="hidden" name="action" value="employee_create">
+                            {% endif %}
 
+                            {% if employee_edit_form %}
+                            {% for field in employee_edit_form %}
+                            <div class="mb-3">
+                                {% if field.is_hidden %}
+                                    {{ field }}
+                                    {% if field.name == "gym" and employee_edit_form.locked_gym %}
+                                    <label class="form-label fw-semibold">Salle active</label>
+                                    <div class="settings-muted-box p-3">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span class="material-icons text-primary" style="font-size:20px;">storefront</span>
+                                            <span class="fw-semibold">{{ employee_edit_form.locked_gym.name }}</span>
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                {% elif field.field.widget.input_type == "checkbox" %}
+                                <div class="form-check">
+                                    {{ field }}
+                                    <label class="form-check-label fw-semibold">{{ field.label }}</label>
+                                </div>
+                                {% else %}
+                                <label class="form-label fw-semibold">{{ field.label }}</label>
+                                {{ field }}
+                                {% endif %}
+                                {{ field.errors }}
+                            </div>
+                            {% endfor %}
+
+                            <div class="d-grid gap-2">
+                                <button type="submit" class="btn btn-primary w-100">
+                                    <span class="material-icons me-2" style="font-size:18px;">save</span>Enregistrer les modifications
+                                </button>
+                                <a href="{% url 'core:settings' %}?tab=employees" class="btn btn-light w-100">Annuler</a>
+                            </div>
+                            {% else %}
                             {% for field in employee_form %}
                             <div class="mb-3">
                                 {% if field.is_hidden %}
@@ -331,6 +378,7 @@
                             <button type="submit" class="btn btn-primary w-100">
                                 <span class="material-icons me-2" style="font-size:18px;">person_add</span>Creer l'employe
                             </button>
+                            {% endif %}
                         </form>
                     </div>
                 </div>
@@ -381,6 +429,10 @@
                                     </td>
                                     <td class="text-end">
                                         <div class="d-inline-flex gap-2 flex-wrap justify-content-end">
+                                            <a href="{% url 'core:settings' %}?tab=employees&amp;edit_role={{ role.id }}" class="btn btn-sm btn-outline-primary">
+                                                Modifier
+                                            </a>
+
                                             <form method="post">
                                                 {% csrf_token %}
                                                 <input type="hidden" name="role_id" value="{{ role.id }}">
@@ -408,6 +460,17 @@
                                                 <input type="hidden" name="action" value="employee_activate">
                                                 <button type="submit" class="btn btn-sm btn-outline-success">
                                                     Activer
+                                                </button>
+                                            </form>
+                                            {% endif %}
+
+                                            {% if role.user_id != request.user.id %}
+                                            <form method="post" onsubmit="return confirm('Supprimer ce profil employe de cette salle ?');">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="role_id" value="{{ role.id }}">
+                                                <input type="hidden" name="action" value="employee_delete">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                    Supprimer
                                                 </button>
                                             </form>
                                             {% endif %}

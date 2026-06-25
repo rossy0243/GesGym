@@ -19,7 +19,7 @@ from compte.utils import generate_temporary_password, generate_username, has_oth
 from coaching.models import CoachSpecialty
 from organizations.models import SensitiveActivityLog
 from .audit import log_sensitive_action
-from .forms import CoachSpecialtyForm, InternalEmployeeForm, OrganizationSettingsForm
+from .forms import CoachSpecialtyForm, InternalEmployeeForm, InternalEmployeeProfileForm, OrganizationSettingsForm
 from members.models import Member
 from organizations.models import Gym, GymModule
 from pos.models import Payment
@@ -625,7 +625,31 @@ def settings_dashboard(request):
         allowed_roles=allowed_employee_roles,
         locked_gym=locked_employee_gym,
     )
+    employee_edit_role = None
+    employee_edit_form = None
     specialty_form = CoachSpecialtyForm()
+
+    if request.method == "GET" and active_tab == "employees" and request.GET.get("edit_role"):
+        employee_edit_role = get_object_or_404(
+            UserGymRole.objects.select_related("user", "gym"),
+            id=request.GET.get("edit_role"),
+            gym__in=accessible_gyms,
+        )
+        if employee_edit_role.role == "owner" or employee_edit_role.role not in allowed_employee_roles:
+            return HttpResponseForbidden("Role non autorise pour votre niveau d'acces.")
+        if _scoped_identity_change_blocked(employee_edit_role.user, employee_edit_role):
+            messages.error(
+                request,
+                "Ce compte est partage avec un autre profil actif. La modification globale est bloquee.",
+            )
+            return _settings_redirect("employees")
+        employee_edit_form = InternalEmployeeProfileForm(
+            role_instance=employee_edit_role,
+            organization=organization,
+            gyms=accessible_gyms,
+            allowed_roles=allowed_employee_roles,
+            locked_gym=locked_employee_gym,
+        )
 
     if request.method == "POST":
         action = request.POST.get("action", "")
@@ -698,6 +722,61 @@ def settings_dashboard(request):
                 }
                 return _settings_redirect("employees")
 
+        elif action == "employee_update":
+            active_tab = "employees"
+            role = get_object_or_404(
+                UserGymRole.objects.select_related("user", "gym"),
+                id=request.POST.get("role_id"),
+                gym__in=accessible_gyms,
+            )
+            if role.role == "owner":
+                return HttpResponseForbidden("Impossible de modifier un Owner ici.")
+            if role.role not in allowed_employee_roles:
+                return HttpResponseForbidden("Role non autorise pour votre niveau d'acces.")
+            if _scoped_identity_change_blocked(role.user, role):
+                messages.error(
+                    request,
+                    "Ce compte est partage avec un autre profil actif. La modification globale est bloquee.",
+                )
+                return _settings_redirect("employees")
+
+            employee_edit_role = role
+            employee_edit_form = InternalEmployeeProfileForm(
+                request.POST,
+                role_instance=role,
+                organization=organization,
+                gyms=accessible_gyms,
+                allowed_roles=allowed_employee_roles,
+                locked_gym=locked_employee_gym,
+            )
+            if employee_edit_form.is_valid():
+                selected_gym = employee_edit_form.cleaned_data["gym"]
+                role_label_before = f"{role.user.username} - {role.get_role_display()} ({role.gym.name})"
+                role.gym = selected_gym
+                role.role = employee_edit_form.cleaned_data["role"]
+                role.is_active = employee_edit_form.cleaned_data["is_active"]
+                role.save(update_fields=["gym", "role", "is_active"])
+
+                role.user.first_name = employee_edit_form.cleaned_data["first_name"]
+                role.user.last_name = employee_edit_form.cleaned_data["last_name"]
+                role.user.email = employee_edit_form.cleaned_data["email"]
+                if role.is_active:
+                    role.user.is_active = True
+                elif not has_other_active_access(role.user, exclude_role_ids=[role.id]):
+                    role.user.is_active = False
+                role.user.save(update_fields=["first_name", "last_name", "email", "is_active"])
+
+                log_sensitive_action(
+                    request,
+                    "employee.updated",
+                    "UserGymRole",
+                    role_label_before,
+                    metadata={"role": role.role, "employee_id": role.user_id},
+                    gym=role.gym,
+                )
+                messages.success(request, f"Profil employe mis a jour : {role.user.username}.")
+                return _settings_redirect("employees")
+
         elif action in ["employee_activate", "employee_deactivate", "employee_reset_password"]:
             active_tab = "employees"
             role = get_object_or_404(
@@ -767,6 +846,41 @@ def settings_dashboard(request):
             messages.success(request, f"Employe {role.user.username} {status_label}.")
             return _settings_redirect("employees")
 
+        elif action == "employee_delete":
+            active_tab = "employees"
+            role = get_object_or_404(
+                UserGymRole.objects.select_related("user", "gym"),
+                id=request.POST.get("role_id"),
+                gym__in=accessible_gyms,
+            )
+            if role.role == "owner":
+                return HttpResponseForbidden("Impossible de supprimer un Owner ici.")
+            if role.role not in allowed_employee_roles:
+                return HttpResponseForbidden("Role non autorise pour votre niveau d'acces.")
+            if role.user_id == request.user.id:
+                messages.error(request, "Vous ne pouvez pas supprimer votre propre profil d'acces.")
+                return _settings_redirect("employees")
+
+            user = role.user
+            gym_for_log = role.gym
+            target_label = f"{user.username} - {role.get_role_display()} ({role.gym.name})"
+            should_deactivate_user = not has_other_active_access(user, exclude_role_ids=[role.id])
+            role.delete()
+            if should_deactivate_user:
+                user.is_active = False
+                user.save(update_fields=["is_active"])
+
+            log_sensitive_action(
+                request,
+                "employee.deleted",
+                "UserGymRole",
+                target_label,
+                metadata={"employee_id": user.id},
+                gym=gym_for_log,
+            )
+            messages.success(request, f"Profil employe supprime : {user.username}.")
+            return _settings_redirect("employees")
+
         elif action == "specialty_create":
             active_tab = "specialties"
             specialty_form = CoachSpecialtyForm(request.POST)
@@ -823,6 +937,8 @@ def settings_dashboard(request):
         "gym": gym,
         "organization_form": organization_form,
         "employee_form": employee_form,
+        "employee_edit_form": employee_edit_form,
+        "employee_edit_role": employee_edit_role,
         "employee_credentials": employee_credentials,
         "specialty_form": specialty_form,
         "employee_roles": employee_roles,

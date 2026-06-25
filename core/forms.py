@@ -107,6 +107,30 @@ class InternalEmployeeForm(forms.Form):
         return role
 
 
+class InternalEmployeeProfileForm(InternalEmployeeForm):
+    def __init__(self, *args, role_instance=None, **kwargs):
+        self.role_instance = role_instance
+        if role_instance is not None and "initial" not in kwargs:
+            kwargs["initial"] = {
+                "first_name": role_instance.user.first_name,
+                "last_name": role_instance.user.last_name,
+                "email": role_instance.user.email,
+                "gym": role_instance.gym,
+                "role": role_instance.role,
+                "is_active": role_instance.is_active and role_instance.user.is_active,
+            }
+        super().__init__(*args, **kwargs)
+
+    def clean_gym(self):
+        gym = self.cleaned_data["gym"]
+        if self.role_instance and UserGymRole.objects.filter(
+            user=self.role_instance.user,
+            gym=gym,
+        ).exclude(id=self.role_instance.id).exists():
+            raise forms.ValidationError("Cet employe a deja un acces dans cette salle.")
+        return gym
+
+
 class CoachSpecialtyForm(forms.ModelForm):
     class Meta:
         model = CoachSpecialty

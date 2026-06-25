@@ -862,6 +862,159 @@ class AccountingReportExportTests(TestCase):
             ).exists()
         )
 
+    def test_settings_owner_can_open_internal_employee_edit_mode(self):
+        employee = User.objects.create_user(
+            username="settings-edit",
+            password="pass",
+            first_name="Old",
+            last_name="Name",
+            email="old-edit@example.com",
+        )
+        role = UserGymRole.objects.create(user=employee, gym=self.gym_a, role="cashier")
+
+        response = self.client.get(reverse("core:settings"), {"tab": "employees", "edit_role": role.id})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Modifier un employe interne")
+        self.assertContains(response, "settings-edit")
+        self.assertContains(response, 'value="Old"', html=False)
+        self.assertContains(response, "Enregistrer les modifications")
+
+    def test_settings_owner_can_update_internal_employee_profile(self):
+        employee = User.objects.create_user(
+            username="settings-update",
+            password="pass",
+            first_name="Old",
+            last_name="Cashier",
+            email="old-cashier@example.com",
+        )
+        role = UserGymRole.objects.create(user=employee, gym=self.gym_a, role="cashier")
+
+        response = self.client.post(
+            reverse("core:settings"),
+            {
+                "action": "employee_update",
+                "role_id": role.id,
+                "first_name": "New",
+                "last_name": "Coach",
+                "email": "new-coach@example.com",
+                "gym": self.gym_a.id,
+                "role": "coach",
+                "is_active": "on",
+            },
+        )
+
+        self.assertRedirects(response, f"{reverse('core:settings')}?tab=employees", fetch_redirect_response=False)
+        employee.refresh_from_db()
+        role.refresh_from_db()
+        self.assertEqual(employee.first_name, "New")
+        self.assertEqual(employee.last_name, "Coach")
+        self.assertEqual(employee.email, "new-coach@example.com")
+        self.assertEqual(role.role, "coach")
+        self.assertTrue(
+            SensitiveActivityLog.objects.filter(
+                organization=self.org_a,
+                action="employee.updated",
+                target_label__icontains="settings-update",
+            ).exists()
+        )
+
+    def test_settings_owner_can_delete_internal_employee_profile(self):
+        employee = User.objects.create_user(username="settings-delete", password="pass", is_active=True)
+        role = UserGymRole.objects.create(user=employee, gym=self.gym_a, role="cashier")
+
+        response = self.client.post(
+            reverse("core:settings"),
+            {
+                "action": "employee_delete",
+                "role_id": role.id,
+            },
+        )
+
+        self.assertRedirects(response, f"{reverse('core:settings')}?tab=employees", fetch_redirect_response=False)
+        self.assertFalse(UserGymRole.objects.filter(id=role.id).exists())
+        employee.refresh_from_db()
+        self.assertFalse(employee.is_active)
+        self.assertTrue(
+            SensitiveActivityLog.objects.filter(
+                organization=self.org_a,
+                action="employee.deleted",
+                target_label__icontains="settings-delete",
+            ).exists()
+        )
+
+    def test_settings_employee_delete_preserves_shared_member_profile(self):
+        shared_user = User.objects.create_user(
+            username="member-staff",
+            password="pass",
+            first_name="Member",
+            last_name="Staff",
+            email="member-staff@example.com",
+            is_active=True,
+        )
+        member = Member.objects.create(
+            gym=self.gym_a,
+            user=shared_user,
+            first_name="Client",
+            last_name="Photo",
+            phone="90001",
+            email="client-photo@example.com",
+        )
+        role = UserGymRole.objects.create(user=shared_user, gym=self.gym_a, role="cashier")
+
+        response = self.client.post(
+            reverse("core:settings"),
+            {
+                "action": "employee_delete",
+                "role_id": role.id,
+            },
+        )
+
+        self.assertRedirects(response, f"{reverse('core:settings')}?tab=employees", fetch_redirect_response=False)
+        self.assertFalse(UserGymRole.objects.filter(id=role.id).exists())
+        self.assertTrue(Member.objects.filter(id=member.id, user=shared_user).exists())
+        shared_user.refresh_from_db()
+        self.assertTrue(shared_user.is_active)
+
+    def test_settings_employee_update_blocks_shared_member_profile(self):
+        shared_user = User.objects.create_user(
+            username="member-staff-update",
+            password="pass",
+            first_name="Member",
+            last_name="Staff",
+            email="member-staff-update@example.com",
+        )
+        Member.objects.create(
+            gym=self.gym_a,
+            user=shared_user,
+            first_name="Client",
+            last_name="Protected",
+            phone="90002",
+            email="client-protected@example.com",
+        )
+        role = UserGymRole.objects.create(user=shared_user, gym=self.gym_a, role="cashier")
+
+        response = self.client.post(
+            reverse("core:settings"),
+            {
+                "action": "employee_update",
+                "role_id": role.id,
+                "first_name": "Changed",
+                "last_name": "Name",
+                "email": "changed@example.com",
+                "gym": self.gym_a.id,
+                "role": "coach",
+                "is_active": "on",
+            },
+        )
+
+        self.assertRedirects(response, f"{reverse('core:settings')}?tab=employees", fetch_redirect_response=False)
+        shared_user.refresh_from_db()
+        role.refresh_from_db()
+        self.assertEqual(shared_user.first_name, "Member")
+        self.assertEqual(shared_user.email, "member-staff-update@example.com")
+        self.assertEqual(role.role, "cashier")
+
     @patch("core.views.generate_temporary_password", return_value="OwnerReset123!")
     def test_settings_owner_can_manage_employee_across_organization_gyms(self, _mock_password):
         gym_c = Gym.objects.create(
@@ -1225,6 +1378,74 @@ class RoleAccessMatrixTests(TestCase):
         self.assertFalse(current_role.is_active)
         self.assertTrue(other_role.is_active)
         self.assertTrue(shared_user.is_active)
+
+    def test_manager_can_update_allowed_employee_profile_in_current_gym(self):
+        employee = User.objects.create_user(
+            username="manager-edit-cashier",
+            password="pass",
+            first_name="Cash",
+            last_name="Old",
+            email="cash-old@example.com",
+        )
+        role = UserGymRole.objects.create(user=employee, gym=self.gym, role="cashier")
+        self.client.force_login(self.manager)
+
+        response = self.client.post(
+            reverse("core:settings"),
+            {
+                "action": "employee_update",
+                "role_id": role.id,
+                "first_name": "Reception",
+                "last_name": "New",
+                "email": "reception-new@example.com",
+                "gym": self.gym.id,
+                "role": "reception",
+                "is_active": "on",
+            },
+        )
+
+        self.assertRedirects(response, f"{reverse('core:settings')}?tab=employees", fetch_redirect_response=False)
+        employee.refresh_from_db()
+        role.refresh_from_db()
+        self.assertEqual(employee.first_name, "Reception")
+        self.assertEqual(employee.email, "reception-new@example.com")
+        self.assertEqual(role.role, "reception")
+
+    def test_manager_can_delete_allowed_employee_profile_in_current_gym(self):
+        employee = User.objects.create_user(username="manager-delete-cashier", password="pass", is_active=True)
+        role = UserGymRole.objects.create(user=employee, gym=self.gym, role="cashier")
+        self.client.force_login(self.manager)
+
+        response = self.client.post(
+            reverse("core:settings"),
+            {
+                "action": "employee_delete",
+                "role_id": role.id,
+            },
+        )
+
+        self.assertRedirects(response, f"{reverse('core:settings')}?tab=employees", fetch_redirect_response=False)
+        self.assertFalse(UserGymRole.objects.filter(id=role.id).exists())
+        employee.refresh_from_db()
+        self.assertFalse(employee.is_active)
+
+    def test_manager_cannot_delete_manager_profile(self):
+        peer_manager = User.objects.create_user(username="manager-delete-protected", password="pass", is_active=True)
+        manager_role = UserGymRole.objects.create(user=peer_manager, gym=self.gym, role="manager")
+        self.client.force_login(self.manager)
+
+        response = self.client.post(
+            reverse("core:settings"),
+            {
+                "action": "employee_delete",
+                "role_id": manager_role.id,
+            },
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(UserGymRole.objects.filter(id=manager_role.id).exists())
+        peer_manager.refresh_from_db()
+        self.assertTrue(peer_manager.is_active)
 
     def test_non_owner_cannot_open_dashboard_for_other_gym_than_request_context(self):
         UserGymRole.objects.create(user=self.manager, gym=self.other_gym, role="manager")
