@@ -601,13 +601,18 @@ class MemberPortalTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Bienvenue")
         self.assertContains(response, "Non lu")
+        self.assertContains(response, "Voir")
+        self.assertNotContains(response, "Marquer comme lu")
 
         response = self.client.post(
             reverse("members:member_notification_read", args=[notification.id])
         )
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response["Location"], f"{reverse('members:member_portal')}?tab=messages")
+        self.assertEqual(
+            response["Location"],
+            f"{reverse('members:member_portal')}?tab=messages&message={notification.id}",
+        )
         notification.refresh_from_db()
         self.assertIsNotNone(notification.read_at)
 
@@ -849,20 +854,22 @@ class MemberPortalTests(TestCase):
         self.assertContains(response, "La plus choisie")
 
     def test_member_portal_messages_tab_shows_unread_badge_and_compact_sections(self):
+        unread_body = "Premier message important " + ("details " * 20) + "FIN_CACHEE_NON_LUE"
+        read_body = "Second message deja lu " + ("contenu " * 20) + "FIN_CACHEE_LUE"
         Notification.objects.create(
             gym=self.gym,
             member=self.member,
             title="Info 1",
-            message="Premier message important",
+            message=unread_body,
             channel=Notification.CHANNEL_IN_APP,
             status=Notification.STATUS_SENT,
             sent_at=timezone.now(),
         )
-        Notification.objects.create(
+        read_notification = Notification.objects.create(
             gym=self.gym,
             member=self.member,
             title="Info 2",
-            message="Second message deja lu",
+            message=read_body,
             channel=Notification.CHANNEL_IN_APP,
             status=Notification.STATUS_SENT,
             sent_at=timezone.now(),
@@ -877,6 +884,17 @@ class MemberPortalTests(TestCase):
         self.assertContains(response, "Prioritaires")
         self.assertContains(response, "Recents")
         self.assertContains(response, "1 non lu")
+        self.assertContains(response, "Voir")
+        self.assertNotContains(response, "Marquer comme lu")
+        self.assertNotContains(response, "FIN_CACHEE_NON_LUE")
+        self.assertNotContains(response, "FIN_CACHEE_LUE")
+
+        response = self.client.get(
+            reverse("members:member_portal"),
+            {"tab": "messages", "message": read_notification.id},
+        )
+
+        self.assertContains(response, "FIN_CACHEE_LUE")
 
     def test_member_can_change_password_from_portal(self):
         self.client.force_login(self.member.user)

@@ -637,6 +637,22 @@ def member_portal(request):
     granted_access_count = sum(1 for item in access_logs_list if item.access_granted)
     denied_access_count = len(access_logs_list) - granted_access_count
     member_notifications_list = list(member_notifications)
+    selected_notification = None
+    selected_notification_id = request.GET.get("message")
+    if selected_notification_id:
+        try:
+            selected_notification_id = int(selected_notification_id)
+        except (TypeError, ValueError):
+            selected_notification_id = None
+        if selected_notification_id:
+            selected_notification = next(
+                (
+                    notification
+                    for notification in member_notifications_list
+                    if notification.id == selected_notification_id
+                ),
+                None,
+            )
     unread_notifications = [item for item in member_notifications_list if not item.read_at]
     read_notifications = [item for item in member_notifications_list if item.read_at]
     visible_tabs = _member_tab_config(unread_notification_count)
@@ -692,6 +708,7 @@ def member_portal(request):
         "selected_group_programs": selected_group_programs,
         "current_group_program_id": selected_group_programs.first().id if selected_group_programs.exists() else None,
         "member_notifications": member_notifications_list,
+        "selected_notification": selected_notification,
         "unread_notifications": unread_notifications[:5],
         "recent_notifications": read_notifications[:6],
         "archived_notifications": read_notifications[6:18],
@@ -1024,7 +1041,7 @@ def member_notification_read(request, notification_id):
         notification.read_at = timezone.now()
         notification.save(update_fields=["read_at"])
 
-    return redirect(f"{reverse('members:member_portal')}?tab=messages")
+    return redirect(f"{reverse('members:member_portal')}?tab=messages&message={notification.id}")
 
 
 @login_required
