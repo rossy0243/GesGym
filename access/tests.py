@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.urls import reverse
@@ -54,6 +55,13 @@ class AccessControlTests(TestCase):
             phone="20001",
             email="bob-access@example.com",
         )
+        self.member_c = Member.objects.create(
+            gym=self.gym_a,
+            first_name="Carla",
+            last_name="Access",
+            phone="10005",
+            email="carla-access@example.com",
+        )
         self.plan_a = SubscriptionPlan.objects.create(
             gym=self.gym_a,
             name="Mensuel",
@@ -64,6 +72,14 @@ class AccessControlTests(TestCase):
         MemberSubscription.objects.create(
             gym=self.gym_a,
             member=self.member_a,
+            plan=self.plan_a,
+            start_date=today,
+            end_date=today + timedelta(days=30),
+            is_active=True,
+        )
+        MemberSubscription.objects.create(
+            gym=self.gym_a,
+            member=self.member_c,
             plan=self.plan_a,
             start_date=today,
             end_date=today + timedelta(days=30),
@@ -141,6 +157,40 @@ class AccessControlTests(TestCase):
         self.assertEqual(payload["log"]["method"], "QR Scanner")
         self.assertEqual(payload["stats"]["entries"], 1)
         self.assertEqual(payload["stats"]["denied"], 1)
+
+    def test_qr_access_allows_multiple_different_members_in_sequence(self):
+        first_response = self.client.post(
+            reverse("access:member_access", args=[self.member_a.qr_code])
+        )
+        second_response = self.client.post(
+            reverse("access:member_access", args=[self.member_c.qr_code])
+        )
+
+        self.assertEqual(first_response.status_code, 200)
+        self.assertEqual(second_response.status_code, 200)
+        self.assertTrue(first_response.json()["access"])
+
+        payload = second_response.json()
+        self.assertTrue(payload["access"])
+        self.assertEqual(payload["member"], "Carla Access")
+        self.assertEqual(payload["stats"]["entries"], 2)
+        self.assertEqual(payload["stats"]["denied"], 0)
+
+        logs = AccessLog.objects.filter(gym=self.gym_a, access_granted=True)
+        self.assertEqual(logs.count(), 2)
+
+    def test_scanner_template_keeps_camera_active_after_successful_scan(self):
+        template = (
+            settings.BASE_DIR / "access" / "templates" / "access" / "acces.html"
+        ).read_text(encoding="utf-8")
+        on_success = template.split("function onScanSuccess", 1)[1].split(
+            "function renderHistorique",
+            1,
+        )[0]
+
+        self.assertNotIn("html5QrCode.stop()", on_success)
+        self.assertIn("cameraScanInProgress", on_success)
+        self.assertIn("Prêt pour le membre suivant.", template)
 
     def test_previous_day_entry_does_not_block_today(self):
         log = AccessLog.objects.create(
