@@ -41,7 +41,15 @@ class PublicRouteTests(TestCase):
     def test_landing_uses_versioned_script_to_avoid_stale_browser_cache(self):
         response = self.client.get("/")
 
-        self.assertContains(response, "script_accueil.js?v=landing-v6-mobile-menu-toggle")
+        self.assertContains(response, "script_accueil.js?v=landing-v7-mobile-login-link")
+
+    def test_landing_mobile_header_uses_direct_login_link(self):
+        response = self.client.get("/")
+
+        self.assertContains(response, 'id="mobile-login-link"')
+        self.assertContains(response, reverse("compte:login"))
+        self.assertNotContains(response, 'id="menu-btn"')
+        self.assertNotContains(response, 'id="mobile-menu"')
 
     def test_demo_request_sends_email_to_contact_address(self):
         response = self.client.post(

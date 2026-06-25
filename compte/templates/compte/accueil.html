@@ -207,9 +207,9 @@
 
   <!-- HEADER -->
   <header class="sticky top-0 z-50 bg-white/85 backdrop-blur-md border-b border-slate-100 shadow-sm">
-    <div class="container-premium mx-auto px-6 lg:px-8 py-3 flex items-center justify-between flex-wrap gap-4">
-      <div class="flex items-center gap-2">
-        <span class="text-2xl font-extrabold italic tracking-tight">
+    <div class="container-premium mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-2 min-w-0">
+        <span class="text-xl sm:text-2xl font-extrabold italic tracking-tight whitespace-nowrap">
           <span class="text-[#FF8C00]">SmartClub</span><span class="text-[#007BFF]">Pro</span>
         </span>
       </div>
@@ -232,32 +232,11 @@
         </a>
       </div>
 
-      <div class="flex items-center gap-3 md:hidden">
-        <button id="menu-btn" type="button" class="block text-2xl text-gray-700 focus:outline-none" aria-controls="mobile-menu" aria-expanded="false" aria-label="Ouvrir le menu">
-          <i class="fas fa-bars"></i>
-        </button>
-      </div>
+      <a id="mobile-login-link" href="{% url 'compte:login' %}" class="md:hidden shrink-0 px-4 py-2 text-sm font-semibold text-[#004e92] border-2 border-[#004e92] rounded-full hover:bg-[#004e92] hover:text-white transition-all">
+        Connexion
+      </a>
     </div>
 
-    <div id="mobile-menu" class="mobile-menu md:hidden bg-white border-t border-gray-100 px-6" aria-hidden="true">
-      <nav class="flex flex-col py-4 space-y-3 text-sm font-semibold text-gray-700">
-        <a href="#accueil" class="hover:text-[#FF8C00] transition">Accueil</a>
-        <a href="#solution" class="hover:text-[#FF8C00] transition">Solution</a>
-        <a href="#modules" class="hover:text-[#FF8C00] transition">Modules</a>
-        <a href="#formules" class="hover:text-[#FF8C00] transition">Formules</a>
-        <a href="#faq" class="hover:text-[#FF8C00] transition">FAQ</a>
-        <a href="#contact" class="hover:text-[#FF8C00] transition">Contact</a>
-
-        <div class="mobile-auth-buttons space-y-2">
-          <a href="{% url 'compte:login' %}" class="px-5 py-2.5 text-sm font-semibold text-[#004e92] border-2 border-[#004e92] rounded-full hover:bg-[#004e92] hover:text-white transition-all block text-center">
-            Connexion
-          </a>
-          <a href="#demo-form" class="px-5 py-2.5 text-sm font-semibold bg-gradient-to-r from-[#FF8C00] to-orange-600 text-white rounded-full shadow-lg shadow-orange-200 hover:shadow-xl transition block text-center">
-            Demander une démo
-          </a>
-        </div>
-      </nav>
-    </div>
   </header>
 
   <!-- HERO -->
@@ -1162,6 +1141,6 @@
     });
   </script>
 
-  <script src="{% static 'js/script_accueil.js' %}?v=landing-v6-mobile-menu-toggle"></script>
+  <script src="{% static 'js/script_accueil.js' %}?v=landing-v7-mobile-login-link"></script>
 </body>
 </html>
