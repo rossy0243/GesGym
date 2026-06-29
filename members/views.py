@@ -3,7 +3,7 @@ import json
 import mimetypes
 from datetime import date, timedelta
 from io import BytesIO
-from django.http import HttpResponse, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.utils import timezone
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
@@ -1057,6 +1057,20 @@ def member_portal_qr(request):
     return HttpResponse(buffer.getvalue(), content_type="image/png")
 
 
+@login_required
+def member_organization_logo(request):
+    if not _member_management_allowed(request):
+        raise PermissionDenied
+
+    organization = request.gym.organization if request.gym else None
+    logo = getattr(organization, "logo", None)
+    if not logo:
+        raise Http404("Logo indisponible.")
+
+    content_type = mimetypes.guess_type(logo.name)[0] or "application/octet-stream"
+    return FileResponse(logo.open("rb"), content_type=content_type)
+
+
 def _pwa_icon_type(icon_url):
     mime_type, _encoding = mimetypes.guess_type(icon_url)
     return mime_type or "image/png"
@@ -1801,7 +1815,7 @@ def member_detail(request, member_id):
         "id": member.id,
         "photo_url": _absolute_media_url(request, member.photo) or None,
         "organization_name": organization.name if organization else "",
-        "organization_logo_url": _absolute_media_url(request, organization.logo) if organization else "",
+        "organization_logo_url": reverse("members:organization_logo") if organization and organization.logo else "",
         "gym_name": request.gym.name if request.gym else "",
         "username": member.user.username if member.user else "Non défini",
         "first_name": member.first_name,

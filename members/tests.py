@@ -766,6 +766,43 @@ class MemberPortalTests(TestCase):
         self.assertIn("subscription_offers", data)
         self.assertEqual(data["subscription_offers"], ["Acces groupe coaching"])
 
+    @override_settings(
+        STORAGES={
+            "default": {
+                "BACKEND": "django.core.files.storage.InMemoryStorage",
+            },
+            "staticfiles": {
+                "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+            },
+        }
+    )
+    def test_member_detail_uses_same_origin_organization_logo_for_card(self):
+        logo_bytes = (
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
+            b"\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
+            b"\x00\x00\x00\rIDATx\x9cc\xf8\xff\xff?\x00\x05\xfe\x02"
+            b"\xfeA\x0f\xb4\x16\x00\x00\x00\x00IEND\xaeB`\x82"
+        )
+        self.organization.logo.save(
+            "card-logo.png",
+            SimpleUploadedFile("card-logo.png", logo_bytes, content_type="image/png"),
+            save=True,
+        )
+        reception_user = User.objects.create_user(username="reception-card", password="pass12345")
+        UserGymRole.objects.create(user=reception_user, gym=self.gym, role="reception", is_active=True)
+        self.client.force_login(reception_user)
+
+        response = self.client.get(reverse("members:member_detail", args=[self.member.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["organization_logo_url"], reverse("members:organization_logo"))
+
+        logo_response = self.client.get(reverse("members:organization_logo"))
+
+        self.assertEqual(logo_response.status_code, 200)
+        self.assertEqual(logo_response["Content-Type"], "image/png")
+        self.assertTrue(b"".join(logo_response.streaming_content).startswith(b"\x89PNG"))
+
     def test_member_offer_only_plan_unlocks_coach_and_group_choices(self):
         offer_plan = SubscriptionPlan.objects.create(
             gym=self.gym,
