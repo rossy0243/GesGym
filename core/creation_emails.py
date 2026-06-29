@@ -86,10 +86,9 @@ def send_pre_registration_received_email(pre_registration):
     lines = [
         f"Bonjour {pre_registration.first_name},",
         "",
-        f"Nous avons bien recu votre preinscription chez {gym_name}.",
+        f"Votre preinscription chez {organization_name or gym_name} a bien ete recue.",
+        f"Salle de sport : {organization_name + ' - ' if organization_name else ''}{gym_name}.",
     ]
-    if organization_name:
-        lines.append(f"Organisation : {organization_name}")
     lines.extend(
         [
             "",

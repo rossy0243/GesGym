@@ -364,7 +364,8 @@ class MemberPreRegistrationTests(TestCase):
         self.assertEqual(message.from_email, "Org Members <noreply@smartclubpro.org>")
         self.assertEqual(message.to, ["alice.visitor@example.com"])
         self.assertIn("Org Members - Preinscription recue", message.subject)
-        self.assertIn("Nous avons bien recu votre preinscription", message.body)
+        self.assertIn("Votre preinscription chez Org Members a bien ete recue", message.body)
+        self.assertIn("Salle de sport : Org Members - Main Gym", message.body)
         self.assertIn("Passez a la salle", message.body)
 
     def test_public_pre_registration_requires_phone_and_email(self):
