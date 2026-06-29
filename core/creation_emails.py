@@ -78,6 +78,42 @@ def send_member_creation_email(member, temporary_password="", portal_url=""):
     )
 
 
+def send_pre_registration_received_email(pre_registration):
+    gym_name = pre_registration.gym.name if pre_registration.gym_id else "votre salle"
+    organization = getattr(pre_registration.gym, "organization", None) if pre_registration.gym_id else None
+    organization_name = organization.name if organization else ""
+
+    lines = [
+        f"Bonjour {pre_registration.first_name},",
+        "",
+        f"Nous avons bien recu votre preinscription chez {gym_name}.",
+    ]
+    if organization_name:
+        lines.append(f"Organisation : {organization_name}")
+    lines.extend(
+        [
+            "",
+            "Votre demande est en attente de confirmation.",
+            "Passez a la salle afin que l'equipe confirme votre inscription et finalise votre fiche membre.",
+            "",
+            "Coordonnees recues :",
+            f"- Nom : {pre_registration.first_name} {pre_registration.last_name}",
+            f"- Telephone : {pre_registration.phone}",
+            f"- Email : {pre_registration.email}",
+            f"- Adresse : {pre_registration.address or 'Non renseignee'}",
+            "",
+            f"Validite de la demande : jusqu'au {pre_registration.expires_at:%d/%m/%Y %H:%M}.",
+        ]
+    )
+
+    return _send_creation_email(
+        subject=f"{organization_name or gym_name} - Preinscription recue",
+        message="\n".join(lines),
+        recipient=pre_registration.email,
+        organization_name=organization_name,
+    )
+
+
 def send_employee_creation_email(employee):
     gym_name = employee.gym.name if employee.gym_id else "votre salle"
     organization = getattr(employee.gym, "organization", None) if employee.gym_id else None

@@ -8,7 +8,11 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from core.creation_emails import notify_creation_email_failure, send_member_creation_email
+from core.creation_emails import (
+    notify_creation_email_failure,
+    send_member_creation_email,
+    send_pre_registration_received_email,
+)
 from smartclub.access_control import MEMBER_ROLES, has_role
 from .forms import MemberPreRegistrationForm
 from .models import Member, MemberPreRegistration, MemberPreRegistrationLink
@@ -47,6 +51,10 @@ def public_pre_registration(request, token):
             saved_pre_registration.gym = gym
             saved_pre_registration.link = link
             saved_pre_registration.save()
+            try:
+                send_pre_registration_received_email(saved_pre_registration)
+            except Exception as exc:
+                notify_creation_email_failure(str(saved_pre_registration), exc)
             form = MemberPreRegistrationForm(gym=gym)
     else:
         form = MemberPreRegistrationForm(gym=gym)

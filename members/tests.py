@@ -337,7 +337,8 @@ class MemberPreRegistrationTests(TestCase):
         self.assertFalse(form.is_valid())
         self.assertIn("photo", form.errors)
 
-    def test_public_pre_registration_creates_pending_request_for_link_gym(self):
+    @override_settings(DEFAULT_FROM_EMAIL="noreply@smartclubpro.org")
+    def test_public_pre_registration_creates_pending_request_and_sends_received_email(self):
         link = MemberPreRegistrationLink.objects.get(gym=self.gym)
 
         response = self.client.post(
@@ -358,6 +359,33 @@ class MemberPreRegistrationTests(TestCase):
         self.assertEqual(pre_registration.status, MemberPreRegistration.STATUS_PENDING)
         self.assertGreater(pre_registration.expires_at, timezone.now() + timedelta(days=6, hours=23))
         self.assertFalse(Member.objects.filter(phone="+243810000001").exists())
+        self.assertEqual(len(mail.outbox), 1)
+        message = mail.outbox[0]
+        self.assertEqual(message.from_email, "Org Members <noreply@smartclubpro.org>")
+        self.assertEqual(message.to, ["alice.visitor@example.com"])
+        self.assertIn("Org Members - Preinscription recue", message.subject)
+        self.assertIn("Nous avons bien recu votre preinscription", message.body)
+        self.assertIn("Passez a la salle", message.body)
+
+    def test_public_pre_registration_requires_phone_and_email(self):
+        link = MemberPreRegistrationLink.objects.get(gym=self.gym)
+
+        response = self.client.post(
+            reverse("members:public_pre_registration", args=[link.token]),
+            {
+                "first_name": "No",
+                "last_name": "Contact",
+                "phone": "",
+                "email": "",
+                "address": "Kinshasa",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(MemberPreRegistration.objects.filter(first_name="No").exists())
+        self.assertFormError(response.context["form"], "phone", "Ce champ est obligatoire.")
+        self.assertFormError(response.context["form"], "email", "Ce champ est obligatoire.")
+        self.assertEqual(len(mail.outbox), 0)
 
     @override_settings(DEFAULT_FROM_EMAIL="noreply@smartclubpro.org")
     @patch("members.signals.generate_temporary_password", return_value="TempPass123!")
@@ -392,6 +420,7 @@ class MemberPreRegistrationTests(TestCase):
         self.assertIn("Org Members - Vos coordonnees membre", message.subject)
         self.assertIn(member.user.username, message.body)
         self.assertIn("TempPass123!", message.body)
+        self.assertIn("Vous devrez changer ce mot de passe", message.body)
 
     def test_pre_registration_list_is_scoped_to_current_gym(self):
         MemberPreRegistration.objects.create(

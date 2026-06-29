@@ -191,7 +191,7 @@
                                         {% for error in form.phone.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
                                     </div>
                                     <div class="col-md-6">
-                                        <label class="form-label">Email</label>
+                                        <label class="form-label">Email <span class="text-danger">*</span></label>
                                         {{ form.email }}
                                         {% for error in form.email.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
                                     </div>

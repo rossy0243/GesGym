@@ -97,6 +97,10 @@ class MemberPreRegistrationForm(forms.ModelForm):
     def __init__(self, *args, gym=None, **kwargs):
         self.gym = gym
         super().__init__(*args, **kwargs)
+        self.fields["phone"].required = True
+        self.fields["email"].required = True
+        self.fields["phone"].widget.attrs["required"] = "required"
+        self.fields["email"].widget.attrs["required"] = "required"
 
     def clean_phone(self):
         phone = (self.cleaned_data.get("phone") or "").strip()
@@ -120,7 +124,7 @@ class MemberPreRegistrationForm(forms.ModelForm):
     def clean_email(self):
         email = (self.cleaned_data.get("email") or "").strip()
         if not email:
-            return None
+            raise forms.ValidationError("L'email est obligatoire.")
 
         if self.gym and Member.objects.filter(gym=self.gym, email=email).exists():
             raise forms.ValidationError("Un membre existe deja avec cet email.")
