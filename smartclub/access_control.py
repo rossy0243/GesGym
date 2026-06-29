@@ -8,7 +8,7 @@ flags pour masquer la navigation non autorisee.
 DASHBOARD_ROLES = frozenset({"owner", "manager"})
 MEMBER_ROLES = frozenset({"owner", "manager", "reception"})
 MEMBER_WRITE_ROLES = frozenset({"owner", "manager", "reception"})
-MEMBER_STATUS_ROLES = frozenset({"manager"})
+MEMBER_STATUS_ROLES = frozenset({"owner", "manager"})
 MEMBER_ADMIN_ROLES = MEMBER_STATUS_ROLES
 SUBSCRIPTION_ROLES = frozenset({"owner", "manager"})
 POS_CASHIER_ROLES = frozenset({"owner", "manager", "reception", "cashier"})

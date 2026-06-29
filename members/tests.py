@@ -239,7 +239,7 @@ class MemberPreRegistrationTests(TestCase):
         self.assertFalse(member.user.force_password_change)
         self.assertTrue(member.user.check_password("InitialMember123!"))
 
-    def test_only_manager_can_suspend_and_reactivate_member(self):
+    def test_owner_and_manager_can_suspend_and_reactivate_member(self):
         member = Member.objects.create(
             gym=self.gym,
             first_name="Status",
@@ -262,10 +262,21 @@ class MemberPreRegistrationTests(TestCase):
             is_active=True,
         )
 
-        for user in [self.owner, self.reception, self.cashier]:
+        for user in [self.reception, self.cashier]:
             self.client.force_login(user)
             response = self.client.post(reverse("members:suspend_member", args=[member.id]))
             self.assertEqual(response.status_code, 403)
+
+        self.client.force_login(self.owner)
+        owner_suspend_response = self.client.post(reverse("members:suspend_member", args=[member.id]))
+        self.assertRedirects(owner_suspend_response, reverse("members:member_list"), fetch_redirect_response=False)
+        member.refresh_from_db()
+        self.assertEqual(member.status, "suspended")
+
+        owner_reactivate_response = self.client.post(reverse("members:reactivate_member", args=[member.id]))
+        self.assertRedirects(owner_reactivate_response, reverse("members:member_list"), fetch_redirect_response=False)
+        member.refresh_from_db()
+        self.assertEqual(member.status, "active")
 
         self.client.force_login(self.manager)
         suspend_response = self.client.post(reverse("members:suspend_member", args=[member.id]))
@@ -304,7 +315,7 @@ class MemberPreRegistrationTests(TestCase):
 
         self.client.force_login(self.owner)
         owner_response = self.client.get(reverse("members:member_list"))
-        self.assertNotContains(owner_response, 'id="statusToggleBtn"', html=False)
+        self.assertContains(owner_response, 'id="statusToggleBtn"', html=False)
 
     def test_member_photo_upload_rejects_non_image_file(self):
         uploaded = SimpleUploadedFile(
