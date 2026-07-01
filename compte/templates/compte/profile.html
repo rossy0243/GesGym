@@ -21,16 +21,16 @@
                         <span class="material-icons">person</span>
                     </div>
                     <h4 class="fw-bold mb-1">{{ request.user.get_full_name|default:request.user.username }}</h4>
-                    <p class="text-muted mb-0">{{ request.user.email|default:"Email non renseigne" }}</p>
+                    <p class="text-muted mb-0">{{ request.user.email|default:"E-mail non renseigné" }}</p>
                 </div>
 
                 <div class="profile-info-list">
                     <div>
-                        <span>Nom d'utilisateur</span>
+                        <span>Nom d’utilisateur</span>
                         <strong>{{ request.user.username }}</strong>
                     </div>
                     <div>
-                        <span>Role courant</span>
+                        <span>Rôle courant</span>
                         <strong>{{ request.role|default:"-"|title }}</strong>
                     </div>
                     <div>
@@ -39,13 +39,13 @@
                     </div>
                     <div>
                         <span>Salle active</span>
-                        <strong>{{ request.gym.name|default:"Aucune salle selectionnee" }}</strong>
+                        <strong>{{ request.gym.name|default:"Aucune salle sélectionnée" }}</strong>
                     </div>
                 </div>
 
                 {% if active_roles %}
                     <div class="mt-4">
-                        <h6 class="fw-bold">Acces internes</h6>
+                        <h6 class="fw-bold">Accès internes</h6>
                         {% for role in active_roles %}
                             <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
                                 <span>{{ role.gym.name }}</span>
@@ -62,7 +62,7 @@
         {% if force_password_change %}
         <div class="alert alert-warning border-0 shadow-sm">
             <strong>Action requise :</strong> ce compte utilise encore un mot de passe temporaire.
-            Definis maintenant un mot de passe personnel pour continuer.
+            Définissez maintenant un mot de passe personnel pour continuer.
         </div>
         {% endif %}
 
@@ -79,7 +79,7 @@
                     {% csrf_token %}
                     <input type="hidden" name="action" value="profile">
                     <div class="col-md-6">
-                        <label class="form-label">Prenom</label>
+                        <label class="form-label">Prénom</label>
                         {{ profile_form.first_name }}
                         {% for error in profile_form.first_name.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
                     </div>
@@ -89,7 +89,7 @@
                         {% for error in profile_form.last_name.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
                     </div>
                     <div class="col-md-12">
-                        <label class="form-label">Email</label>
+                        <label class="form-label">E-mail</label>
                         {{ profile_form.email }}
                         {% for error in profile_form.email.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
                     </div>
@@ -108,7 +108,7 @@
             <div class="card-header">
                 <h5 class="card-title mb-0 d-flex align-items-center gap-2">
                     <span class="material-icons" style="font-size:22px;">lock_reset</span>
-                    {% if force_password_change %}Definir votre mot de passe{% else %}Changer le mot de passe{% endif %}
+                    {% if force_password_change %}Définir votre mot de passe{% else %}Changer le mot de passe{% endif %}
                 </h5>
             </div>
             <div class="card-body">

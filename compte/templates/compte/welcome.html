@@ -204,19 +204,19 @@
             {% endif %}
         </div>
 
-        <p class="eyebrow">Connexion reussie</p>
+        <p class="eyebrow">Connexion réussie</p>
         <h1>Bienvenue</h1>
         <div class="org-name">{{ organization.name|default:"SmartClub Pro" }}</div>
         <div class="context-chip">
             {% if is_owner %}
-                Proprietaire
+                Propriétaire
             {% else %}
-                {{ organization.name|default:"SmartClub Pro" }}{% if gym %} · {{ gym.name }}{% endif %}
+                {{ organization.name|default:"SmartClub Pro" }}{% if gym %} - {{ gym.name }}{% endif %}
             {% endif %}
         </div>
 
         <div class="loader" aria-hidden="true"><span></span></div>
-        <p class="caption">Ouverture de votre espace...</p>
+        <p class="caption">Ouverture de votre espace…</p>
     </main>
 
     <script>

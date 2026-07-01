@@ -111,7 +111,7 @@ class CustomLoginView(LoginView):
         if self.request.user.force_password_change:
             messages.warning(
                 self.request,
-                "Votre mot de passe temporaire doit etre remplace avant d'acceder a l'application.",
+                "Votre mot de passe temporaire doit être remplacé avant d’accéder à l’application.",
             )
             return redirect("compte:profile")
         return redirect("compte:welcome")
@@ -148,9 +148,9 @@ def profile(request):
             profile_form = UserProfileForm(request.POST, instance=request.user)
             if profile_form.is_valid():
                 profile_form.save()
-                messages.success(request, "Profil mis a jour avec succes.")
+                messages.success(request, "Profil mis à jour avec succès.")
                 return redirect("compte:profile")
-            messages.error(request, "Impossible de mettre a jour le profil. Verifiez les champs.")
+            messages.error(request, "Impossible de mettre à jour le profil. Vérifiez les champs.")
 
         elif action == "password":
             password_form = (
@@ -166,12 +166,12 @@ def profile(request):
                 update_session_auth_hash(request, user)
                 messages.success(
                     request,
-                    "Mot de passe defini avec succes."
+                    "Mot de passe défini avec succès."
                     if force_password_change
-                    else "Mot de passe modifie avec succes.",
+                    else "Mot de passe modifié avec succès.",
                 )
                 return redirect(request.session.get("post_login_target", reverse_lazy("compte:profile")))
-            messages.error(request, "Mot de passe non modifie. Verifiez les informations saisies.")
+            messages.error(request, "Mot de passe non modifié. Vérifiez les informations saisies.")
 
     active_roles = UserGymRole.objects.filter(
         user=request.user,

@@ -18,7 +18,7 @@ class DemoRequestForm(forms.Form):
         max_length=120,
     )
     email = forms.EmailField(
-        label="Email professionnel",
+        label="E-mail professionnel",
         max_length=254,
     )
     phone = forms.CharField(
@@ -48,7 +48,7 @@ class DemoRequestForm(forms.Form):
         self.fields["full_name"].widget.attrs.update(
             {
                 "class": base_input_classes,
-                "placeholder": "Ex: Rosette Mukendi",
+                "placeholder": "Ex. : Rosette Mukendi",
             }
         )
         self.fields["email"].widget.attrs.update(

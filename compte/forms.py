@@ -48,7 +48,7 @@ class CustomAuthenticationForm(AuthenticationForm):
     username = forms.CharField(
         widget=forms.TextInput(attrs={
             "class": "w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#004e92] ",
-            "placeholder": "Nom d'utilisateur",
+            "placeholder": "Nom d’utilisateur",
             "autocomplete": "username",
             "autofocus": "autofocus",
         })
@@ -68,7 +68,7 @@ class StyledPasswordResetForm(PasswordResetForm):
         super().__init__(*args, **kwargs)
         self.fields["email"].widget.attrs.update({
             "class": "w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#004e92]",
-            "placeholder": "Adresse email",
+            "placeholder": "Adresse e-mail",
             "autocomplete": "email",
         })
 
@@ -129,7 +129,7 @@ class UserProfileForm(forms.ModelForm):
         widgets = {
             "first_name": forms.TextInput(attrs={
                 "class": "form-control",
-                "placeholder": "Prenom",
+                "placeholder": "Prénom",
             }),
             "last_name": forms.TextInput(attrs={
                 "class": "form-control",
@@ -137,7 +137,7 @@ class UserProfileForm(forms.ModelForm):
             }),
             "email": forms.EmailInput(attrs={
                 "class": "form-control",
-                "placeholder": "Email",
+                "placeholder": "E-mail",
             }),
         }
 
