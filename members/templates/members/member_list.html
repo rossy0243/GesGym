@@ -886,7 +886,7 @@ body.members-screen .modal-dialog {
                             </button>
                         </div>
                         <div class="member-card-preview-wrapper p-4 rounded-4 mt-4 border"
-                            style="background:linear-gradient(135deg,#f8fafc,#eef2f7);">
+                            style="background:linear-gradient(135deg,#111827,#27313f);">
                             <div class="d-flex align-items-center justify-content-between mb-2">
                                 <h6 class="d-flex align-items-center gap-2 mb-0">
                                     <span class="material-icons" style="font-size:18px;">badge</span>
@@ -897,8 +897,8 @@ body.members-screen .modal-dialog {
                                     carte
                                 </button>
                             </div>
-                            <canvas id="memberCardPreview" width="502" height="325" class="w-100 rounded-4 border"
-                                style="max-width:502px; box-shadow:0 10px 30px rgba(15,23,42,0.10); background:#fff;"></canvas>
+                            <canvas id="memberCardPreview" width="502" height="325" class="w-100 rounded-4 border border-dark"
+                                style="max-width:502px; box-shadow:0 18px 45px rgba(0,0,0,0.28); background:#111827;"></canvas>
                             <small class="text-muted d-block mt-2">Format carte 85 x 55 mm, avec logo organisation,
                                 infos membre et QR code.</small>
                         </div>
@@ -1326,22 +1326,91 @@ body.members-screen .modal-dialog {
         ctx.drawImage(image, x + (width - drawWidth) / 2, y + (height - drawHeight) / 2, drawWidth, drawHeight);
     }
 
-    function drawMemberInitials(ctx, member, x, y, size) {
-        const initials = `${member.first_name || ""} ${member.last_name || ""}`
-            .trim()
-            .split(/\s+/)
-            .slice(0, 2)
-            .map(part => part[0] || "")
-            .join("")
-            .toUpperCase() || "M";
-        ctx.fillStyle = "#e0f2fe";
-        drawRoundRect(ctx, x, y, size, size, size / 2);
+    function drawCoverImage(ctx, image, x, y, width, height) {
+        if (!image) return;
+        const ratio = Math.max(width / image.width, height / image.height);
+        const drawWidth = image.width * ratio;
+        const drawHeight = image.height * ratio;
+        ctx.drawImage(image, x + (width - drawWidth) / 2, y + (height - drawHeight) / 2, drawWidth, drawHeight);
+    }
+
+    function drawHexagon(ctx, x, y, radius) {
+        ctx.beginPath();
+        for (let i = 0; i < 6; i += 1) {
+            const angle = Math.PI / 6 + i * Math.PI / 3;
+            const pointX = x + Math.cos(angle) * radius;
+            const pointY = y + Math.sin(angle) * radius;
+            if (i === 0) {
+                ctx.moveTo(pointX, pointY);
+            } else {
+                ctx.lineTo(pointX, pointY);
+            }
+        }
+        ctx.closePath();
+    }
+
+    function drawCardTexture(ctx, width, height, s) {
+        ctx.save();
+        ctx.strokeStyle = "rgba(255,255,255,0.14)";
+        ctx.lineWidth = 2 * s;
+        const radius = 34 * s;
+        const horizontalStep = radius * 1.75;
+        const verticalStep = radius * 1.52;
+        for (let row = -1; row < Math.ceil(height / verticalStep) + 2; row += 1) {
+            for (let col = -1; col < Math.ceil(width / horizontalStep) + 2; col += 1) {
+                const x = col * horizontalStep + (row % 2 ? horizontalStep / 2 : 0);
+                const y = row * verticalStep;
+                ctx.globalAlpha = Math.max(0.03, 0.18 - (y / height) * 0.12);
+                drawHexagon(ctx, x, y, radius);
+                ctx.stroke();
+            }
+        }
+        ctx.restore();
+
+        ctx.save();
+        const smoke = ctx.createRadialGradient(330 * s, 205 * s, 20 * s, 330 * s, 205 * s, 340 * s);
+        smoke.addColorStop(0, "rgba(255,255,255,0.18)");
+        smoke.addColorStop(0.45, "rgba(255,255,255,0.07)");
+        smoke.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = smoke;
+        ctx.fillRect(0, 0, width, height);
+
+        const rightGlow = ctx.createRadialGradient(900 * s, 555 * s, 20 * s, 900 * s, 555 * s, 250 * s);
+        rightGlow.addColorStop(0, "rgba(255,255,255,0.14)");
+        rightGlow.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = rightGlow;
+        ctx.fillRect(0, 0, width, height);
+        ctx.restore();
+    }
+
+    function setFittedFont(ctx, text, maxWidth, maxSize, minSize, s, weight = "700", family = "Arial") {
+        let fontSize = maxSize * s;
+        const minimum = minSize * s;
+        do {
+            ctx.font = `${weight} ${fontSize}px ${family}`;
+            if (ctx.measureText(text).width <= maxWidth || fontSize <= minimum) {
+                break;
+            }
+            fontSize -= 1 * s;
+        } while (fontSize > minimum);
+    }
+
+    function drawCardPhotoPlaceholder(ctx, x, y, size) {
+        ctx.fillStyle = "#f4f4f2";
+        ctx.fillRect(x, y, size, size);
+        ctx.fillStyle = "#c9c9c5";
+        ctx.beginPath();
+        ctx.arc(x + size / 2, y + size * 0.40, size * 0.16, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = "#075985";
-        ctx.font = `700 ${Math.round(size * 0.35)}px Arial`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(initials, x + size / 2, y + size / 2);
+        ctx.beginPath();
+        ctx.moveTo(x + size * 0.20, y + size * 0.78);
+        ctx.bezierCurveTo(
+            x + size * 0.28, y + size * 0.58,
+            x + size * 0.72, y + size * 0.58,
+            x + size * 0.80, y + size * 0.78
+        );
+        ctx.lineTo(x + size * 0.20, y + size * 0.78);
+        ctx.fill();
     }
 
     async function drawMemberCard(canvas, member, scale = 1) {
@@ -1355,231 +1424,124 @@ body.members-screen .modal-dialog {
             loadCanvasImage(logoUrl),
             loadCanvasImage(member.photo_url)
         ]);
+        const fullName = `${member.first_name || ""} ${member.last_name || ""}`.trim() || "Membre";
+        const memberNumber = member.member_code || (member.id ? `MEM-${String(member.id).padStart(5, "0")}` : "-");
+        const username = member.username || "Non defini";
+        const organizationName = (member.organization_name || "Organisation").toUpperCase();
 
         ctx.clearRect(0, 0, width, height);
 
-        // ===== FOND GLOBAL =====
-        const bgGradient = ctx.createLinearGradient(0, 0, width, height);
-        bgGradient.addColorStop(0, "#ffffff");
-        bgGradient.addColorStop(1, "#f8fafc");
-        ctx.fillStyle = bgGradient;
-        drawRoundRect(ctx, 0, 0, width, height, 34 * s);
-        ctx.fill();
+        ctx.save();
+        drawRoundRect(ctx, 0, 0, width, height, 26 * s);
+        ctx.clip();
 
-        // Bordure externe douce
-        ctx.strokeStyle = "#e2e8f0";
+        const bgGradient = ctx.createLinearGradient(0, 0, width, height);
+        bgGradient.addColorStop(0, "#141414");
+        bgGradient.addColorStop(0.45, "#1b1b1d");
+        bgGradient.addColorStop(1, "#0b0c0e");
+        ctx.fillStyle = bgGradient;
+        ctx.fillRect(0, 0, width, height);
+
+        drawCardTexture(ctx, width, height, s);
+
+        const vignette = ctx.createRadialGradient(width / 2, height / 2, 60 * s, width / 2, height / 2, width * 0.62);
+        vignette.addColorStop(0, "rgba(0,0,0,0)");
+        vignette.addColorStop(1, "rgba(0,0,0,0.54)");
+        ctx.fillStyle = vignette;
+        ctx.fillRect(0, 0, width, height);
+        ctx.restore();
+
+        ctx.strokeStyle = "rgba(255,255,255,0.10)";
         ctx.lineWidth = 2 * s;
+        drawRoundRect(ctx, 1 * s, 1 * s, width - 2 * s, height - 2 * s, 26 * s);
         ctx.stroke();
 
-        // ===== BANDE LATERALE PREMIUM =====
-        const sideGradient = ctx.createLinearGradient(width * 0.70, 0, width, height);
-        sideGradient.addColorStop(0, "#0f172a");
-        sideGradient.addColorStop(0.5, "#111827");
-        sideGradient.addColorStop(1, "#1e293b");
-        ctx.fillStyle = sideGradient;
-        drawRoundRect(ctx, 700 * s, 0, 304 * s, 650 * s, 34 * s);
-        ctx.fill();
-
-        // Accent décoratif discret
-        ctx.globalAlpha = 0.06;
-        ctx.fillStyle = "#0f766e";
-        ctx.beginPath();
-        ctx.arc(160 * s, 540 * s, 200 * s, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.beginPath();
-        ctx.arc(830 * s, 110 * s, 140 * s, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = 1;
-
-        // ===== EN-TETE =====
-        // Bloc logo
-        ctx.fillStyle = "#ffffff";
-        drawRoundRect(ctx, 48 * s, 42 * s, 104 * s, 104 * s, 22 * s);
-        ctx.fill();
+        const logoBoxWidth = 390 * s;
+        const logoBoxHeight = 112 * s;
+        const logoX = (width - logoBoxWidth) / 2;
+        const logoY = 24 * s;
 
         if (logo) {
-            drawContainedImage(ctx, logo, 60 * s, 54 * s, 80 * s, 80 * s);
-        } else {
-            ctx.fillStyle = "#cbd5e1";
-            ctx.font = `700 ${22 * s}px Arial`;
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillText("LOGO", 100 * s, 94 * s);
-        }
-
-        // Nom organisation
-        ctx.textAlign = "left";
-        ctx.textBaseline = "alphabetic";
-        ctx.fillStyle = "#0f172a";
-        ctx.font = `700 ${28 * s}px Arial`;
-        ctx.fillText((member.organization_name || "Organisation").toUpperCase(), 180 * s, 82 * s);
-
-        ctx.fillStyle = "#64748b";
-        ctx.font = `600 ${15 * s}px Arial`;
-        ctx.fillText("CARTE MEMBRE OFFICIELLE", 180 * s, 110 * s);
-
-        // Ligne séparatrice
-        ctx.strokeStyle = "#e2e8f0";
-        ctx.lineWidth = 2 * s;
-        ctx.beginPath();
-        ctx.moveTo(48 * s, 164 * s);
-        ctx.lineTo(650 * s, 164 * s);
-        ctx.stroke();
-
-        // ===== PHOTO =====
-        ctx.fillStyle = "#ffffff";
-        drawRoundRect(ctx, 48 * s, 196 * s, 180 * s, 220 * s, 28 * s);
-        ctx.fill();
-
-        ctx.strokeStyle = "#e2e8f0";
-        ctx.lineWidth = 2 * s;
-        ctx.stroke();
-
-        if (photo) {
             ctx.save();
-            drawRoundRect(ctx, 62 * s, 210 * s, 152 * s, 192 * s, 22 * s);
-            ctx.clip();
-            ctx.drawImage(photo, 62 * s, 210 * s, 152 * s, 192 * s);
+            ctx.shadowColor = "rgba(0,0,0,0.55)";
+            ctx.shadowBlur = 16 * s;
+            ctx.shadowOffsetY = 6 * s;
+            drawContainedImage(ctx, logo, logoX, logoY, logoBoxWidth, logoBoxHeight);
             ctx.restore();
         } else {
-            drawMemberInitials(ctx, member, 62 * s, 230 * s, 152 * s);
-        }
-
-        // ===== INFOS PRINCIPALES =====
-        const infoX = 260 * s;
-        const infoWidth = 400 * s;
-
-        const fullName = `${member.first_name || ""} ${member.last_name || ""}`.trim() || "Membre";
-        ctx.textAlign = "left";
-        ctx.textBaseline = "alphabetic";
-
-        ctx.fillStyle = "#0f172a";
-        ctx.font = `700 ${34 * s}px Arial`;
-        ctx.fillText(fullName, infoX, 238 * s);
-
-        ctx.fillStyle = "#64748b";
-        ctx.font = `600 ${15 * s}px Arial`;
-        ctx.fillText("Identité du membre", infoX, 266 * s);
-
-        // Badge ID
-        ctx.fillStyle = "#ecfeff";
-        drawRoundRect(ctx, infoX, 286 * s, 150 * s, 40 * s, 14 * s);
-        ctx.fill();
-
-        ctx.fillStyle = "#0f766e";
-        ctx.font = `700 ${16 * s}px Arial`;
-        ctx.textBaseline = "middle";
-        ctx.fillText(`ID #${member.id || "-"}`, infoX + 20 * s, 306 * s);
-        ctx.textBaseline = "alphabetic";
-
-        // ===== BLOCS INFOS ALIGNÉS =====
-        function drawInfoBlock(label, value, x, y, w, h) {
-            ctx.fillStyle = "#ffffff";
-            drawRoundRect(ctx, x, y, w, h, 18 * s);
-            ctx.fill();
-
-            ctx.strokeStyle = "#dbe3ea";
-            ctx.lineWidth = 1.5 * s;
-            ctx.stroke();
-
-            // Label
-            ctx.textAlign = "left";
-            ctx.textBaseline = "top";
-            ctx.fillStyle = "#94a3b8";
-            ctx.font = `700 ${11 * s}px Arial`;
-            ctx.fillText(label.toUpperCase(), x + 18 * s, y + 12 * s);
-
-            // Valeur
+            ctx.textAlign = "center";
             ctx.textBaseline = "middle";
-            ctx.fillStyle = "#0f172a";
-            ctx.font = `700 ${17 * s}px Arial`;
-            ctx.fillText(value || "-", x + 18 * s, y + h - 18 * s);
-
-            ctx.textBaseline = "alphabetic";
+            ctx.fillStyle = "#111827";
+            setFittedFont(ctx, organizationName, logoBoxWidth - 40 * s, 38, 18, s, "800");
+            ctx.fillText(organizationName, width / 2, logoY + 36 * s);
+            ctx.fillStyle = "#ef4444";
+            ctx.font = `700 ${16 * s}px Arial`;
+            ctx.fillText("GYM", width / 2, logoY + 68 * s);
         }
-        drawInfoBlock("Username", member.username || "-", infoX, 346 * s, infoWidth, 64 * s);
-        drawInfoBlock("Téléphone", member.phone || "-", infoX, 426 * s, infoWidth, 64 * s);
 
-        ctx.fillStyle = "#f8fafc";
-        drawRoundRect(ctx, infoX, 506 * s, infoWidth, 78 * s, 20 * s);
-        ctx.fill();
+        const photoX = 60 * s;
+        const photoY = 205 * s;
+        const photoSize = 200 * s;
+        ctx.save();
+        ctx.fillStyle = "#f4f4f2";
+        ctx.fillRect(photoX, photoY, photoSize, photoSize);
+        if (photo) {
+            ctx.beginPath();
+            ctx.rect(photoX, photoY, photoSize, photoSize);
+            ctx.clip();
+            drawCoverImage(ctx, photo, photoX, photoY, photoSize, photoSize);
+        } else {
+            drawCardPhotoPlaceholder(ctx, photoX, photoY, photoSize);
+        }
+        ctx.restore();
 
-        ctx.strokeStyle = "#dbe3ea";
+        ctx.strokeStyle = "rgba(255,255,255,0.16)";
         ctx.lineWidth = 1.5 * s;
-        ctx.stroke();
+        ctx.strokeRect(photoX, photoY, photoSize, photoSize);
 
+        const infoX = 300 * s;
+        const infoMaxWidth = 335 * s;
         ctx.textAlign = "left";
-        ctx.textBaseline = "top";
-        ctx.fillStyle = "#94a3b8";
-        ctx.font = `700 ${11 * s}px Arial`;
-        ctx.fillText("ABONNEMENT", infoX + 18 * s, 520 * s);
-
-        ctx.textBaseline = "middle";
-        ctx.fillStyle = "#0f172a";
-        ctx.font = `700 ${17 * s}px Arial`;
-        ctx.fillText(member.subscription_type || "Aucun abonnement", infoX + 18 * s, 555 * s);
-
         ctx.textBaseline = "alphabetic";
-        ctx.fill();
+        ctx.fillStyle = "#ffffff";
+        setFittedFont(ctx, fullName, infoMaxWidth, 33, 21, s, "800");
+        ctx.fillText(fullName, infoX, 258 * s);
 
-        ctx.strokeStyle = "#e2e8f0";
-        ctx.lineWidth = 1.5 * s;
-        ctx.stroke();
+        ctx.fillStyle = "#f4f4f5";
+        ctx.font = `600 ${20 * s}px Arial`;
+        ctx.fillText(`@${username}`, infoX, 305 * s);
 
-        ctx.fillStyle = "#94a3b8";
-        ctx.font = `700 ${12 * s}px Arial`;
-        ctx.fillText("ABONNEMENT", 288 * s, 536 * s);
-
-        ctx.fillStyle = "#0f172a";
+        ctx.fillStyle = "#ffffff";
+        ctx.font = `500 ${22 * s}px Arial`;
+        ctx.fillText(`N\u00b0 membre:`, infoX, 354 * s);
         ctx.font = `700 ${22 * s}px Arial`;
-        ctx.fillText(member.subscription_type || "Aucun abonnement", 288 * s, 566 * s);
+        ctx.fillText(memberNumber, infoX + 150 * s, 354 * s);
 
-        // ===== ZONE QR =====
         const qrCanvas = document.createElement("canvas");
-        qrCanvas.width = 220 * s;
-        qrCanvas.height = 220 * s;
-        await renderQRCodeCanvas(qrCanvas, member.qr_code, 220 * s);
+        const qrSize = Math.round(200 * s);
+        qrCanvas.width = qrSize;
+        qrCanvas.height = qrSize;
+        await renderQRCodeCanvas(qrCanvas, member.qr_code, qrSize);
 
+        const qrX = 690 * s;
+        const qrY = 245 * s;
+        const qrPadding = 24 * s;
         ctx.fillStyle = "#ffffff";
-        drawRoundRect(ctx, 742 * s, 120 * s, 220 * s, 220 * s, 28 * s);
-        ctx.fill();
+        ctx.fillRect(qrX - qrPadding, qrY - qrPadding, qrSize + qrPadding * 2, qrSize + qrPadding * 2);
+        ctx.drawImage(qrCanvas, qrX, qrY, qrSize, qrSize);
 
-        ctx.drawImage(qrCanvas, 742 * s, 120 * s, 220 * s, 220 * s);
-
-        ctx.textAlign = "center";
-        ctx.fillStyle = "#ffffff";
-        ctx.font = `700 ${22 * s}px Arial`;
-        ctx.fillText("SCAN QR", 852 * s, 392 * s);
-
-        ctx.fillStyle = "rgba(255,255,255,0.72)";
-        ctx.font = `500 ${13 * s}px Arial`;
-        ctx.fillText("Accès personnel sécurisé", 852 * s, 418 * s);
-
-        // ===== PETIT BLOC IDENTITÉ À DROITE =====
-        ctx.fillStyle = "rgba(255,255,255,0.08)";
-        drawRoundRect(ctx, 736 * s, 462 * s, 232 * s, 96 * s, 20 * s);
-        ctx.fill();
+        ctx.fillStyle = "rgba(255,255,255,0.16)";
+        ctx.fillRect(60 * s, 548 * s, 560 * s, 1 * s);
 
         ctx.textAlign = "left";
-        ctx.fillStyle = "#cbd5e1";
-        ctx.font = `700 ${11 * s}px Arial`;
-        ctx.fillText("MEMBRE", 756 * s, 490 * s);
-
-        ctx.fillStyle = "#ffffff";
-        ctx.font = `700 ${18 * s}px Arial`;
-        ctx.fillText(fullName.length > 18 ? fullName.substring(0, 18) + "..." : fullName, 756 * s, 518 * s);
-
-        ctx.fillStyle = "#94a3b8";
+        ctx.fillStyle = "rgba(255,255,255,0.55)";
         ctx.font = `600 ${12 * s}px Arial`;
-        ctx.fillText(`ID ${member.id || "-"}`, 756 * s, 542 * s);
+        ctx.fillText("Carte personnelle - acces reserve au membre identifie.", 60 * s, 582 * s);
 
-        // ===== FOOTER =====
-        ctx.textAlign = "left";
-        ctx.fillStyle = "#64748b";
+        ctx.textAlign = "right";
+        ctx.fillStyle = "rgba(255,255,255,0.48)";
         ctx.font = `600 ${12 * s}px Arial`;
-        ctx.fillText("Cette carte est personnelle. Sa validité dépend du statut actif du membre dans le système.",
-            48 * s, 614 * s);
+        ctx.fillText(member.gym_name || "", 944 * s, 596 * s);
     }
 
     async function renderMemberCardPreview(member) {
