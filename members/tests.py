@@ -422,6 +422,16 @@ class MemberPreRegistrationTests(TestCase):
         self.assertIn(member.user.username, message.body)
         self.assertIn("TempPass123!", message.body)
         self.assertIn("Vous devrez changer ce mot de passe", message.body)
+        self.assertIn("Votre carte membre est jointe", message.body)
+        self.assertTrue(message.alternatives)
+        self.assertIn("Votre carte membre est jointe", message.alternatives[0][0])
+        self.assertEqual(message.extra_headers["Auto-Submitted"], "auto-generated")
+        self.assertEqual(message.extra_headers["X-Auto-Response-Suppress"], "All")
+        self.assertEqual(len(message.attachments), 1)
+        attachment_name, attachment_content, attachment_type = message.attachments[0]
+        self.assertTrue(attachment_name.startswith("carte_membre_bob-ready"))
+        self.assertEqual(attachment_type, "image/png")
+        self.assertTrue(attachment_content.startswith(b"\x89PNG"))
 
     def test_pre_registration_list_is_scoped_to_current_gym(self):
         MemberPreRegistration.objects.create(
