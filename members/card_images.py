@@ -40,7 +40,7 @@ def _open_image(field_file):
         image = Image.open(field_file)
         image.load()
         return image.convert("RGBA")
-    except (OSError, ValueError):
+    except (OSError, SyntaxError, ValueError):
         return None
     finally:
         try:
@@ -191,4 +191,38 @@ def render_member_card_png(member):
 
     output = BytesIO()
     image.convert("RGB").save(output, format="PNG", optimize=True)
+    return output.getvalue()
+
+
+def render_organization_pwa_icon_png(organization, size=512):
+    size = max(128, min(int(size or 512), 1024))
+    logo = _open_image(getattr(organization, "logo", None))
+    organization_name = (getattr(organization, "name", "") or "SmartClub").upper()
+
+    image = Image.new("RGBA", (size, size), (16, 40, 32, 255))
+    draw = ImageDraw.Draw(image, "RGBA")
+    for y in range(size):
+        shade = int(18 + (y / size) * 14)
+        draw.line((0, y, size, y), fill=(shade, shade + 22, shade + 15, 255))
+
+    draw.ellipse((-size * 0.25, -size * 0.2, size * 0.7, size * 0.65), fill=(255, 255, 255, 18))
+    draw.ellipse((size * 0.45, size * 0.52, size * 1.25, size * 1.22), fill=(255, 255, 255, 14))
+
+    if logo:
+        margin = round(size * 0.12)
+        _paste_contained(image, logo, (margin, margin, size - margin * 2, size - margin * 2))
+    else:
+        words = [part[:1] for part in organization_name.split() if part]
+        initials = "".join(words[:2]) or "SC"
+        font = _fit_font(draw, initials, round(size * 0.72), round(size * 0.36), round(size * 0.16), bold=True)
+        bbox = draw.textbbox((0, 0), initials, font=font)
+        draw.text(
+            ((size - (bbox[2] - bbox[0])) / 2, (size - (bbox[3] - bbox[1])) / 2 - bbox[1]),
+            initials,
+            fill="#ffffff",
+            font=font,
+        )
+
+    output = BytesIO()
+    image.save(output, format="PNG", optimize=True)
     return output.getvalue()

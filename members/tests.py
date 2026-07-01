@@ -1,6 +1,6 @@
 import json
 from datetime import timedelta
-from io import StringIO
+from io import BytesIO, StringIO
 from unittest.mock import patch
 
 from django.core import mail
@@ -9,6 +9,7 @@ from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
+from PIL import Image
 
 from access.models import AccessLog
 from coaching.models import Coach, CoachAssignment, CoachingFeedback, GroupCoachingProgram
@@ -1152,22 +1153,46 @@ class MemberPortalTests(TestCase):
         self.assertIn("service-worker", reverse("members:member_app_service_worker"))
         self.assertNotIn("/members/me/", worker_response.content.decode("utf-8"))
 
+    @override_settings(
+        STORAGES={
+            "default": {
+                "BACKEND": "django.core.files.storage.InMemoryStorage",
+            },
+            "staticfiles": {
+                "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+            },
+        }
+    )
     def test_pwa_manifest_uses_authenticated_member_organization_logo(self):
-        self.organization.logo = "organizations/logos/portal-org.png"
-        self.organization.save(update_fields=["logo"])
+        logo_file = BytesIO()
+        Image.new("RGBA", (32, 32), (220, 38, 38, 255)).save(logo_file, format="PNG")
+        self.organization.logo.save(
+            "portal-org.png",
+            SimpleUploadedFile("portal-org.png", logo_file.getvalue(), content_type="image/png"),
+            save=True,
+        )
         self.client.force_login(self.member.user)
 
+        expected_icon_192 = reverse("members:member_app_organization_icon", args=[self.organization.id, 192])
+        expected_icon_512 = reverse("members:member_app_organization_icon", args=[self.organization.id, 512])
         manifest_response = self.client.get(reverse("members:member_app_manifest"))
         portal_response = self.client.get(reverse("members:member_portal"))
+        icon_response = self.client.get(expected_icon_512)
 
         self.assertEqual(manifest_response.status_code, 200)
         manifest = manifest_response.json()
         self.assertEqual(manifest["name"], "Portal Org Membre")
         self.assertEqual(manifest["short_name"], "Portal Org")
         self.assertEqual(manifest_response["Cache-Control"], "private, no-store")
-        self.assertTrue(manifest["icons"][0]["src"].endswith("/media/organizations/logos/portal-org.png"))
+        self.assertEqual(manifest["icons"][0]["src"], expected_icon_192)
+        self.assertEqual(manifest["icons"][1]["src"], expected_icon_512)
+        self.assertEqual(manifest["icons"][2]["src"], expected_icon_512)
         self.assertEqual(manifest["icons"][0]["purpose"], "any")
-        self.assertContains(portal_response, 'rel="apple-touch-icon" href="/media/organizations/logos/portal-org.png"')
+        self.assertEqual(icon_response.status_code, 200)
+        self.assertEqual(icon_response["Content-Type"], "image/png")
+        self.assertTrue(icon_response.content.startswith(b"\x89PNG"))
+        self.assertEqual(icon_response["Cache-Control"], "public, max-age=3600")
+        self.assertContains(portal_response, f'rel="apple-touch-icon" href="{expected_icon_512}"')
 
     def test_member_api_login_and_me_payload(self):
         AccessLog.objects.create(gym=self.gym, member=self.member, access_granted=True)

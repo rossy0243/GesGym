@@ -35,6 +35,7 @@ from smartclub.access_control import (
 from .forms import MemberCreationForm, MemberGoalForm, MemberWeightMeasurementForm
 from .models import Member, MemberGoal, MemberPreRegistration, MemberPreRegistrationLink, MemberWeightMeasurement
 from notifications.models import Notification
+from organizations.models import Organization
 from pos.models import Payment
 from subscriptions.models import MemberSubscription, SubscriptionPlan, SubscriptionRequest
 
@@ -735,6 +736,7 @@ def member_portal(request):
         "latest_group_feedback": latest_group_feedback,
         "pwa_manifest_url": reverse("members:member_app_manifest"),
         "pwa_service_worker_url": reverse("members:member_app_service_worker"),
+        "pwa_icon_url": reverse("members:member_app_organization_icon", args=[member.gym.organization_id, 512]),
         "coaching_rights": _member_coaching_rights(subscription),
         "active_goal": active_goal,
         "goal_measurements": goal_measurements,
@@ -1071,11 +1073,6 @@ def member_organization_logo(request):
     return FileResponse(logo.open("rb"), content_type=content_type)
 
 
-def _pwa_icon_type(icon_url):
-    mime_type, _encoding = mimetypes.guess_type(icon_url)
-    return mime_type or "image/png"
-
-
 def _member_app_brand(request):
     member = _get_current_member(request.user) if request.user.is_authenticated else None
     if not member or not member.gym_id:
@@ -1083,20 +1080,54 @@ def _member_app_brand(request):
             "name": "SmartClub Membre",
             "short_name": "SmartClub",
             "description": "Carte membre, abonnement et acces SmartClub.",
-            "icon_url": static("icons/1.png"),
-            "icon_type": "image/png",
+            "icon_192_url": static("icons/1.png"),
+            "icon_512_url": static("icons/1.png"),
         }
 
     organization = member.gym.organization
-    logo_url = _absolute_media_url(request, organization.logo)
     name = f"{organization.name} Membre"
+    icon_192_url = reverse("members:member_app_organization_icon", args=[organization.id, 192])
+    icon_512_url = reverse("members:member_app_organization_icon", args=[organization.id, 512])
     return {
         "name": name,
         "short_name": organization.name[:12] or "SmartClub",
         "description": f"Carte membre, abonnement et acces {organization.name}.",
-        "icon_url": logo_url or static("icons/1.png"),
-        "icon_type": _pwa_icon_type(logo_url) if logo_url else "image/png",
+        "icon_192_url": icon_192_url,
+        "icon_512_url": icon_512_url,
     }
+
+
+@login_required
+def member_app_icon(request, size):
+    current_member = _get_current_member(request.user)
+    if not current_member or not current_member.gym_id:
+        raise PermissionDenied
+
+    size = int(size)
+    if size not in {192, 512}:
+        raise Http404("Taille d'icone indisponible.")
+
+    from members.card_images import render_organization_pwa_icon_png
+
+    organization = current_member.gym.organization
+    content = render_organization_pwa_icon_png(organization, size=size)
+    response = HttpResponse(content, content_type="image/png")
+    response["Cache-Control"] = "private, no-store"
+    return response
+
+
+def member_app_organization_icon(request, organization_id, size):
+    size = int(size)
+    if size not in {192, 512}:
+        raise Http404("Taille d'icone indisponible.")
+
+    organization = get_object_or_404(Organization, id=organization_id, is_active=True)
+    from members.card_images import render_organization_pwa_icon_png
+
+    content = render_organization_pwa_icon_png(organization, size=size)
+    response = HttpResponse(content, content_type="image/png")
+    response["Cache-Control"] = "public, max-age=3600"
+    return response
 
 
 def member_app_manifest(request):
@@ -1113,21 +1144,22 @@ def member_app_manifest(request):
         "orientation": "portrait",
         "icons": [
             {
-                "src": brand["icon_url"],
-                "sizes": "512x512",
-                "type": brand["icon_type"],
+                "src": brand["icon_192_url"],
+                "sizes": "192x192",
+                "type": "image/png",
                 "purpose": "any",
             },
             {
-                "src": static("icons/1.png"),
+                "src": brand["icon_512_url"],
+                "sizes": "512x512",
+                "type": "image/png",
+                "purpose": "any",
+            },
+            {
+                "src": brand["icon_512_url"],
                 "sizes": "512x512",
                 "type": "image/png",
                 "purpose": "maskable",
-            },
-            {
-                "src": static("avatar/logo_smartclub.png"),
-                "sizes": "1536x1024",
-                "type": "image/png",
             },
         ],
     }
