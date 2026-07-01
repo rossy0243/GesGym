@@ -466,6 +466,9 @@ class MemberPreRegistrationTests(TestCase):
         self.assertTrue(attachment_name.startswith("carte_membre_bob-ready"))
         self.assertEqual(attachment_type, "image/png")
         self.assertTrue(attachment_content.startswith(b"\x89PNG"))
+        from members.card_images import render_member_card_png
+
+        self.assertEqual(attachment_content, render_member_card_png(member))
 
     def test_pre_registration_list_is_scoped_to_current_gym(self):
         MemberPreRegistration.objects.create(
@@ -809,6 +812,7 @@ class MemberPortalTests(TestCase):
         data = response.json()
         self.assertIn("subscription_offers", data)
         self.assertEqual(data["subscription_offers"], ["Acces groupe coaching"])
+        self.assertEqual(data["card_image_url"], reverse("members:member_card_image", args=[self.member.id]))
 
     @override_settings(
         STORAGES={
@@ -839,13 +843,26 @@ class MemberPortalTests(TestCase):
         response = self.client.get(reverse("members:member_detail", args=[self.member.id]))
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["organization_logo_url"], reverse("members:organization_logo"))
+        data = response.json()
+        self.assertEqual(data["organization_logo_url"], reverse("members:organization_logo"))
+        self.assertEqual(data["card_image_url"], reverse("members:member_card_image", args=[self.member.id]))
 
         logo_response = self.client.get(reverse("members:organization_logo"))
 
         self.assertEqual(logo_response.status_code, 200)
         self.assertEqual(logo_response["Content-Type"], "image/png")
         self.assertTrue(b"".join(logo_response.streaming_content).startswith(b"\x89PNG"))
+
+        card_response = self.client.get(data["card_image_url"])
+        self.assertEqual(card_response.status_code, 200)
+        self.assertEqual(card_response["Content-Type"], "image/png")
+        self.assertEqual(card_response["Cache-Control"], "private, no-store")
+        self.assertTrue(card_response.content.startswith(b"\x89PNG"))
+
+        from members.card_images import render_member_card_png
+
+        member = Member.objects.select_related("gym__organization", "user").get(id=self.member.id)
+        self.assertEqual(card_response.content, render_member_card_png(member))
 
     def test_member_offer_only_plan_unlocks_coach_and_group_choices(self):
         offer_plan = SubscriptionPlan.objects.create(

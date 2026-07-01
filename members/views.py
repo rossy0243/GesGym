@@ -1859,6 +1859,7 @@ def member_detail(request, member_id):
         "status": member.computed_status,
         "qr_code": str(member.qr_code),
         "member_code": _member_code(member),
+        "card_image_url": reverse("members:member_card_image", args=[member.id]),
         "member_portal_url": request.build_absolute_uri(reverse("members:member_portal")),
         # abonnement
         "subscription_type": member.subscription_type,
@@ -1874,6 +1875,24 @@ def member_detail(request, member_id):
     }
 
     return JsonResponse(data)
+
+
+@login_required
+def member_card_image(request, member_id):
+    if not _member_management_allowed(request):
+        raise PermissionDenied
+
+    member = get_object_or_404(
+        Member.objects.select_related("gym", "gym__organization", "user"),
+        id=member_id,
+        gym=request.gym,
+    )
+
+    from members.card_images import render_member_card_png
+
+    response = HttpResponse(render_member_card_png(member), content_type="image/png")
+    response["Cache-Control"] = "private, no-store"
+    return response
 
 
 @login_required

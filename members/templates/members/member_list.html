@@ -1547,7 +1547,12 @@ body.members-screen .modal-dialog {
     async function renderMemberCardPreview(member) {
         const canvas = document.getElementById("memberCardPreview");
         if (!canvas || !member) return;
-        await drawMemberCard(canvas, member, 0.5);
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const cardImage = await loadCanvasImage(member.card_image_url);
+        if (cardImage) {
+            ctx.drawImage(cardImage, 0, 0, canvas.width, canvas.height);
+        }
     }
 
     async function downloadMemberCard() {
@@ -1556,16 +1561,11 @@ body.members-screen .modal-dialog {
             return;
         }
 
-        const canvas = document.createElement("canvas");
-        canvas.width = 1004;
-        canvas.height = 650;
-        await drawMemberCard(canvas, currentMemberData, 1);
-
         const fullName = `${currentMemberData.first_name || ""}_${currentMemberData.last_name || ""}`.replace(
             /\s+/g, "_");
         const link = document.createElement("a");
         link.download = `carte_membre_${fullName || currentMemberData.id}.png`;
-        link.href = canvas.toDataURL("image/png");
+        link.href = currentMemberData.card_image_url;
         link.click();
     }
 

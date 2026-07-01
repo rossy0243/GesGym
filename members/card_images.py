@@ -2,7 +2,7 @@ from io import BytesIO
 import math
 
 import qrcode
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 
 CARD_WIDTH = 1004
@@ -60,6 +60,14 @@ def _paste_contained(base, image, box):
     base.alpha_composite(image, (px, py))
 
 
+def _contained_image(image, width, height):
+    if not image:
+        return None
+    image = image.copy()
+    image.thumbnail((width, height), Image.Resampling.LANCZOS)
+    return image
+
+
 def _paste_cover(base, image, box):
     x, y, width, height = box
     if not image:
@@ -87,17 +95,21 @@ def _draw_photo_placeholder(draw, x, y, size):
         ),
         fill="#c9c9c5",
     )
-    draw.pieslice(
-        (
-            x + size * 0.18,
-            y + size * 0.48,
-            x + size * 0.82,
-            y + size * 1.08,
-        ),
-        180,
-        360,
-        fill="#c9c9c5",
-    )
+    p0 = (x + size * 0.20, y + size * 0.78)
+    p1 = (x + size * 0.28, y + size * 0.58)
+    p2 = (x + size * 0.72, y + size * 0.58)
+    p3 = (x + size * 0.80, y + size * 0.78)
+    curve = []
+    for step in range(25):
+        t = step / 24
+        mt = 1 - t
+        curve.append(
+            (
+                mt**3 * p0[0] + 3 * mt**2 * t * p1[0] + 3 * mt * t**2 * p2[0] + t**3 * p3[0],
+                mt**3 * p0[1] + 3 * mt**2 * t * p1[1] + 3 * mt * t**2 * p2[1] + t**3 * p3[1],
+            )
+        )
+    draw.polygon(curve + [p0], fill="#c9c9c5")
 
 
 def _draw_hex_texture(draw):
@@ -118,6 +130,104 @@ def _draw_hex_texture(draw):
             draw.line(points + [points[0]], fill=(255, 255, 255, alpha), width=2)
 
 
+def _draw_linear_background(image):
+    c0 = (20, 20, 20)
+    c1 = (27, 27, 29)
+    c2 = (11, 12, 14)
+    sample_width = 251
+    sample_height = 163
+    denominator = max(sample_width + sample_height - 2, 1)
+    pixels = []
+    for y in range(sample_height):
+        for x in range(sample_width):
+            t = (x + y) / denominator
+            if t <= 0.45:
+                local = t / 0.45
+                color = tuple(round(c0[i] + (c1[i] - c0[i]) * local) for i in range(3))
+            else:
+                local = (t - 0.45) / 0.55
+                color = tuple(round(c1[i] + (c2[i] - c1[i]) * local) for i in range(3))
+            pixels.append((*color, 255))
+    sample = Image.new("RGBA", (sample_width, sample_height))
+    sample.putdata(pixels)
+    image.alpha_composite(sample.resize((CARD_WIDTH, CARD_HEIGHT), Image.Resampling.BICUBIC))
+
+
+def _overlay_radial(image, center, inner_radius, outer_radius, stops):
+    scale = 4
+    sample_width = math.ceil(CARD_WIDTH / scale)
+    sample_height = math.ceil(CARD_HEIGHT / scale)
+    overlay_pixels = []
+    cx, cy = center
+    outer_radius = max(outer_radius, inner_radius + 1)
+    for y in range(sample_height):
+        source_y = y * scale
+        for x in range(sample_width):
+            source_x = x * scale
+            distance = math.hypot(source_x - cx, source_y - cy)
+            if distance > outer_radius:
+                overlay_pixels.append((0, 0, 0, 0))
+                continue
+            position = 0 if distance <= inner_radius else (distance - inner_radius) / (outer_radius - inner_radius)
+            rgba = stops[-1][1]
+            for index, (stop_pos, stop_rgba) in enumerate(stops):
+                if position <= stop_pos:
+                    if index == 0:
+                        rgba = stop_rgba
+                    else:
+                        prev_pos, prev_rgba = stops[index - 1]
+                        local = 0 if stop_pos == prev_pos else (position - prev_pos) / (stop_pos - prev_pos)
+                        rgba = tuple(prev_rgba[i] + (stop_rgba[i] - prev_rgba[i]) * local for i in range(4))
+                    break
+            alpha = max(0, min(255, round(rgba[3])))
+            if not alpha:
+                overlay_pixels.append((0, 0, 0, 0))
+                continue
+            source = tuple(max(0, min(255, round(value))) for value in rgba[:3])
+            overlay_pixels.append((*source, alpha))
+    overlay = Image.new("RGBA", (sample_width, sample_height))
+    overlay.putdata(overlay_pixels)
+    image.alpha_composite(overlay.resize((CARD_WIDTH, CARD_HEIGHT), Image.Resampling.BICUBIC))
+
+
+def _rounded_mask():
+    mask = Image.new("L", (CARD_WIDTH, CARD_HEIGHT), 0)
+    mask_draw = ImageDraw.Draw(mask)
+    mask_draw.rounded_rectangle((0, 0, CARD_WIDTH, CARD_HEIGHT), radius=26, fill=255)
+    return mask
+
+
+def _open_default_logo():
+    try:
+        from django.contrib.staticfiles import finders
+
+        path = finders.find("avatar/logo_smartclub.png")
+    except Exception:
+        path = None
+    if not path:
+        return None
+    try:
+        image = Image.open(path)
+        image.load()
+        return image.convert("RGBA")
+    except (OSError, SyntaxError, ValueError):
+        return None
+
+
+def _paste_logo_with_shadow(base, logo, box):
+    contained = _contained_image(logo, box[2], box[3])
+    if not contained:
+        return
+    x = box[0] + (box[2] - contained.width) // 2
+    y = box[1] + (box[3] - contained.height) // 2
+    alpha = contained.getchannel("A")
+    shadow = Image.new("RGBA", base.size, (0, 0, 0, 0))
+    shadow.paste((0, 0, 0, 140), (x, y + 6), alpha)
+    shadow = shadow.filter(ImageFilter.GaussianBlur(16))
+    base.alpha_composite(shadow)
+    base.alpha_composite(contained, (x, y))
+
+
 def _qr_image(value, size):
     qr = qrcode.QRCode(border=1, box_size=8)
     qr.add_data(value or "-")
@@ -130,33 +240,65 @@ def _qr_image(value, size):
 
 def render_member_card_png(member):
     organization = member.gym.organization if member.gym_id else None
-    logo = _open_image(getattr(organization, "logo", None))
+    logo = _open_image(getattr(organization, "logo", None)) or _open_default_logo()
     photo = _open_image(member.photo)
     full_name = f"{member.first_name or ''} {member.last_name or ''}".strip() or "Membre"
     member_number = f"MEM-{member.id:05d}" if member.id else "-"
     username = member.user.username if getattr(member, "user", None) else "Non defini"
     organization_name = (organization.name if organization else "Organisation").upper()
 
-    image = Image.new("RGBA", (CARD_WIDTH, CARD_HEIGHT), "#111111")
-    draw = ImageDraw.Draw(image, "RGBA")
-    for y in range(CARD_HEIGHT):
-        shade = int(20 - (y / CARD_HEIGHT) * 9)
-        draw.line((0, y, CARD_WIDTH, y), fill=(shade, shade, shade + 2, 255))
+    card = Image.new("RGBA", (CARD_WIDTH, CARD_HEIGHT), (0, 0, 0, 0))
+    background = Image.new("RGBA", (CARD_WIDTH, CARD_HEIGHT), (0, 0, 0, 255))
+    _draw_linear_background(background)
+    draw = ImageDraw.Draw(background, "RGBA")
     _draw_hex_texture(draw)
-    draw.ellipse((80, 20, 780, 520), fill=(255, 255, 255, 20))
-    draw.ellipse((730, 430, 1070, 760), fill=(255, 255, 255, 28))
+    _overlay_radial(
+        background,
+        (330, 205),
+        20,
+        340,
+        [
+            (0, (255, 255, 255, 46)),
+            (0.45, (255, 255, 255, 18)),
+            (1, (255, 255, 255, 0)),
+        ],
+    )
+    _overlay_radial(
+        background,
+        (900, 555),
+        20,
+        250,
+        [
+            (0, (255, 255, 255, 36)),
+            (1, (255, 255, 255, 0)),
+        ],
+    )
+    _overlay_radial(
+        background,
+        (CARD_WIDTH / 2, CARD_HEIGHT / 2),
+        60,
+        CARD_WIDTH * 0.62,
+        [
+            (0, (0, 0, 0, 0)),
+            (1, (0, 0, 0, 138)),
+        ],
+    )
+
+    card.alpha_composite(background, (0, 0))
+    mask = _rounded_mask()
+    image = Image.new("RGBA", (CARD_WIDTH, CARD_HEIGHT), (0, 0, 0, 0))
+    image.paste(card, (0, 0), mask)
+    draw = ImageDraw.Draw(image, "RGBA")
     draw.rounded_rectangle((1, 1, CARD_WIDTH - 2, CARD_HEIGHT - 2), radius=26, outline=(255, 255, 255, 26), width=2)
 
     logo_box = ((CARD_WIDTH - 390) // 2, 24, 390, 112)
     if logo:
-        _paste_contained(image, logo, logo_box)
+        _paste_logo_with_shadow(image, logo, logo_box)
     else:
         logo_font = _fit_font(draw, organization_name, 350, 38, 18, bold=True)
-        text_bbox = draw.textbbox((0, 0), organization_name, font=logo_font)
-        draw.text(((CARD_WIDTH - (text_bbox[2] - text_bbox[0])) // 2, 48), organization_name, fill="#ffffff", font=logo_font)
+        draw.text((CARD_WIDTH / 2, 60), organization_name, fill="#111827", font=logo_font, anchor="mm")
         gym_font = _font(16, bold=True)
-        gym_bbox = draw.textbbox((0, 0), "GYM", font=gym_font)
-        draw.text(((CARD_WIDTH - (gym_bbox[2] - gym_bbox[0])) // 2, 92), "GYM", fill="#ef4444", font=gym_font)
+        draw.text((CARD_WIDTH / 2, 92), "GYM", fill="#ef4444", font=gym_font, anchor="mm")
 
     photo_box = (60, 205, 200, 200)
     if photo:
@@ -167,10 +309,10 @@ def render_member_card_png(member):
 
     info_x = 300
     name_font = _fit_font(draw, full_name, 335, 33, 21, bold=True)
-    draw.text((info_x, 226), full_name, fill="#ffffff", font=name_font)
-    draw.text((info_x, 282), f"@{username}", fill="#f4f4f5", font=_font(20))
-    draw.text((info_x, 329), "N\u00b0 membre:", fill="#ffffff", font=_font(22))
-    draw.text((info_x + 150, 329), member_number, fill="#ffffff", font=_font(22, bold=True))
+    draw.text((info_x, 258), full_name, fill="#ffffff", font=name_font, anchor="ls")
+    draw.text((info_x, 305), f"@{username}", fill="#f4f4f5", font=_font(20, bold=True), anchor="ls")
+    draw.text((info_x, 354), "N\u00b0 membre:", fill="#ffffff", font=_font(22), anchor="ls")
+    draw.text((info_x + 150, 354), member_number, fill="#ffffff", font=_font(22, bold=True), anchor="ls")
 
     qr_size = 200
     qr_x = 690
@@ -183,14 +325,19 @@ def render_member_card_png(member):
     image.alpha_composite(_qr_image(member.get_qr_data(), qr_size), (qr_x, qr_y))
 
     draw.rectangle((60, 548, 620, 549), fill=(255, 255, 255, 40))
-    draw.text((60, 568), "Carte personnelle - acces reserve au membre identifie.", fill=(255, 255, 255, 140), font=_font(12))
+    draw.text(
+        (60, 582),
+        "Carte personnelle - acces reserve au membre identifie.",
+        fill=(255, 255, 255, 140),
+        font=_font(12, bold=True),
+        anchor="ls",
+    )
     gym_name = member.gym.name if member.gym_id else ""
-    gym_font = _font(12)
-    gym_bbox = draw.textbbox((0, 0), gym_name, font=gym_font)
-    draw.text((944 - (gym_bbox[2] - gym_bbox[0]), 582), gym_name, fill=(255, 255, 255, 122), font=gym_font)
+    gym_font = _font(12, bold=True)
+    draw.text((944, 596), gym_name, fill=(255, 255, 255, 122), font=gym_font, anchor="rs")
 
     output = BytesIO()
-    image.convert("RGB").save(output, format="PNG", optimize=True)
+    image.save(output, format="PNG", optimize=True)
     return output.getvalue()
 
 
