@@ -12,6 +12,16 @@ body.members-screen .modal-backdrop.show {
     backdrop-filter: none !important;
 }
 
+body.members-screen .modal-backdrop.fade,
+body.members-screen .modal.fade,
+body.members-screen .modal.fade .modal-dialog {
+    transition: none !important;
+}
+
+body.members-screen .modal-backdrop.show {
+    opacity: var(--bs-backdrop-opacity) !important;
+}
+
 body.members-screen .modal {
     z-index: 1060;
 }
@@ -19,6 +29,11 @@ body.members-screen .modal {
 body.members-screen .modal-dialog {
     position: relative;
     z-index: 1061;
+}
+
+body.members-screen .modal.fade .modal-dialog,
+body.members-screen .modal.show .modal-dialog {
+    transform: none !important;
 }
 </style>
 <!-- [ page-header ] start -->
