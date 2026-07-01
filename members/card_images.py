@@ -300,41 +300,55 @@ def render_member_card_png(member):
         gym_font = _font(16, bold=True)
         draw.text((CARD_WIDTH / 2, 92), "GYM", fill="#ef4444", font=gym_font, anchor="mm")
 
-    photo_box = (60, 205, 200, 200)
+    photo_box = (60, 192, 230, 230)
     if photo:
         _paste_cover(image, photo, photo_box)
     else:
         _draw_photo_placeholder(draw, *photo_box[:2], photo_box[2])
-    draw.rectangle((60, 205, 260, 405), outline=(255, 255, 255, 42), width=2)
+    draw.rectangle((60, 192, 290, 422), outline=(255, 255, 255, 58), width=3)
 
-    info_x = 300
-    name_font = _fit_font(draw, full_name, 335, 33, 21, bold=True)
-    draw.text((info_x, 258), full_name, fill="#ffffff", font=name_font, anchor="ls")
-    draw.text((info_x, 305), f"@{username}", fill="#f4f4f5", font=_font(20, bold=True), anchor="ls")
-    draw.text((info_x, 354), "N\u00b0 membre:", fill="#ffffff", font=_font(22), anchor="ls")
-    draw.text((info_x + 150, 354), member_number, fill="#ffffff", font=_font(22, bold=True), anchor="ls")
+    info_x = 326
+    info_panel = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    info_draw = ImageDraw.Draw(info_panel, "RGBA")
+    info_draw.rounded_rectangle((306, 178, 656, 458), radius=24, fill=(0, 0, 0, 92))
+    info_draw.rounded_rectangle((306, 178, 656, 458), radius=24, outline=(255, 255, 255, 30), width=1)
+    image.alpha_composite(info_panel)
+    draw = ImageDraw.Draw(image, "RGBA")
 
-    qr_size = 200
-    qr_x = 690
-    qr_y = 245
-    qr_padding = 24
+    def draw_readable_text(position, text, font, fill, anchor="ls"):
+        x, y = position
+        shadow_fill = (0, 0, 0, 180)
+        draw.text((x + 2, y + 2), text, fill=shadow_fill, font=font, anchor=anchor)
+        draw.text((x, y), text, fill=fill, font=font, anchor=anchor)
+
+    name_font = _fit_font(draw, full_name, 300, 48, 30, bold=True)
+    draw_readable_text((info_x, 254), full_name, name_font, "#ffffff")
+    username_font = _fit_font(draw, f"@{username}", 300, 32, 24, bold=True)
+    draw_readable_text((info_x, 316), f"@{username}", username_font, "#f8fafc")
+    draw_readable_text((info_x, 376), "N\u00b0 membre", _font(28, bold=True), "#ffffff")
+    member_number_font = _fit_font(draw, member_number, 300, 34, 26, bold=True)
+    draw_readable_text((info_x, 425), member_number, member_number_font, "#ffffff")
+
+    qr_size = 220
+    qr_x = 704
+    qr_y = 223
+    qr_padding = 20
     draw.rectangle(
         (qr_x - qr_padding, qr_y - qr_padding, qr_x + qr_size + qr_padding, qr_y + qr_size + qr_padding),
         fill="#ffffff",
     )
     image.alpha_composite(_qr_image(member.get_qr_data(), qr_size), (qr_x, qr_y))
 
-    draw.rectangle((60, 548, 620, 549), fill=(255, 255, 255, 40))
-    draw.text(
+    draw.rectangle((60, 548, 660, 550), fill=(255, 255, 255, 54))
+    draw_readable_text(
         (60, 582),
         "Carte personnelle - acces reserve au membre identifie.",
-        fill=(255, 255, 255, 140),
-        font=_font(12, bold=True),
-        anchor="ls",
+        _font(18, bold=True),
+        (255, 255, 255, 190),
     )
     gym_name = member.gym.name if member.gym_id else ""
-    gym_font = _font(12, bold=True)
-    draw.text((944, 596), gym_name, fill=(255, 255, 255, 122), font=gym_font, anchor="rs")
+    gym_font = _font(18, bold=True)
+    draw_readable_text((944, 596), gym_name, gym_font, (255, 255, 255, 170), anchor="rs")
 
     output = BytesIO()
     image.save(output, format="PNG", optimize=True)

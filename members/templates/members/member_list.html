@@ -897,8 +897,9 @@ body.members-screen .modal-dialog {
                                     carte
                                 </button>
                             </div>
-                            <canvas id="memberCardPreview" width="502" height="325" class="w-100 rounded-4 border border-dark"
-                                style="max-width:502px; box-shadow:0 18px 45px rgba(0,0,0,0.28); background:#111827;"></canvas>
+                            <img id="memberCardPreview" src="" alt="Carte membre"
+                                class="w-100 rounded-4 border border-dark"
+                                style="max-width:760px; height:auto; box-shadow:0 18px 45px rgba(0,0,0,0.28); background:#111827;">
                             <small class="text-muted d-block mt-2">Format carte 85 x 55 mm, avec logo organisation,
                                 infos membre et QR code.</small>
                         </div>
@@ -1119,6 +1120,33 @@ body.members-screen .modal-dialog {
             .replace(/'/g, "&#039;");
     }
 
+    function setMemberDetailStatus(status) {
+        const badge = document.getElementById("viewMemberStatus");
+        if (!badge) return;
+
+        const statusConfig = {
+            active: {
+                label: "Actif",
+                className: "badge-actif"
+            },
+            suspended: {
+                label: "Suspendu",
+                className: "badge-suspendu"
+            },
+            expired: {
+                label: "Expir\u00e9",
+                className: "badge-expire"
+            }
+        };
+        const config = statusConfig[status] || {
+            label: "Inconnu",
+            className: "badge-expire"
+        };
+
+        badge.className = `${config.className} mb-3`;
+        badge.textContent = config.label;
+    }
+
     function openMemberModal(memberId) {
         fetch(`/members/${memberId}/`)
             .then(response => {
@@ -1151,7 +1179,7 @@ body.members-screen .modal-dialog {
                     `${data.first_name || ''} ${data.last_name || ''}`.trim() || "-";
                 document.getElementById("viewMemberPhone").innerText = data.phone || "-";
                 document.getElementById("viewMemberEmail").innerText = data.email || "-";
-                document.getElementById("viewMemberStatus").innerText = data.status || "Inconnu";
+                setMemberDetailStatus(data.status);
 
                 // === GÉNÉRATION QR CODE ===
                 const qrCanvas = document.getElementById("memberQRCode");
@@ -1545,14 +1573,9 @@ body.members-screen .modal-dialog {
     }
 
     async function renderMemberCardPreview(member) {
-        const canvas = document.getElementById("memberCardPreview");
-        if (!canvas || !member) return;
-        const ctx = canvas.getContext("2d");
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        const cardImage = await loadCanvasImage(member.card_image_url);
-        if (cardImage) {
-            ctx.drawImage(cardImage, 0, 0, canvas.width, canvas.height);
-        }
+        const preview = document.getElementById("memberCardPreview");
+        if (!preview || !member) return;
+        preview.src = member.card_image_url || "";
     }
 
     async function downloadMemberCard() {

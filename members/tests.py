@@ -350,6 +350,12 @@ class MemberPreRegistrationTests(TestCase):
         owner_response = self.client.get(reverse("members:member_list"))
         self.assertContains(owner_response, 'id="statusToggleBtn"', html=False)
         self.assertContains(owner_response, f'id="delete-form-{sample_member.id}"', html=False)
+        self.assertContains(owner_response, '<img id="memberCardPreview"', html=False)
+        self.assertNotContains(owner_response, '<canvas id="memberCardPreview"', html=False)
+        self.assertContains(owner_response, "function setMemberDetailStatus", html=False)
+        self.assertContains(owner_response, "badge-actif", html=False)
+        self.assertContains(owner_response, "badge-suspendu", html=False)
+        self.assertContains(owner_response, "badge-expire", html=False)
 
     def test_member_photo_upload_rejects_non_image_file(self):
         uploaded = SimpleUploadedFile(
@@ -469,6 +475,10 @@ class MemberPreRegistrationTests(TestCase):
         from members.card_images import render_member_card_png
 
         self.assertEqual(attachment_content, render_member_card_png(member))
+
+        card_response = self.client.get(reverse("members:member_card_image", args=[member.id]))
+        self.assertEqual(card_response.status_code, 200)
+        self.assertEqual(card_response.content, attachment_content)
 
     def test_pre_registration_list_is_scoped_to_current_gym(self):
         MemberPreRegistration.objects.create(
