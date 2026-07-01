@@ -433,7 +433,7 @@ body.members-screen .modal-dialog {
                                         {% csrf_token %}
                                     </form>
                                     {% endif %}
-                                    {% if request.role == "owner" %}
+                                    {% if can_member_delete %}
                                     <div class="dropdown-divider"></div>
                                     <a href="#"
                                         onclick="if(confirm('Supprimer ce membre ?')) { document.getElementById('delete-form-{{ member.id }}').submit(); }"

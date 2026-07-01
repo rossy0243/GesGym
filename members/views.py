@@ -25,8 +25,10 @@ from access.models import AccessLog
 from coaching.forms import CoachingFeedbackForm
 from coaching.models import Coach, CoachingFeedback, GroupCoachingProgram
 from compte.utils import generate_temporary_password
+from core.audit import log_sensitive_action
 from core.creation_emails import notify_creation_email_failure, send_member_creation_email
 from smartclub.access_control import (
+    MEMBER_DELETE_ROLES,
     MEMBER_ROLES,
     MEMBER_STATUS_ROLES,
     MEMBER_WRITE_ROLES,
@@ -1911,18 +1913,36 @@ def reset_member_password(request, member_id):
 @require_POST
 def delete_member(request, member_id):
 
-    if not has_role(request, {"owner"}):
+    if not has_role(request, MEMBER_DELETE_ROLES):
         raise PermissionDenied
 
     member = get_object_or_404(
-        Member,
+        Member.objects.select_related("gym", "gym__organization", "user"),
         id=member_id,
         gym=request.gym
     )
 
-    if request.method == "POST":
-        member.delete()
-        messages.success(request, "Membre supprimé avec succès.")
+    member_label = f"{member.first_name} {member.last_name}".strip() or member.phone or f"Membre #{member.id}"
+    metadata = {
+        "member_id": member.id,
+        "member_code": _member_code(member),
+        "phone": member.phone,
+        "email": member.email,
+        "user_id": member.user_id,
+        "gym_id": member.gym_id,
+    }
+    gym = member.gym
+
+    member.delete()
+    log_sensitive_action(
+        request,
+        "member.deleted",
+        "Member",
+        member_label,
+        metadata=metadata,
+        gym=gym,
+    )
+    messages.success(request, "Membre supprime avec succes.")
 
     return redirect("members:member_list")
 

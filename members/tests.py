@@ -23,7 +23,7 @@ from members.models import (
     MemberWeightMeasurement,
 )
 from notifications.models import Notification
-from organizations.models import Gym, Organization
+from organizations.models import Gym, Organization, SensitiveActivityLog
 from subscriptions.models import MemberSubscription, SubscriptionOffer, SubscriptionPlan, SubscriptionRequest
 
 
@@ -220,6 +220,36 @@ class MemberPreRegistrationTests(TestCase):
         self.assertEqual(delete_response.status_code, 405)
         self.assertTrue(Member.objects.filter(id=member.id).exists())
 
+    def test_only_owner_can_delete_member_and_action_is_logged(self):
+        member = Member.objects.create(
+            gym=self.gym,
+            first_name="Delete",
+            last_name="Target",
+            phone="+243810000112",
+            email="delete.target@example.com",
+        )
+
+        self.client.force_login(self.manager)
+        denied_response = self.client.post(reverse("members:delete_member", args=[member.id]))
+        self.assertEqual(denied_response.status_code, 403)
+        self.assertTrue(Member.objects.filter(id=member.id).exists())
+        self.assertFalse(SensitiveActivityLog.objects.filter(action="member.deleted").exists())
+
+        self.client.force_login(self.owner)
+        delete_response = self.client.post(reverse("members:delete_member", args=[member.id]))
+        self.assertRedirects(delete_response, reverse("members:member_list"), fetch_redirect_response=False)
+        self.assertFalse(Member.objects.filter(id=member.id).exists())
+
+        log = SensitiveActivityLog.objects.get(action="member.deleted")
+        self.assertEqual(log.organization, self.org)
+        self.assertEqual(log.gym, self.gym)
+        self.assertEqual(log.actor, self.owner)
+        self.assertEqual(log.target_type, "Member")
+        self.assertEqual(log.target_label, "Delete Target")
+        self.assertEqual(log.metadata["member_id"], member.id)
+        self.assertEqual(log.metadata["phone"], "+243810000112")
+        self.assertEqual(log.metadata["email"], "delete.target@example.com")
+
     def test_cashier_cannot_reset_member_password(self):
         member = Member.objects.create(
             gym=self.gym,
@@ -309,14 +339,17 @@ class MemberPreRegistrationTests(TestCase):
         self.assertContains(reception_response, "Nouveau Membre")
         self.assertContains(reception_response, "openEditMemberModal(")
         self.assertNotContains(reception_response, 'id="statusToggleBtn"', html=False)
+        self.assertNotContains(reception_response, f'id="delete-form-{sample_member.id}"', html=False)
 
         self.client.force_login(self.manager)
         manager_response = self.client.get(reverse("members:member_list"))
         self.assertContains(manager_response, 'id="statusToggleBtn"', html=False)
+        self.assertNotContains(manager_response, f'id="delete-form-{sample_member.id}"', html=False)
 
         self.client.force_login(self.owner)
         owner_response = self.client.get(reverse("members:member_list"))
         self.assertContains(owner_response, 'id="statusToggleBtn"', html=False)
+        self.assertContains(owner_response, f'id="delete-form-{sample_member.id}"', html=False)
 
     def test_member_photo_upload_rejects_non_image_file(self):
         uploaded = SimpleUploadedFile(

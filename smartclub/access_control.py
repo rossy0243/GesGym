@@ -9,6 +9,7 @@ DASHBOARD_ROLES = frozenset({"owner", "manager"})
 MEMBER_ROLES = frozenset({"owner", "manager", "reception"})
 MEMBER_WRITE_ROLES = frozenset({"owner", "manager", "reception"})
 MEMBER_STATUS_ROLES = frozenset({"owner", "manager"})
+MEMBER_DELETE_ROLES = frozenset({"owner"})
 MEMBER_ADMIN_ROLES = MEMBER_STATUS_ROLES
 SUBSCRIPTION_ROLES = frozenset({"owner", "manager"})
 POS_CASHIER_ROLES = frozenset({"owner", "manager", "reception", "cashier"})
@@ -53,6 +54,7 @@ def permission_flags(request):
         "can_members": has_role(request, MEMBER_ROLES),
         "can_member_write": has_role(request, MEMBER_WRITE_ROLES),
         "can_member_status_admin": has_role(request, MEMBER_STATUS_ROLES),
+        "can_member_delete": has_role(request, MEMBER_DELETE_ROLES),
         "can_subscriptions": has_role(request, SUBSCRIPTION_ROLES),
         "can_pos_cashier": has_role(request, POS_CASHIER_ROLES),
         "can_pos_history": has_role(request, POS_HISTORY_ROLES),
