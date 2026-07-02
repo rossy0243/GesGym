@@ -896,6 +896,10 @@ body.members-screen .modal.show .modal-dialog {
                             <div class="qr-code-container mx-auto mb-3 text-center">
                                 <canvas id="memberQRCode" width="160" height="160"></canvas>
                             </div>
+                            <small class="text-muted d-block mb-2" id="memberQrExpiry">Expiration : -</small>
+                            <button class="btn btn-sm btn-outline-primary mb-2 d-none" id="regenerateQrBtn" type="button" onclick="regenerateMemberQr()">
+                                <span class="material-icons" style="font-size:18px;">sync</span> Regenerer le QR
+                            </button>
                             <button class="btn btn-sm btn-primary" onclick="downloadQRCode()">
                                 <span class="material-icons" style="font-size:18px;">download</span> Télécharger QR Code
                             </button>
@@ -1088,6 +1092,35 @@ body.members-screen .modal.show .modal-dialog {
         input.setSelectionRange(0, 99999);
         navigator.clipboard.writeText(input.value).catch(() => document.execCommand("copy"));
     }
+
+    function regenerateMemberQr() {
+        if (!currentMemberId || !currentMemberData) return;
+        if (!confirm("Regenerer le QR code de ce membre ? L'ancien QR cessera de fonctionner.")) return;
+
+        fetch(`/members/${currentMemberId}/regenerate-qr/`, {
+            method: "POST",
+            headers: {
+                "X-CSRFToken": document.querySelector("[name=csrfmiddlewaretoken]").value,
+                "X-Requested-With": "XMLHttpRequest"
+            }
+        })
+            .then(response => {
+                if (!response.ok) throw new Error("Regeneration impossible");
+                return response.json();
+            })
+            .then(data => {
+                currentMemberData.qr_code = data.qr_code;
+                currentMemberData.qr_code_expires_at = data.qr_code_expires_at;
+                currentMemberData.card_image_url = data.card_image_url;
+                updateMemberQrControls(currentMemberData);
+                drawMemberQr(data.qr_code);
+                renderMemberCardPreview(currentMemberData);
+            })
+            .catch(error => {
+                console.error(error);
+                alert("Impossible de regenerer le QR code.");
+            });
+    }
 </script>
 
 <script>
@@ -1162,6 +1195,32 @@ body.members-screen .modal.show .modal-dialog {
         badge.textContent = config.label;
     }
 
+    function updateMemberQrControls(member) {
+        const expiry = document.getElementById("memberQrExpiry");
+        const regenerateBtn = document.getElementById("regenerateQrBtn");
+        if (expiry) {
+            expiry.textContent = `Expiration : ${member.qr_code_expires_at || "-"}`;
+        }
+        if (regenerateBtn) {
+            regenerateBtn.classList.toggle("d-none", !member.can_regenerate_qr);
+        }
+    }
+
+    function drawMemberQr(value) {
+        const qrCanvas = document.getElementById("memberQRCode");
+        if (!qrCanvas || qrCanvas.tagName !== "CANVAS") return;
+        qrCanvas.getContext("2d").clearRect(0, 0, qrCanvas.width, qrCanvas.height);
+        if (!value) return;
+        QRCode.toCanvas(qrCanvas, value, {
+            width: 160,
+            margin: 2,
+            color: {
+                dark: "#000000",
+                light: "#FFFFFF"
+            }
+        });
+    }
+
     function openMemberModal(memberId) {
         fetch(`/members/${memberId}/`)
             .then(response => {
@@ -1195,6 +1254,7 @@ body.members-screen .modal.show .modal-dialog {
                 document.getElementById("viewMemberPhone").innerText = data.phone || "-";
                 document.getElementById("viewMemberEmail").innerText = data.email || "-";
                 setMemberDetailStatus(data.status);
+                updateMemberQrControls(data);
 
                 // === GÉNÉRATION QR CODE ===
                 const qrCanvas = document.getElementById("memberQRCode");

@@ -11,6 +11,10 @@ def default_pre_registration_expiry():
     return timezone.now() + timedelta(days=7)
 
 
+def default_member_qr_expiry():
+    return timezone.now() + timedelta(days=7)
+
+
 class Member(models.Model):
     """
     Représente un membre d’un gym.
@@ -48,6 +52,10 @@ class Member(models.Model):
         default=uuid.uuid4,
         editable=False,
         unique=True,
+        db_index=True
+    )
+    qr_code_expires_at = models.DateTimeField(
+        default=default_member_qr_expiry,
         db_index=True
     )
 
@@ -172,6 +180,22 @@ class Member(models.Model):
     def get_qr_data(self):
         """Données qui seront encodées dans le QR Code"""
         return str(self.qr_code)
+
+    @property
+    def qr_code_is_expired(self):
+        return self.qr_code_expires_at <= timezone.now()
+
+    def rotate_qr_code(self, save=True):
+        self.qr_code = uuid.uuid4()
+        self.qr_code_expires_at = default_member_qr_expiry()
+        if save:
+            self.save(update_fields=["qr_code", "qr_code_expires_at"])
+        return self.qr_code
+
+    def ensure_valid_qr_code(self, save=True):
+        if self.qr_code_is_expired:
+            self.rotate_qr_code(save=save)
+        return self.qr_code
 
     @property
     def active_goal(self):

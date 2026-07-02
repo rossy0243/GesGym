@@ -11,7 +11,7 @@ from members.models import Member
 from organizations.models import Gym, GymModule, Module, Organization
 from subscriptions.models import MemberSubscription, SubscriptionPlan
 from .models import AccessLog
-from .views import DOUBLE_SCAN_REASON
+from .views import DOUBLE_SCAN_REASON, EXPIRED_QR_REASON
 
 
 class AccessControlTests(TestCase):
@@ -157,6 +157,31 @@ class AccessControlTests(TestCase):
         self.assertEqual(payload["log"]["method"], "QR Scanner")
         self.assertEqual(payload["stats"]["entries"], 1)
         self.assertEqual(payload["stats"]["denied"], 1)
+
+    def test_qr_access_denies_expired_qr_code(self):
+        self.member_a.qr_code_expires_at = timezone.now() - timedelta(minutes=1)
+        self.member_a.save(update_fields=["qr_code_expires_at"])
+
+        response = self.client.post(
+            reverse("access:member_access", args=[self.member_a.qr_code])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertFalse(payload["access"])
+        self.assertEqual(payload["reason"], EXPIRED_QR_REASON)
+        self.assertEqual(payload["log"]["status"], "denied")
+
+    def test_manual_access_still_allows_member_when_qr_is_expired(self):
+        self.member_a.qr_code_expires_at = timezone.now() - timedelta(minutes=1)
+        self.member_a.save(update_fields=["qr_code_expires_at"])
+
+        response = self.client.post(
+            reverse("access:manual_access_entry", args=[self.member_a.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["access"])
 
     def test_qr_access_allows_multiple_different_members_in_sequence(self):
         first_response = self.client.post(

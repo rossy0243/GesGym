@@ -250,6 +250,39 @@ class MemberPreRegistrationTests(TestCase):
         self.assertEqual(log.metadata["phone"], "+243810000112")
         self.assertEqual(log.metadata["email"], "delete.target@example.com")
 
+    def test_only_owner_can_regenerate_member_qr_and_action_is_logged(self):
+        member = Member.objects.create(
+            gym=self.gym,
+            first_name="Qr",
+            last_name="Target",
+            phone="+243810000113",
+            email="qr.target@example.com",
+        )
+        old_qr_code = str(member.qr_code)
+
+        self.client.force_login(self.manager)
+        denied_response = self.client.post(reverse("members:regenerate_member_qr", args=[member.id]))
+        self.assertEqual(denied_response.status_code, 403)
+        member.refresh_from_db()
+        self.assertEqual(str(member.qr_code), old_qr_code)
+
+        self.client.force_login(self.owner)
+        response = self.client.post(reverse("members:regenerate_member_qr", args=[member.id]))
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        member.refresh_from_db()
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["qr_code"], str(member.qr_code))
+        self.assertNotEqual(str(member.qr_code), old_qr_code)
+        self.assertGreater(member.qr_code_expires_at, timezone.now())
+
+        log = SensitiveActivityLog.objects.get(action="member.qr_regenerated")
+        self.assertEqual(log.actor, self.owner)
+        self.assertEqual(log.gym, self.gym)
+        self.assertEqual(log.metadata["previous_qr_code"], old_qr_code)
+        self.assertEqual(log.metadata["new_qr_code"], str(member.qr_code))
+
     def test_cashier_cannot_reset_member_password(self):
         member = Member.objects.create(
             gym=self.gym,
@@ -1200,6 +1233,54 @@ class MemberPortalTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "image/png")
         self.assertTrue(response.content.startswith(b"\x89PNG"))
+
+    def test_member_portal_qr_regenerates_expired_qr_code(self):
+        old_qr_code = str(self.member.qr_code)
+        self.member.qr_code_expires_at = timezone.now() - timedelta(minutes=1)
+        self.member.save(update_fields=["qr_code_expires_at"])
+        self.client.force_login(self.member.user)
+
+        response = self.client.get(reverse("members:member_portal_qr"))
+
+        self.assertEqual(response.status_code, 200)
+        self.member.refresh_from_db()
+        self.assertNotEqual(str(self.member.qr_code), old_qr_code)
+        self.assertGreater(self.member.qr_code_expires_at, timezone.now())
+
+    def test_member_api_payload_regenerates_expired_qr_code(self):
+        old_qr_code = str(self.member.qr_code)
+        self.member.qr_code_expires_at = timezone.now() - timedelta(minutes=1)
+        self.member.save(update_fields=["qr_code_expires_at"])
+
+        response = self.client.post(
+            reverse("members:member_api_login"),
+            data=json.dumps(
+                {
+                    "username": self.member.user.username,
+                    "password": "MemberPortal123!",
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.member.refresh_from_db()
+        payload = response.json()
+        self.assertNotEqual(str(self.member.qr_code), old_qr_code)
+        self.assertEqual(payload["data"]["member"]["qr_data"], str(self.member.qr_code))
+
+    def test_rotate_member_qrcodes_command_rotates_expired_members(self):
+        old_qr_code = str(self.member.qr_code)
+        self.member.qr_code_expires_at = timezone.now() - timedelta(minutes=1)
+        self.member.save(update_fields=["qr_code_expires_at"])
+
+        output = StringIO()
+        call_command("rotate_member_qrcodes", stdout=output)
+
+        self.member.refresh_from_db()
+        self.assertNotEqual(str(self.member.qr_code), old_qr_code)
+        self.assertGreater(self.member.qr_code_expires_at, timezone.now())
+        self.assertIn("1 QR code", output.getvalue())
 
     def test_pwa_manifest_and_service_worker_are_available(self):
         manifest_response = self.client.get(reverse("members:member_app_manifest"))

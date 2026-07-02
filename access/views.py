@@ -13,18 +13,22 @@ from .models import AccessLog
 
 
 DOUBLE_SCAN_REASON = "Ce membre est d\u00e9j\u00e0 dans la salle."
+EXPIRED_QR_REASON = "QR code expire. Ouvrez l'espace membre pour obtenir le nouveau QR code."
 
 
 def _today():
     return localtime(now()).date()
 
 
-def _member_has_valid_access(member):
+def _member_has_valid_access(member, require_valid_qr=False):
     if not member.is_active:
         return False, "Membre inactif"
 
     if member.status == "suspended":
         return False, "Membre suspendu"
+
+    if require_valid_qr and member.qr_code_is_expired:
+        return False, EXPIRED_QR_REASON
 
     has_valid_subscription = member.subscriptions.filter(
         gym=member.gym,
@@ -61,10 +65,13 @@ def _today_stats(gym):
     }
 
 
-def _record_access(gym, member, user, method):
+def _record_access(gym, member, user, method, require_valid_qr=False):
     with transaction.atomic():
         member = Member.objects.select_for_update().get(id=member.id, gym=gym)
-        access_granted, reason = _member_has_valid_access(member)
+        access_granted, reason = _member_has_valid_access(
+            member,
+            require_valid_qr=require_valid_qr,
+        )
 
         if access_granted and _member_already_checked_in_today(gym, member):
             access_granted = False
@@ -224,6 +231,7 @@ def member_access(request, qr_code):
         member=member,
         user=request.user,
         method="QR Scanner",
+        require_valid_qr=True,
     )
 
     return JsonResponse({

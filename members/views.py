@@ -57,6 +57,10 @@ def _member_write_allowed(request):
     return has_role(request, MEMBER_WRITE_ROLES) and request.gym
 
 
+def _member_qr_admin_allowed(request):
+    return has_role(request, frozenset({"owner"})) and request.gym
+
+
 def _get_pre_registration_public_url(request, link):
     return request.build_absolute_uri(
         reverse("members:public_pre_registration", args=[link.token])
@@ -372,6 +376,7 @@ def _goal_payload(goal, goal_access):
 
 
 def _member_mobile_payload(request, member):
+    member.ensure_valid_qr_code()
     subscription = member.active_subscription
     payments = list(
         Payment.objects.filter(member=member, gym=member.gym)
@@ -1054,6 +1059,7 @@ def member_portal_qr(request):
     if not current_member:
         raise PermissionDenied
 
+    current_member.ensure_valid_qr_code()
     qr = qrcode.make(current_member.get_qr_data())
     buffer = BytesIO()
     qr.save(buffer)
@@ -1746,9 +1752,10 @@ def member_qr(request, uuid):
     if not _member_management_allowed(request):
         raise PermissionDenied
 
-    get_object_or_404(Member, qr_code=uuid, gym=request.gym)
+    member = get_object_or_404(Member, qr_code=uuid, gym=request.gym)
+    member.ensure_valid_qr_code()
     
-    qr = qrcode.make(uuid)
+    qr = qrcode.make(member.get_qr_data())
 
     buffer = BytesIO()
     qr.save(buffer)
@@ -1812,6 +1819,7 @@ def member_detail(request, member_id):
         id=member_id,
         gym=request.gym
     )
+    member.ensure_valid_qr_code()
     subscription = member.active_subscription
     organization = request.gym.organization if request.gym else None
     
@@ -1858,6 +1866,8 @@ def member_detail(request, member_id):
         "email": member.email,
         "status": member.computed_status,
         "qr_code": str(member.qr_code),
+        "qr_code_expires_at": timezone.localtime(member.qr_code_expires_at).strftime("%d/%m/%Y %H:%M"),
+        "can_regenerate_qr": _member_qr_admin_allowed(request),
         "member_code": _member_code(member),
         "card_image_url": reverse("members:member_card_image", args=[member.id]),
         "member_portal_url": request.build_absolute_uri(reverse("members:member_portal")),
@@ -1887,12 +1897,54 @@ def member_card_image(request, member_id):
         id=member_id,
         gym=request.gym,
     )
+    member.ensure_valid_qr_code()
 
     from members.card_images import render_member_card_png
 
     response = HttpResponse(render_member_card_png(member), content_type="image/png")
     response["Cache-Control"] = "private, no-store"
     return response
+
+
+@login_required
+@require_POST
+def regenerate_member_qr(request, member_id):
+    if not _member_qr_admin_allowed(request):
+        raise PermissionDenied
+
+    member = get_object_or_404(
+        Member.objects.select_related("gym", "gym__organization", "user"),
+        id=member_id,
+        gym=request.gym,
+    )
+    previous_qr_code = str(member.qr_code)
+    member.rotate_qr_code()
+    member_label = f"{member.first_name} {member.last_name}".strip() or member.phone or f"Membre #{member.id}"
+
+    log_sensitive_action(
+        request,
+        "member.qr_regenerated",
+        "Member",
+        member_label,
+        metadata={
+            "member_id": member.id,
+            "member_code": _member_code(member),
+            "previous_qr_code": previous_qr_code,
+            "new_qr_code": str(member.qr_code),
+            "qr_code_expires_at": member.qr_code_expires_at.isoformat(),
+            "gym_id": member.gym_id,
+        },
+        gym=member.gym,
+    )
+
+    return JsonResponse(
+        {
+            "success": True,
+            "qr_code": str(member.qr_code),
+            "qr_code_expires_at": timezone.localtime(member.qr_code_expires_at).strftime("%d/%m/%Y %H:%M"),
+            "card_image_url": reverse("members:member_card_image", args=[member.id]),
+        }
+    )
 
 
 @login_required
