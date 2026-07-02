@@ -1,7 +1,7 @@
 import json
 from datetime import timedelta
 from io import BytesIO, StringIO
-from unittest.mock import patch
+from unittest.mock import PropertyMock, patch
 
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -856,6 +856,18 @@ class MemberPortalTests(TestCase):
         self.assertIn("subscription_offers", data)
         self.assertEqual(data["subscription_offers"], ["Acces groupe coaching"])
         self.assertEqual(data["card_image_url"], reverse("members:member_card_image", args=[self.member.id]))
+
+    def test_member_detail_json_converts_unexpected_model_values(self):
+        reception_user = User.objects.create_user(username="reception-safe-json", password="pass12345")
+        UserGymRole.objects.create(user=reception_user, gym=self.gym, role="reception", is_active=True)
+        self.client.force_login(reception_user)
+
+        with patch.object(Member, "subscription_type", new_callable=PropertyMock) as mocked_subscription_type:
+            mocked_subscription_type.return_value = self.gym
+            response = self.client.get(reverse("members:member_detail", args=[self.member.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["subscription_type"], str(self.gym))
 
     @override_settings(
         STORAGES={

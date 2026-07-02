@@ -2,6 +2,7 @@
 import json
 import mimetypes
 from datetime import date, timedelta
+from decimal import Decimal
 from io import BytesIO
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.utils import timezone
@@ -13,6 +14,7 @@ from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import redirect
+from django.db.models import Model
 from django.db.models import Q, Exists, OuterRef, Count
 from django.core.paginator import Paginator
 from django.urls import reverse
@@ -73,6 +75,18 @@ def _get_current_member(user):
 
 def _member_code(member):
     return f"MEM-{member.id:05d}"
+
+
+def _json_safe_value(value):
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, Model):
+        return str(value)
+    if isinstance(value, dict):
+        return {str(key): _json_safe_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe_value(item) for item in value]
+    return value
 
 
 def _subscription_progress(subscription):
@@ -1884,7 +1898,7 @@ def member_detail(request, member_id):
         "access_logs": access_data,
     }
 
-    return JsonResponse(data)
+    return JsonResponse(_json_safe_value(data))
 
 
 @login_required
