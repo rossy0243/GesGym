@@ -40,14 +40,14 @@ class CustomAuthenticationForm(AuthenticationForm):
         required=False,
         widget=forms.CheckboxInput(
             attrs={
-                "class": "rounded border-gray-300 text-[#004e92] focus:ring-[#004e92]",
+                "class": "rounded border-gray-300 text-[#8A6D1D] focus:ring-[#8A6D1D]",
             }
         ),
     )
 
     username = forms.CharField(
         widget=forms.TextInput(attrs={
-            "class": "w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#004e92] ",
+            "class": "w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8A6D1D] ",
             "placeholder": "Nom d’utilisateur",
             "autocomplete": "username",
             "autofocus": "autofocus",
@@ -56,7 +56,7 @@ class CustomAuthenticationForm(AuthenticationForm):
 
     password = forms.CharField(
         widget=forms.PasswordInput(attrs={
-            "class": "w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#004e92]",
+            "class": "w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8A6D1D]",
             "placeholder": "Mot de passe",
             "autocomplete": "current-password",
         })
@@ -67,7 +67,7 @@ class StyledPasswordResetForm(PasswordResetForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["email"].widget.attrs.update({
-            "class": "w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#004e92]",
+            "class": "w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8A6D1D]",
             "placeholder": "Adresse e-mail",
             "autocomplete": "email",
         })
@@ -97,12 +97,12 @@ class StyledSetPasswordForm(SetPasswordForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["new_password1"].widget.attrs.update({
-            "class": "w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#004e92]",
+            "class": "w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8A6D1D]",
             "placeholder": "Nouveau mot de passe",
             "autocomplete": "new-password",
         })
         self.fields["new_password2"].widget.attrs.update({
-            "class": "w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#004e92]",
+            "class": "w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8A6D1D]",
             "placeholder": "Confirmer le nouveau mot de passe",
             "autocomplete": "new-password",
         })

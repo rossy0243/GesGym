@@ -28,7 +28,7 @@
         new bootstrap.Modal(document.getElementById('activate2FAModal')).show();
     };
     window.profilModifierPreferences = function() {
-        if (typeof Swal !== 'undefined') Swal.fire({ icon: 'info', title: 'Modifier les préférences', text: 'Configurer les notifications (rappels caisse, modèles SMS).', confirmButtonColor: '#3454d1' });
+        if (typeof Swal !== 'undefined') Swal.fire({ icon: 'info', title: 'Modifier les préférences', text: 'Configurer les notifications (rappels caisse, modèles SMS).', confirmButtonColor: '#8A6D1D' });
         else alert('Modifier les préférences : page à venir.');
     };
     window.profilRevoquerAppareils = function() {
@@ -52,7 +52,7 @@
             if (document.getElementById('infoAdresse')) document.getElementById('infoAdresse').textContent = adresse;
             if (document.getElementById('infoNotes')) document.getElementById('infoNotes').textContent = notes;
             bootstrap.Modal.getInstance(document.getElementById('editProfileModal')).hide();
-            if (typeof Swal !== 'undefined') Swal.fire({ icon: 'success', title: 'Profil mis à jour', text: 'Les modifications ont été enregistrées.', confirmButtonColor: '#3454d1' });
+            if (typeof Swal !== 'undefined') Swal.fire({ icon: 'success', title: 'Profil mis à jour', text: 'Les modifications ont été enregistrées.', confirmButtonColor: '#8A6D1D' });
         });
         document.getElementById('btnChangePassword') && document.getElementById('btnChangePassword').addEventListener('click', function() {
             var cur = document.getElementById('currentPassword').value;
@@ -62,7 +62,7 @@
             if (pwd !== conf) { (typeof Swal !== 'undefined' ? Swal.fire({ icon: 'error', title: 'Erreur', text: 'Les mots de passe ne correspondent pas.' }) : alert('Mots de passe différents.')); return; }
             bootstrap.Modal.getInstance(document.getElementById('changePasswordModal')).hide();
             document.getElementById('changePasswordForm').reset();
-            if (typeof Swal !== 'undefined') Swal.fire({ icon: 'success', title: 'Mot de passe modifié', text: 'Votre mot de passe a été mis à jour.', confirmButtonColor: '#3454d1' });
+            if (typeof Swal !== 'undefined') Swal.fire({ icon: 'success', title: 'Mot de passe modifié', text: 'Votre mot de passe a été mis à jour.', confirmButtonColor: '#8A6D1D' });
         });
         document.getElementById('btnActivate2FA') && document.getElementById('btnActivate2FA').addEventListener('click', function() {
             var mode = (document.querySelector('input[name="mode2FA"]:checked') && document.querySelector('input[name="mode2FA"]:checked').value) || 'email';
@@ -71,7 +71,7 @@
             var linkEl = document.getElementById('link2FA');
             if (badgeEl) { badgeEl.className = 'badge bg-success'; badgeEl.textContent = 'Activé'; badgeEl.id = 'badge2FA'; }
             if (linkEl) { linkEl.outerHTML = '<span class="text-success ms-3"><span class="material-icons align-middle" style="font-size:18px;">check_circle</span> Activé</span>'; }
-            if (typeof Swal !== 'undefined') Swal.fire({ icon: 'success', title: '2FA activé', text: 'Authentification à deux facteurs par ' + (mode === 'email' ? 'email' : 'application') + ' activée.', confirmButtonColor: '#3454d1' });
+            if (typeof Swal !== 'undefined') Swal.fire({ icon: 'success', title: '2FA activé', text: 'Authentification à deux facteurs par ' + (mode === 'email' ? 'email' : 'application') + ' activée.', confirmButtonColor: '#8A6D1D' });
         });
     });
 })();

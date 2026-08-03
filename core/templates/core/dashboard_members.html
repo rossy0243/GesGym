@@ -20,9 +20,9 @@
 }
 
 .peak-hour-card {
-    border: 1px solid rgba(52, 84, 209, 0.14);
+    border: 1px solid rgba(201, 162, 39, 0.14);
     border-radius: 16px;
-    background: linear-gradient(135deg, rgba(52, 84, 209, 0.08), rgba(23, 198, 102, 0.08));
+    background: linear-gradient(135deg, rgba(201, 162, 39, 0.08), rgba(23, 198, 102, 0.08));
     padding: 14px;
 }
 
@@ -30,8 +30,8 @@
     width: 42px;
     height: 42px;
     border-radius: 14px;
-    background: rgba(52, 84, 209, 0.12);
-    color: #3454d1;
+    background: rgba(201, 162, 39, 0.12);
+    color: #8A6D1D;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -39,9 +39,9 @@
 }
 
 .dashboard-context-card {
-    border: 1px solid rgba(52, 84, 209, 0.14);
+    border: 1px solid rgba(201, 162, 39, 0.14);
     border-radius: 18px;
-    background: linear-gradient(135deg, rgba(52, 84, 209, 0.08), rgba(13, 110, 253, 0.03));
+    background: linear-gradient(135deg, rgba(201, 162, 39, 0.08), rgba(13, 110, 253, 0.03));
     padding: 18px 20px;
 }
 
@@ -75,8 +75,8 @@
 
 .dashboard-action-card:hover {
     transform: translateY(-2px);
-    border-color: rgba(52, 84, 209, 0.18);
-    box-shadow: 0 16px 30px rgba(52, 84, 209, 0.10);
+    border-color: rgba(201, 162, 39, 0.18);
+    box-shadow: 0 16px 30px rgba(201, 162, 39, 0.10);
 }
 
 .dashboard-action-card .card-body {
@@ -92,8 +92,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background: rgba(52, 84, 209, 0.10);
-    color: #3454d1;
+    background: rgba(201, 162, 39, 0.10);
+    color: #8A6D1D;
     flex-shrink: 0;
 }
 
@@ -102,7 +102,7 @@
 }
 
 .dashboard-action-copy a {
-    color: #0f172a;
+    color: #0B0B0B;
     font-weight: 700;
     text-decoration: none;
 }
@@ -130,7 +130,7 @@
 
 .analytics-kpi-card__value {
     margin: 6px 0 2px;
-    color: #0f172a;
+    color: #0B0B0B;
     font-size: 1.35rem;
     font-weight: 800;
 }
@@ -1039,7 +1039,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 {{ dashboard_chart_data|json_script:"dashboard-chart-data" }}
 <script>
-const chartColors = ["#3454d1", "#17c666", "#ffa21d", "#3dc7be", "#ea4d4d", "#64748b", "#6610f2"];
+const chartColors = ["#8A6D1D", "#17c666", "#ffa21d", "#3dc7be", "#ea4d4d", "#64748b", "#6610f2"];
 const mutedGrid = "rgba(100, 116, 139, 0.12)";
 const dashboardChartNode = document.getElementById("dashboard-chart-data");
 const dashboardChartData = dashboardChartNode ? JSON.parse(dashboardChartNode.textContent) : {};
@@ -1359,7 +1359,7 @@ if (memberGrowthCanvas) {
             datasets: [{
                 label: "Nouveaux membres",
                 data: {{ member_growth_values|default:"[]"|safe }},
-                backgroundColor: "rgba(52, 84, 209, 0.78)",
+                backgroundColor: "rgba(201, 162, 39, 0.78)",
                 borderRadius: 10,
                 maxBarThickness: 42
             }]

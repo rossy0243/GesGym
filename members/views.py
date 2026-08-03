@@ -1161,8 +1161,8 @@ def member_app_manifest(request):
         "start_url": reverse("members:member_portal"),
         "scope": "/members/",
         "display": "standalone",
-        "background_color": "#f6f7f2",
-        "theme_color": "#102820",
+        "background_color": "#0B0B0B",
+        "theme_color": "#0B0B0B",
         "orientation": "portrait",
         "icons": [
             {
@@ -1192,7 +1192,7 @@ def member_app_manifest(request):
 
 def member_app_service_worker(request):
     content = """
-const CACHE_NAME = "smartclub-member-v5";
+const CACHE_NAME = "smartclub-member-v6";
 const STATIC_ASSETS = [
   "/static/css/member-portal.css",
   "/static/js/member-portal.js",

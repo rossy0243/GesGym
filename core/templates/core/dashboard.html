@@ -38,7 +38,7 @@
                             <h3 class="mb-0 fw-bold" id="kpiActiveMembers">{{ active_members }}</h3>
                         </div>
                         <div class="stat-icon-box">
-                            <span class="material-icons" style="color: #3454d1;">group</span>
+                            <span class="material-icons" style="color: #8A6D1D;">group</span>
                         </div>
                     </div>
                 </div>
@@ -113,7 +113,7 @@
                             <h3 class="mb-0 fw-bold" id="kpiAvailability">{{ availability_rate|default:0 }}%</h3>
                         </div>
                         <div class="stat-icon-box">
-                            <span class="material-icons" style="color: #3454d1;">speed</span>
+                            <span class="material-icons" style="color: #8A6D1D;">speed</span>
                         </div>
                     </div>
                 </div>
@@ -131,7 +131,7 @@
                     <div class="d-flex align-items-start justify-content-between mb-4">
                         <div class="d-flex gap-4 align-items-center">
                             <div class="stat-icon-box">
-                                <span class="material-icons" style="color:#3454d1; font-size:32px;">group</span>
+                                <span class="material-icons" style="color:#8A6D1D; font-size:32px;">group</span>
                             </div>
                             <div>
                                 <div class="fs-4 fw-bold text-dark counter" id="totalMembers">{{ total_members }}</div>
@@ -667,7 +667,7 @@
                 datasets: [{
                     label: "Entrées",
                     data: week_values,
-                    backgroundColor: "#3454d1"
+                    backgroundColor: "#8A6D1D"
                 }]
             },
             options: { responsive: true, plugins: { legend: { display: false } } }
@@ -709,7 +709,7 @@
                 labels: plan_labels,
                 datasets: [{
                     data: plan_values,
-                    backgroundColor: ["#3454d1", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"]
+                    backgroundColor: ["#8A6D1D", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"]
                 }]
             },
             options: { responsive: true }

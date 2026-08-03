@@ -4,24 +4,24 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{{ seo_title|default:"SmartClub Pro | Logiciel de gestion pour salles de sport" }}</title>
-  <meta name="description" content="{{ seo_description|default:'SmartClub Pro est un logiciel de gestion pour salles de sport.' }}">
+  <title>{{ seo_title|default:"Royal Gym | Salle de sport premium à Kinshasa" }}</title>
+  <meta name="description" content="{{ seo_description|default:'Royal Gym est une salle de sport premium à Kinshasa.' }}">
   <meta name="keywords" content="{{ seo_keywords|default:'' }}">
   <meta name="robots" content="{{ seo_robots|default:'index, follow' }}">
   <meta property="og:locale" content="fr_FR">
   <meta property="og:type" content="{{ seo_og_type|default:'website' }}">
-  <meta property="og:title" content="{{ seo_title|default:'SmartClub Pro | Logiciel de gestion pour salles de sport' }}">
-  <meta property="og:description" content="{{ seo_description|default:'SmartClub Pro est un logiciel de gestion pour salles de sport.' }}">
+  <meta property="og:title" content="{{ seo_title|default:'Royal Gym | Salle de sport premium à Kinshasa' }}">
+  <meta property="og:description" content="{{ seo_description|default:'Royal Gym est une salle de sport premium à Kinshasa.' }}">
   <meta property="og:url" content="{{ seo_canonical_url|default:request.build_absolute_uri }}">
-  <meta property="og:site_name" content="SmartClub Pro">
+  <meta property="og:site_name" content="Royal Gym">
   <meta property="og:image" content="{{ seo_og_image|default:'' }}">
   <meta name="twitter:card" content="{{ seo_twitter_card|default:'summary_large_image' }}">
-  <meta name="twitter:title" content="{{ seo_title|default:'SmartClub Pro | Logiciel de gestion pour salles de sport' }}">
-  <meta name="twitter:description" content="{{ seo_description|default:'SmartClub Pro est un logiciel de gestion pour salles de sport.' }}">
+  <meta name="twitter:title" content="{{ seo_title|default:'Royal Gym | Salle de sport premium à Kinshasa' }}">
+  <meta name="twitter:description" content="{{ seo_description|default:'Royal Gym est une salle de sport premium à Kinshasa.' }}">
   <meta name="twitter:image" content="{{ seo_og_image|default:'' }}">
   <link rel="canonical" href="{{ seo_canonical_url|default:request.build_absolute_uri }}">
-  <link rel="icon" type="image/png" href="{% static 'images/favicon-smartclub.png' %}">
-  <link rel="shortcut icon" type="image/png" href="{% static 'images/favicon-smartclub.png' %}">
+  <link rel="icon" type="image/png" href="{% static 'images/royal-gym-favicon.png' %}">
+  <link rel="shortcut icon" type="image/png" href="{% static 'images/royal-gym-favicon.png' %}">
   {% if seo_schema_json %}
   <script type="application/ld+json">{{ seo_schema_json|safe }}</script>
   {% endif %}
@@ -36,7 +36,7 @@
     body {
       font-family: 'Inter', sans-serif;
       background: #ffffff;
-      color: #0f172a;
+      color: #0B0B0B;
     }
 
     .container-premium {
@@ -44,7 +44,7 @@
     }
 
     .gradient-text {
-      background: linear-gradient(135deg, #004e92 0%, #2563eb 45%, #FF8C00 100%);
+      background: linear-gradient(135deg, #0B0B0B 0%, #8A6D1D 55%, #C9A227 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
@@ -54,9 +54,9 @@
       position: relative;
       overflow: hidden;
       background:
-        radial-gradient(circle at top right, rgba(37, 99, 235, 0.10), transparent 28%),
-        radial-gradient(circle at bottom left, rgba(255, 140, 0, 0.08), transparent 30%),
-        linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+        radial-gradient(circle at top right, rgba(201, 162, 39, 0.12), transparent 28%),
+        radial-gradient(circle at bottom left, rgba(11, 11, 11, 0.05), transparent 30%),
+        linear-gradient(180deg, #FBF8F0 0%, #ffffff 100%);
     }
 
     .hero-premium::before {
@@ -79,7 +79,7 @@
     }
 
     .soft-card {
-      background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+      background: linear-gradient(180deg, #ffffff 0%, #fbfbf8 100%);
       border: 1px solid rgba(148, 163, 184, 0.12);
       box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
     }
@@ -90,43 +90,12 @@
       gap: .45rem;
       padding: .45rem .85rem;
       border-radius: 999px;
-      background: #eef4ff;
-      color: #004e92;
+      background: #F7EFD9;
+      color: #0B0B0B;
       font-size: .78rem;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: .05em;
-    }
-
-    .pack-card {
-      position: relative;
-      overflow: hidden;
-      border-radius: 28px;
-      transition: transform .25s ease, box-shadow .25s ease;
-    }
-
-    .pack-card:hover {
-      transform: translateY(-4px);
-    }
-
-    .pack-club {
-      background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
-      border: 1px solid rgba(148, 163, 184, 0.16);
-      box-shadow: 0 16px 32px rgba(15, 23, 42, 0.06);
-    }
-
-    .pack-premium {
-      background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
-      border: 1px solid rgba(37, 99, 235, 0.18);
-      box-shadow: 0 24px 44px rgba(37, 99, 235, 0.12);
-    }
-
-    .pack-premium::before {
-      content: "";
-      position: absolute;
-      inset: 0 auto 0 0;
-      width: 6px;
-      background: linear-gradient(180deg, #004e92 0%, #2563eb 55%, #FF8C00 100%);
     }
 
     .metric-chip {
@@ -135,9 +104,21 @@
       box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
     }
 
+    .equip-icon {
+      width: 3.5rem;
+      height: 3.5rem;
+      border-radius: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #0B0B0B 0%, #2b2409 100%);
+      color: #C9A227;
+      font-size: 1.5rem;
+    }
+
     .faq-item {
       border: 1px solid rgba(148, 163, 184, 0.12);
-      background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+      background: linear-gradient(180deg, #ffffff 0%, #fbfbf8 100%);
       box-shadow: 0 10px 22px rgba(15, 23, 42, 0.04);
       border-radius: 24px;
       overflow: hidden;
@@ -152,7 +133,7 @@
       justify-content: space-between;
       gap: 1rem;
       font-weight: 700;
-      color: #0f172a;
+      color: #0B0B0B;
       background: transparent;
       border: none;
       cursor: pointer;
@@ -170,7 +151,7 @@
 
     .faq-item.active .faq-icon {
       transform: rotate(180deg);
-      color: #004e92;
+      color: #C9A227;
     }
 
     .faq-content {
@@ -187,19 +168,13 @@
 
     .cta-panel {
       background:
-        radial-gradient(circle at top right, rgba(255,255,255,0.10), transparent 30%),
-        linear-gradient(135deg, #004e92 0%, #0f3f73 50%, #0b2f57 100%);
+        radial-gradient(circle at top right, rgba(201, 162, 39, 0.18), transparent 30%),
+        linear-gradient(135deg, #0B0B0B 0%, #1a1a1a 55%, #3a2f0d 100%);
       box-shadow: 0 20px 40px rgba(15, 23, 42, 0.16);
     }
 
     .footer-dark {
-      background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
-    }
-
-    .pricing-mini-card {
-      border: 1px solid rgba(148, 163, 184, 0.12);
-      background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
-      box-shadow: 0 10px 20px rgba(15, 23, 42, 0.04);
+      background: linear-gradient(180deg, #0B0B0B 0%, #141414 100%);
     }
   </style>
 </head>
@@ -209,31 +184,32 @@
   <header class="sticky top-0 z-50 bg-white/85 backdrop-blur-md border-b border-slate-100 shadow-sm">
     <div class="container-premium mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-3">
       <div class="flex items-center gap-2 min-w-0">
-        <span class="text-xl sm:text-2xl font-extrabold italic tracking-tight whitespace-nowrap">
-          <span class="text-[#FF8C00]">SmartClub</span><span class="text-[#007BFF]">Pro</span>
+        <img src="{% static 'images/royal-gym-logo.png' %}" alt="Royal Gym" class="h-10 w-10 rounded-xl object-cover">
+        <span class="text-xl sm:text-2xl font-extrabold italic tracking-tight whitespace-nowrap text-[#0B0B0B]">
+          Royal Gym
         </span>
       </div>
 
       <nav class="hidden md:flex gap-8 text-sm font-semibold text-gray-700">
-        <a href="#accueil" class="hover:text-[#FF8C00] transition">Accueil</a>
-        <a href="#solution" class="hover:text-[#FF8C00] transition">Solution</a>
-        <a href="#modules" class="hover:text-[#FF8C00] transition">Modules</a>
-        <a href="#formules" class="hover:text-[#FF8C00] transition">Formules</a>
-        <a href="#faq" class="hover:text-[#FF8C00] transition">FAQ</a>
-        <a href="#contact" class="hover:text-[#FF8C00] transition">Contact</a>
+        <a href="#accueil" class="hover:text-[#C9A227] transition">Accueil</a>
+        <a href="#services" class="hover:text-[#C9A227] transition">Services</a>
+        <a href="#equipements" class="hover:text-[#C9A227] transition">Équipements</a>
+        <a href="#horaires" class="hover:text-[#C9A227] transition">Horaires</a>
+        <a href="#faq" class="hover:text-[#C9A227] transition">FAQ</a>
+        <a href="#contact" class="hover:text-[#C9A227] transition">Contact</a>
       </nav>
 
       <div class="hidden md:flex gap-3">
-        <a href="{% url 'compte:login' %}" class="px-5 py-2.5 text-sm font-semibold text-[#004e92] border-2 border-[#004e92] rounded-full hover:bg-[#004e92] hover:text-white transition-all">
-          Connexion
+        <a href="{% url 'compte:login' %}" class="px-5 py-2.5 text-sm font-semibold text-[#0B0B0B] border-2 border-[#0B0B0B] rounded-full hover:bg-[#0B0B0B] hover:text-white transition-all">
+          Espace membre
         </a>
-        <a href="#demo-form" class="px-5 py-2.5 text-sm font-semibold bg-gradient-to-r from-[#FF8C00] to-orange-600 text-white rounded-full shadow-lg shadow-orange-200 hover:shadow-xl transition">
-          Demander une démo
+        <a href="#contact-form" class="px-5 py-2.5 text-sm font-semibold bg-gradient-to-r from-[#C9A227] to-[#8A6D1D] text-white rounded-full shadow-lg hover:shadow-xl transition">
+          Nous rejoindre
         </a>
       </div>
 
-      <a id="mobile-login-link" href="{% url 'compte:login' %}" class="md:hidden shrink-0 px-4 py-2 text-sm font-semibold text-[#004e92] border-2 border-[#004e92] rounded-full hover:bg-[#004e92] hover:text-white transition-all">
-        Connexion
+      <a id="mobile-login-link" href="{% url 'compte:login' %}" class="md:hidden shrink-0 px-4 py-2 text-sm font-semibold text-[#0B0B0B] border-2 border-[#0B0B0B] rounded-full hover:bg-[#0B0B0B] hover:text-white transition-all">
+        Espace membre
       </a>
     </div>
 
@@ -244,700 +220,334 @@
     <div class="container-premium mx-auto px-6 lg:px-8 relative">
       <div class="grid lg:grid-cols-2 gap-10 items-center">
         <div class="text-center lg:text-left">
-          <span class="section-kicker mb-5">Logiciel métier pour salles de sport</span>
+          <span class="section-kicker mb-5">Salle de sport premium à Kinshasa</span>
 
           <h1 class="text-4xl md:text-5xl lg:text-6xl font-extrabold leading-tight mb-6 tracking-tight">
-            <span class="gradient-text">Gérez votre salle de sport</span><br>
-            <span class="text-gray-900">avec plus de contrôle, moins de pertes et plus de professionnalisme</span>
+            <span class="gradient-text">Royal Gym</span><br>
+            <span class="text-gray-900">Entraînez-vous comme un roi</span>
           </h1>
 
           <p class="text-lg md:text-xl text-gray-600 mb-8 max-w-2xl mx-auto lg:mx-0 leading-relaxed">
-            SmartClub Pro centralise la gestion des membres, des abonnements, des paiements, des accès par code QR, des employés et des rapports de votre salle de sport dans une seule plateforme.
+            Musculation, cardio-training, cours collectifs et coaching personnalisé
+            dans un espace pensé pour vous aider à progresser, en toute sécurité et
+            dans une ambiance motivante.
           </p>
 
           <div class="flex flex-wrap gap-3 justify-center lg:justify-start mb-8">
-            <span class="metric-chip px-4 py-2 rounded-full text-sm font-semibold text-gray-700">Contrôle par code QR</span>
-            <span class="metric-chip px-4 py-2 rounded-full text-sm font-semibold text-gray-700">Paiements mieux suivis</span>
-            <span class="metric-chip px-4 py-2 rounded-full text-sm font-semibold text-gray-700">Rapports fiables</span>
-            <span class="metric-chip px-4 py-2 rounded-full text-sm font-semibold text-gray-700">Tarification par site actif</span>
-            
+            <span class="metric-chip px-4 py-2 rounded-full text-sm font-semibold text-gray-700"><i class="fas fa-dumbbell text-[#C9A227] mr-1"></i> Musculation</span>
+            <span class="metric-chip px-4 py-2 rounded-full text-sm font-semibold text-gray-700"><i class="fas fa-person-running text-[#C9A227] mr-1"></i> Cardio-training</span>
+            <span class="metric-chip px-4 py-2 rounded-full text-sm font-semibold text-gray-700"><i class="fas fa-people-group text-[#C9A227] mr-1"></i> Cours collectifs</span>
+            <span class="metric-chip px-4 py-2 rounded-full text-sm font-semibold text-gray-700"><i class="fas fa-user-tie text-[#C9A227] mr-1"></i> Coaching personnel</span>
           </div>
 
           <div class="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-            <a href="#demo-form" class="px-6 py-3.5 bg-[#004e92] text-white font-bold rounded-full hover:bg-[#003a6e] transition shadow-lg">
-              Demander une démo
+            <a href="#contact-form" class="px-6 py-3.5 bg-[#0B0B0B] text-white font-bold rounded-full hover:bg-[#8A6D1D] transition shadow-lg">
+              Nous contacter
             </a>
-            <a href="#formules" class="px-6 py-3.5 border-2 border-[#004e92] text-[#004e92] font-bold rounded-full hover:bg-[#004e92] hover:text-white transition">
-              Voir les formules
+            <a href="#services" class="px-6 py-3.5 border-2 border-[#0B0B0B] text-[#0B0B0B] font-bold rounded-full hover:bg-[#0B0B0B] hover:text-white transition">
+              Découvrir nos services
             </a>
           </div>
 
           <p class="mt-6 text-sm text-gray-500">
-            Pensé pour les salles indépendantes comme pour les structures qui pilotent plusieurs sites.
+            Ouvert aux débutants comme aux sportifs confirmés.
           </p>
         </div>
 
         <div class="relative">
-          <div class="premium-card rounded-[32px] p-5 lg:p-6">
-            <img src="{% static 'images/landing-dashboard.png' %}" alt="Tableau de bord SmartClub Pro" class="rounded-[24px] object-cover w-full h-auto">
-
-            <div class="grid grid-cols-2 gap-4 mt-5">
-              <div class="pricing-mini-card rounded-2xl p-4">
-                <p class="text-sm text-gray-500 mb-1">Pack Club</p>
-                <p class="text-2xl font-extrabold text-gray-900">45 $</p>
-                <p class="text-sm text-gray-500">/ site / mois</p>
+          <div class="premium-card rounded-[32px] p-8 lg:p-10 flex flex-col items-center text-center">
+            <img src="{% static 'images/royal-gym-logo.png' %}" alt="Royal Gym" class="w-40 h-40 rounded-3xl object-cover shadow-xl mb-6">
+            <div class="grid grid-cols-2 gap-4 w-full">
+              <div class="soft-card rounded-2xl p-4">
+                <i class="fas fa-crown text-[#C9A227] text-xl mb-1"></i>
+                <p class="text-sm font-semibold text-gray-800">Équipements premium</p>
               </div>
-              <div class="pricing-mini-card rounded-2xl p-4">
-                <p class="text-sm text-gray-500 mb-1">Pack Premium</p>
-                <p class="text-2xl font-extrabold text-gray-900">55 $</p>
-                <p class="text-sm text-gray-500">/ site / mois</p>
+              <div class="soft-card rounded-2xl p-4">
+                <i class="fas fa-user-tie text-[#C9A227] text-xl mb-1"></i>
+                <p class="text-sm font-semibold text-gray-800">Coachs qualifiés</p>
+              </div>
+              <div class="soft-card rounded-2xl p-4">
+                <i class="fas fa-id-card text-[#C9A227] text-xl mb-1"></i>
+                <p class="text-sm font-semibold text-gray-800">Carte membre &amp; QR</p>
+              </div>
+              <div class="soft-card rounded-2xl p-4">
+                <i class="fas fa-clock text-[#C9A227] text-xl mb-1"></i>
+                <p class="text-sm font-semibold text-gray-800">Horaires flexibles</p>
               </div>
             </div>
           </div>
-
-          
         </div>
       </div>
     </div>
   </section>
 
-  <!-- POURQUOI -->
-  <section id="solution" class="py-10 lg:py-12 bg-white">
+  <!-- POURQUOI ROYAL GYM -->
+  <section class="py-10 lg:py-12 bg-white">
     <div class="container-premium mx-auto px-6 lg:px-8">
       <div class="max-w-3xl mx-auto text-center mb-8">
-        <span class="section-kicker mb-4">Pourquoi SmartClub Pro</span>
+        <span class="section-kicker mb-4">Pourquoi Royal Gym</span>
         <h2 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">
-          Une structure claire pour des opérations<br>qui ne doivent plus être approximatives
+          Une salle pensée pour votre progression
         </h2>
         <p class="text-lg text-gray-600 leading-relaxed">
-          Un club ne se pilote pas en empilant des outils. Il faut relier correctement les opérations qui structurent réellement l’activité.
+          Royal Gym vous accompagne avec des équipements de qualité, des coachs
+          expérimentés et un suivi personnalisé, dans un cadre motivant.
         </p>
       </div>
 
       <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div class="soft-card rounded-3xl p-8">
-          <div class="w-14 h-14 bg-blue-100 rounded-2xl flex items-center justify-center mb-5 text-[#004e92] text-2xl">
-            <i class="fas fa-layer-group"></i>
-          </div>
-          <h3 class="text-xl font-bold mb-3">Une logique métier solide</h3>
-          <p class="text-gray-500">Les membres, abonnements, paiements, accès et rapports fonctionnent ensemble dans un cadre cohérent.</p>
+          <div class="equip-icon mb-5"><i class="fas fa-crown"></i></div>
+          <h3 class="text-xl font-bold mb-3">Équipements premium</h3>
+          <p class="text-gray-500">Du matériel adapté à tous les niveaux, entretenu et renouvelé régulièrement.</p>
         </div>
 
         <div class="soft-card rounded-3xl p-8">
-          <div class="w-14 h-14 bg-orange-100 rounded-2xl flex items-center justify-center mb-5 text-[#FF8C00] text-2xl">
-            <i class="fas fa-cash-register"></i>
-          </div>
-          <h3 class="text-xl font-bold mb-3">Une caisse réellement centrale</h3>
-          <p class="text-gray-500">Les flux financiers sont mieux suivis, ce qui fiabilise les abonnements, les accès et les rapports.</p>
+          <div class="equip-icon mb-5"><i class="fas fa-user-tie"></i></div>
+          <h3 class="text-xl font-bold mb-3">Coachs qualifiés</h3>
+          <p class="text-gray-500">Un accompagnement personnalisé pour progresser en toute sécurité vers vos objectifs.</p>
         </div>
 
         <div class="soft-card rounded-3xl p-8">
-          <div class="w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center mb-5 text-green-600 text-2xl">
-            <i class="fas fa-columns"></i>
-          </div>
-          <h3 class="text-xl font-bold mb-3">Deux formules lisibles</h3>
-          <p class="text-gray-500">L’offre reste simple à comprendre, sans paliers inutiles ni complexité commerciale.</p>
+          <div class="equip-icon mb-5"><i class="fas fa-fire"></i></div>
+          <h3 class="text-xl font-bold mb-3">Ambiance motivante</h3>
+          <p class="text-gray-500">Un cadre premium pensé pour vous donner l'énergie de vous dépasser à chaque séance.</p>
         </div>
 
         <div class="soft-card rounded-3xl p-8">
-          <div class="w-14 h-14 bg-purple-100 rounded-2xl flex items-center justify-center mb-5 text-purple-600 text-2xl">
-            <i class="fas fa-building"></i>
-          </div>
-          <h3 class="text-xl font-bold mb-3">Une logique juste par site actif</h3>
-          <p class="text-gray-500">Chaque site actif bénéficie du pack choisi, avec une lecture budgétaire simple et naturelle.</p>
+          <div class="equip-icon mb-5"><i class="fas fa-users"></i></div>
+          <h3 class="text-xl font-bold mb-3">Accessible à tous</h3>
+          <p class="text-gray-500">Débutants, sportifs confirmés ou remise en forme : chacun trouve sa place chez nous.</p>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- PROBLEMES RESOLUS -->
-  <section class="py-10 lg:py-12 bg-slate-50">
+  <!-- SERVICES -->
+  <section id="services" class="py-10 lg:py-12 bg-slate-50">
     <div class="container-premium mx-auto px-6 lg:px-8">
       <div class="max-w-3xl mx-auto text-center mb-8">
-        <span class="section-kicker mb-4">Problèmes résolus</span>
+        <span class="section-kicker mb-4">Nos services</span>
         <h2 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">
-          Les problèmes que SmartClub Pro règle pour votre salle
+          Tout ce qu'il faut pour atteindre vos objectifs
         </h2>
         <p class="text-lg text-gray-600 leading-relaxed">
-          Beaucoup de salles perdent du temps et de l'argent à cause d'un suivi manuel des abonnements, des paiements et des accès. SmartClub Pro aide à reprendre le contrôle avec une gestion centralisée et plus fiable.
+          Que vous visiez la prise de masse, la perte de poids ou la remise en
+          forme, Royal Gym met à votre disposition les moyens d'y arriver.
         </p>
       </div>
 
-      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <div class="soft-card rounded-3xl p-8">
-          <h3 class="text-xl font-bold mb-3">Accès non autorisés</h3>
-          <p class="text-gray-500">Repérez plus facilement les membres expirés, suspendus ou non conformes qui tentent encore d'accéder à la salle.</p>
+          <div class="equip-icon mb-5"><i class="fas fa-dumbbell"></i></div>
+          <h3 class="text-xl font-bold mb-3">Musculation</h3>
+          <p class="text-gray-500">Charges libres, machines guidées et zone de force pour tous les niveaux.</p>
         </div>
+
         <div class="soft-card rounded-3xl p-8">
-          <h3 class="text-xl font-bold mb-3">Paiements difficiles à vérifier</h3>
-          <p class="text-gray-500">Reliez les paiements aux abonnements et limitez les écarts entre la caisse, les membres et les rapports.</p>
+          <div class="equip-icon mb-5"><i class="fas fa-person-running"></i></div>
+          <h3 class="text-xl font-bold mb-3">Cardio-training</h3>
+          <p class="text-gray-500">Tapis, vélos et rameurs pour améliorer votre endurance et brûler des calories.</p>
         </div>
+
         <div class="soft-card rounded-3xl p-8">
-          <h3 class="text-xl font-bold mb-3">Suivis dispersés</h3>
-          <p class="text-gray-500">Remplacez les fichiers Excel, messages WhatsApp ou cahiers par un cadre unique de gestion.</p>
+          <div class="equip-icon mb-5"><i class="fas fa-people-group"></i></div>
+          <h3 class="text-xl font-bold mb-3">Cours collectifs</h3>
+          <p class="text-gray-500">Des séances en groupe pour progresser dans la bonne humeur et la motivation.</p>
         </div>
+
         <div class="soft-card rounded-3xl p-8">
-          <h3 class="text-xl font-bold mb-3">Rapports peu fiables</h3>
-          <p class="text-gray-500">Basez vos décisions sur des opérations enregistrées plutôt que sur des estimations difficiles à contrôler.</p>
-        </div>
-        <div class="soft-card rounded-3xl p-8">
-          <h3 class="text-xl font-bold mb-3">Coordination compliquée</h3>
-          <p class="text-gray-500">Donnez aux agents, managers et responsables une lecture plus claire des informations essentielles.</p>
-        </div>
-        <div class="soft-card rounded-3xl p-8">
-          <h3 class="text-xl font-bold mb-3">Temps perdu à la réception</h3>
-          <p class="text-gray-500">Accélérez les vérifications courantes à l'entrée, au paiement et au renouvellement des abonnements.</p>
+          <div class="equip-icon mb-5"><i class="fas fa-user-tie"></i></div>
+          <h3 class="text-xl font-bold mb-3">Coaching personnel</h3>
+          <p class="text-gray-500">Un programme sur mesure avec un coach dédié à votre progression.</p>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- MODULES -->
-  <section id="modules" class="py-10 lg:py-12 bg-white">
+  <!-- EQUIPEMENTS -->
+  <section id="equipements" class="py-10 lg:py-12 bg-white">
     <div class="container-premium mx-auto px-6 lg:px-8">
       <div class="max-w-3xl mx-auto text-center mb-8">
-        <span class="section-kicker mb-4">Un seul outil</span>
+        <span class="section-kicker mb-4">Nos équipements</span>
         <h2 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">
-          Un environnement unique pour piloter l’essentiel
+          Un plateau complet pour s'entraîner sans limite
         </h2>
         <p class="text-lg text-gray-600">
-          SmartClub Pro réunit les briques qui structurent réellement l’exploitation d’un club, du cœur de l’activité aux besoins plus avancés.
-        </p>
-        <p class="text-base text-gray-500 max-w-3xl mx-auto text-center mt-4">
-          Le Pack Club couvre le cœur de l’exploitation. Le Pack Premium ajoute les dimensions plus avancées liées au stock, aux équipes et aux équipements.
-        </p>
-      </div>
-
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div class="soft-card rounded-3xl p-8">
-          <div class="w-14 h-14 bg-blue-100 rounded-2xl flex items-center justify-center mb-5 text-[#004e92] text-2xl"><i class="fas fa-users"></i></div>
-          <h3 class="text-xl font-bold mb-3">Gestion des membres</h3>
-          <p class="text-gray-500">Centralisez les profils, statuts et informations utiles pour retrouver rapidement chaque adhérent.</p>
-        </div>
-
-        <div class="soft-card rounded-3xl p-8">
-          <div class="w-14 h-14 bg-orange-100 rounded-2xl flex items-center justify-center mb-5 text-[#FF8C00] text-2xl"><i class="fas fa-id-card"></i></div>
-          <h3 class="text-xl font-bold mb-3">Gestion des abonnements</h3>
-          <p class="text-gray-500">Suivez les formules, dates d’expiration, renouvellements et statuts avec plus de rigueur.</p>
-        </div>
-
-        <div class="soft-card rounded-3xl p-8">
-          <div class="w-14 h-14 bg-sky-100 rounded-2xl flex items-center justify-center mb-5 text-sky-600 text-2xl"><i class="fas fa-mobile-screen-button"></i></div>
-          <h3 class="text-xl font-bold mb-3">Espace membre PWA</h3>
-          <p class="text-gray-500">Donnez à chaque membre un espace mobile avec carte, code QR, abonnement, paiements, coach et messages.</p>
-        </div>
-
-        <div class="soft-card rounded-3xl p-8">
-          <div class="w-14 h-14 bg-emerald-100 rounded-2xl flex items-center justify-center mb-5 text-emerald-600 text-2xl"><i class="fas fa-comments"></i></div>
-          <h3 class="text-xl font-bold mb-3">Messages membres</h3>
-          <p class="text-gray-500">Envoyez des messages ciblés aux membres actifs, expirés, suspendus, sans abonnement ou proches de la date d’expiration.</p>
-        </div>
-
-        <div class="soft-card rounded-3xl p-8">
-          <div class="w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center mb-5 text-green-600 text-2xl"><i class="fas fa-money-bill-wave"></i></div>
-          <h3 class="text-xl font-bold mb-3">Caisse / paiements</h3>
-          <p class="text-gray-500">Enregistrez les entrées d’argent et limitez les erreurs entre paiements, abonnements et rapports.</p>
-        </div>
-
-        <div class="soft-card rounded-3xl p-8">
-          <div class="w-14 h-14 bg-purple-100 rounded-2xl flex items-center justify-center mb-5 text-purple-600 text-2xl"><i class="fas fa-chart-bar"></i></div>
-          <h3 class="text-xl font-bold mb-3">Rapports</h3>
-          <p class="text-gray-500">Obtenez une vision claire de l’activité réelle de la salle à partir des opérations enregistrées.</p>
-        </div>
-
-        <div class="soft-card rounded-3xl p-8">
-          <div class="w-14 h-14 bg-pink-100 rounded-2xl flex items-center justify-center mb-5 text-pink-600 text-2xl"><i class="fas fa-qrcode"></i></div>
-          <h3 class="text-xl font-bold mb-3">Contrôle d’accès</h3>
-          <p class="text-gray-500">Vérifiez rapidement si un membre peut accéder à la salle selon son abonnement et son statut.</p>
-        </div>
-
-        <div class="soft-card rounded-3xl p-8">
-          <div class="w-14 h-14 bg-indigo-100 rounded-2xl flex items-center justify-center mb-5 text-indigo-600 text-2xl"><i class="fas fa-user-check"></i></div>
-          <h3 class="text-xl font-bold mb-3">Coaching</h3>
-          <p class="text-gray-500">Structurez l’accompagnement sportif des membres et le suivi des coachs.</p>
-        </div>
-
-        <div class="soft-card rounded-3xl p-8">
-          <div class="w-14 h-14 bg-yellow-100 rounded-2xl flex items-center justify-center mb-5 text-yellow-600 text-2xl"><i class="fas fa-boxes-stacked"></i></div>
-          <h3 class="text-xl font-bold mb-3">Produits / stock</h3>
-          <p class="text-gray-500">Suivez les produits vendus, les niveaux de stock et les mouvements commerciaux du club.</p>
-        </div>
-
-        <div class="soft-card rounded-3xl p-8">
-          <div class="w-14 h-14 bg-cyan-100 rounded-2xl flex items-center justify-center mb-5 text-cyan-600 text-2xl"><i class="fas fa-user-tie"></i></div>
-          <h3 class="text-xl font-bold mb-3">RH / employés</h3>
-          <p class="text-gray-500">Organisez les informations de l’équipe et encadrez les responsabilités internes.</p>
-        </div>
-
-        <div class="soft-card rounded-3xl p-8">
-          <div class="w-14 h-14 bg-red-100 rounded-2xl flex items-center justify-center mb-5 text-red-600 text-2xl"><i class="fas fa-dumbbell"></i></div>
-          <h3 class="text-xl font-bold mb-3">Machines / équipements</h3>
-          <p class="text-gray-500">Gardez une trace claire du matériel, des machines et de leur suivi dans le temps.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- QR CODE -->
-  <section class="py-10 lg:py-12 bg-slate-50">
-    <div class="container-premium mx-auto px-6 lg:px-8">
-      <div class="grid lg:grid-cols-[0.9fr_1.1fr] gap-8 items-center">
-        <div>
-          <span class="section-kicker mb-4">Contrôle d’accès</span>
-          <h2 class="text-3xl md:text-4xl font-bold mb-5 tracking-tight">
-            Contrôlez les accès avec un code QR membre
-          </h2>
-          <p class="text-lg text-gray-600 leading-relaxed">
-            Chaque membre dispose d’un code QR dans son espace mobile. À l’entrée, l’agent scanne le code et vérifie immédiatement si l’abonnement est actif, expiré, suspendu ou non conforme.
-          </p>
-        </div>
-
-        <div class="grid sm:grid-cols-2 gap-5">
-          <div class="soft-card rounded-3xl p-6">
-            <h3 class="font-bold text-lg mb-2">Vérification rapide</h3>
-            <p class="text-gray-500">L’entrée devient plus fluide pour l’agent et pour le membre.</p>
-          </div>
-          <div class="soft-card rounded-3xl p-6">
-            <h3 class="font-bold text-lg mb-2">Moins d’accès non autorisés</h3>
-            <p class="text-gray-500">Le contrôle tient compte de l’état réel de l’abonnement.</p>
-          </div>
-          <div class="soft-card rounded-3xl p-6">
-            <h3 class="font-bold text-lg mb-2">Meilleure expérience membre</h3>
-            <p class="text-gray-500">Le membre retrouve sa carte et son code QR depuis son téléphone.</p>
-          </div>
-          <div class="soft-card rounded-3xl p-6">
-            <h3 class="font-bold text-lg mb-2">Suivi lié aux paiements</h3>
-            <p class="text-gray-500">L’accès dépend de la situation réelle d’abonnement et de paiement.</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- PACKS -->
-  <section id="formules" class="py-10 lg:py-12 bg-white">
-    <div class="container-premium mx-auto px-6 lg:px-8">
-      <div class="max-w-3xl mx-auto text-center mb-8">
-        <span class="section-kicker mb-4">Nos formules</span>
-        <h2 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">
-          Deux offres nettes pour équiper le club au bon niveau
-        </h2>
-        <p class="text-lg text-gray-600">
-          L’une structure l’exploitation quotidienne. L’autre ajoute une gestion plus avancée des ressources internes.
-        </p>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-6xl mx-auto">
-        <!-- Pack Club -->
-        <div class="pack-card pack-club p-8 md:p-10">
-          <div class="flex items-center justify-between mb-6">
-            <div>
-              <h3 class="text-2xl font-bold">Pack Club</h3>
-              <p class="text-gray-500 mt-1">Pour structurer l’essentiel au quotidien</p>
-            </div>
-            <div class="text-right">
-              <p class="text-4xl font-extrabold text-gray-900">45 $</p>
-              <p class="text-sm text-gray-500">/ site / mois</p>
-            </div>
-          </div>
-
-          <ul class="space-y-3 mb-8 text-gray-600">
-            <li><i class="fas fa-check text-green-500 mr-2"></i> Membres</li>
-            <li><i class="fas fa-check text-green-500 mr-2"></i> Abonnements</li>
-            <li><i class="fas fa-check text-green-500 mr-2"></i> Espace membre PWA</li>
-            <li><i class="fas fa-check text-green-500 mr-2"></i> Messages membres intégrés</li>
-            <li><i class="fas fa-check text-green-500 mr-2"></i> Caisse / paiements</li>
-            <li><i class="fas fa-check text-green-500 mr-2"></i> Rapports</li>
-            <li><i class="fas fa-check text-green-500 mr-2"></i> Contrôle d’accès</li>
-          </ul>
-
-          <div class="border-t border-slate-200 pt-6 mb-8">
-            <p class="text-gray-600 leading-relaxed">
-              Pour les salles qui veulent structurer l’essentiel de leur exploitation quotidienne : membres, abonnements, espace membre, messages, paiements, accès et rapports.
-            </p>
-          </div>
-
-          <a href="/?pack=club#demo-form" class="block text-center bg-white border-2 border-[#004e92] text-[#004e92] hover:bg-[#004e92] hover:text-white font-bold py-3.5 rounded-full transition">
-            Choisir le Pack Club
-          </a>
-        </div>
-
-        <!-- Pack Premium -->
-        <div class="pack-card pack-premium p-8 md:p-10">
-          <div class="inline-flex mb-5 px-4 py-1.5 rounded-full bg-blue-100 text-[#004e92] text-xs font-bold tracking-wide uppercase">
-            Structure avancée
-          </div>
-
-          <div class="flex items-center justify-between mb-6">
-            <div>
-              <h3 class="text-2xl font-bold">Pack Premium</h3>
-              <p class="text-gray-500 mt-1">Pour aller plus loin dans le pilotage</p>
-            </div>
-            <div class="text-right">
-              <p class="text-4xl font-extrabold text-gray-900">55 $</p>
-              <p class="text-sm text-gray-500">/ site / mois</p>
-            </div>
-          </div>
-
-          <ul class="space-y-3 mb-8 text-gray-600">
-            <li><i class="fas fa-check text-green-500 mr-2"></i> Tout le Pack Club</li>
-            <li><i class="fas fa-check text-green-500 mr-2"></i> Produits / stock</li>
-            <li><i class="fas fa-check text-green-500 mr-2"></i> RH / employés</li>
-            <li><i class="fas fa-check text-green-500 mr-2"></i> Machines / équipements</li>
-            <li><i class="fas fa-check text-green-500 mr-2"></i> Coaching</li>
-          </ul>
-
-          <div class="border-t border-slate-200 pt-6 mb-8">
-            <p class="text-gray-600 leading-relaxed">
-              Pour les salles qui veulent aller plus loin avec une gestion avancée des ressources internes : stock, employés, équipements et coaching.
-            </p>
-          </div>
-
-          <a href="/?pack=premium#demo-form" class="block text-center bg-[#004e92] text-white hover:bg-[#003a6e] font-bold py-3.5 rounded-full transition shadow-lg">
-            Choisir le Pack Premium
-          </a>
-        </div>
-      </div>
-      <p class="mt-8 text-center text-sm text-gray-500">
-        Un site correspond à une salle ou une succursale physique active équipée avec SmartClub Pro.
-      </p>
-    </div>
-  </section>
-
-  <!-- TARIFICATION -->
-  <section class="py-10 lg:py-12 bg-slate-50">
-    <div class="container-premium mx-auto px-6 lg:px-8">
-      <div class="grid lg:grid-cols-2 gap-8 items-start">
-        <div>
-          <span class="section-kicker mb-4">Tarification</span>
-          <h2 class="text-3xl md:text-4xl font-bold mt-2 mb-6 tracking-tight">
-            Une tarification claire par site actif
-          </h2>
-          <p class="text-gray-600 mb-8 text-lg leading-relaxed">
-            La tarification suit votre déploiement réel. Vous payez par site actif équipé, selon le pack choisi.
-          </p>
-
-          <div class="space-y-4">
-            <div class="soft-card rounded-2xl p-5">
-              <p class="font-semibold text-gray-900">1 site en Pack Club</p>
-              <p class="text-gray-500">1 × 45 $ = <strong class="text-gray-900">45 $ / mois</strong></p>
-            </div>
-            <div class="soft-card rounded-2xl p-5">
-              <p class="font-semibold text-gray-900">2 sites en Pack Club</p>
-              <p class="text-gray-500">2 × 45 $ = <strong class="text-gray-900">90 $ / mois</strong></p>
-            </div>
-            <div class="soft-card rounded-2xl p-5">
-              <p class="font-semibold text-gray-900">3 sites en Pack Premium</p>
-              <p class="text-gray-500">3 × 55 $ = <strong class="text-gray-900">165 $ / mois</strong></p>
-            </div>
-          </div>
-        </div>
-
-        <div class="premium-card rounded-[28px] p-8">
-          <h3 class="text-2xl font-bold mb-6">Pourquoi ce modèle est juste</h3>
-          <div class="space-y-6 text-gray-600">
-            <div>
-              <h4 class="font-bold text-gray-900 mb-1">Chaque site actif est réellement équipé</h4>
-              <p>Le prix suit donc le déploiement réel de la solution dans votre organisation.</p>
-            </div>
-            <div>
-              <h4 class="font-bold text-gray-900 mb-1">Le budget reste lisible</h4>
-              <p>Vous savez immédiatement comment la formule s’applique à votre structure.</p>
-            </div>
-            <div>
-              <h4 class="font-bold text-gray-900 mb-1">La croissance se gère simplement</h4>
-              <p>Quand un nouveau site entre dans votre périmètre, la logique reste claire et naturelle.</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- POUR QUELS CLUBS -->
-  <section class="py-10 lg:py-12 bg-white">
-    <div class="container-premium mx-auto px-6 lg:px-8">
-      <div class="max-w-3xl mx-auto text-center mb-8">
-        <span class="section-kicker mb-4">Pour quels clubs ?</span>
-        <h2 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">
-          Une solution pensée pour les gestionnaires de clubs
-        </h2>
-        <p class="text-lg text-gray-600">
-          SmartClub Pro s’adresse aux structures qui veulent mieux encadrer leurs opérations sans multiplier les outils ni alourdir leur gestion.
-        </p>
-      </div>
-
-      <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div class="soft-card rounded-3xl p-8">
-          <h3 class="font-bold text-xl mb-3">Propriétaires de salles</h3>
-          <p class="text-gray-500">Pour mieux structurer le fonctionnement global du club.</p>
-        </div>
-        <div class="soft-card rounded-3xl p-8">
-          <h3 class="font-bold text-xl mb-3">Gérants de clubs</h3>
-          <p class="text-gray-500">Pour centraliser les opérations essentielles dans un seul outil.</p>
-        </div>
-        <div class="soft-card rounded-3xl p-8">
-          <h3 class="font-bold text-xl mb-3">Responsables d’exploitation</h3>
-          <p class="text-gray-500">Pour fiabiliser les membres, paiements, accès et rapports.</p>
-        </div>
-        <div class="soft-card rounded-3xl p-8">
-          <h3 class="font-bold text-xl mb-3">Structures avec un ou plusieurs sites</h3>
-          <p class="text-gray-500">Pour déployer une méthode cohérente site par site.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- BENEFICES -->
-  <section class="py-10 lg:py-12 bg-slate-50">
-    <div class="container-premium mx-auto px-6 lg:px-8">
-      <div class="max-w-3xl mx-auto text-center mb-8">
-        <span class="section-kicker mb-4">Bénéfices concrets</span>
-        <h2 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">
-          Une plateforme pensée pour mieux gérer, mieux analyser et mieux piloter
-        </h2>
-        <p class="text-lg text-gray-600">
-          SmartClub Pro améliore à la fois la rigueur opérationnelle, l’analyse financière et la qualité du pilotage.
-        </p>
-      </div>
-
-      <div class="grid md:grid-cols-3 gap-6">
-        <div class="soft-card rounded-3xl p-8">
-          <h3 class="font-bold text-xl mb-3">Bénéfices opérationnels</h3>
-          <p class="text-gray-500">Vous réunissez les fonctions essentielles dans un seul environnement et réduisez la dispersion entre outils, fichiers et suivis manuels.</p>
-        </div>
-        <div class="soft-card rounded-3xl p-8">
-          <h3 class="font-bold text-xl mb-3">Bénéfices financiers</h3>
-          <p class="text-gray-500">La caisse fiabilise le suivi des paiements et donne une base plus solide aux rapports et à la lecture économique du club.</p>
-        </div>
-        <div class="soft-card rounded-3xl p-8">
-          <h3 class="font-bold text-xl mb-3">Bénéfices de pilotage</h3>
-          <p class="text-gray-500">Vous gagnez en visibilité, prenez vos décisions sur une base plus fiable et faites évoluer votre cadre de gestion avec plus de maîtrise.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- CREDIBILITE LOCALE -->
-  <section class="py-10 lg:py-12 bg-white">
-    <div class="container-premium mx-auto px-6 lg:px-8">
-      <div class="grid lg:grid-cols-[0.95fr_1.05fr] gap-8 items-start">
-        <div>
-          <span class="section-kicker mb-4">Terrain local</span>
-          <h2 class="text-3xl md:text-4xl font-bold mb-5 tracking-tight">
-            Une solution adaptée aux réalités des salles de sport africaines
-          </h2>
-          <p class="text-lg text-gray-600 leading-relaxed">
-            SmartClub Pro a été pensé pour les salles qui veulent se professionnaliser sans complexité : une gestion simple, accessible et adaptée aux clubs à un ou plusieurs sites.
-          </p>
-        </div>
-
-        <div class="grid sm:grid-cols-2 gap-5">
-          <div class="soft-card rounded-3xl p-6">
-            <h3 class="font-bold text-lg mb-2">Utilisation simple</h3>
-            <p class="text-gray-500">Une interface claire pour les opérations quotidiennes.</p>
-          </div>
-          <div class="soft-card rounded-3xl p-6">
-            <h3 class="font-bold text-lg mb-2">Assistance locale</h3>
-            <p class="text-gray-500">Un accompagnement proche des réalités du terrain.</p>
-          </div>
-          <div class="soft-card rounded-3xl p-6">
-            <h3 class="font-bold text-lg mb-2">Budget mensuel lisible</h3>
-            <p class="text-gray-500">Une tarification abordable par site actif équipé.</p>
-          </div>
-          <div class="soft-card rounded-3xl p-6">
-            <h3 class="font-bold text-lg mb-2">Accès multiplateforme</h3>
-            <p class="text-gray-500">Utilisable depuis ordinateur, tablette ou téléphone.</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- APERCUS DU PRODUIT -->
-  <section class="py-10 lg:py-12 bg-slate-50">
-    <div class="container-premium mx-auto px-6 lg:px-8">
-      <div class="max-w-3xl mx-auto text-center mb-8">
-        <span class="section-kicker mb-4">Aperçus du produit</span>
-        <h2 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">
-          Des captures réelles pourront être ajoutées ici
-        </h2>
-        <p class="text-lg text-gray-600">
-          La page est prête à accueillir plus tard des vues réelles de l’application, sans dépendre aujourd’hui de fichiers images inexistants.
+          Aperçu de nos espaces d'entraînement. Photos réelles de la salle à venir prochainement.
         </p>
       </div>
 
       <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div class="soft-card rounded-3xl p-6">
-          <h3 class="font-bold text-lg mb-2">Tableau de bord</h3>
-          <p class="text-gray-500">Emplacement prévu pour une capture du pilotage global.</p>
+        <div class="soft-card rounded-3xl p-8 text-center">
+          <div class="equip-icon mb-5 mx-auto"><i class="fas fa-dumbbell"></i></div>
+          <h3 class="font-bold text-lg mb-2">Zone musculation</h3>
+          <p class="text-gray-500">Haltères, barres et machines guidées.</p>
         </div>
-        <div class="soft-card rounded-3xl p-6">
-          <h3 class="font-bold text-lg mb-2">Liste des membres</h3>
-          <p class="text-gray-500">Emplacement prévu pour la gestion quotidienne des adhérents.</p>
+        <div class="soft-card rounded-3xl p-8 text-center">
+          <div class="equip-icon mb-5 mx-auto"><i class="fas fa-heart-pulse"></i></div>
+          <h3 class="font-bold text-lg mb-2">Zone cardio</h3>
+          <p class="text-gray-500">Tapis de course, vélos et rameurs.</p>
         </div>
-        <div class="soft-card rounded-3xl p-6">
-          <h3 class="font-bold text-lg mb-2">Scan du code QR</h3>
-          <p class="text-gray-500">Emplacement prévu pour présenter le contrôle d’accès.</p>
+        <div class="soft-card rounded-3xl p-8 text-center">
+          <div class="equip-icon mb-5 mx-auto"><i class="fas fa-bolt"></i></div>
+          <h3 class="font-bold text-lg mb-2">Espace fonctionnel</h3>
+          <p class="text-gray-500">Cross-training, kettlebells et poids libres.</p>
         </div>
-        <div class="soft-card rounded-3xl p-6">
-          <h3 class="font-bold text-lg mb-2">Caisse</h3>
-          <p class="text-gray-500">Emplacement prévu pour les paiements et mouvements de caisse.</p>
+        <div class="soft-card rounded-3xl p-8 text-center">
+          <div class="equip-icon mb-5 mx-auto"><i class="fas fa-people-group"></i></div>
+          <h3 class="font-bold text-lg mb-2">Salle de cours collectifs</h3>
+          <p class="text-gray-500">Un espace dédié aux séances en groupe.</p>
         </div>
-        <div class="soft-card rounded-3xl p-6">
-          <h3 class="font-bold text-lg mb-2">Fiche membre</h3>
-          <p class="text-gray-500">Emplacement prévu pour une vue détaillée d’un adhérent.</p>
+        <div class="soft-card rounded-3xl p-8 text-center">
+          <div class="equip-icon mb-5 mx-auto"><i class="fas fa-shower"></i></div>
+          <h3 class="font-bold text-lg mb-2">Vestiaires &amp; douches</h3>
+          <p class="text-gray-500">Un espace propre et confortable après l'effort.</p>
         </div>
-        <div class="soft-card rounded-3xl p-6">
-          <h3 class="font-bold text-lg mb-2">Rapports</h3>
-          <p class="text-gray-500">Emplacement prévu pour les indicateurs et exports utiles.</p>
+        <div class="soft-card rounded-3xl p-8 text-center">
+          <div class="equip-icon mb-5 mx-auto"><i class="fas fa-hand-holding-heart"></i></div>
+          <h3 class="font-bold text-lg mb-2">Coin étirement</h3>
+          <p class="text-gray-500">Un espace pour récupérer après l'entraînement.</p>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- FAQ ACCORDEON -->
+  <!-- HORAIRES / LOCALISATION -->
+  <section id="horaires" class="py-10 lg:py-12 bg-slate-50">
+    <div class="container-premium mx-auto px-6 lg:px-8">
+      <div class="grid lg:grid-cols-2 gap-8 items-center">
+        <div>
+          <span class="section-kicker mb-4">Horaires &amp; localisation</span>
+          <h2 class="text-3xl md:text-4xl font-bold mb-5 tracking-tight">
+            Retrouvez-nous à Kinshasa
+          </h2>
+          <div class="space-y-4">
+            <div class="soft-card rounded-2xl p-5 flex items-start gap-4">
+              <i class="fas fa-location-dot text-[#C9A227] text-xl mt-1"></i>
+              <div>
+                <p class="font-semibold text-gray-900">Adresse</p>
+                <p class="text-gray-500"><!-- TODO Royal Gym : indiquer l'adresse exacte -->Adresse à confirmer, Kinshasa</p>
+              </div>
+            </div>
+            <div class="soft-card rounded-2xl p-5 flex items-start gap-4">
+              <i class="fas fa-clock text-[#C9A227] text-xl mt-1"></i>
+              <div>
+                <p class="font-semibold text-gray-900">Horaires</p>
+                <p class="text-gray-500"><!-- TODO Royal Gym : indiquer les horaires réels -->Contactez-nous pour connaître nos horaires à jour</p>
+              </div>
+            </div>
+            <div class="soft-card rounded-2xl p-5 flex items-start gap-4">
+              <i class="fab fa-whatsapp text-[#C9A227] text-xl mt-1"></i>
+              <div>
+                <p class="font-semibold text-gray-900">WhatsApp</p>
+                <p class="text-gray-500"><!-- TODO Royal Gym : indiquer le vrai numéro -->Écrivez-nous directement sur WhatsApp</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="premium-card rounded-[32px] p-8">
+          <h3 class="text-2xl font-bold mb-6">Nos formules</h3>
+          <div class="space-y-4 text-gray-600">
+            <div class="soft-card rounded-2xl p-5">
+              <p class="font-semibold text-gray-900">Abonnement journalier</p>
+              <p class="text-gray-500">Idéal pour découvrir la salle.</p>
+            </div>
+            <div class="soft-card rounded-2xl p-5">
+              <p class="font-semibold text-gray-900">Abonnement mensuel</p>
+              <p class="text-gray-500">Notre formule la plus populaire.</p>
+            </div>
+            <div class="soft-card rounded-2xl p-5">
+              <p class="font-semibold text-gray-900">Abonnement trimestriel / annuel</p>
+              <p class="text-gray-500">Pour vous engager durablement, à meilleur prix.</p>
+            </div>
+          </div>
+          <p class="mt-6 text-sm text-gray-500">Contactez-nous pour connaître nos tarifs et offres en cours.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
   <section id="faq" class="py-10 lg:py-12 bg-white">
     <div class="container-premium mx-auto px-6 lg:px-8 max-w-4xl">
       <div class="text-center mb-8">
         <span class="section-kicker mb-4">FAQ</span>
         <h2 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">
-          Les réponses essentielles
+          Vos questions les plus fréquentes
         </h2>
-        <p class="text-lg text-gray-600">
-          Pour comprendre rapidement la logique de la solution.
-        </p>
       </div>
 
       <div class="space-y-5" id="faqAccordion">
         <div class="faq-item active">
           <button class="faq-button" type="button">
-            <span>Quelle est la différence entre le Pack Club et le Pack Premium ?</span>
+            <span>Quels sont vos horaires d'ouverture ?</span>
             <i class="fas fa-chevron-down faq-icon"></i>
           </button>
           <div class="faq-content" style="max-height: 300px;">
             <div class="faq-content-inner">
-              Le Pack Club couvre l’exploitation essentielle. Le Pack Premium ajoute des fonctionnalités plus avancées liées aux produits, aux employés, aux équipements et au coaching.
+              Contactez-nous par WhatsApp ou téléphone pour connaître nos horaires à jour.
             </div>
           </div>
         </div>
 
         <div class="faq-item">
           <button class="faq-button" type="button">
-            <span>Pourquoi la caisse est-elle centrale dans la solution ?</span>
+            <span>Proposez-vous un coaching personnalisé ?</span>
             <i class="fas fa-chevron-down faq-icon"></i>
           </button>
           <div class="faq-content">
             <div class="faq-content-inner">
-              Parce qu’elle permet d’enregistrer correctement les paiements, qui conditionnent le suivi des abonnements, la qualité des rapports et le contrôle des accès.
+              Oui. Nos coachs vous accompagnent avec un suivi adapté à vos objectifs, que vous débutiez ou souhaitiez aller plus loin.
             </div>
           </div>
         </div>
 
         <div class="faq-item">
           <button class="faq-button" type="button">
-            <span>Comment fonctionne la tarification ?</span>
+            <span>Faut-il réserver pour les cours collectifs ?</span>
             <i class="fas fa-chevron-down faq-icon"></i>
           </button>
           <div class="faq-content">
             <div class="faq-content-inner">
-              Le prix mensuel dépend du pack choisi et du nombre de sites actifs équipés. Chaque site actif bénéficie du pack retenu.
+              Contactez notre équipe pour connaître le planning des cours et les modalités d'inscription.
             </div>
           </div>
         </div>
 
         <div class="faq-item">
           <button class="faq-button" type="button">
-            <span>Le Pack Club suffit-il pour une salle classique ?</span>
+            <span>Quelles formules d'abonnement proposez-vous ?</span>
             <i class="fas fa-chevron-down faq-icon"></i>
           </button>
           <div class="faq-content">
             <div class="faq-content-inner">
-              Oui. Il couvre déjà les opérations essentielles d’un club qui veut structurer sérieusement son activité.
+              Des formules journalières, mensuelles, trimestrielles et annuelles. Contactez-nous pour connaître les tarifs en cours.
             </div>
           </div>
         </div>
 
         <div class="faq-item">
           <button class="faq-button" type="button">
-            <span>Le membre a-t-il un espace mobile ?</span>
+            <span>Royal Gym convient-il aux débutants ?</span>
             <i class="fas fa-chevron-down faq-icon"></i>
           </button>
           <div class="faq-content">
             <div class="faq-content-inner">
-              Oui. Chaque pack inclut un espace membre mobile PWA avec carte, code QR, abonnement, coach, accès, paiements et messages de la salle.
+              Tout à fait. Nos coachs sont là pour vous guider dès votre première séance, quel que soit votre niveau.
             </div>
           </div>
         </div>
 
         <div class="faq-item">
           <button class="faq-button" type="button">
-            <span>La salle peut-elle communiquer avec ses membres ?</span>
+            <span>En tant que membre, ai-je un espace personnel ?</span>
             <i class="fas fa-chevron-down faq-icon"></i>
           </button>
           <div class="faq-content">
             <div class="faq-content-inner">
-              Oui. Les administrateurs et les managers peuvent envoyer des messages intégrés à l’application à un membre précis ou à une audience : tous les membres, les membres actifs, expirés, suspendus, sans abonnement ou dont l’abonnement expire sous 7 jours.
-            </div>
-          </div>
-        </div>
-
-        <div class="faq-item">
-          <button class="faq-button" type="button">
-            <span>À quel moment passer au Pack Premium ?</span>
-            <i class="fas fa-chevron-down faq-icon"></i>
-          </button>
-          <div class="faq-content">
-            <div class="faq-content-inner">
-              Lorsque le club souhaite élargir son pilotage à des dimensions plus avancées comme le stock, les employés, les équipements et le coaching.
-            </div>
-          </div>
-        </div>
-
-        <div class="faq-item">
-          <button class="faq-button" type="button">
-            <span>SmartClub Pro est-il adapté à une structure avec plusieurs sites ?</span>
-            <i class="fas fa-chevron-down faq-icon"></i>
-          </button>
-          <div class="faq-content">
-            <div class="faq-content-inner">
-              Oui. La tarification par site actif permet d’équiper une ou plusieurs succursales avec une lecture budgétaire claire.
-            </div>
-          </div>
-        </div>
-
-        <div class="faq-item">
-          <button class="faq-button" type="button">
-            <span>SmartClub Pro fonctionne-t-il pour une seule salle ?</span>
-            <i class="fas fa-chevron-down faq-icon"></i>
-          </button>
-          <div class="faq-content">
-            <div class="faq-content-inner">
-              Oui. Une salle seule peut utiliser le Pack Club pour gérer ses membres, abonnements, paiements, accès et rapports.
-            </div>
-          </div>
-        </div>
-
-        <div class="faq-item">
-          <button class="faq-button" type="button">
-            <span>Le code QR remplace-t-il le contrôle manuel ?</span>
-            <i class="fas fa-chevron-down faq-icon"></i>
-          </button>
-          <div class="faq-content">
-            <div class="faq-content-inner">
-              Il rend surtout le contrôle plus rapide et plus fiable. L’agent peut vérifier immédiatement la situation réelle du membre.
-            </div>
-          </div>
-        </div>
-
-        <div class="faq-item">
-          <button class="faq-button" type="button">
-            <span>Faut-il installer une application mobile ?</span>
-            <i class="fas fa-chevron-down faq-icon"></i>
-          </button>
-          <div class="faq-content">
-            <div class="faq-content-inner">
-              Non. L’espace membre est pensé comme une PWA accessible depuis un téléphone, sans promettre une application native séparée.
+              Oui. Chaque membre Royal Gym dispose d'un espace personnel avec sa carte, son code QR d'accès et le suivi de son abonnement.
             </div>
           </div>
         </div>
@@ -950,128 +560,101 @@
     <div class="container-premium mx-auto px-6 lg:px-8">
         <div class="cta-panel rounded-[32px] p-10 md:p-14 text-white text-center">
           <h2 class="text-3xl md:text-4xl font-bold mb-4">
-            Vous voulez voir SmartClub Pro en action ?
+            Prêt à commencer votre transformation ?
           </h2>
-          <p class="text-lg text-blue-100 mb-8 max-w-3xl mx-auto">
-            Demandez une démo personnalisée et découvrez comment la plateforme peut s’adapter à votre salle de sport.
+          <p class="text-lg text-gray-300 mb-8 max-w-3xl mx-auto">
+            Rejoignez Royal Gym dès aujourd'hui et bénéficiez d'un accompagnement premium pour atteindre vos objectifs.
           </p>
           <div class="flex flex-col sm:flex-row gap-4 justify-center">
-            <a href="#demo-form" class="px-6 py-3.5 border-2 border-white text-white font-bold rounded-full hover:bg-white hover:text-[#004e92] transition">
-              Demander une démo
+            <a href="#contact-form" class="px-6 py-3.5 border-2 border-white text-white font-bold rounded-full hover:bg-white hover:text-[#0B0B0B] transition">
+              Nous contacter
             </a>
           </div>
         </div>
     </div>
   </section>
 
-  <!-- FORMULAIRE DEMO -->
-  <section id="demo-form" class="py-10 lg:py-12 bg-slate-50">
+  <!-- FORMULAIRE CONTACT -->
+  <section id="contact-form" class="py-10 lg:py-12 bg-slate-50">
     <div class="container-premium mx-auto px-6 lg:px-8">
       <div class="grid gap-8 lg:grid-cols-[0.95fr_1.05fr] items-start">
         <div>
-          <span class="section-kicker mb-4">Demander une démo</span>
+          <span class="section-kicker mb-4">Nous rejoindre</span>
           <h2 class="text-3xl md:text-4xl font-bold mb-5 tracking-tight">
-            Parlons de votre club et de votre besoin
+            Parlons de vos objectifs
           </h2>
           <p class="text-lg text-gray-600 leading-relaxed mb-6">
-            Remplissez ce formulaire pour demander une démo personnalisée. Nous vous recontacterons afin d’échanger sur votre salle, vos sites et vos besoins prioritaires.
+            Laissez-nous vos coordonnées pour être recontacté rapidement, ou
+            écrivez-nous directement sur WhatsApp.
           </p>
 
           <div class="space-y-4">
             <div class="soft-card rounded-3xl p-6">
-              <h3 class="text-lg font-bold mb-2">Ce que vous pouvez indiquer</h3>
-              <p class="text-gray-500">Votre salle, le nombre de sites, vos besoins prioritaires et les modules qui vous intéressent.</p>
-            </div>
-            <div class="soft-card rounded-3xl p-6">
-              <h3 class="text-lg font-bold mb-2">Ce que nous recevons</h3>
-              <p class="text-gray-500">Un e-mail clair avec vos coordonnées, votre structure et votre message pour reprendre contact rapidement.</p>
+              <h3 class="text-lg font-bold mb-2">Essai, tarifs, coaching</h3>
+              <p class="text-gray-500">Dites-nous ce qui vous intéresse et notre équipe vous répond rapidement.</p>
             </div>
           </div>
         </div>
 
         <div class="premium-card rounded-[32px] p-6 md:p-8">
-          {% if demo_sent %}
+          {% if contact_sent %}
             <div class="mb-6 rounded-3xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-emerald-800">
-              <p class="font-semibold">Votre demande a bien été envoyée par e-mail.</p>
+              <p class="font-semibold">Votre message a bien été envoyé.</p>
               <p class="mt-1">Vous pouvez aussi nous contacter sur WhatsApp pour un suivi plus rapide.</p>
-              <a href="{{ demo_whatsapp_link }}" target="_blank" rel="noopener noreferrer" class="mt-4 inline-flex items-center gap-2 rounded-full bg-[#25D366] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#1fb858]">
+              <a href="{{ contact_whatsapp_link }}" target="_blank" rel="noopener noreferrer" class="mt-4 inline-flex items-center gap-2 rounded-full bg-[#25D366] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#1fb858]">
                 <i class="fab fa-whatsapp"></i>
                 Contacter aussi sur WhatsApp
               </a>
             </div>
           {% endif %}
 
-          {% if selected_pack_label %}
-            <div class="mb-6 rounded-3xl border border-blue-200 bg-blue-50 px-5 py-4 text-blue-900">
-              Vous avez sélectionné : <strong>{{ selected_pack_label }}</strong>. Le message du formulaire a été préparé en fonction de ce choix.
-            </div>
-          {% endif %}
-
-          {% if demo_form.non_field_errors %}
+          {% if contact_form.non_field_errors %}
             <div class="mb-6 rounded-3xl border border-red-200 bg-red-50 px-5 py-4 text-red-700">
-              {{ demo_form.non_field_errors }}
+              {{ contact_form.non_field_errors }}
             </div>
           {% endif %}
 
-          <form method="post" action="{% url 'landing' %}#demo-form" class="space-y-5">
+          <form method="post" action="{% url 'landing' %}#contact-form" class="space-y-5">
             {% csrf_token %}
-            {{ demo_form.selected_pack }}
             <div class="grid gap-5 md:grid-cols-2">
               <div>
-                <label for="{{ demo_form.full_name.id_for_label }}" class="mb-2 block text-sm font-semibold text-slate-700">{{ demo_form.full_name.label }}</label>
-                {{ demo_form.full_name }}
-                {% if demo_form.full_name.errors %}
-                  <p class="mt-2 text-sm text-red-600">{{ demo_form.full_name.errors.0 }}</p>
+                <label for="{{ contact_form.full_name.id_for_label }}" class="mb-2 block text-sm font-semibold text-slate-700">{{ contact_form.full_name.label }}</label>
+                {{ contact_form.full_name }}
+                {% if contact_form.full_name.errors %}
+                  <p class="mt-2 text-sm text-red-600">{{ contact_form.full_name.errors.0 }}</p>
                 {% endif %}
               </div>
               <div>
-                <label for="{{ demo_form.email.id_for_label }}" class="mb-2 block text-sm font-semibold text-slate-700">{{ demo_form.email.label }}</label>
-                {{ demo_form.email }}
-                {% if demo_form.email.errors %}
-                  <p class="mt-2 text-sm text-red-600">{{ demo_form.email.errors.0 }}</p>
-                {% endif %}
-              </div>
-            </div>
-
-            <div class="grid gap-5 md:grid-cols-2">
-              <div>
-                <label for="{{ demo_form.phone.id_for_label }}" class="mb-2 block text-sm font-semibold text-slate-700">{{ demo_form.phone.label }}</label>
-                {{ demo_form.phone }}
-                {% if demo_form.phone.errors %}
-                  <p class="mt-2 text-sm text-red-600">{{ demo_form.phone.errors.0 }}</p>
-                {% endif %}
-              </div>
-              <div>
-                <label for="{{ demo_form.club_name.id_for_label }}" class="mb-2 block text-sm font-semibold text-slate-700">{{ demo_form.club_name.label }}</label>
-                {{ demo_form.club_name }}
-                {% if demo_form.club_name.errors %}
-                  <p class="mt-2 text-sm text-red-600">{{ demo_form.club_name.errors.0 }}</p>
+                <label for="{{ contact_form.phone.id_for_label }}" class="mb-2 block text-sm font-semibold text-slate-700">{{ contact_form.phone.label }}</label>
+                {{ contact_form.phone }}
+                {% if contact_form.phone.errors %}
+                  <p class="mt-2 text-sm text-red-600">{{ contact_form.phone.errors.0 }}</p>
                 {% endif %}
               </div>
             </div>
 
             <div>
-              <label for="{{ demo_form.sites_count.id_for_label }}" class="mb-2 block text-sm font-semibold text-slate-700">{{ demo_form.sites_count.label }}</label>
-              {{ demo_form.sites_count }}
-              {% if demo_form.sites_count.errors %}
-                <p class="mt-2 text-sm text-red-600">{{ demo_form.sites_count.errors.0 }}</p>
+              <label for="{{ contact_form.email.id_for_label }}" class="mb-2 block text-sm font-semibold text-slate-700">{{ contact_form.email.label }}</label>
+              {{ contact_form.email }}
+              {% if contact_form.email.errors %}
+                <p class="mt-2 text-sm text-red-600">{{ contact_form.email.errors.0 }}</p>
               {% endif %}
             </div>
 
             <div>
-              <label for="{{ demo_form.message.id_for_label }}" class="mb-2 block text-sm font-semibold text-slate-700">{{ demo_form.message.label }}</label>
-              {{ demo_form.message }}
-              {% if demo_form.message.errors %}
-                <p class="mt-2 text-sm text-red-600">{{ demo_form.message.errors.0 }}</p>
+              <label for="{{ contact_form.message.id_for_label }}" class="mb-2 block text-sm font-semibold text-slate-700">{{ contact_form.message.label }}</label>
+              {{ contact_form.message }}
+              {% if contact_form.message.errors %}
+                <p class="mt-2 text-sm text-red-600">{{ contact_form.message.errors.0 }}</p>
               {% endif %}
             </div>
 
-            <button type="submit" class="w-full rounded-full bg-[#004e92] px-6 py-4 text-base font-bold text-white transition hover:bg-[#003a6e]">
-              Envoyer ma demande de démo
+            <button type="submit" class="w-full rounded-full bg-[#0B0B0B] px-6 py-4 text-base font-bold text-white transition hover:bg-[#8A6D1D]">
+              Envoyer mon message
             </button>
             <p class="text-center text-sm text-slate-500">
               Vous préférez WhatsApp ?
-              <a href="{{ whatsapp_contact_url }}" target="_blank" rel="noopener noreferrer" class="font-semibold text-[#004e92] hover:text-[#FF8C00]">
+              <a href="{{ whatsapp_contact_url }}" target="_blank" rel="noopener noreferrer" class="font-semibold text-[#0B0B0B] hover:text-[#C9A227]">
                 Écrivez-nous directement.
               </a>
             </p>
@@ -1087,32 +670,34 @@
       <div class="grid grid-cols-1 md:grid-cols-3 gap-10 md:gap-8">
         <div class="text-center md:text-left">
           <div class="flex items-center justify-center md:justify-start gap-2 mb-4">
-            <span class="text-xl font-bold text-white">SmartClub Pro</span>
+            <img src="{% static 'images/royal-gym-logo.png' %}" alt="Royal Gym" class="h-9 w-9 rounded-lg object-cover">
+            <span class="text-xl font-bold text-white">Royal Gym</span>
           </div>
-          <p class="text-sm flex items-center justify-center md:justify-start gap-2"><i class="fas fa-map-marker-alt text-[#FF8C00] w-4"></i> 01 bis, route de Matadi, Ngaliema, Kinshasa</p>
-          <p class="text-sm mt-2 flex items-center justify-center md:justify-start gap-2"><i class="fas fa-phone-alt text-[#FF8C00] w-4"></i> +243 979710633</p>
-          <p class="text-sm flex items-center justify-center md:justify-start gap-2"><i class="fas fa-envelope text-[#FF8C00] w-4"></i> contact@smartclubpro.org</p>
+          <p class="text-sm flex items-center justify-center md:justify-start gap-2"><i class="fas fa-map-marker-alt text-[#C9A227] w-4"></i> <!-- TODO Royal Gym : adresse réelle -->Adresse à confirmer, Kinshasa</p>
+          <p class="text-sm mt-2 flex items-center justify-center md:justify-start gap-2"><i class="fas fa-phone-alt text-[#C9A227] w-4"></i> <!-- TODO Royal Gym : téléphone réel -->+243 00 000 0000</p>
+          <p class="text-sm flex items-center justify-center md:justify-start gap-2"><i class="fas fa-envelope text-[#C9A227] w-4"></i> <!-- TODO Royal Gym : email réel -->contact@royalgym.example</p>
         </div>
 
         <div class="text-center">
-          <h4 class="text-white font-bold text-lg mb-4">Formules</h4>
+          <h4 class="text-white font-bold text-lg mb-4">Nos services</h4>
           <ul class="space-y-2 text-sm">
-            <li>Pack Club — 45 $ / site / mois</li>
-            <li>Pack Premium — 55 $ / site / mois</li>
-            <li>Tarification claire par site actif</li>
+            <li>Musculation</li>
+            <li>Cardio-training</li>
+            <li>Cours collectifs</li>
+            <li>Coaching personnel</li>
           </ul>
         </div>
 
         <div class="text-center md:text-right">
-          <h4 class="text-white font-bold text-lg mb-4">WhatsApp</h4>
+          <h4 class="text-white font-bold text-lg mb-4">Suivez-nous</h4>
           <div class="flex justify-center md:justify-end gap-5 text-3xl">
-            <a href="{{ whatsapp_contact_url }}" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp SmartClub Pro" class="hover:text-[#FF8C00] transition transform hover:scale-110"><i class="fab fa-whatsapp"></i></a>
+            <a href="{{ whatsapp_contact_url }}" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp Royal Gym" class="hover:text-[#C9A227] transition transform hover:scale-110"><i class="fab fa-whatsapp"></i></a>
           </div>
-          <p class="text-xs text-gray-500 mt-6">Développé par SmartClub Pro</p>
+          <p class="text-xs text-gray-500 mt-6">Royal Gym</p>
         </div>
       </div>
       <hr class="border-gray-800 my-8">
-      <p class="text-xs text-center text-gray-500">© 2026 SmartClub Pro – Tous droits réservés.</p>
+      <p class="text-xs text-center text-gray-500">© 2026 Royal Gym – Tous droits réservés.</p>
     </div>
   </footer>
 
@@ -1141,6 +726,6 @@
     });
   </script>
 
-  <script src="{% static 'js/script_accueil.js' %}?v=landing-v7-mobile-login-link"></script>
+  <script src="{% static 'js/script_accueil.js' %}?v=landing-v8-royal-gym"></script>
 </body>
 </html>

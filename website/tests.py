@@ -11,10 +11,9 @@ class PublicRouteTests(TestCase):
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "SmartClub")
-        self.assertContains(response, "Espace membre PWA")
-        self.assertContains(response, "Messages membres")
-        self.assertContains(response, "Envoyer ma demande de démo")
+        self.assertContains(response, "Royal Gym")
+        self.assertContains(response, "Musculation")
+        self.assertContains(response, "Envoyer mon message")
         self.assertContains(response, reverse("compte:login"))
         self.assertNotContains(response, "fa-facebook")
         self.assertNotContains(response, "fa-instagram")
@@ -41,7 +40,7 @@ class PublicRouteTests(TestCase):
     def test_landing_uses_versioned_script_to_avoid_stale_browser_cache(self):
         response = self.client.get("/")
 
-        self.assertContains(response, "script_accueil.js?v=landing-v7-mobile-login-link")
+        self.assertContains(response, "script_accueil.js?v=landing-v8-royal-gym")
 
     def test_landing_mobile_header_uses_direct_login_link(self):
         response = self.client.get("/")
@@ -51,82 +50,50 @@ class PublicRouteTests(TestCase):
         self.assertNotContains(response, 'id="menu-btn"')
         self.assertNotContains(response, 'id="mobile-menu"')
 
-    def test_demo_request_sends_email_to_contact_address(self):
+    def test_contact_request_sends_email_to_contact_address(self):
         response = self.client.post(
             "/",
             {
-                "selected_pack": "premium",
                 "full_name": "Rosette Mukendi",
                 "email": "rosette@example.com",
                 "phone": "+243821000000",
-                "club_name": "Club Horizon",
-                "sites_count": 2,
-                "message": "Nous voulons une démo pour la gestion multi-sites.",
+                "message": "Je souhaite connaître vos tarifs et horaires.",
             },
         )
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(len(mail.outbox), 1)
         sent_email = mail.outbox[0]
-        self.assertEqual(sent_email.to, ["contact@smartclubpro.org"])
+        self.assertEqual(sent_email.to, ["contact@royalgym.example"])
         self.assertEqual(sent_email.reply_to, ["rosette@example.com"])
-        self.assertIn("Club Horizon", sent_email.subject)
-        self.assertIn("Pack Premium", sent_email.body)
+        self.assertIn("Rosette Mukendi", sent_email.subject)
         self.assertIn("Rosette Mukendi", sent_email.body)
-        self.assertIn("2", sent_email.body)
+        self.assertIn("tarifs et horaires", sent_email.body)
 
-    def test_demo_request_can_be_signaled_on_whatsapp_after_email(self):
+    def test_contact_request_can_be_signaled_on_whatsapp_after_email(self):
         response = self.client.post(
             "/",
             {
-                "selected_pack": "club",
                 "full_name": "Mila Kanku",
                 "email": "mila@example.com",
                 "phone": "+243979000000",
-                "club_name": "Smart Fit",
-                "sites_count": 1,
-                "message": "Je veux une démo rapide.",
+                "message": "Je veux visiter la salle.",
             },
             follow=True,
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Signaler aussi sur WhatsApp")
-        self.assertContains(response, "https://wa.me/243842616570?text=")
+        self.assertContains(response, "Contacter aussi sur WhatsApp")
+        self.assertContains(response, "https://wa.me/243000000000?text=")
         self.assertContains(response, "Mila%20Kanku")
 
-    def test_pack_links_prefill_demo_form_for_club(self):
-        response = self.client.get("/?pack=club")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Vous avez sélectionné")
-        self.assertContains(response, "Pack Club")
-        self.assertContains(
-            response,
-            "je souhaite découvrir le Pack Club à travers une démonstration",
-        )
-        self.assertContains(response, 'value="club"')
-
-    def test_pack_links_prefill_demo_form_for_premium(self):
-        response = self.client.get("/?pack=premium")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Pack Premium")
-        self.assertContains(
-            response,
-            "je souhaite découvrir le Pack Premium à travers une démonstration",
-        )
-        self.assertContains(response, 'value="premium"')
-
-    def test_demo_request_invalid_submission_shows_errors(self):
+    def test_contact_request_invalid_submission_shows_errors(self):
         response = self.client.post(
             "/",
             {
                 "full_name": "",
                 "email": "email-invalide",
                 "phone": "",
-                "club_name": "",
-                "sites_count": 0,
                 "message": "",
             },
         )

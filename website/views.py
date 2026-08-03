@@ -9,47 +9,38 @@ from django.urls import reverse
 
 from organizations.models import Gym
 
-from .forms import DemoRequestForm
+from .forms import ContactRequestForm
 
 
-PACK_PRESET_MESSAGES = {
-    "club": "Bonjour, je souhaite découvrir le Pack Club à travers une démonstration, en particulier pour la gestion des membres, des abonnements, des paiements, des accès QR code et des rapports.",
-    "premium": "Bonjour, je souhaite découvrir le Pack Premium à travers une démonstration, notamment pour les modules avancés comme le stock, les employés, les équipements, le coaching et le pilotage multi-site.",
-}
+# TODO Royal Gym : remplacer par le vrai numéro WhatsApp (indicatif + numéro, sans "+" ni espaces).
+CONTACT_WHATSAPP_NUMBER = "243000000000"
+# TODO Royal Gym : remplacer par l'adresse e-mail réelle de contact.
+CONTACT_EMAIL = "contact@royalgym.example"
 
-PACK_LABELS = {
-    "club": "Pack Club",
-    "premium": "Pack Premium",
-}
-DEMO_WHATSAPP_NUMBER = "243842616570"
 LANDING_META_DESCRIPTION = (
-    "SmartClub Pro est un logiciel de gestion pour salles de sport : membres, "
-    "abonnements, paiements, contrôle d’accès QR code, coaching et rapports "
-    "dans une plateforme unique pour réduire les pertes et mieux piloter."
+    "Royal Gym est une salle de sport premium à Kinshasa : musculation, cardio, "
+    "cours collectifs et coaching personnalisé dans un cadre haut de gamme."
 )
-LANDING_OG_IMAGE = "/static/images/smartclub-logo-full.png"
+LANDING_OG_IMAGE = "/static/images/royal-gym-logo.png"
 LANDING_KEYWORDS = (
-    "logiciel salle de sport, logiciel gestion salle de sport, gestion club fitness, "
-    "application salle de sport, logiciel abonnement fitness, contrôle accès QR code gym"
+    "salle de sport Kinshasa, musculation, fitness, cours collectifs, coaching personnel, "
+    "Royal Gym"
 )
 
 
 def _build_whatsapp_url(message):
     if message:
-        return f"https://wa.me/{DEMO_WHATSAPP_NUMBER}?text={quote(message)}"
-    return f"https://wa.me/{DEMO_WHATSAPP_NUMBER}"
+        return f"https://wa.me/{CONTACT_WHATSAPP_NUMBER}?text={quote(message)}"
+    return f"https://wa.me/{CONTACT_WHATSAPP_NUMBER}"
 
 
-def _build_demo_whatsapp_message(cleaned_data, pack_label):
+def _build_contact_whatsapp_message(cleaned_data):
     return (
-        "Bonjour SmartClub Pro, je viens de faire une demande de démo.\n\n"
-        f"Pack choisi : {pack_label}\n"
+        "Bonjour Royal Gym, je viens de vous contacter depuis votre site.\n\n"
         f"Nom complet : {cleaned_data['full_name']}\n"
-        f"Email : {cleaned_data['email']}\n"
         f"Téléphone : {cleaned_data['phone']}\n"
-        f"Club : {cleaned_data['club_name']}\n"
-        f"Nombre de sites actifs : {cleaned_data['sites_count']}\n\n"
-        f"Besoin : {cleaned_data['message'] or 'Aucun message complémentaire.'}"
+        f"Email : {cleaned_data['email'] or 'Non renseigné'}\n\n"
+        f"Message : {cleaned_data['message'] or 'Aucun message complémentaire.'}"
     )
 
 
@@ -62,81 +53,59 @@ def _absolute_url(request, path=""):
 def _build_landing_seo_context(request):
     canonical_url = _absolute_url(request)
     og_image_url = _absolute_url(request, LANDING_OG_IMAGE)
-    title = "SmartClub Pro | Logiciel de gestion pour salles de sport"
+    title = "Royal Gym | Salle de sport premium à Kinshasa"
     faq_schema = {
         "@context": "https://schema.org",
         "@type": "FAQPage",
         "mainEntity": [
             {
                 "@type": "Question",
-                "name": "Quelle est la différence entre le Pack Club et le Pack Premium ?",
+                "name": "Quels services propose Royal Gym ?",
                 "acceptedAnswer": {
                     "@type": "Answer",
                     "text": (
-                        "Le Pack Club couvre l'exploitation essentielle. Le Pack Premium "
-                        "ajoute les besoins avancés liés aux produits, aux employés, aux "
-                        "équipements et au coaching."
+                        "Musculation, cardio-training, cours collectifs et coaching "
+                        "personnalisé, dans un espace pensé pour progresser en toute "
+                        "sécurité."
                     ),
                 },
             },
             {
                 "@type": "Question",
-                "name": "Comment fonctionne la tarification ?",
+                "name": "Quels sont les horaires d'ouverture ?",
                 "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": (
-                        "Le prix mensuel dépend du pack choisi et du nombre de sites actifs "
-                        "équipés. Chaque site actif bénéficie du pack retenu."
-                    ),
+                    "text": "Contactez-nous par WhatsApp ou téléphone pour connaître nos horaires à jour.",
                 },
             },
             {
                 "@type": "Question",
-                "name": "Le membre a-t-il un espace mobile ?",
+                "name": "Proposez-vous un coaching personnalisé ?",
                 "acceptedAnswer": {
                     "@type": "Answer",
                     "text": (
-                        "Oui. Chaque pack inclut un espace membre mobile PWA avec carte, QR code, "
-                        "abonnement, coach, accès, paiements et messages de la salle."
+                        "Oui, nos coachs vous accompagnent avec un suivi personnalisé "
+                        "adapté à vos objectifs."
                     ),
                 },
             },
         ],
     }
-    software_schema = {
+    gym_schema = {
         "@context": "https://schema.org",
-        "@type": "SoftwareApplication",
-        "name": "SmartClub Pro",
-        "applicationCategory": "BusinessApplication",
-        "operatingSystem": "Web",
+        "@type": "ExerciseGym",
+        "name": "Royal Gym",
         "description": LANDING_META_DESCRIPTION,
         "url": canonical_url,
         "image": og_image_url,
-        "offers": [
-            {
-                "@type": "Offer",
-                "name": "Pack Club",
-                "price": "45",
-                "priceCurrency": "USD",
-            },
-            {
-                "@type": "Offer",
-                "name": "Pack Premium",
-                "price": "55",
-                "priceCurrency": "USD",
-            },
-        ],
-        "publisher": {
-            "@type": "Organization",
-            "name": "SmartClub Pro",
-            "email": "contact@smartclubpro.org",
-            "telephone": "+243979710633",
-            "address": {
-                "@type": "PostalAddress",
-                "streetAddress": "01 bis, route de Matadi, Ngaliema",
-                "addressLocality": "Kinshasa",
-                "addressCountry": "CD",
-            },
+        "telephone": f"+{CONTACT_WHATSAPP_NUMBER}",
+        "email": CONTACT_EMAIL,
+        "address": {
+            "@type": "PostalAddress",
+            # TODO Royal Gym : remplacer par l'adresse réelle.
+            "streetAddress": "Adresse à confirmer",
+            "addressLocality": "Kinshasa",
+            "addressCountry": "CD",
         },
     }
     return {
@@ -148,67 +117,53 @@ def _build_landing_seo_context(request):
         "seo_og_type": "website",
         "seo_og_image": og_image_url,
         "seo_twitter_card": "summary_large_image",
-        "seo_schema_json": json.dumps([software_schema, faq_schema], ensure_ascii=False),
+        "seo_schema_json": json.dumps([gym_schema, faq_schema], ensure_ascii=False),
     }
 
 
 def landing(request):
-    demo_sent = request.GET.get("demo") == "sent"
-    demo_whatsapp_message = ""
-    if demo_sent:
-        demo_whatsapp_message = request.session.pop("demo_whatsapp_message", "")
-    selected_pack = request.GET.get("pack", "").strip().lower()
-    if selected_pack not in PACK_PRESET_MESSAGES:
-        selected_pack = ""
+    contact_sent = request.GET.get("contact") == "sent"
+    contact_whatsapp_message = ""
+    if contact_sent:
+        contact_whatsapp_message = request.session.pop("contact_whatsapp_message", "")
 
     if request.method == "POST":
-        form = DemoRequestForm(request.POST)
+        form = ContactRequestForm(request.POST)
         if form.is_valid():
             cleaned_data = form.cleaned_data
-            sites_count = cleaned_data["sites_count"]
-            pack_key = cleaned_data.get("selected_pack", "")
-            pack_label = PACK_LABELS.get(pack_key, "Non précisé")
-            subject = f"Nouvelle demande de démo SmartClub Pro - {cleaned_data['club_name']}"
+            subject = f"Nouveau message Royal Gym - {cleaned_data['full_name']}"
             message = (
-                "Une nouvelle demande de démo a été envoyée depuis la landing page.\n\n"
-                f"Pack choisi : {pack_label}\n"
+                "Un nouveau message a été envoyé depuis le site Royal Gym.\n\n"
                 f"Nom complet : {cleaned_data['full_name']}\n"
-                f"Email : {cleaned_data['email']}\n"
                 f"Téléphone : {cleaned_data['phone']}\n"
-                f"Club : {cleaned_data['club_name']}\n"
-                f"Nombre de sites actifs : {sites_count}\n\n"
-                "Besoin exprimé :\n"
+                f"Email : {cleaned_data['email'] or 'Non renseigné'}\n\n"
+                "Message :\n"
                 f"{cleaned_data['message'] or 'Aucun message complémentaire.'}\n"
             )
+            reply_to = [cleaned_data["email"]] if cleaned_data["email"] else []
             email = EmailMessage(
                 subject=subject,
                 body=message,
                 from_email=settings.DEFAULT_FROM_EMAIL,
-                to=["contact@smartclubpro.org"],
-                reply_to=[cleaned_data["email"]],
+                to=[CONTACT_EMAIL],
+                reply_to=reply_to,
             )
             email.send(fail_silently=False)
-            request.session["demo_whatsapp_message"] = _build_demo_whatsapp_message(
+            request.session["contact_whatsapp_message"] = _build_contact_whatsapp_message(
                 cleaned_data,
-                pack_label,
             )
-            return redirect(f"{reverse('landing')}?demo=sent#demo-form")
+            return redirect(f"{reverse('landing')}?contact=sent#contact-form")
     else:
-        initial = {}
-        if selected_pack:
-            initial["selected_pack"] = selected_pack
-            initial["message"] = PACK_PRESET_MESSAGES[selected_pack]
-        form = DemoRequestForm(initial=initial)
+        form = ContactRequestForm()
 
     return render(
         request,
         "compte/accueil.html",
         {
-            "demo_form": form,
-            "demo_sent": demo_sent,
-            "demo_whatsapp_link": _build_whatsapp_url(demo_whatsapp_message),
+            "contact_form": form,
+            "contact_sent": contact_sent,
+            "contact_whatsapp_link": _build_whatsapp_url(contact_whatsapp_message),
             "whatsapp_contact_url": _build_whatsapp_url(""),
-            "selected_pack_label": PACK_LABELS.get(selected_pack, ""),
             **_build_landing_seo_context(request),
         },
     )

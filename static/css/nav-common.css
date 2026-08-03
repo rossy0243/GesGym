@@ -48,18 +48,18 @@ footer.footer {
 /* Navigation - états actifs : parent vs sous-menu */
 /* Parent actif (ex: Finances) - fond plus marqué */
 .nxl-item.nxl-hasmenu.active > .nxl-link {
-    background-color: rgba(52, 84, 209, 0.12);
-    color: #3454d1;
+    background-color: rgba(201, 162, 39, 0.14);
+    color: #8A6D1D;
     font-weight: 600;
-    border-left: 3px solid #3454d1;
+    border-left: 3px solid #C9A227;
 }
 
 /* Sous-menu actif (ex: Rapports dans Finances) - style distinct, plus subtil */
 .nxl-submenu .nxl-item.active .nxl-link {
-    background-color: rgba(52, 84, 209, 0.08);
-    color: #3454d1;
+    background-color: rgba(201, 162, 39, 0.10);
+    color: #8A6D1D;
     font-weight: 500;
-    border-left: 2px solid #3454d1;
+    border-left: 2px solid #C9A227;
     padding-left: calc(1rem - 2px);
 }
 
@@ -83,14 +83,14 @@ footer.footer {
     margin-top: auto;
 }
 .nav-profil-link .nxl-link:hover {
-    background-color: rgba(52, 84, 209, 0.06);
-    color: #3454d1;
+    background-color: rgba(201, 162, 39, 0.08);
+    color: #8A6D1D;
 }
 .nav-profil-link.active .nxl-link {
-    background-color: rgba(52, 84, 209, 0.08);
-    color: #3454d1;
+    background-color: rgba(201, 162, 39, 0.10);
+    color: #8A6D1D;
     font-weight: 500;
-    border-left: 2px solid #3454d1;
+    border-left: 2px solid #C9A227;
 }
 
 /* Mini brand shell */
@@ -102,17 +102,17 @@ footer.footer {
     justify-content: center;
     gap: 0.1rem;
     border-radius: 14px;
-    background: linear-gradient(135deg, #0f172a 0%, #3454d1 68%, #ff8c00 140%);
-    color: #ffffff;
+    background: linear-gradient(135deg, #0B0B0B 0%, #3a2f0d 55%, #C9A227 140%);
+    color: #F6F1E4;
     font-size: 1rem;
     font-weight: 800;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+    box-shadow: 0 10px 24px rgba(11, 11, 11, 0.35);
 }
 
 .nxl-navigation .b-brand .logo-sm span:last-child {
-    color: #ffd166;
+    color: #E8C766;
 }
 
 html.minimenu .nxl-navigation {

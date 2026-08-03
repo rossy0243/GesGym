@@ -368,11 +368,11 @@ def render_organization_pwa_icon_png(organization, size=512):
     logo = _open_image(getattr(organization, "logo", None))
     organization_name = (getattr(organization, "name", "") or "SmartClub").upper()
 
-    image = Image.new("RGBA", (size, size), (16, 40, 32, 255))
+    image = Image.new("RGBA", (size, size), (11, 11, 11, 255))
     draw = ImageDraw.Draw(image, "RGBA")
     for y in range(size):
-        shade = int(18 + (y / size) * 14)
-        draw.line((0, y, size, y), fill=(shade, shade + 22, shade + 15, 255))
+        shade = int(14 + (y / size) * 16)
+        draw.line((0, y, size, y), fill=(shade + 16, shade + 8, shade, 255))
 
     draw.ellipse((-size * 0.25, -size * 0.2, size * 0.7, size * 0.65), fill=(255, 255, 255, 18))
     draw.ellipse((size * 0.45, size * 0.52, size * 1.25, size * 1.22), fill=(255, 255, 255, 14))
@@ -388,7 +388,7 @@ def render_organization_pwa_icon_png(organization, size=512):
         draw.text(
             ((size - (bbox[2] - bbox[0])) / 2, (size - (bbox[3] - bbox[1])) / 2 - bbox[1]),
             initials,
-            fill="#ffffff",
+            fill="#C9A227",
             font=font,
         )
 

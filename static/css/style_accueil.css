@@ -1,7 +1,7 @@
 
 body { font-family: 'Inter', sans-serif; }
 .gradient-text {
-    background: linear-gradient(145deg, #004e92, #00c6ff);
+    background: linear-gradient(145deg, #0B0B0B, #C9A227);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;

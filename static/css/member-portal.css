@@ -4,9 +4,9 @@
     --line: #d9e1dc;
     --paper: #f4f6f7;
     --panel: #ffffff;
-    --accent: #f28c28;
-    --accent-dark: #165d63;
-    --accent-soft: #e6f4f1;
+    --accent: #C9A227;
+    --accent-dark: #0B0B0B;
+    --accent-soft: #F7EFD9;
     --ok: #15803d;
     --danger: #b42318;
     --warn: #a15c00;
@@ -26,7 +26,7 @@ body {
     margin: 0;
     min-height: 100vh;
     background:
-        linear-gradient(180deg, rgba(22, 93, 99, 0.08), rgba(255, 255, 255, 0) 260px),
+        linear-gradient(180deg, rgba(11, 11, 11, 0.08), rgba(255, 255, 255, 0) 260px),
         var(--paper);
     color: var(--ink);
     font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
@@ -161,22 +161,22 @@ a {
 
 .install-button {
     cursor: pointer;
-    background: rgba(0, 78, 146, 0.08);
+    background: rgba(11, 11, 11, 0.08);
     color: var(--accent-dark);
-    border-color: rgba(0, 78, 146, 0.18);
+    border-color: rgba(11, 11, 11, 0.18);
 }
 
 .refresh-button {
     cursor: pointer;
-    background: rgba(16, 40, 32, 0.06);
+    background: rgba(11, 11, 11, 0.06);
     color: var(--ink);
-    border-color: rgba(16, 40, 32, 0.12);
+    border-color: rgba(11, 11, 11, 0.12);
 }
 
 .security-button {
-    background: rgba(255, 140, 0, 0.1);
+    background: rgba(201, 162, 39, 0.1);
     color: #8a4d00;
-    border-color: rgba(255, 140, 0, 0.18);
+    border-color: rgba(201, 162, 39, 0.18);
 }
 
 .logout-button:hover,
@@ -188,7 +188,7 @@ a {
 .security-button:hover,
 .security-button:focus {
     transform: translateY(-1px);
-    box-shadow: 0 10px 24px rgba(16, 40, 32, 0.1);
+    box-shadow: 0 10px 24px rgba(11, 11, 11, 0.1);
 }
 
 .install-button[hidden] {
@@ -259,8 +259,8 @@ a {
     position: absolute;
     inset: 0;
     background:
-        linear-gradient(135deg, rgba(22, 93, 99, 0.11), transparent 38%),
-        linear-gradient(315deg, rgba(242, 140, 40, 0.13), transparent 44%);
+        linear-gradient(135deg, rgba(11, 11, 11, 0.11), transparent 38%),
+        linear-gradient(315deg, rgba(201, 162, 39, 0.13), transparent 44%);
     pointer-events: none;
 }
 
@@ -482,7 +482,7 @@ a {
 .mini-progress {
     display: grid;
     gap: 14px;
-    border: 1px solid rgba(22, 93, 99, 0.12);
+    border: 1px solid rgba(11, 11, 11, 0.12);
     border-radius: 18px;
     background: rgba(230, 244, 241, 0.66);
     padding: 18px;
@@ -496,7 +496,7 @@ a {
 
 .mini-progress .progress-track {
     margin: 0;
-    background: rgba(22, 93, 99, 0.12);
+    background: rgba(11, 11, 11, 0.12);
 }
 
 .action-button,
@@ -609,7 +609,7 @@ a {
 }
 
 .metric.attention {
-    background: rgba(255, 140, 0, 0.12);
+    background: rgba(201, 162, 39, 0.12);
     color: var(--warn);
 }
 
@@ -835,7 +835,7 @@ a {
     justify-content: center;
     min-height: 34px;
     padding: 7px 13px;
-    border: 1px solid rgba(22, 93, 99, 0.2);
+    border: 1px solid rgba(11, 11, 11, 0.2);
     border-radius: 999px;
     background: rgba(230, 244, 241, 0.76);
     color: var(--accent-dark);
@@ -923,8 +923,8 @@ a {
 }
 
 .member-message-card.is-unread {
-    border-color: rgba(0, 78, 146, 0.26);
-    background: linear-gradient(180deg, rgba(0, 78, 146, 0.08), rgba(255, 255, 255, 0.96));
+    border-color: rgba(11, 11, 11, 0.26);
+    background: linear-gradient(180deg, rgba(11, 11, 11, 0.08), rgba(255, 255, 255, 0.96));
 }
 
 .member-message-card.is-unread::before {
@@ -951,7 +951,7 @@ a {
 .member-message-head span {
     flex: 0 0 auto;
     border-radius: 999px;
-    background: rgba(255, 140, 0, 0.14);
+    background: rgba(201, 162, 39, 0.14);
     color: var(--warn);
     padding: 5px 8px;
     font-size: 0.7rem;
@@ -977,7 +977,7 @@ a {
 }
 
 .member-message-detail {
-    border: 1px solid rgba(22, 93, 99, 0.2);
+    border: 1px solid rgba(11, 11, 11, 0.2);
     border-radius: 16px;
     background: #fbfcfb;
     padding: 17px;
@@ -985,8 +985,8 @@ a {
 }
 
 .member-message-detail.is-unread {
-    border-color: rgba(0, 78, 146, 0.26);
-    background: linear-gradient(180deg, rgba(0, 78, 146, 0.08), rgba(255, 255, 255, 0.96));
+    border-color: rgba(11, 11, 11, 0.26);
+    background: linear-gradient(180deg, rgba(11, 11, 11, 0.08), rgba(255, 255, 255, 0.96));
 }
 
 .member-message-detail p {
@@ -1070,9 +1070,9 @@ a {
 }
 
 .pending-box {
-    border: 1px solid rgba(255, 140, 0, 0.24);
+    border: 1px solid rgba(201, 162, 39, 0.24);
     border-radius: 16px;
-    background: rgba(255, 140, 0, 0.09);
+    background: rgba(201, 162, 39, 0.09);
     padding: 16px;
     margin-bottom: 16px;
 }
@@ -1106,8 +1106,8 @@ a {
 }
 
 .plan-card.is-featured {
-    border-color: rgba(0, 78, 146, 0.28);
-    box-shadow: 0 20px 48px rgba(0, 78, 146, 0.15);
+    border-color: rgba(11, 11, 11, 0.28);
+    box-shadow: 0 20px 48px rgba(11, 11, 11, 0.15);
 }
 
 .plan-main {
@@ -1129,7 +1129,7 @@ a {
 .plan-badge {
     flex: 0 0 auto;
     border-radius: 999px;
-    background: rgba(0, 78, 146, 0.1);
+    background: rgba(11, 11, 11, 0.1);
     color: var(--accent-dark);
     padding: 6px 9px;
     font-size: 0.72rem;
@@ -1245,7 +1245,7 @@ a {
 }
 
 .empty-panel {
-    border: 1px dashed rgba(16, 40, 32, 0.16);
+    border: 1px dashed rgba(11, 11, 11, 0.16);
     border-radius: 18px;
     background: linear-gradient(180deg, rgba(246, 247, 242, 0.88), rgba(255, 255, 255, 0.96));
     padding: 22px 18px;
@@ -1420,7 +1420,7 @@ a {
     padding: 0 5px;
     border-radius: 999px;
     background: var(--accent);
-    color: #102820;
+    color: #0B0B0B;
     font-size: 0.65rem;
     font-style: normal;
     line-height: 18px;

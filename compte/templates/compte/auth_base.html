@@ -4,9 +4,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}SmartClub Pro{% endblock %}</title>
-  <link rel="icon" type="image/png" href="{% static 'images/favicon-smartclub.png' %}">
-  <link rel="shortcut icon" type="image/png" href="{% static 'images/favicon-smartclub.png' %}">
+  <title>{% block title %}Royal Gym{% endblock %}</title>
+  <link rel="icon" type="image/png" href="{% static 'images/royal-gym-favicon.png' %}">
+  <link rel="shortcut icon" type="image/png" href="{% static 'images/royal-gym-favicon.png' %}">
   <script src="https://cdn.tailwindcss.com"></script>
   <link
     href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap"
@@ -16,8 +16,8 @@
     body {
       font-family: 'Inter', sans-serif;
       background:
-        radial-gradient(circle at top left, rgba(255, 140, 0, 0.14), transparent 32%),
-        radial-gradient(circle at bottom right, rgba(0, 78, 146, 0.14), transparent 38%),
+        radial-gradient(circle at top left, rgba(201, 162, 39, 0.14), transparent 32%),
+        radial-gradient(circle at bottom right, rgba(11, 11, 11, 0.14), transparent 38%),
         #f8fafc;
     }
   </style>
@@ -33,10 +33,8 @@
 
     <div class="bg-white rounded-3xl shadow-xl border border-slate-100 p-6 sm:p-8">
       <div class="text-center mb-6">
-        <h1 class="text-3xl font-extrabold tracking-tight">
-          <span class="text-[#FF8C00]">SmartClub</span>
-          <span class="text-[#004e92]">Pro</span>
-        </h1>
+        <img src="{% static 'images/royal-gym-logo.png' %}" alt="Royal Gym" class="mx-auto h-16 w-16 rounded-2xl shadow-md mb-2">
+        <h1 class="text-2xl font-extrabold tracking-tight text-[#0B0B0B]">Royal Gym</h1>
         <p class="text-slate-500 mt-2 text-sm">{% block intro %}{% endblock %}</p>
       </div>
 

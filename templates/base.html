@@ -7,14 +7,14 @@
     <meta charset="utf-8" />
     <meta http-equiv="x-ua-compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="SmartClub Pro - Tableau de Bord Gestion de Salle de Sport" />
+    <meta name="description" content="Royal Gym - Tableau de Bord Gestion de Salle de Sport" />
     <meta name="author" content="Smart IT Solution" />
     <meta name="csrf-token" content="{{ csrf_token }}">
     <title>
     {% if request.organization %}
         {{ request.organization.name }}
     {% else %}
-        SmartClub
+        Royal Gym
     {% endif %}
     || {% block page_titre %}{% endblock %}
     </title>
@@ -26,8 +26,9 @@
     <link rel="icon" href="{{ organization_brand_logo_url }}" />
     <link rel="apple-touch-icon" href="{{ organization_brand_logo_url }}" />
     {% else %}
-    <link rel="icon" type="image/png" href="{% static 'images/favicon-smartclub.png' %}" />
-    <link rel="shortcut icon" type="image/png" href="{% static 'images/favicon-smartclub.png' %}" />
+    <link rel="icon" type="image/png" href="{% static 'images/royal-gym-favicon.png' %}" />
+    <link rel="shortcut icon" type="image/png" href="{% static 'images/royal-gym-favicon.png' %}" />
+    <link rel="apple-touch-icon" href="{% static 'images/royal-gym-logo-512.png' %}" />
     {% endif %}
     <!--! END: Favicon-->
     <!--! BEGIN: Bootstrap CSS-->

@@ -83,3 +83,38 @@ services:
         value: noreply@smartclubpro.org
       - key: DJANGO_SERVER_EMAIL
         value: noreply@smartclubpro.org
+
+  - type: web
+    name: gesgym-web-test
+    runtime: python
+    plan: free
+    region: frankfurt
+    branch: dev
+    autoDeployTrigger: commit
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
+    startCommand: python manage.py migrate --noinput && python -m gunicorn smartclub.wsgi:application --bind 0.0.0.0:$PORT --log-file - --access-logfile -
+    healthCheckPath: /health/
+    envVars:
+      - key: DJANGO_ENV
+        value: test
+      - key: DJANGO_DEBUG
+        value: "False"
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      # Base SQLite ephemeral : suffisant pour un apercu visuel, pas de
+      # persistance garantie entre deploiements. Pas de base Postgres
+      # separee a provisionner pour cet environnement de test.
+      - key: DATABASE_URL
+        value: "sqlite:////opt/render/project/src/test_preview.sqlite3"
+      - key: DJANGO_ALLOWED_HOSTS
+        value: ".onrender.com"
+      - key: DJANGO_CSRF_TRUSTED_ORIGINS
+        value: "https://*.onrender.com"
+      - key: DJANGO_CANONICAL_HOST
+        value: ""
+      - key: DJANGO_SERVE_MEDIA
+        value: "True"
+      # Pas de SMTP reel configure sur cet environnement de test : les
+      # messages du formulaire de contact partent seulement dans les logs.
+      - key: DJANGO_EMAIL_BACKEND
+        value: django.core.mail.backends.console.EmailBackend

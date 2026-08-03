@@ -1,6 +1,6 @@
 {% extends "compte/auth_base.html" %}
 
-{% block title %}SmartClub Pro · Connexion{% endblock %}
+{% block title %}Royal Gym · Connexion{% endblock %}
 {% block intro %}Connectez-vous à votre espace de travail sécurisé.{% endblock %}
 
 {% block card_content %}
@@ -66,10 +66,10 @@
         {{ form.remember_me }}
         <span>Se souvenir de moi</span>
       </label>
-      <a href="{% url 'compte:password_reset' %}" class="text-[#004e92] hover:underline">Mot de passe oublié ?</a>
+      <a href="{% url 'compte:password_reset' %}" class="text-[#0B0B0B] hover:underline">Mot de passe oublié ?</a>
     </div>
 
-    <button type="submit" class="w-full bg-[#004e92] hover:bg-[#003a6e] text-white font-semibold py-3 rounded-xl transition">
+    <button type="submit" class="w-full bg-[#0B0B0B] hover:bg-[#8A6D1D] text-white font-semibold py-3 rounded-xl transition">
       Se connecter
     </button>
   </form>

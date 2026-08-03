@@ -33,7 +33,7 @@
                         <div class="d-flex align-items-start justify-content-between mb-4">
                             <div class="d-flex gap-4 align-items-center">
                                 <div class="d-flex align-items-center justify-content-center" style="width: 56px; height: 56px;">
-                                    <span class="material-icons fs-2" style="color: #3454d1;">mail</span>
+                                    <span class="material-icons fs-2" style="color: #8A6D1D;">mail</span>
                                 </div>
                                 <div>
                                     <div class="fs-4 fw-bold text-dark" id="totalEnvois">1,247</div>
@@ -706,7 +706,7 @@
             type: 'line',
             data: {
                 labels: notificationsData.graphData.labels,
-                datasets: [{ label: 'Notifications envoyées', data: notificationsData.graphData.values, borderColor: '#3454d1', backgroundColor: 'rgba(52, 84, 209, 0.1)', tension: 0.3, fill: true, pointBackgroundColor: '#3454d1' }]
+                datasets: [{ label: 'Notifications envoyées', data: notificationsData.graphData.values, borderColor: '#8A6D1D', backgroundColor: 'rgba(201, 162, 39, 0.1)', tension: 0.3, fill: true, pointBackgroundColor: '#8A6D1D' }]
             },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
         });
@@ -783,7 +783,7 @@
     }
 
     function editTemplate(id) {
-        if (typeof Swal !== 'undefined') Swal.fire({ icon: 'info', title: 'Édition de modèle', text: 'Fonctionnalité d\'édition du modèle #' + id + ' (simulation)', confirmButtonColor: '#3454d1' });
+        if (typeof Swal !== 'undefined') Swal.fire({ icon: 'info', title: 'Édition de modèle', text: 'Fonctionnalité d\'édition du modèle #' + id + ' (simulation)', confirmButtonColor: '#8A6D1D' });
     }
 
     function renderHistorique() {
