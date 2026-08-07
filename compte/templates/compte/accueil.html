@@ -255,22 +255,21 @@
         </div>
 
         <div class="relative">
-          <div class="premium-card rounded-[32px] p-8 lg:p-10 flex flex-col items-center text-center">
-            <img src="{% static 'images/royal-gym-logo.png' %}" alt="Royal Gym" class="w-40 h-40 rounded-3xl object-cover shadow-xl mb-6">
-            <div class="grid grid-cols-2 gap-4 w-full">
-              <div class="soft-card rounded-2xl p-4">
-                <i class="fas fa-crown text-[#C9A227] text-xl mb-1"></i>
-                <p class="text-sm font-semibold text-gray-800">Équipements premium</p>
-              </div>
-              <div class="soft-card rounded-2xl p-4">
+          <div class="premium-card rounded-[32px] p-4 lg:p-5">
+            <div class="relative rounded-[24px] overflow-hidden">
+              <img src="{% static 'images/royal-gym-equipment-2.jpg' %}" alt="Équipement de musculation Royal Gym" class="w-full h-auto object-cover">
+              <img src="{% static 'images/royal-gym-logo.png' %}" alt="Royal Gym" class="absolute bottom-4 left-4 w-14 h-14 rounded-xl shadow-lg object-cover">
+            </div>
+            <div class="grid grid-cols-3 gap-3 mt-5">
+              <div class="soft-card rounded-2xl p-4 text-center">
                 <i class="fas fa-user-tie text-[#C9A227] text-xl mb-1"></i>
                 <p class="text-sm font-semibold text-gray-800">Coachs qualifiés</p>
               </div>
-              <div class="soft-card rounded-2xl p-4">
+              <div class="soft-card rounded-2xl p-4 text-center">
                 <i class="fas fa-id-card text-[#C9A227] text-xl mb-1"></i>
                 <p class="text-sm font-semibold text-gray-800">Carte membre &amp; QR</p>
               </div>
-              <div class="soft-card rounded-2xl p-4">
+              <div class="soft-card rounded-2xl p-4 text-center">
                 <i class="fas fa-clock text-[#C9A227] text-xl mb-1"></i>
                 <p class="text-sm font-semibold text-gray-800">Horaires flexibles</p>
               </div>
@@ -374,15 +373,17 @@
           Un plateau complet pour s'entraîner sans limite
         </h2>
         <p class="text-lg text-gray-600">
-          Aperçu de nos espaces d'entraînement. Photos réelles de la salle à venir prochainement.
+          Aperçu de nos espaces d'entraînement, pensés pour vous accompagner à chaque séance.
         </p>
       </div>
 
       <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div class="soft-card rounded-3xl p-8 text-center">
-          <div class="equip-icon mb-5 mx-auto"><i class="fas fa-dumbbell"></i></div>
-          <h3 class="font-bold text-lg mb-2">Zone musculation</h3>
-          <p class="text-gray-500">Haltères, barres et machines guidées.</p>
+        <div class="soft-card rounded-3xl overflow-hidden text-center">
+          <img src="{% static 'images/royal-gym-equipment-1.jpg' %}" alt="Zone musculation Royal Gym" class="w-full h-48 object-cover">
+          <div class="p-8 pt-6">
+            <h3 class="font-bold text-lg mb-2">Zone musculation</h3>
+            <p class="text-gray-500">Haltères, barres et machines guidées.</p>
+          </div>
         </div>
         <div class="soft-card rounded-3xl p-8 text-center">
           <div class="equip-icon mb-5 mx-auto"><i class="fas fa-heart-pulse"></i></div>

@@ -105,7 +105,7 @@ services:
       # persistance garantie entre deploiements. Pas de base Postgres
       # separee a provisionner pour cet environnement de test.
       - key: DATABASE_URL
-        value: "sqlite:////opt/render/project/src/test_preview.sqlite3"
+        value: "sqlite:///test_preview.sqlite3"
       - key: DJANGO_ALLOWED_HOSTS
         value: ".onrender.com"
       - key: DJANGO_CSRF_TRUSTED_ORIGINS
