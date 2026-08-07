@@ -5,6 +5,13 @@ databases:
     databaseName: gesgym
     user: gesgym
 
+  # Base de production definitive, sur le compte Render de Royal Gym.
+  - name: royal-gym-db
+    plan: free
+    region: frankfurt
+    databaseName: royalgym
+    user: royalgym
+
 services:
   - type: web
     name: gesgym-web
@@ -84,6 +91,9 @@ services:
       - key: DJANGO_SERVER_EMAIL
         value: noreply@smartclubpro.org
 
+  # Site de production definitif de Royal Gym (compte Render royalgym243@gmail.com).
+  # Nom technique herite du service de test initial ("gesgym-web-test") ; peut
+  # etre renomme plus tard dans le dashboard Render sans casser l'URL existante.
   - type: web
     name: gesgym-web-test
     runtime: python
@@ -96,25 +106,63 @@ services:
     healthCheckPath: /health/
     envVars:
       - key: DJANGO_ENV
-        value: test
+        value: production
       - key: DJANGO_DEBUG
         value: "False"
       - key: DJANGO_SECRET_KEY
         generateValue: true
-      # Base SQLite ephemeral : suffisant pour un apercu visuel, pas de
-      # persistance garantie entre deploiements. Pas de base Postgres
-      # separee a provisionner pour cet environnement de test.
       - key: DATABASE_URL
-        value: "sqlite:///test_preview.sqlite3"
+        fromDatabase:
+          name: royal-gym-db
+          property: connectionString
+      # Pas de domaine personnalise pour l'instant : reste sur l'URL Render.
       - key: DJANGO_ALLOWED_HOSTS
         value: ".onrender.com"
       - key: DJANGO_CSRF_TRUSTED_ORIGINS
         value: "https://*.onrender.com"
       - key: DJANGO_CANONICAL_HOST
         value: ""
-      - key: DJANGO_SERVE_MEDIA
+      - key: DJANGO_USE_X_FORWARDED_HOST
         value: "True"
-      # Pas de SMTP reel configure sur cet environnement de test : les
-      # messages du formulaire de contact partent seulement dans les logs.
+      - key: DJANGO_SECURE_SSL_REDIRECT
+        value: "True"
+      - key: DJANGO_SESSION_COOKIE_SECURE
+        value: "True"
+      - key: DJANGO_CSRF_COOKIE_SECURE
+        value: "True"
+      - key: DJANGO_SECURE_HSTS_SECONDS
+        value: "31536000"
+      - key: DJANGO_SERVE_MEDIA
+        value: "False"
+      - key: B2_BUCKET_NAME
+        sync: false
+      - key: B2_REGION
+        sync: false
+      - key: B2_ENDPOINT_URL
+        sync: false
+      - key: B2_KEY_ID
+        sync: false
+      - key: B2_APPLICATION_KEY
+        sync: false
+      - key: B2_MEDIA_LOCATION
+        value: media
+      - key: B2_QUERYSTRING_AUTH
+        value: "False"
       - key: DJANGO_EMAIL_BACKEND
-        value: django.core.mail.backends.console.EmailBackend
+        value: django.core.mail.backends.smtp.EmailBackend
+      - key: DJANGO_EMAIL_HOST
+        value: mail.smartclubpro.org
+      - key: DJANGO_EMAIL_PORT
+        value: "465"
+      - key: DJANGO_EMAIL_HOST_USER
+        value: noreply@smartclubpro.org
+      - key: DJANGO_EMAIL_HOST_PASSWORD
+        sync: false
+      - key: DJANGO_EMAIL_USE_TLS
+        value: "False"
+      - key: DJANGO_EMAIL_USE_SSL
+        value: "True"
+      - key: DJANGO_DEFAULT_FROM_EMAIL
+        value: noreply@smartclubpro.org
+      - key: DJANGO_SERVER_EMAIL
+        value: noreply@smartclubpro.org
