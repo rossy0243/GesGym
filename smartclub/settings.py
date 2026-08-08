@@ -153,6 +153,7 @@ INSTALLED_APPS = [
     'coaching',
     'rh',
     'website',
+    'anymail',
 ]
 
 MIDDLEWARE = [
@@ -375,6 +376,12 @@ EMAIL_USE_TLS = _env_bool("DJANGO_EMAIL_USE_TLS", not DEBUG)
 EMAIL_USE_SSL = _env_bool("DJANGO_EMAIL_USE_SSL", False)
 DEFAULT_FROM_EMAIL = _env("DJANGO_DEFAULT_FROM_EMAIL", "noreply@gesgym.local")
 SERVER_EMAIL = _env("DJANGO_SERVER_EMAIL", DEFAULT_FROM_EMAIL)
+
+# Relais HTTP (port 443) pour l'envoi d'e-mails quand le port SMTP sortant
+# est bloque par l'hebergeur (cas du plan gratuit Render).
+ANYMAIL = {
+    "BREVO_API_KEY": _env("BREVO_API_KEY", ""),
+}
 SOCIAL_LINKS = [
     {
         "label": "Facebook",
