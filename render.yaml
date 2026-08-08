@@ -115,11 +115,15 @@ services:
         fromDatabase:
           name: royal-gym-db
           property: connectionString
-      # Pas de domaine personnalise pour l'instant : reste sur l'URL Render.
+      # Domaine personnalise du client (DNS en cours de propagation cote
+      # client) : on garde .onrender.com dans la liste pour ne pas se
+      # couper l'acces pendant la transition. CANONICAL_HOST reste vide
+      # tant que le domaine n'est pas verifie, pour eviter une redirection
+      # vers un domaine pas encore resolu.
       - key: DJANGO_ALLOWED_HOSTS
-        value: ".onrender.com"
+        value: "royalgym-fitness.com,www.royalgym-fitness.com,.onrender.com"
       - key: DJANGO_CSRF_TRUSTED_ORIGINS
-        value: "https://*.onrender.com"
+        value: "https://royalgym-fitness.com,https://www.royalgym-fitness.com,https://*.onrender.com"
       - key: DJANGO_CANONICAL_HOST
         value: ""
       - key: DJANGO_USE_X_FORWARDED_HOST
