@@ -21,7 +21,7 @@ LANDING_META_DESCRIPTION = (
     "Royal Gym est une salle de sport premium à Kinshasa : musculation, cardio, "
     "cours collectifs et coaching personnalisé dans un cadre haut de gamme."
 )
-LANDING_OG_IMAGE = "/static/images/royal-gym-logo.png"
+LANDING_OG_IMAGE = "/static/images/royal-gym-logo-512.png"
 LANDING_KEYWORDS = (
     "salle de sport Kinshasa, musculation, fitness, cours collectifs, coaching personnel, "
     "Royal Gym"

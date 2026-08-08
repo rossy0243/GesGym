@@ -28,6 +28,11 @@ from website.views import landing, robots_txt, sitemap_xml
 
 urlpatterns = [
     path('', landing, name='landing'),
+    path(
+        'favicon.ico',
+        RedirectView.as_view(url='/static/images/royal-gym-favicon.png', permanent=False),
+        name='favicon',
+    ),
     path('robots.txt', robots_txt, name='robots_txt'),
     path('sitemap.xml', sitemap_xml, name='sitemap_xml'),
     path('health/', lambda request: HttpResponse("ok", content_type="text/plain"), name='health'),
