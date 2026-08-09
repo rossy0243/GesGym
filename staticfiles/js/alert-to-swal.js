@@ -15,7 +15,7 @@
             icon: icon,
             title: icon === 'success' ? 'Succès' : (icon === 'error' ? 'Attention' : 'Information'),
             text: text,
-            confirmButtonColor: '#3454d1'
+            confirmButtonColor: '#8A6D1D'
         });
     };
 })();

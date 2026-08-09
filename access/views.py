@@ -65,7 +65,7 @@ def _today_stats(gym):
     }
 
 
-def _record_access(gym, member, user, method, require_valid_qr=False):
+def _record_access(gym, member, user, method, require_valid_qr=False, device=None):
     with transaction.atomic():
         member = Member.objects.select_for_update().get(id=member.id, gym=gym)
         access_granted, reason = _member_has_valid_access(
@@ -84,6 +84,7 @@ def _record_access(gym, member, user, method, require_valid_qr=False):
             denial_reason=reason,
             device_used=method,
             scanned_by=user,
+            device=device,
         )
 
     return access_granted, reason, log

@@ -98,11 +98,11 @@
                 datasets: [{
                     label: 'Revenus (en USD)',
                     data: dashboardData.salesChartData.values,
-                    borderColor: '#3454d1',
-                    backgroundColor: 'rgba(52, 84, 209, 0.1)',
+                    borderColor: '#8A6D1D',
+                    backgroundColor: 'rgba(201, 162, 39, 0.1)',
                     tension: 0.3,
                     fill: true,
-                    pointBackgroundColor: '#3454d1',
+                    pointBackgroundColor: '#8A6D1D',
                     pointBorderColor: '#fff',
                     pointBorderWidth: 2,
                     pointRadius: 4
@@ -171,7 +171,7 @@
             type: 'bar',
             data: {
                 labels: analyticsData.revenueByCenter.labels,
-                datasets: [{ label: 'Revenus (USD)', data: analyticsData.revenueByCenter.values, backgroundColor: '#3454d1' }]
+                datasets: [{ label: 'Revenus (USD)', data: analyticsData.revenueByCenter.values, backgroundColor: '#8A6D1D' }]
             },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: function(v) { return v + ' $'; } } } } }
         });
@@ -179,7 +179,7 @@
             type: 'doughnut',
             data: {
                 labels: analyticsData.visitsByCenter.labels,
-                datasets: [{ data: analyticsData.visitsByCenter.values, backgroundColor: ['#3454d1', '#10b981', '#f59e0b', '#ef4444'] }]
+                datasets: [{ data: analyticsData.visitsByCenter.values, backgroundColor: ['#8A6D1D', '#10b981', '#f59e0b', '#ef4444'] }]
             },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
         });
@@ -188,12 +188,12 @@
     function refreshDashboard() {
         updateDashboard();
         if (typeof Swal !== 'undefined') {
-            Swal.fire({ icon: 'success', title: 'Données actualisées', text: 'Les statistiques ont été mises à jour avec succès!', confirmButtonColor: '#3454d1', timer: 2000, showConfirmButton: false });
+            Swal.fire({ icon: 'success', title: 'Données actualisées', text: 'Les statistiques ont été mises à jour avec succès!', confirmButtonColor: '#8A6D1D', timer: 2000, showConfirmButton: false });
         } else { alert('Données mises à jour avec succès!'); }
     }
 
     function exportChartData() {
-        if (typeof Swal !== 'undefined') Swal.fire({ icon: 'info', title: 'Export en cours', text: 'Préparation du rapport d\'évolution des revenus...', confirmButtonColor: '#3454d1' });
+        if (typeof Swal !== 'undefined') Swal.fire({ icon: 'info', title: 'Export en cours', text: 'Préparation du rapport d\'évolution des revenus...', confirmButtonColor: '#8A6D1D' });
         else alert('Export des données du graphique...');
     }
 

@@ -1,3 +1,4 @@
+import json
 from datetime import timedelta
 
 from django.conf import settings
@@ -10,7 +11,9 @@ from compte.models import User, UserGymRole
 from members.models import Member
 from organizations.models import Gym, GymModule, Module, Organization
 from subscriptions.models import MemberSubscription, SubscriptionPlan
-from .models import AccessLog
+from .device_views import UNKNOWN_CREDENTIAL_REASON
+from .hikvision import parse_event_payload
+from .models import AccessDevice, AccessLog
 from .views import DOUBLE_SCAN_REASON, EXPIRED_QR_REASON
 
 
@@ -359,9 +362,211 @@ class AccessControlTests(TestCase):
         self.assertEqual(len(payload), 1)
         self.assertEqual(payload[0]["member"], "Alice Access")
 
+    def test_access_dashboard_renders_readers_section(self):
+        response = self.client.get(reverse("access:acces_dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="lecteursSection"')
+        self.assertContains(response, "Détecter un lecteur sur le réseau")
+
     def test_access_dashboard_requires_active_module(self):
         GymModule.objects.filter(gym=self.gym_a, module__code="ACCESS").update(is_active=False)
 
         response = self.client.get(reverse("access:acces_dashboard"))
 
         self.assertEqual(response.status_code, 403)
+
+
+class HikvisionEventParsingTests(TestCase):
+    """Extraction de l'identifiant scanne dans les notifications du lecteur."""
+
+    def test_extracts_qr_content_from_json_event(self):
+        payload = json.dumps({
+            "eventType": "AccessControllerEvent",
+            "dateTime": "2026-08-09T10:00:00+01:00",
+            "AccessControllerEvent": {
+                "majorEventType": 5,
+                "subEventType": 75,
+                "cardNo": "0",
+                "QRCodeInfo": "0f1d4c62-6f52-4a2e-9f42-7d3f6a1b2c3d",
+            },
+        })
+
+        parsed = parse_event_payload(payload.encode(), "application/json")
+
+        self.assertEqual(parsed["credential"], "0f1d4c62-6f52-4a2e-9f42-7d3f6a1b2c3d")
+
+    def test_extracts_card_number_when_no_qr(self):
+        payload = json.dumps({
+            "AccessControllerEvent": {"cardNo": "1234567890"},
+        })
+
+        parsed = parse_event_payload(payload.encode(), "application/json")
+
+        self.assertEqual(parsed["credential"], "1234567890")
+
+    def test_extracts_json_block_from_multipart_body(self):
+        body = (
+            "--MIME_boundary\r\n"
+            'Content-Disposition: form-data; name="event_log"\r\n'
+            "Content-Type: application/json\r\n\r\n"
+            '{"AccessControllerEvent": {"QRCodeInfo": "abc-123"}}\r\n'
+            "--MIME_boundary--\r\n"
+        )
+
+        parsed = parse_event_payload(
+            body.encode(),
+            "multipart/form-data; boundary=MIME_boundary",
+        )
+
+        self.assertEqual(parsed["credential"], "abc-123")
+
+    def test_returns_empty_credential_on_unreadable_body(self):
+        parsed = parse_event_payload(b"heartbeat", "text/plain")
+
+        self.assertEqual(parsed["credential"], "")
+
+
+class AccessDeviceWebhookTests(TestCase):
+    """Passages pousses par un lecteur physique vers l'application."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(name="Org D", slug="org-d")
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym D",
+            slug="gym-d",
+            subdomain="gym-d",
+        )
+        self.other_gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym E",
+            slug="gym-e",
+            subdomain="gym-e",
+        )
+        self.device = AccessDevice.objects.create(
+            gym=self.gym,
+            name="Entree principale",
+            host="192.168.1.64",
+            username="admin",
+            password="secret",
+        )
+        self.member = Member.objects.create(
+            gym=self.gym,
+            first_name="Dina",
+            last_name="Device",
+            phone="30001",
+            email="dina-device@example.com",
+        )
+        self.outsider = Member.objects.create(
+            gym=self.other_gym,
+            first_name="Elio",
+            last_name="Device",
+            phone="40001",
+            email="elio-device@example.com",
+        )
+        plan = SubscriptionPlan.objects.create(
+            gym=self.gym,
+            name="Mensuel",
+            duration_days=30,
+            price=30,
+        )
+        today = timezone.now().date()
+        MemberSubscription.objects.create(
+            gym=self.gym,
+            member=self.member,
+            plan=plan,
+            start_date=today,
+            end_date=today + timedelta(days=30),
+            is_active=True,
+        )
+
+    def _post_scan(self, credential, token=None):
+        payload = json.dumps({
+            "eventType": "AccessControllerEvent",
+            "AccessControllerEvent": {"QRCodeInfo": str(credential)},
+        })
+        url = reverse(
+            "access:device_webhook",
+            args=[token or self.device.webhook_token],
+        )
+        return self.client.post(url, data=payload, content_type="application/json")
+
+    def test_valid_scan_grants_access_and_logs_device(self):
+        response = self._post_scan(self.member.qr_code)
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["access"])
+        self.assertEqual(payload["member"], "Dina Device")
+
+        log = AccessLog.objects.get(member=self.member)
+        self.assertEqual(log.gym, self.gym)
+        self.assertEqual(log.device, self.device)
+        self.assertEqual(log.device_used, "Entree principale")
+        self.assertIsNone(log.scanned_by)
+
+    def test_scan_marks_device_as_seen(self):
+        self.assertIsNone(self.device.last_seen_at)
+
+        self._post_scan(self.member.qr_code)
+
+        self.device.refresh_from_db()
+        self.assertIsNotNone(self.device.last_seen_at)
+
+    def test_unknown_credential_is_refused_without_log(self):
+        response = self._post_scan("11111111-2222-3333-4444-555555555555")
+
+        payload = response.json()
+        self.assertFalse(payload["access"])
+        self.assertEqual(payload["reason"], UNKNOWN_CREDENTIAL_REASON)
+        self.assertEqual(AccessLog.objects.count(), 0)
+
+    def test_member_from_another_gym_is_not_resolved(self):
+        response = self._post_scan(self.outsider.qr_code)
+
+        payload = response.json()
+        self.assertFalse(payload["access"])
+        self.assertEqual(payload["reason"], UNKNOWN_CREDENTIAL_REASON)
+        self.assertEqual(AccessLog.objects.count(), 0)
+
+    def test_expired_qr_code_is_refused(self):
+        Member.objects.filter(pk=self.member.pk).update(
+            qr_code_expires_at=timezone.now() - timedelta(days=1)
+        )
+
+        response = self._post_scan(self.member.qr_code)
+
+        payload = response.json()
+        self.assertFalse(payload["access"])
+        self.assertEqual(payload["reason"], EXPIRED_QR_REASON)
+
+    def test_second_scan_same_day_is_refused(self):
+        self._post_scan(self.member.qr_code)
+        response = self._post_scan(self.member.qr_code)
+
+        payload = response.json()
+        self.assertFalse(payload["access"])
+        self.assertEqual(payload["reason"], DOUBLE_SCAN_REASON)
+
+    def test_unknown_token_returns_404(self):
+        response = self._post_scan(
+            self.member.qr_code,
+            token="99999999-8888-7777-6666-555555555555",
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_inactive_device_is_rejected(self):
+        AccessDevice.objects.filter(pk=self.device.pk).update(is_active=False)
+
+        response = self._post_scan(self.member.qr_code)
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_get_is_not_allowed(self):
+        url = reverse("access:device_webhook", args=[self.device.webhook_token])
+
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 405)

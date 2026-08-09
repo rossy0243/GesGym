@@ -1,6 +1,25 @@
 from django.contrib import admin
 
-from .models import AccessLog
+from .models import AccessDevice, AccessLog
+
+
+@admin.register(AccessDevice)
+class AccessDeviceAdmin(admin.ModelAdmin):
+    list_display = ("name", "gym", "brand", "host", "port", "is_active", "last_seen_at")
+    list_filter = ("brand", "is_active", "gym")
+    search_fields = ("name", "host", "serial_number", "mac_address", "gym__name")
+    autocomplete_fields = ("gym",)
+    readonly_fields = (
+        "webhook_token",
+        "model_name",
+        "serial_number",
+        "firmware",
+        "mac_address",
+        "last_seen_at",
+        "last_error",
+        "created_at",
+        "updated_at",
+    )
 
 
 @admin.register(AccessLog)

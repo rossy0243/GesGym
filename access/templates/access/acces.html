@@ -169,6 +169,10 @@
         <span class="material-icons me-1" style="font-size:18px;">history</span>
         Historique
     </button>
+    <button type="button" class="btn btn-light" onclick="showSection('lecteurs')">
+        <span class="material-icons me-1" style="font-size:18px;">sensors</span>
+        Lecteurs
+    </button>
 </div>
 
 <!-- SECTION SCAN -->
@@ -470,6 +474,111 @@
     </div>
 </div>
 
+<!-- SECTION LECTEURS -->
+<div id="lecteursSection" class="mx-2" style="display:none;">
+    <div class="card section-card mb-4">
+        <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <h5 class="mb-0 d-flex align-items-center gap-2">
+                <span class="material-icons">travel_explore</span>
+                Détecter un lecteur sur le réseau
+            </h5>
+            <button class="btn btn-primary btn-sm" id="btnDiscover" onclick="discoverDevices()">
+                <span class="material-icons me-2" style="font-size:16px;">radar</span>
+                Lancer la détection
+            </button>
+        </div>
+        <div class="card-body">
+            <p class="text-muted small mb-3">
+                L'application interroge le réseau local et propose les lecteurs qu'elle trouve.
+                Le lecteur doit être alimenté et raccordé au même réseau que ce serveur.
+            </p>
+            <div id="discoverStatus" class="small text-muted mb-3"></div>
+            <div id="discoverResults"></div>
+        </div>
+    </div>
+
+    <div class="card section-card">
+        <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <h5 class="mb-0 d-flex align-items-center gap-2">
+                <span class="material-icons">sensors</span>
+                Lecteurs enregistrés
+            </h5>
+            <button class="btn btn-light btn-sm" onclick="loadDevices()">
+                <span class="material-icons me-2" style="font-size:16px;">refresh</span>
+                Actualiser
+            </button>
+        </div>
+        <div class="card-body">
+            <div id="devicesList"></div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL AJOUT LECTEUR -->
+<div class="modal fade" id="deviceModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title d-flex align-items-center gap-2">
+                    <span class="material-icons">add_link</span>
+                    Utiliser ce lecteur
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+            </div>
+            <div class="modal-body">
+                <div id="deviceModalError" class="alert alert-danger d-none"></div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Nom du lecteur</label>
+                    <input type="text" class="form-control" id="deviceName" placeholder="Entrée principale">
+                </div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-8">
+                        <label class="form-label fw-semibold">Adresse IP</label>
+                        <input type="text" class="form-control" id="deviceHost" readonly>
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label fw-semibold">Port</label>
+                        <input type="number" class="form-control" id="devicePort" value="80">
+                    </div>
+                </div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <label class="form-label fw-semibold">Identifiant</label>
+                        <input type="text" class="form-control" id="deviceUsername" value="admin">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label fw-semibold">Mot de passe</label>
+                        <input type="password" class="form-control" id="devicePassword" autocomplete="new-password">
+                    </div>
+                </div>
+
+                <div class="mb-2">
+                    <label class="form-label fw-semibold">Numéro de porte</label>
+                    <input type="number" class="form-control" id="deviceDoor" value="1" style="max-width:120px;">
+                </div>
+
+                <input type="hidden" id="deviceMac">
+                <input type="hidden" id="deviceModel">
+                <input type="hidden" id="deviceSerial">
+                <input type="hidden" id="deviceFirmware">
+
+                <p class="text-muted small mb-0">
+                    Le mot de passe est celui défini sur l'écran du lecteur lors de son activation.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" id="btnSaveDevice" onclick="saveDevice()">
+                    Enregistrer et tester
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="quick-action">
     <button class="btn btn-primary" onclick="openScannerModal()">
         <span class="material-icons">photo_camera</span>
@@ -652,14 +761,20 @@ function showSection(section) {
     const scan = document.getElementById("scanSection");
     const manuel = document.getElementById("manuelSection");
     const historique = document.getElementById("historiqueSection");
+    const lecteurs = document.getElementById("lecteursSection");
 
     if (scan) scan.style.display = "none";
     if (manuel) manuel.style.display = "none";
     if (historique) historique.style.display = "none";
+    if (lecteurs) lecteurs.style.display = "none";
 
     if (section === "scan" && scan) scan.style.display = "block";
     if (section === "manual" && manuel) manuel.style.display = "block";
     if (section === "historique" && historique) historique.style.display = "block";
+    if (section === "lecteurs" && lecteurs) {
+        lecteurs.style.display = "block";
+        loadDevices();
+    }
 }
 </script>
 
@@ -1018,6 +1133,247 @@ document.addEventListener("DOMContentLoaded", function () {
         this.value = "";
     });
 });
+</script>
+
+<script>
+/* ------------------------------------------------------------------
+   Lecteurs physiques : détection réseau, enregistrement, tests
+   ------------------------------------------------------------------ */
+
+let deviceModal = null;
+
+function devicePost(url, payload) {
+    return fetch(url, {
+        method: "POST",
+        headers: {
+            "X-CSRFToken": getCookie("csrftoken"),
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload || {})
+    }).then(response => response.json().then(data => ({ ok: response.ok, data })));
+}
+
+function escapeHtml(value) {
+    return String(value || "").replace(/[&<>"']/g, function (char) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char];
+    });
+}
+
+function discoverDevices() {
+    const button = document.getElementById("btnDiscover");
+    const status = document.getElementById("discoverStatus");
+    const results = document.getElementById("discoverResults");
+
+    button.disabled = true;
+    results.innerHTML = "";
+    status.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Recherche en cours sur le réseau local...';
+
+    devicePost("/access/devices/discover/").then(({ ok, data }) => {
+        button.disabled = false;
+
+        if (!ok) {
+            status.innerHTML = `<span class="text-danger">${escapeHtml(data.error || "Détection impossible.")}</span>`;
+            return;
+        }
+
+        if (!data.devices.length) {
+            status.innerHTML = "";
+            results.innerHTML = `
+                <div class="alert alert-warning mb-0">
+                    <strong>Aucun lecteur détecté.</strong>
+                    <ul class="mb-0 mt-2 small">
+                        <li>Vérifiez que le lecteur est alimenté et que son écran est allumé.</li>
+                        <li>Vérifiez qu'il est sur le même réseau que ce serveur.</li>
+                        <li>Un VPN actif sur le serveur bloque le réseau local : déconnectez-le.</li>
+                    </ul>
+                </div>`;
+            return;
+        }
+
+        const method = data.method === "sadp" ? "découverte SADP" : "balayage du sous-réseau";
+        status.innerHTML = `${data.count} appareil(s) trouvé(s) via ${method}.`;
+
+        results.innerHTML = data.devices.map(device => {
+            const label = device.model || "Appareil Hikvision";
+            const already = device.already_registered;
+            const inactive = device.activated === false;
+
+            return `
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 p-3 border rounded-3 mb-2">
+                <div>
+                    <div class="fw-semibold d-flex align-items-center gap-2">
+                        <span class="material-icons text-primary" style="font-size:20px;">sensors</span>
+                        ${escapeHtml(label)}
+                    </div>
+                    <div class="text-muted small">
+                        ${escapeHtml(device.host)}:${device.http_port}
+                        ${device.mac ? " &middot; " + escapeHtml(device.mac) : ""}
+                        ${device.serial ? " &middot; " + escapeHtml(device.serial) : ""}
+                    </div>
+                    ${inactive ? '<div class="text-danger small mt-1">Appareil non activé : définissez son mot de passe sur son écran tactile.</div>' : ""}
+                </div>
+                <div>
+                    ${already
+                        ? '<span class="badge bg-secondary px-3 py-2">Déjà enregistré</span>'
+                        : `<button class="btn btn-primary btn-sm" onclick='openDeviceModal(${JSON.stringify(device).replace(/'/g, "&#39;")})'>
+                               <span class="material-icons me-2" style="font-size:16px;">add</span>
+                               Utiliser ce lecteur
+                           </button>`}
+                </div>
+            </div>`;
+        }).join("");
+    }).catch(() => {
+        button.disabled = false;
+        status.innerHTML = '<span class="text-danger">Erreur réseau pendant la détection.</span>';
+    });
+}
+
+function openDeviceModal(device) {
+    const modalElement = document.getElementById("deviceModal");
+
+    document.getElementById("deviceModalError").classList.add("d-none");
+    document.getElementById("deviceName").value = device.model ? `Lecteur ${device.model}` : "Entrée principale";
+    document.getElementById("deviceHost").value = device.host || "";
+    document.getElementById("devicePort").value = device.http_port || 80;
+    document.getElementById("deviceUsername").value = "admin";
+    document.getElementById("devicePassword").value = "";
+    document.getElementById("deviceDoor").value = 1;
+    document.getElementById("deviceMac").value = device.mac || "";
+    document.getElementById("deviceModel").value = device.model || "";
+    document.getElementById("deviceSerial").value = device.serial || "";
+    document.getElementById("deviceFirmware").value = device.firmware || "";
+
+    deviceModal = bootstrap.Modal.getOrCreateInstance(modalElement);
+    deviceModal.show();
+}
+
+function saveDevice() {
+    const button = document.getElementById("btnSaveDevice");
+    const errorBox = document.getElementById("deviceModalError");
+
+    const payload = {
+        name: document.getElementById("deviceName").value,
+        host: document.getElementById("deviceHost").value,
+        port: document.getElementById("devicePort").value,
+        username: document.getElementById("deviceUsername").value,
+        password: document.getElementById("devicePassword").value,
+        door_number: document.getElementById("deviceDoor").value,
+        mac: document.getElementById("deviceMac").value,
+        model: document.getElementById("deviceModel").value,
+        serial: document.getElementById("deviceSerial").value,
+        firmware: document.getElementById("deviceFirmware").value
+    };
+
+    button.disabled = true;
+    errorBox.classList.add("d-none");
+
+    devicePost("/access/devices/create/", payload).then(({ ok, data }) => {
+        button.disabled = false;
+
+        if (!ok) {
+            errorBox.textContent = data.error || "Enregistrement impossible.";
+            errorBox.classList.remove("d-none");
+            return;
+        }
+
+        deviceModal?.hide();
+        loadDevices();
+
+        if (data.test && !data.test.ok) {
+            alert("Lecteur enregistré, mais la liaison a échoué :\n" + data.test.error);
+        }
+    }).catch(() => {
+        button.disabled = false;
+        errorBox.textContent = "Erreur réseau.";
+        errorBox.classList.remove("d-none");
+    });
+}
+
+function loadDevices() {
+    const container = document.getElementById("devicesList");
+    if (!container) return;
+
+    fetch("/access/devices/").then(res => res.json()).then(data => {
+        if (!data.devices.length) {
+            container.innerHTML = `
+                <div class="text-center py-4">
+                    <span class="material-icons empty-state-icon">sensors_off</span>
+                    <p class="mt-2 mb-0 text-muted">Aucun lecteur enregistré pour cette salle.</p>
+                    <p class="text-muted small mb-0">Lancez la détection ci-dessus pour en ajouter un.</p>
+                </div>`;
+            return;
+        }
+
+        container.innerHTML = data.devices.map(device => {
+            const badge = device.online
+                ? '<span class="badge bg-success px-3 py-2">En ligne</span>'
+                : '<span class="badge bg-danger px-3 py-2">Hors ligne</span>';
+
+            return `
+            <div class="p-3 border rounded-3 mb-3">
+                <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+                    <div>
+                        <div class="fw-semibold d-flex align-items-center gap-2">
+                            <span class="material-icons text-primary" style="font-size:20px;">sensors</span>
+                            ${escapeHtml(device.name)}
+                        </div>
+                        <div class="text-muted small">
+                            ${escapeHtml(device.host)}:${device.port}
+                            ${device.model ? " &middot; " + escapeHtml(device.model) : ""}
+                            ${device.firmware ? " &middot; " + escapeHtml(device.firmware) : ""}
+                        </div>
+                        ${device.last_seen ? `<div class="text-muted small">Dernier contact : ${escapeHtml(device.last_seen)}</div>` : ""}
+                        ${device.last_error ? `<div class="text-danger small mt-1">${escapeHtml(device.last_error)}</div>` : ""}
+                    </div>
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        ${badge}
+                        <button class="btn btn-light btn-sm" onclick="testDevice(${device.id})">
+                            <span class="material-icons me-1" style="font-size:16px;">network_check</span>
+                            Tester
+                        </button>
+                        <button class="btn btn-light btn-sm" onclick="openDoor(${device.id})">
+                            <span class="material-icons me-1" style="font-size:16px;">lock_open</span>
+                            Ouvrir
+                        </button>
+                        <button class="btn btn-light btn-sm text-danger" onclick="deleteDevice(${device.id})">
+                            <span class="material-icons" style="font-size:16px;">delete</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="mt-3 pt-3 border-top">
+                    <label class="form-label small fw-semibold mb-1">
+                        URL de notification à saisir dans le lecteur
+                    </label>
+                    <input type="text" class="form-control form-control-sm"
+                           readonly onclick="this.select()"
+                           value="${window.location.origin}${escapeHtml(device.webhook_path)}">
+                </div>
+            </div>`;
+        }).join("");
+    });
+}
+
+function testDevice(deviceId) {
+    devicePost(`/access/devices/${deviceId}/test/`).then(({ data }) => {
+        loadDevices();
+        if (data.test && !data.test.ok) {
+            alert("Test échoué :\n" + data.test.error);
+        }
+    });
+}
+
+function openDoor(deviceId) {
+    devicePost(`/access/devices/${deviceId}/open/`).then(({ ok, data }) => {
+        alert(ok ? data.message : "Ouverture impossible :\n" + (data.error || ""));
+        loadDevices();
+    });
+}
+
+function deleteDevice(deviceId) {
+    if (!confirm("Supprimer ce lecteur ?")) return;
+    devicePost(`/access/devices/${deviceId}/delete/`).then(() => loadDevices());
+}
 </script>
 
 {% endblock %}

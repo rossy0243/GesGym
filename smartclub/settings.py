@@ -437,5 +437,11 @@ LOGGING = {
             "level": "WARNING",
             "propagate": False,
         },
+        # Trace des passages pousses par les lecteurs physiques.
+        "access": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
     },
 }

@@ -160,7 +160,7 @@ function filterReports() {
             icon: 'success',
             title: 'Rapport filtré',
             text: `Données mises à jour pour la période sélectionnée`,
-            confirmButtonColor: '#3454d1',
+            confirmButtonColor: '#8A6D1D',
             timer: 1500,
             showConfirmButton: false
         });
@@ -178,7 +178,7 @@ function generateSelectedReport() {
             icon: 'info',
             title: 'Génération en cours',
             text: `Préparation du rapport ${reportType}...`,
-            confirmButtonColor: '#3454d1'
+            confirmButtonColor: '#8A6D1D'
         });
     } else {
         alert(`Génération du rapport ${reportType}...`);
@@ -197,7 +197,7 @@ function toggleDailyClosure() {
             showCancelButton: true,
             confirmButtonText: 'Oui, clôturer',
             cancelButtonText: 'Annuler',
-            confirmButtonColor: '#3454d1'
+            confirmButtonColor: '#8A6D1D'
         }).then((result) => {
             if (result.isConfirmed) {
                 dailyClosureState.isClosed = true;
@@ -270,7 +270,7 @@ function generateCustomReport() {
             icon: 'success',
             title: 'Rapport généré',
             html: `Rapport personnalisé créé avec succès<br><small>Données: ${types.join(', ')}<br>Période: du ${from} au ${to}</small>`,
-            confirmButtonColor: '#3454d1'
+            confirmButtonColor: '#8A6D1D'
         });
     }
 }
@@ -281,7 +281,7 @@ function saveReportTemplate() {
             icon: 'success',
             title: 'Modèle sauvegardé',
             text: 'Votre configuration de rapport a été enregistrée',
-            confirmButtonColor: '#3454d1'
+            confirmButtonColor: '#8A6D1D'
         });
     }
 }
@@ -292,7 +292,7 @@ function loadTemplate(template) {
             icon: 'info',
             title: 'Modèle chargé',
             text: `Configuration "${template}" appliquée`,
-            confirmButtonColor: '#3454d1'
+            confirmButtonColor: '#8A6D1D'
         });
     }
 }
@@ -308,7 +308,7 @@ function exportReport(format) {
             icon: 'success',
             title: 'Export en cours',
             text: `Le rapport ${reportName} est en cours d'export au format ${format.toUpperCase()}`,
-            confirmButtonColor: '#3454d1'
+            confirmButtonColor: '#8A6D1D'
         });
     } else {
         alert(`Export du rapport ${reportName} au format ${format}`);
@@ -325,7 +325,7 @@ function printCurrentView() {
             icon: 'info',
             title: 'Impression',
             text: 'Préparation de la vue pour impression...',
-            confirmButtonColor: '#3454d1'
+            confirmButtonColor: '#8A6D1D'
         });
     }
 }
@@ -347,7 +347,7 @@ function renderDailyChart() {
             labels: ['Cash', 'Cartes & Mobile Money'],
             datasets: [{
                 data: [36, 12],
-                backgroundColor: ['#10b981', '#3454d1'],
+                backgroundColor: ['#10b981', '#8A6D1D'],
                 borderWidth: 0
             }]
         },
@@ -379,11 +379,11 @@ function renderMonthlyChart() {
             datasets: [{
                 label: 'Revenus (en USD)',
                 data: reportsData.monthly.salesChart.values,
-                borderColor: '#3454d1',
-                backgroundColor: 'rgba(52, 84, 209, 0.1)',
+                borderColor: '#8A6D1D',
+                backgroundColor: 'rgba(201, 162, 39, 0.1)',
                 tension: 0.3,
                 fill: true,
-                pointBackgroundColor: '#3454d1',
+                pointBackgroundColor: '#8A6D1D',
                 pointBorderColor: '#fff',
                 pointBorderWidth: 2,
                 pointRadius: 4
