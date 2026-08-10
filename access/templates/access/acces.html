@@ -122,22 +122,80 @@
     color: #94a3b8;
 }
 
+/* Verdict d'acces : doit se lire d'un coup d'oeil, a distance, sans ambiguite
+   de couleur entre autorise (vert) et refuse (rouge). */
 .access-result-alert {
     border: 0;
-    border-radius: 16px;
-    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.10);
-    padding: 18px;
+    border-left: 12px solid transparent;
+    border-radius: 18px;
+    box-shadow: 0 16px 34px rgba(15, 23, 42, 0.16);
+    padding: 24px 26px;
+    animation: access-result-pop .28s ease-out;
+}
+
+@keyframes access-result-pop {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: none; }
+}
+
+.access-result-alert.is-granted {
+    background: #dcfce7;
+    border-left-color: #15803d;
+    color: #14532d;
+}
+
+.access-result-alert.is-denied {
+    background: #fee2e2;
+    border-left-color: #b91c1c;
+    color: #7f1d1d;
 }
 
 .access-result-alert .result-icon {
-    width: 48px;
-    height: 48px;
+    width: 68px;
+    height: 68px;
     border-radius: 50%;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    background: rgba(255, 255, 255, 0.65);
+    color: #ffffff;
+}
+
+.access-result-alert.is-granted .result-icon { background: #16a34a; }
+.access-result-alert.is-denied .result-icon { background: #dc2626; }
+
+.access-result-title {
+    font-size: 1.9rem;
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -0.5px;
+}
+
+.access-result-member {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-top: 2px;
+}
+
+.access-result-reason {
+    display: inline-block;
+    margin-top: 10px;
+    padding: 9px 14px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.72);
+    font-size: 1.02rem;
+    font-weight: 600;
+}
+
+.access-result-door {
+    margin-top: 10px;
+    font-size: .98rem;
+    font-weight: 600;
+}
+
+@media (max-width: 575.98px) {
+    .access-result-title { font-size: 1.5rem; }
+    .access-result-alert { padding: 18px; }
 }
 
 .cards-row {
@@ -717,7 +775,11 @@ let html5QrCode = null;
 let cameraScanInProgress = false;
 let lastCameraQrCode = "";
 let lastCameraQrAt = 0;
-const CAMERA_DUPLICATE_DELAY_MS = 2500;
+let scanCooldownTimer = null;
+
+// Delai impose entre deux scans consecutifs : laisse a l'agent le temps de
+// lire le resultat avant que la camera n'enchaine sur le membre suivant.
+const SCAN_COOLDOWN_MS = 5000;
 
 function setScannerStatus(message, tone = "muted") {
     const status = document.getElementById("scannerStatus");
@@ -737,10 +799,36 @@ function openScannerModal() {
     }, 500);
 }
 
+function startScanCooldown() {
+    if (scanCooldownTimer) clearInterval(scanCooldownTimer);
+
+    let remaining = Math.round(SCAN_COOLDOWN_MS / 1000);
+    setScannerStatus(`Prochain scan possible dans ${remaining} s...`, "primary");
+
+    scanCooldownTimer = setInterval(() => {
+        remaining -= 1;
+
+        if (remaining > 0) {
+            setScannerStatus(`Prochain scan possible dans ${remaining} s...`, "primary");
+            return;
+        }
+
+        clearInterval(scanCooldownTimer);
+        scanCooldownTimer = null;
+        cameraScanInProgress = false;
+        setScannerStatus("Prêt pour le membre suivant.", "success");
+    }, 1000);
+}
+
 function stopScanner() {
     cameraScanInProgress = false;
     lastCameraQrCode = "";
     lastCameraQrAt = 0;
+
+    if (scanCooldownTimer) {
+        clearInterval(scanCooldownTimer);
+        scanCooldownTimer = null;
+    }
 
     if (html5QrCode) {
         html5QrCode.stop().then(() => {
@@ -864,10 +952,12 @@ document.addEventListener("DOMContentLoaded", function () {
 <script>
 function renderAccessResult(data) {
     const allowed = Boolean(data.access);
-    const alertClass = allowed ? "alert-success" : "alert-warning";
-    const icon = allowed ? "check_circle" : "warning";
-    const title = allowed ? "Acces autorise" : "Acces refuse";
-    const reason = data.reason ? `<div class="small mt-1">${escapeHtml(data.reason)}</div>` : "";
+    const stateClass = allowed ? "is-granted" : "is-denied";
+    const icon = allowed ? "check_circle" : "cancel";
+    const title = allowed ? "ACCÈS AUTORISÉ" : "ACCÈS REFUSÉ";
+    const reason = data.reason
+        ? `<div class="access-result-reason">${escapeHtml(data.reason)}</div>`
+        : "";
     const member = data.member ? escapeHtml(data.member) : "-";
 
     // Retour du relais : l'acces peut etre accorde alors que la porte n'a pas
@@ -877,22 +967,21 @@ function renderAccessResult(data) {
         const doorIcon = data.door.opened ? "lock_open" : "lock";
         const doorClass = data.door.opened ? "text-success" : "text-danger";
         doorLine = `
-            <div class="small mt-2 d-flex align-items-center gap-1 ${doorClass}">
-                <span class="material-icons" style="font-size:16px;">${doorIcon}</span>
+            <div class="access-result-door d-flex align-items-center gap-1 ${doorClass}">
+                <span class="material-icons" style="font-size:18px;">${doorIcon}</span>
                 ${escapeHtml(data.door.message)}
             </div>`;
     }
 
     return `
-        <div class="alert ${alertClass} access-result-alert mb-0">
+        <div class="alert access-result-alert ${stateClass} mb-0" role="alert" aria-live="assertive">
             <div class="d-flex align-items-center gap-3">
                 <span class="result-icon">
-                    <span class="material-icons" style="font-size:28px;">${icon}</span>
+                    <span class="material-icons" style="font-size:40px;">${icon}</span>
                 </span>
                 <div>
-                    <div class="small text-muted text-uppercase fw-semibold">Dernier scan</div>
-                    <div class="fw-bold fs-5">${title}</div>
-                    <div>${member}</div>
+                    <div class="access-result-title">${title}</div>
+                    <div class="access-result-member">${member}</div>
                     ${reason}
                     ${doorLine}
                 </div>
@@ -1004,7 +1093,7 @@ function onScanSuccess(decodedText) {
     if (
         qrCode &&
         qrCode === lastCameraQrCode &&
-        currentTime - lastCameraQrAt < CAMERA_DUPLICATE_DELAY_MS
+        currentTime - lastCameraQrAt < SCAN_COOLDOWN_MS
     ) {
         return;
     }
@@ -1014,12 +1103,7 @@ function onScanSuccess(decodedText) {
     lastCameraQrAt = currentTime;
     setScannerStatus("Lecture en cours...", "primary");
 
-    submitQrCode(decodedText).finally(() => {
-        setTimeout(() => {
-            cameraScanInProgress = false;
-            setScannerStatus("Prêt pour le membre suivant.", "success");
-        }, 700);
-    });
+    submitQrCode(decodedText).finally(startScanCooldown);
 }
 
 function renderHistorique() {

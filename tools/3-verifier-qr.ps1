@@ -65,8 +65,11 @@ if (-not $echec) {
     Trace "Interrogation du lecteur en cours..." "Yellow"
     Trace ""
 
-    # 2>&1 : la sortie d'erreur est fusionnee pour etre capturee elle aussi.
-    $resultat = & $python $manage verifier_qr 2>&1 | ForEach-Object { $_.ToString() }
+    # Fusion des flux confiee a cmd : un `2>&1` cote PowerShell 5.1 transforme
+    # chaque ligne d'erreur en objet d'erreur, ce qui noie la sortie utile.
+    # @() force un tableau : avec une sortie d'une seule ligne, PowerShell
+    # renvoie une chaine, que foreach parcourrait caractere par caractere.
+    $resultat = @(cmd /c "`"$python`" `"$manage`" verifier_qr 2>&1")
     $code = $LASTEXITCODE
 
     foreach ($ligne in $resultat) { Trace $ligne }

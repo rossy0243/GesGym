@@ -32,14 +32,19 @@ Write-Host "Identifiant: test-lecteur"
 Write-Host ""
 Write-Host "URL webhook a saisir dans le lecteur :" -ForegroundColor Yellow
 
-& $python (Join-Path $projectRoot "manage.py") shell -c @"
+$webhook = & $python (Join-Path $projectRoot "manage.py") shell -c @"
 from access.models import AccessDevice
 device = AccessDevice.objects.first()
-if device:
-    print('  http://192.0.0.100:8000/access/devices/webhook/%s/' % device.webhook_token)
-else:
-    print('  AUCUN LECTEUR ENREGISTRE')
-"@
+print(device.webhook_token if device else '')
+"@ | Select-Object -Last 1
+
+if ([string]::IsNullOrWhiteSpace($webhook)) {
+    Write-Host "  AUCUN LECTEUR ENREGISTRE DANS L'APPLICATION." -ForegroundColor Red
+    Write-Host "  Ouvre Controle d'acces > Lecteurs > Lancer la detection," -ForegroundColor Red
+    Write-Host "  puis 'Utiliser ce lecteur'. L'URL apparaitra sur sa fiche." -ForegroundColor Red
+} else {
+    Write-Host "  http://192.0.0.100:8000/access/devices/webhook/$webhook/" -ForegroundColor Green
+}
 
 Write-Host ""
 Write-Host "Journal : $journal"
@@ -47,4 +52,9 @@ Write-Host "Laisse cette fenetre ouverte. Ctrl+C pour arreter."
 Write-Host ""
 
 Set-Location $projectRoot
-& $python manage.py runserver 0.0.0.0:8000 2>&1 | Tee-Object -FilePath $journal
+
+# La fusion des flux est faite par cmd, pas par PowerShell : en 5.1, un `2>&1`
+# cote PowerShell emballe chaque ligne d'erreur d'un programme externe dans un
+# objet d'erreur. Django journalisant sur la sortie d'erreur, tous ses messages
+# normaux ressortaient alors comme des echecs (NativeCommandError).
+cmd /c "`"$python`" manage.py runserver 0.0.0.0:8000 2>&1" | Tee-Object -FilePath $journal
