@@ -1,5 +1,6 @@
 import json
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -11,6 +12,7 @@ from compte.models import User, UserGymRole
 from members.models import Member
 from organizations.models import Gym, GymModule, Module, Organization
 from subscriptions.models import MemberSubscription, SubscriptionPlan
+from . import hikvision
 from .device_views import UNKNOWN_CREDENTIAL_REASON
 from .hikvision import parse_event_payload
 from .models import AccessDevice, AccessLog
@@ -481,6 +483,13 @@ class AccessDeviceWebhookTests(TestCase):
             is_active=True,
         )
 
+        # Aucun test ne doit joindre un vrai lecteur : les cas qui accordent
+        # l'acces declenchent l'ouverture, on neutralise donc le relais par
+        # defaut. Les tests qui verifient l'ouverture reposent leur propre patch.
+        patcher = patch("access.hikvision.HikvisionClient.open_door")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def _post_scan(self, credential, token=None):
         payload = json.dumps({
             "eventType": "AccessControllerEvent",
@@ -570,3 +579,198 @@ class AccessDeviceWebhookTests(TestCase):
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, 405)
+
+    def test_granted_scan_opens_the_door(self):
+        with patch("access.hikvision.HikvisionClient.open_door") as open_door:
+            response = self._post_scan(self.member.qr_code)
+
+        open_door.assert_called_once_with(self.device.door_number)
+        payload = response.json()
+        self.assertTrue(payload["door"]["opened"])
+
+    def test_denied_scan_never_opens_the_door(self):
+        with patch("access.hikvision.HikvisionClient.open_door") as open_door:
+            response = self._post_scan("11111111-2222-3333-4444-555555555555")
+
+        open_door.assert_not_called()
+        self.assertFalse(response.json().get("door", {}).get("attempted"))
+
+    def test_device_failure_does_not_cancel_a_granted_access(self):
+        """Une panne du relais ne doit pas invalider une decision deja prise."""
+        with patch(
+            "access.hikvision.HikvisionClient.open_door",
+            side_effect=hikvision.HikvisionUnreachable("timed out"),
+        ):
+            response = self._post_scan(self.member.qr_code)
+
+        payload = response.json()
+        self.assertTrue(payload["access"])
+        self.assertFalse(payload["door"]["opened"])
+        self.assertIn("timed out", payload["door"]["message"])
+
+        log = AccessLog.objects.get(member=self.member)
+        self.assertTrue(log.access_granted)
+
+        self.device.refresh_from_db()
+        self.assertIn("timed out", self.device.last_error)
+
+    def test_device_with_auto_open_disabled_stays_closed(self):
+        AccessDevice.objects.filter(pk=self.device.pk).update(open_on_granted=False)
+
+        with patch("access.hikvision.HikvisionClient.open_door") as open_door:
+            response = self._post_scan(self.member.qr_code)
+
+        open_door.assert_not_called()
+        self.assertTrue(response.json()["access"])
+
+
+class DashboardDoorOpeningTests(TestCase):
+    """Scan QR et pointage manuel : la porte suit la decision metier."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(name="Org F", slug="org-f")
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym F",
+            slug="gym-f",
+            subdomain="gym-f",
+        )
+        access_module, _ = Module.objects.get_or_create(
+            code="ACCESS", defaults={"name": "Access"}
+        )
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=access_module, defaults={"is_active": True}
+        )
+        self.user = User.objects.create_user(username="reception-f", password="test-pass")
+        UserGymRole.objects.create(user=self.user, gym=self.gym, role="reception")
+
+        self.device = AccessDevice.objects.create(
+            gym=self.gym,
+            name="Tourniquet",
+            host="192.0.0.64",
+            username="admin",
+            password="secret",
+        )
+        self.member = Member.objects.create(
+            gym=self.gym,
+            first_name="Fara",
+            last_name="Scan",
+            phone="50001",
+            email="fara-scan@example.com",
+        )
+        plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Mensuel", duration_days=30, price=30
+        )
+        today = timezone.now().date()
+        MemberSubscription.objects.create(
+            gym=self.gym,
+            member=self.member,
+            plan=plan,
+            start_date=today,
+            end_date=today + timedelta(days=30),
+            is_active=True,
+        )
+        self.client.login(username="reception-f", password="test-pass")
+
+        patcher = patch("access.hikvision.HikvisionClient.open_door")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _scan(self, qr_code):
+        return self.client.post(reverse("access:member_access", args=[qr_code]))
+
+    def test_valid_qr_opens_the_door(self):
+        with patch("access.hikvision.HikvisionClient.open_door") as open_door:
+            response = self._scan(self.member.qr_code)
+
+        open_door.assert_called_once_with(1)
+        payload = response.json()
+        self.assertTrue(payload["access"])
+        self.assertTrue(payload["door"]["opened"])
+
+    def test_expired_qr_leaves_the_door_closed(self):
+        Member.objects.filter(pk=self.member.pk).update(
+            qr_code_expires_at=timezone.now() - timedelta(days=1)
+        )
+
+        with patch("access.hikvision.HikvisionClient.open_door") as open_door:
+            response = self._scan(self.member.qr_code)
+
+        open_door.assert_not_called()
+        self.assertFalse(response.json()["access"])
+
+    def test_second_scan_same_day_leaves_the_door_closed(self):
+        with patch("access.hikvision.HikvisionClient.open_door"):
+            self._scan(self.member.qr_code)
+
+        with patch("access.hikvision.HikvisionClient.open_door") as open_door:
+            response = self._scan(self.member.qr_code)
+
+        open_door.assert_not_called()
+        payload = response.json()
+        self.assertFalse(payload["access"])
+        self.assertEqual(payload["reason"], DOUBLE_SCAN_REASON)
+
+    def test_gym_without_device_still_grants_access(self):
+        AccessDevice.objects.filter(pk=self.device.pk).delete()
+
+        response = self._scan(self.member.qr_code)
+
+        payload = response.json()
+        self.assertTrue(payload["access"])
+        self.assertFalse(payload["door"]["attempted"])
+
+    # --- Pointage manuel ---------------------------------------------------
+
+    def _manual_entry(self, member):
+        return self.client.post(
+            reverse("access:manual_access_entry", args=[member.id])
+        )
+
+    def test_manual_entry_opens_the_door(self):
+        with patch("access.hikvision.HikvisionClient.open_door") as open_door:
+            response = self._manual_entry(self.member)
+
+        open_door.assert_called_once_with(1)
+        payload = response.json()
+        self.assertTrue(payload["access"])
+        self.assertTrue(payload["door"]["opened"])
+
+    def test_manual_entry_without_subscription_leaves_the_door_closed(self):
+        outsider = Member.objects.create(
+            gym=self.gym,
+            first_name="Gaby",
+            last_name="Sansabo",
+            phone="50002",
+            email="gaby-sansabo@example.com",
+        )
+
+        with patch("access.hikvision.HikvisionClient.open_door") as open_door:
+            response = self._manual_entry(outsider)
+
+        open_door.assert_not_called()
+        self.assertFalse(response.json()["access"])
+
+    def test_manual_entry_second_time_same_day_leaves_the_door_closed(self):
+        with patch("access.hikvision.HikvisionClient.open_door"):
+            self._manual_entry(self.member)
+
+        with patch("access.hikvision.HikvisionClient.open_door") as open_door:
+            response = self._manual_entry(self.member)
+
+        open_door.assert_not_called()
+        payload = response.json()
+        self.assertFalse(payload["access"])
+        self.assertEqual(payload["reason"], DOUBLE_SCAN_REASON)
+
+    def test_manual_entry_survives_a_door_failure(self):
+        with patch(
+            "access.hikvision.HikvisionClient.open_door",
+            side_effect=hikvision.HikvisionUnreachable("timed out"),
+        ):
+            response = self._manual_entry(self.member)
+
+        payload = response.json()
+        self.assertTrue(payload["access"])
+        self.assertFalse(payload["door"]["opened"])
+        self.assertTrue(AccessLog.objects.get(member=self.member).access_granted)

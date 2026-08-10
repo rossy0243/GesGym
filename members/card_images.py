@@ -236,14 +236,40 @@ def _paste_logo_with_shadow(base, logo, box):
     base.alpha_composite(contained, (x, y))
 
 
-def _qr_image(value, size):
-    qr = qrcode.QRCode(border=1, box_size=8)
+def _qr_image(value, size, border=2):
+    """
+    QR code net, sans reechantillonnage.
+
+    Le rendu precedent generait le code a une taille arbitraire puis le
+    redimensionnait : le facteur d'echelle n'etant pas entier, les modules
+    ressortaient de largeurs inegales, ce qui degrade la lecture par les
+    scanners. On calcule donc une taille de module entiere, et on centre le
+    resultat sur un fond blanc a la dimension demandee. Aucun pixel n'est
+    interpole.
+    """
+    qr = qrcode.QRCode(
+        border=border,
+        # Correction d'erreur elevee : une carte imprimee se raye et se salit,
+        # 25% de redondance lui permettent de rester lisible.
+        error_correction=qrcode.constants.ERROR_CORRECT_Q,
+    )
     qr.add_data(value or "-")
     qr.make(fit=True)
-    return qr.make_image(fill_color="#111827", back_color="#ffffff").convert("RGBA").resize(
-        (size, size),
-        Image.Resampling.NEAREST,
+
+    total_modules = qr.modules_count + 2 * border
+    qr.box_size = max(1, size // total_modules)
+
+    rendered = qr.make_image(
+        fill_color="#111827",
+        back_color="#ffffff",
+    ).convert("RGBA")
+
+    canvas = Image.new("RGBA", (size, size), (255, 255, 255, 255))
+    canvas.paste(
+        rendered,
+        ((size - rendered.width) // 2, (size - rendered.height) // 2),
     )
+    return canvas
 
 
 def render_member_card_png(member):
@@ -337,12 +363,20 @@ def render_member_card_png(member):
     member_number_font = _fit_font(draw, member_number, 300, 34, 26, bold=True)
     draw_readable_text((info_x, 425), member_number, member_number_font, "#ffffff")
 
-    qr_size = 220
-    qr_x = 704
-    qr_y = 223
-    qr_padding = 20
-    draw.rectangle(
-        (qr_x - qr_padding, qr_y - qr_padding, qr_x + qr_size + qr_padding, qr_y + qr_size + qr_padding),
+    # Colonne de droite : le QR occupe desormais tout l'espace disponible entre
+    # le panneau d'informations (bord droit a 656) et la marge de la carte.
+    qr_size = 276
+    qr_x = 678
+    qr_y = 204
+    qr_padding = 14
+    draw.rounded_rectangle(
+        (
+            qr_x - qr_padding,
+            qr_y - qr_padding,
+            qr_x + qr_size + qr_padding,
+            qr_y + qr_size + qr_padding,
+        ),
+        radius=16,
         fill="#ffffff",
     )
     image.alpha_composite(_qr_image(member.get_qr_data(), qr_size), (qr_x, qr_y))

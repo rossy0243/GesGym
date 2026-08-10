@@ -870,6 +870,19 @@ function renderAccessResult(data) {
     const reason = data.reason ? `<div class="small mt-1">${escapeHtml(data.reason)}</div>` : "";
     const member = data.member ? escapeHtml(data.member) : "-";
 
+    // Retour du relais : l'acces peut etre accorde alors que la porte n'a pas
+    // repondu (lecteur hors ligne). L'agent doit le voir immediatement.
+    let doorLine = "";
+    if (data.door && data.door.attempted) {
+        const doorIcon = data.door.opened ? "lock_open" : "lock";
+        const doorClass = data.door.opened ? "text-success" : "text-danger";
+        doorLine = `
+            <div class="small mt-2 d-flex align-items-center gap-1 ${doorClass}">
+                <span class="material-icons" style="font-size:16px;">${doorIcon}</span>
+                ${escapeHtml(data.door.message)}
+            </div>`;
+    }
+
     return `
         <div class="alert ${alertClass} access-result-alert mb-0">
             <div class="d-flex align-items-center gap-3">
@@ -881,6 +894,7 @@ function renderAccessResult(data) {
                     <div class="fw-bold fs-5">${title}</div>
                     <div>${member}</div>
                     ${reason}
+                    ${doorLine}
                 </div>
             </div>
         </div>

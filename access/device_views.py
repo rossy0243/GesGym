@@ -21,7 +21,7 @@ from members.models import Member
 from smartclub.access_control import ACCESS_DEVICE_ROLES
 from smartclub.decorators import module_required, role_required
 
-from . import hikvision
+from . import door, hikvision
 from .models import AccessDevice
 from .views import _record_access, _today_stats
 
@@ -46,6 +46,7 @@ def _serialize_device(device):
         "firmware": device.firmware,
         "mac": device.mac_address,
         "is_active": device.is_active,
+        "open_on_granted": device.open_on_granted,
         "online": device.is_online,
         "last_seen": device.last_seen_at.strftime("%d/%m/%Y %H:%M") if device.last_seen_at else "",
         "last_error": device.last_error,
@@ -318,12 +319,19 @@ def device_webhook(request, token):
         device=device,
     )
 
+    # Le lecteur a lu le QR, l'application a tranche : on lui rend la main sur
+    # le relais uniquement si l'acces est accorde.
+    door_status = door.summarize(
+        door.open_doors(device.gym, device=device) if access_granted else []
+    )
+
     return JsonResponse({
         "access": access_granted,
         "member": f"{member.first_name} {member.last_name}",
         "reason": reason,
         "log_id": log.id,
         "stats": _today_stats(device.gym),
+        "door": door_status,
     })
 
 

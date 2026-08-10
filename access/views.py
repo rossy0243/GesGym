@@ -9,6 +9,7 @@ from django.views.decorators.http import require_POST
 from members.models import Member
 from smartclub.access_control import ACCESS_ROLES
 from smartclub.decorators import module_required, role_required
+from . import door
 from .models import AccessLog
 
 
@@ -207,12 +208,17 @@ def manual_access_entry(request, member_id):
         method="Manuel",
     )
 
+    door_status = door.summarize(
+        door.open_doors(request.gym) if access_granted else []
+    )
+
     return JsonResponse({
         "member": f"{member.first_name} {member.last_name}",
         "access": access_granted,
         "reason": reason,
         "stats": _today_stats(request.gym),
         "log": _serialize_log(log),
+        "door": door_status,
     })
 
 
@@ -235,10 +241,17 @@ def member_access(request, qr_code):
         require_valid_qr=True,
     )
 
+    # QR code valide : on commande l'ouverture physique. Un echec du materiel
+    # n'annule pas l'acces, il est simplement signale a l'agent.
+    door_status = door.summarize(
+        door.open_doors(request.gym) if access_granted else []
+    )
+
     return JsonResponse({
         "member": f"{member.first_name} {member.last_name}",
         "access": access_granted,
         "reason": reason,
         "stats": _today_stats(request.gym),
         "log": _serialize_log(log),
+        "door": door_status,
     })

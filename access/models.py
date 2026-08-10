@@ -45,6 +45,15 @@ class AccessDevice(models.Model):
 
     door_number = models.PositiveSmallIntegerField(default=1)
 
+    open_on_granted = models.BooleanField(
+        default=True,
+        verbose_name="Ouvrir la porte sur acces autorise",
+        help_text=(
+            "Declenche le relais de ce lecteur quand un QR code valide est "
+            "reconnu par l'application."
+        ),
+    )
+
     # Renseignes automatiquement lors du test de connexion.
     model_name = models.CharField(max_length=100, blank=True)
     serial_number = models.CharField(max_length=100, blank=True)
