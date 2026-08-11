@@ -272,6 +272,36 @@ def _qr_image(value, size, border=2):
     return canvas
 
 
+# Taille par defaut du QR telecharge seul. Genereuse a dessein : ces codes
+# finissent sur des cartes imprimees, ou une image trop petite donne des
+# modules baveux que les lecteurs peinent a decoder.
+QR_DOWNLOAD_SIZE = 1024
+QR_DOWNLOAD_MIN = 256
+QR_DOWNLOAD_MAX = 2048
+
+
+def render_member_qr_png(member, size=QR_DOWNLOAD_SIZE):
+    """
+    QR code seul, en haute definition, pret pour l'impression.
+
+    Utilise exactement le meme rendu que celui de la carte membre : modules
+    entiers, aucun reechantillonnage, correction d'erreur elevee. La bordure
+    est portee a 4 modules, la zone de silence prevue par la norme, puisque le
+    code n'est plus entoure du cadre blanc de la carte.
+    """
+    try:
+        size = int(size or QR_DOWNLOAD_SIZE)
+    except (TypeError, ValueError):
+        size = QR_DOWNLOAD_SIZE
+    size = max(QR_DOWNLOAD_MIN, min(size, QR_DOWNLOAD_MAX))
+
+    image = _qr_image(member.get_qr_data(), size, border=4)
+
+    output = BytesIO()
+    image.convert("RGB").save(output, format="PNG", optimize=True)
+    return output.getvalue()
+
+
 def render_member_card_png(member):
     organization = member.gym.organization if member.gym_id else None
     logo = _open_image(getattr(organization, "logo", None)) or _open_default_logo()

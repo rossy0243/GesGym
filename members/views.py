@@ -3,7 +3,6 @@ import json
 import mimetypes
 from datetime import date, timedelta
 from decimal import Decimal
-from io import BytesIO
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.utils import timezone
 from django.contrib import messages
@@ -18,17 +17,22 @@ from django.db.models import Model
 from django.db.models import Q, Exists, OuterRef, Count
 from django.core.paginator import Paginator
 from django.urls import reverse
+from django.utils.html import format_html
+from django.utils.text import slugify
 from django.templatetags.static import static
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.views.decorators.http import require_http_methods
-import qrcode
 from access.models import AccessLog
 from coaching.forms import CoachingFeedbackForm
 from coaching.models import Coach, CoachingFeedback, GroupCoachingProgram
 from compte.utils import generate_temporary_password
 from core.audit import log_sensitive_action
-from core.creation_emails import notify_creation_email_failure, send_member_creation_email
+from core.creation_emails import (
+    notify_creation_email_failure,
+    send_member_creation_email,
+    send_member_password_reset_email,
+)
 from smartclub.access_control import (
     MEMBER_DELETE_ROLES,
     MEMBER_ROLES,
@@ -36,6 +40,7 @@ from smartclub.access_control import (
     MEMBER_WRITE_ROLES,
     has_role,
 )
+from smartclub.public_links import build_public_url
 from .forms import MemberCreationForm, MemberGoalForm, MemberWeightMeasurementForm
 from .models import Member, MemberGoal, MemberPreRegistration, MemberPreRegistrationLink, MemberWeightMeasurement
 from notifications.models import Notification
@@ -48,7 +53,7 @@ from subscriptions.models import MemberSubscription, SubscriptionPlan, Subscript
 
 
 def _cleanup_expired_pre_registrations():
-    MemberPreRegistration.delete_expired_pending()
+    MemberPreRegistration.mark_expired_pending()
 
 
 def _member_management_allowed(request):
@@ -60,7 +65,11 @@ def _member_write_allowed(request):
 
 
 def _member_qr_admin_allowed(request):
-    return has_role(request, frozenset({"owner"})) and request.gym
+    # Regenerer un QR invalide la carte imprimee du membre : reserve aux
+    # proprietaires et gerants.
+    # bool() explicite : cette valeur est serialisee telle quelle dans la fiche
+    # membre, elle ne doit pas y arriver sous forme d'objet Gym.
+    return bool(has_role(request, MEMBER_STATUS_ROLES) and request.gym)
 
 
 def _get_pre_registration_public_url(request, link):
@@ -75,6 +84,61 @@ def _get_current_member(user):
 
 def _member_code(member):
     return f"MEM-{member.id:05d}"
+
+
+SUSPENDED_MEMBER_MESSAGE = (
+    "Votre compte est suspendu. Contactez la salle pour le reactiver."
+)
+
+
+def _member_filename(member, prefix, extension="png"):
+    """Nom de fichier lisible pour un telechargement."""
+    slug = slugify(f"{member.first_name}-{member.last_name}") or f"membre-{member.id}"
+    return f"{prefix}_{slug}.{extension}"
+
+
+def _image_response(content, filename, as_attachment):
+    """
+    Reponse image, telechargee ou affichee selon le contexte.
+
+    L'en-tete n'est pose que sur demande explicite : la meme URL sert aussi
+    d'apercu dans l'interface, ou une piece jointe serait genante.
+    """
+    response = HttpResponse(content, content_type="image/png")
+    response["Cache-Control"] = "private, no-store"
+    if as_attachment:
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+def _wants_download(request):
+    return request.GET.get("download") in {"1", "true", "yes"}
+
+
+def _member_is_suspended(member):
+    return getattr(member, "status", "") == "suspended"
+
+
+def _block_suspended_member(request, member):
+    """
+    Coupe les actions engageantes d'un membre suspendu.
+
+    Masquer les boutons ne suffit pas : un formulaire deja ouvert ou un appel
+    direct passerait au travers. Le refus doit venir du serveur.
+    Renvoie une redirection si le membre est suspendu, sinon None.
+    """
+    if not _member_is_suspended(member):
+        return None
+
+    messages.error(request, SUSPENDED_MEMBER_MESSAGE)
+    return redirect("members:member_portal")
+
+
+def _api_block_suspended_member(member):
+    """Equivalent pour l'application mobile."""
+    if not _member_is_suspended(member):
+        return None
+    return _json_error(SUSPENDED_MEMBER_MESSAGE, status=403)
 
 
 def _json_safe_value(value):
@@ -390,7 +454,6 @@ def _goal_payload(goal, goal_access):
 
 
 def _member_mobile_payload(request, member):
-    member.ensure_valid_qr_code()
     subscription = member.active_subscription
     payments = list(
         Payment.objects.filter(member=member, gym=member.gym)
@@ -577,8 +640,18 @@ def member_portal(request):
         .select_related("scanned_by")
         .order_by("-check_in_time")[:8]
     )
-    can_choose_individual_coach = _member_can_choose_individual_coach(member, subscription)
-    can_choose_group_program = _member_can_choose_group_program(member, subscription)
+    # Un membre suspendu ne s'engage plus : ni coach, ni programme, ni
+    # abonnement. Neutraliser les drapeaux ici retire d'un coup les sections
+    # correspondantes du portail.
+    member_is_suspended = _member_is_suspended(member)
+    can_choose_individual_coach = (
+        not member_is_suspended
+        and _member_can_choose_individual_coach(member, subscription)
+    )
+    can_choose_group_program = (
+        not member_is_suspended
+        and _member_can_choose_group_program(member, subscription)
+    )
     coaches = Coach.objects.filter(
         gym=member.gym,
         members=member,
@@ -712,6 +785,8 @@ def member_portal(request):
 
     context = {
         "member": member,
+        "member_is_suspended": member_is_suspended,
+        "suspended_member_message": SUSPENDED_MEMBER_MESSAGE,
         "member_code": _member_code(member),
         "organization": member.gym.organization,
         "gym": member.gym,
@@ -777,6 +852,10 @@ def member_goal_create(request):
     if not current_member:
         raise PermissionDenied
 
+    suspended = _block_suspended_member(request, current_member)
+    if suspended:
+        return suspended
+
     member = get_object_or_404(
         Member.objects.select_related("gym"),
         id=current_member.id,
@@ -809,6 +888,10 @@ def member_goal_measurement_create(request):
     current_member = _get_current_member(request.user)
     if not current_member:
         raise PermissionDenied
+
+    suspended = _block_suspended_member(request, current_member)
+    if suspended:
+        return suspended
 
     member = get_object_or_404(
         Member.objects.select_related("gym"),
@@ -850,6 +933,10 @@ def member_submit_coaching_feedback(request):
     current_member = _get_current_member(request.user)
     if not current_member:
         raise PermissionDenied
+
+    suspended = _block_suspended_member(request, current_member)
+    if suspended:
+        return suspended
 
     member = get_object_or_404(
         Member.objects.select_related("gym"),
@@ -927,6 +1014,10 @@ def member_subscription_request(request):
     if not current_member:
         raise PermissionDenied
 
+    suspended = _block_suspended_member(request, current_member)
+    if suspended:
+        return suspended
+
     member = get_object_or_404(
         Member.objects.select_related("gym"),
         id=current_member.id,
@@ -977,6 +1068,10 @@ def member_choose_coach(request):
     if not current_member:
         raise PermissionDenied
 
+    suspended = _block_suspended_member(request, current_member)
+    if suspended:
+        return suspended
+
     member = get_object_or_404(
         Member.objects.select_related("gym"),
         id=current_member.id,
@@ -1008,6 +1103,10 @@ def member_choose_group_program(request):
     current_member = _get_current_member(request.user)
     if not current_member:
         raise PermissionDenied
+
+    suspended = _block_suspended_member(request, current_member)
+    if suspended:
+        return suspended
 
     member = get_object_or_404(
         Member.objects.select_related("gym"),
@@ -1073,14 +1172,13 @@ def member_portal_qr(request):
     if not current_member:
         raise PermissionDenied
 
-    current_member.ensure_valid_qr_code()
-    qr = qrcode.make(current_member.get_qr_data())
-    buffer = BytesIO()
-    qr.save(buffer)
+    from members.card_images import render_member_qr_png
 
-    return HttpResponse(buffer.getvalue(), content_type="image/png")
-
-
+    return _image_response(
+        render_member_qr_png(current_member, size=request.GET.get("size")),
+        _member_filename(current_member, "qr"),
+        _wants_download(request),
+    )
 @login_required
 def member_organization_logo(request):
     if not _member_management_allowed(request):
@@ -1336,6 +1434,9 @@ def member_api_subscription_request(request):
     member, error = _api_current_member(request)
     if error:
         return error
+    suspended = _api_block_suspended_member(member)
+    if suspended:
+        return suspended
     try:
         data = _json_body(request)
     except ValueError as exc:
@@ -1378,6 +1479,9 @@ def member_api_goal_create(request):
     member, error = _api_current_member(request)
     if error:
         return error
+    suspended = _api_block_suspended_member(member)
+    if suspended:
+        return suspended
     if member.active_goal:
         return _json_error("Un objectif actif existe deja sur ce compte.", status=400)
     try:
@@ -1403,6 +1507,9 @@ def member_api_goal_measurement_create(request):
     member, error = _api_current_member(request)
     if error:
         return error
+    suspended = _api_block_suspended_member(member)
+    if suspended:
+        return suspended
     goal = get_object_or_404(
         MemberGoal.objects.prefetch_related("measurements"),
         member=member,
@@ -1438,6 +1545,9 @@ def member_api_choose_coach(request):
     member, error = _api_current_member(request)
     if error:
         return error
+    suspended = _api_block_suspended_member(member)
+    if suspended:
+        return suspended
     subscription = member.active_subscription
     if not _member_can_choose_individual_coach(member, subscription):
         return _json_error("Votre formule actuelle ne permet pas de choisir un coach individuel.", status=403)
@@ -1464,6 +1574,9 @@ def member_api_choose_group_program(request):
     member, error = _api_current_member(request)
     if error:
         return error
+    suspended = _api_block_suspended_member(member)
+    if suspended:
+        return suspended
     subscription = member.active_subscription
     if not _member_can_choose_group_program(member, subscription):
         return _json_error("Votre formule actuelle ne permet pas de rejoindre un programme groupe.", status=403)
@@ -1494,6 +1607,9 @@ def member_api_coaching_feedback(request):
     member, error = _api_current_member(request)
     if error:
         return error
+    suspended = _api_block_suspended_member(member)
+    if suspended:
+        return suspended
     try:
         data = _json_body(request)
     except ValueError as exc:
@@ -1711,49 +1827,68 @@ def create_member(request):
     if not _member_write_allowed(request):
         raise PermissionDenied
     
-    if request.method == "POST":
-        form = MemberCreationForm(request.POST, request.FILES)
-        if form.is_valid():
-            member = form.save(commit=False)
-            member.gym = request.gym
-            member.save()  # déclenche signal → crée User automatiquement
+    if request.method != "POST":
+        return redirect("members:member_list")
 
-            temporary_password = getattr(member, "_temporary_password", "")
-            try:
-                email_sent = send_member_creation_email(
-                    member,
-                    temporary_password=temporary_password,
-                    portal_url=request.build_absolute_uri(reverse("members:member_portal")),
-                )
-            except Exception as exc:
-                notify_creation_email_failure(str(member), exc)
-                email_sent = False
+    form = MemberCreationForm(request.POST, request.FILES, gym=request.gym)
 
-            messages.success(
-                request,
-                f"""
-                <div class="d-flex align-items-center gap-3">
-                    <span class="material-icons text-white" style="font-size:32px;">check_circle</span>
-                    <div>
-                        <strong style="font-size:1.1rem;">Membre créé avec succès !</strong><br>
-                        <span class="opacity-90">
-                            {member.first_name} {member.last_name}<br>
-                            Identifiant : <strong>{member.user.username}</strong><br>
-                            Mot de passe temporaire : <strong>{temporary_password or "Genere automatiquement"}</strong><br>
-                            Changement obligatoire a la premiere connexion.<br>
-                            Espace membre : <strong>{reverse("members:member_portal")}</strong><br>
-                            Email envoye : <strong>{"oui" if email_sent else "non"}</strong>
-                        </span>
-                    </div>
-                </div>
-                """,
-                extra_tags='safe toast-success'
+    if not form.is_valid():
+        # Sans cette branche, un formulaire invalide renvoyait vers la liste
+        # sans le moindre message : l'utilisateur croyait avoir enregistre.
+        for field_name, errors in form.errors.items():
+            label = (
+                form.fields[field_name].label
+                or field_name.replace("_", " ").capitalize()
+                if field_name in form.fields
+                else "Formulaire"
             )
-            return redirect("members:member_list")
-            
-    else:
-        form = MemberCreationForm()
+            for error in errors:
+                messages.error(request, f"{label} : {error}")
+        return redirect("members:member_list")
 
+    member = form.save(commit=False)
+    member.gym = request.gym
+    member.save()  # déclenche signal → crée User automatiquement
+
+    temporary_password = getattr(member, "_temporary_password", "")
+    try:
+        email_sent = send_member_creation_email(
+            member,
+            temporary_password=temporary_password,
+            portal_url=build_public_url(request, reverse("members:member_portal")),
+        )
+    except Exception as exc:
+        notify_creation_email_failure(str(member), exc)
+        email_sent = False
+
+    # format_html echappe les valeurs interpolees : un nom contenant des
+    # balises ne peut pas s'executer dans ce message rendu en HTML brut.
+    messages.success(
+        request,
+        format_html(
+            '<div class="d-flex align-items-center gap-3">'
+            '<span class="material-icons text-white" style="font-size:32px;">check_circle</span>'
+            "<div>"
+            '<strong style="font-size:1.1rem;">Membre cree avec succes !</strong><br>'
+            '<span class="opacity-90">'
+            "{first_name} {last_name}<br>"
+            "Identifiant : <strong>{username}</strong><br>"
+            "Mot de passe temporaire : <strong>{password}</strong><br>"
+            "Changement obligatoire a la premiere connexion.<br>"
+            "Espace membre : <strong>{portal}</strong><br>"
+            "Email envoye : <strong>{email_sent}</strong>"
+            "</span></div></div>",
+            first_name=member.first_name,
+            last_name=member.last_name,
+            username=member.user.username if member.user else "-",
+            password=temporary_password or "Genere automatiquement",
+            portal=reverse("members:member_portal"),
+            email_sent="oui" if email_sent else "non",
+        ),
+        # "persistent" : ce message porte le mot de passe temporaire, qui n'est
+        # stocke nulle part en clair. Il ne doit pas disparaitre tout seul.
+        extra_tags="safe toast-success persistent",
+    )
     return redirect("members:member_list")
 
 #Qrcode
@@ -1767,20 +1902,14 @@ def member_qr(request, uuid):
         raise PermissionDenied
 
     member = get_object_or_404(Member, qr_code=uuid, gym=request.gym)
-    member.ensure_valid_qr_code()
-    
-    qr = qrcode.make(member.get_qr_data())
 
-    buffer = BytesIO()
-    qr.save(buffer)
+    from members.card_images import render_member_qr_png
 
-    return HttpResponse(
-        buffer.getvalue(),
-        content_type="image/png"
+    return _image_response(
+        render_member_qr_png(member, size=request.GET.get("size")),
+        _member_filename(member, "qr"),
+        _wants_download(request),
     )
-    
-
-
 @login_required
 def edit_member(request, member_id):
     if not _member_write_allowed(request):
@@ -1789,8 +1918,10 @@ def edit_member(request, member_id):
     member = get_object_or_404(Member, id=member_id, gym=request.gym)
 
     if request.method == "POST":
-        form = MemberCreationForm(request.POST, request.FILES, instance=member)
-        
+        form = MemberCreationForm(
+            request.POST, request.FILES, instance=member, gym=request.gym
+        )
+
         if form.is_valid():
             form.save()
             messages.success(request, "Membre modifié avec succès.")
@@ -1833,7 +1964,6 @@ def member_detail(request, member_id):
         id=member_id,
         gym=request.gym
     )
-    member.ensure_valid_qr_code()
     subscription = member.active_subscription
     organization = request.gym.organization if request.gym else None
     
@@ -1884,7 +2014,9 @@ def member_detail(request, member_id):
         "can_regenerate_qr": _member_qr_admin_allowed(request),
         "member_code": _member_code(member),
         "card_image_url": reverse("members:member_card_image", args=[member.id]),
-        "member_portal_url": request.build_absolute_uri(reverse("members:member_portal")),
+        "card_download_url": reverse("members:member_card_image", args=[member.id]) + "?download=1",
+        "qr_download_url": reverse("members:member_qr", args=[member.qr_code]) + "?download=1",
+        "member_portal_url": build_public_url(request, reverse("members:member_portal")),
         # abonnement
         "subscription_type": member.subscription_type,
         "start_date": subscription.start_date.strftime("%d/%m/%Y") if subscription else None,
@@ -1911,13 +2043,14 @@ def member_card_image(request, member_id):
         id=member_id,
         gym=request.gym,
     )
-    member.ensure_valid_qr_code()
 
     from members.card_images import render_member_card_png
 
-    response = HttpResponse(render_member_card_png(member), content_type="image/png")
-    response["Cache-Control"] = "private, no-store"
-    return response
+    return _image_response(
+        render_member_card_png(member),
+        _member_filename(member, "carte_membre"),
+        _wants_download(request),
+    )
 
 
 @login_required
@@ -1957,6 +2090,8 @@ def regenerate_member_qr(request, member_id):
             "qr_code": str(member.qr_code),
             "qr_code_expires_at": timezone.localtime(member.qr_code_expires_at).strftime("%d/%m/%Y %H:%M"),
             "card_image_url": reverse("members:member_card_image", args=[member.id]),
+        "card_download_url": reverse("members:member_card_image", args=[member.id]) + "?download=1",
+        "qr_download_url": reverse("members:member_qr", args=[member.qr_code]) + "?download=1",
         }
     )
 
@@ -1987,9 +2122,28 @@ def reset_member_password(request, member_id):
         "username": member.user.username,
         "password": temporary_password,
     }
+
+    # Les identifiants sont aussi envoyes au membre : sans cela, le personnel
+    # devait les lui transmettre de vive voix.
+    try:
+        email_sent = send_member_password_reset_email(
+            member,
+            temporary_password=temporary_password,
+            portal_url=build_public_url(request, reverse("members:member_portal")),
+        )
+    except Exception as exc:
+        notify_creation_email_failure(str(member), exc)
+        email_sent = False
+
+    delivery = (
+        "Identifiants envoyes par e-mail au membre."
+        if email_sent
+        else "L'envoi de l'e-mail a echoue : communiquez-les au membre."
+    )
     messages.success(
         request,
-        f"Mot de passe temporaire regenere pour {member.first_name} {member.last_name}.",
+        f"Mot de passe temporaire regenere pour {member.first_name} {member.last_name}. "
+        f"{delivery}",
     )
     return redirect("members:member_list")
 
@@ -2046,12 +2200,20 @@ def suspend_member(request, member_id):
 
     # Mettre en pause l'abonnement actif
     active_sub = member.latest_active_subscription
-    if active_sub and not active_sub.is_paused:
+    if active_sub is None:
+        detail = "Il n'avait aucun abonnement actif a mettre en pause."
+    elif active_sub.is_paused:
+        detail = "Son abonnement etait deja en pause."
+    else:
         active_sub.is_paused = True
         active_sub.paused_at = timezone.now()
         active_sub.save()
+        detail = "Son abonnement est en pause."
 
-    messages.warning(request, f"{member.first_name} {member.last_name} a été suspendu. Son abonnement est en pause.")
+    messages.warning(
+        request,
+        f"{member.first_name} {member.last_name} a ete suspendu. {detail}",
+    )
     return redirect("members:member_list")
 
 
@@ -2069,8 +2231,26 @@ def reactivate_member(request, member_id):
 
     # Reprendre l'abonnement en pause
     active_sub = member.latest_active_subscription
-    if active_sub and active_sub.is_paused:
-        active_sub.resume_subscription()   # utilise la méthode qu'on a ajoutée
+    if active_sub is None:
+        detail = "Il n'a aucun abonnement a reprendre."
+    elif not active_sub.is_paused:
+        detail = "Son abonnement n'etait pas en pause."
+    else:
+        recovered_days = active_sub.resume_subscription()
+        if recovered_days:
+            detail = (
+                f"Son abonnement reprend, prolonge de {recovered_days} jour"
+                f"{'s' if recovered_days > 1 else ''} "
+                f"jusqu'au {active_sub.end_date:%d/%m/%Y}."
+            )
+        else:
+            detail = (
+                "Son abonnement reprend. La pause a dure moins d'une journee, "
+                "l'echeance est inchangee."
+            )
 
-    messages.success(request, f"{member.first_name} {member.last_name} a été réactivé avec succès.")
+    messages.success(
+        request,
+        f"{member.first_name} {member.last_name} a ete reactive. {detail}",
+    )
     return redirect("members:member_list")

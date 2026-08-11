@@ -44,6 +44,7 @@ from .pre_registration_views import (
     confirm_pre_registration,
     pre_registration_list,
     public_pre_registration,
+    regenerate_pre_registration_link,
 )
 
 app_name = "members"
@@ -75,6 +76,7 @@ urlpatterns = [
     path("api/me/group-programs/choose/", member_api_choose_group_program, name="member_api_choose_group_program"),
     path("api/me/coaching-feedback/", member_api_coaching_feedback, name="member_api_coaching_feedback"),
     path("preinscriptions/", pre_registration_list, name="pre_registration_list"),
+    path("preinscriptions/lien/regenerer/", regenerate_pre_registration_link, name="regenerate_pre_registration_link"),
     path("preinscriptions/<int:pre_registration_id>/confirm/", confirm_pre_registration, name="confirm_pre_registration"),
     path("preinscriptions/<int:pre_registration_id>/cancel/", cancel_pre_registration, name="cancel_pre_registration"),
     path("preinscription/<uuid:token>/", public_pre_registration, name="public_pre_registration"),

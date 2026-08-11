@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, transaction
 from django.conf import settings
 from django.utils import timezone
 from datetime import timedelta
@@ -12,7 +12,16 @@ def default_pre_registration_expiry():
 
 
 def default_member_qr_expiry():
-    return timezone.now() + timedelta(days=7)
+    """
+    Echeance du QR code d'un membre.
+
+    Volontairement lointaine : le QR est imprime sur la carte membre, il doit
+    rester lisible aussi longtemps que la carte. Le renouveler est une decision
+    humaine (carte perdue, soupcon de copie), pas un effet du calendrier.
+    Ajustable via DJANGO_MEMBER_QR_VALIDITY_DAYS.
+    """
+    validity_days = getattr(settings, "MEMBER_QR_VALIDITY_DAYS", 1825)
+    return timezone.now() + timedelta(days=validity_days)
 
 
 class Member(models.Model):
@@ -478,6 +487,19 @@ class MemberPreRegistrationLink(models.Model):
     def __str__(self):
         return f"Lien preinscription - {self.gym}"
 
+    def regenerate_token(self, save=True):
+        """
+        Remplace le jeton : l'ancien lien cesse immediatement de fonctionner.
+
+        Seul moyen de revoquer un lien diffuse par erreur ou emporte par une
+        personne qui quitte le club.
+        """
+        self.token = uuid.uuid4()
+        self.is_active = True
+        if save:
+            self.save(update_fields=["token", "is_active", "updated_at"])
+        return self.token
+
 
 class MemberPreRegistration(models.Model):
     """
@@ -488,11 +510,17 @@ class MemberPreRegistration(models.Model):
     STATUS_PENDING = "pending"
     STATUS_CONFIRMED = "confirmed"
     STATUS_CANCELLED = "cancelled"
+    STATUS_EXPIRED = "expired"
 
     STATUS_CHOICES = (
         (STATUS_PENDING, "En attente"),
         (STATUS_CONFIRMED, "Confirmee"),
         (STATUS_CANCELLED, "Annulee"),
+        (STATUS_EXPIRED, "Expiree"),
+    )
+
+    DUPLICATE_MEMBER_ERROR = (
+        "Un membre existe deja avec ces coordonnees dans cette salle."
     )
 
     gym = models.ForeignKey(
@@ -535,6 +563,10 @@ class MemberPreRegistration(models.Model):
 
     address = models.TextField(blank=True, null=True)
 
+    # Renseignee par la vue publique : sert a limiter les soumissions en rafale
+    # depuis une meme origine.
+    ip_address = models.GenericIPAddressField(blank=True, null=True, db_index=True)
+
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
@@ -574,35 +606,60 @@ class MemberPreRegistration(models.Model):
 
     @property
     def is_expired(self):
+        if self.status == self.STATUS_EXPIRED:
+            return True
         return self.status == self.STATUS_PENDING and self.expires_at <= timezone.now()
 
     @classmethod
-    def delete_expired_pending(cls):
+    def mark_expired_pending(cls):
+        """
+        Bascule les demandes en attente arrivees a echeance vers le statut
+        "expiree" au lieu de les supprimer : un prospect qui s'est manifeste
+        reste visible pour le suivi commercial.
+        """
         return cls.objects.filter(
             status=cls.STATUS_PENDING,
             expires_at__lte=timezone.now(),
-        ).delete()
+        ).update(status=cls.STATUS_EXPIRED)
+
+    def conflicting_member(self):
+        """Membre existant portant deja ce telephone ou cet email."""
+        criteria = models.Q(phone=self.phone)
+        if self.email:
+            criteria |= models.Q(email=self.email)
+        return Member.objects.filter(criteria, gym=self.gym).first()
 
     def confirm(self, confirmed_by):
         if self.is_expired:
             raise ValueError("Cette preinscription a expire.")
         if self.status != self.STATUS_PENDING:
             raise ValueError("Cette preinscription n'est plus en attente.")
+        # Controle porte par le modele et non par la vue : un appel direct
+        # (script, admin) ne doit pas pouvoir creer un membre en double.
+        if self.conflicting_member() is not None:
+            raise ValueError(self.DUPLICATE_MEMBER_ERROR)
 
-        member = Member.objects.create(
-            gym=self.gym,
-            first_name=self.first_name,
-            last_name=self.last_name,
-            phone=self.phone,
-            email=self.email,
-            address=self.address,
-        )
+        # Creation du membre, de son compte utilisateur (via signal) et mise a
+        # jour du statut : un echec en cours de route ne doit rien laisser
+        # derriere lui.
+        with transaction.atomic():
+            member = Member.objects.create(
+                gym=self.gym,
+                first_name=self.first_name,
+                last_name=self.last_name,
+                phone=self.phone,
+                email=self.email,
+                address=self.address,
+            )
 
-        self.member = member
-        self.status = self.STATUS_CONFIRMED
-        self.confirmed_at = timezone.now()
-        self.confirmed_by = confirmed_by
-        self.save(update_fields=["member", "status", "confirmed_at", "confirmed_by"])
+            self.member = member
+            self.status = self.STATUS_CONFIRMED
+            self.confirmed_at = timezone.now()
+            self.confirmed_by = confirmed_by
+            self.save(
+                update_fields=["member", "status", "confirmed_at", "confirmed_by"]
+            )
+
         return member
 
     def __str__(self):

@@ -68,6 +68,7 @@ def _send_creation_email(
     organization_name="",
     organization=None,
     attachments=None,
+    email_type="account-creation",
 ):
     recipient = (recipient or "").strip()
     if not recipient:
@@ -82,7 +83,7 @@ def _send_creation_email(
         headers={
             "Auto-Submitted": "auto-generated",
             "X-Auto-Response-Suppress": "All",
-            "X-SmartClub-Email-Type": "account-creation",
+            "X-SmartClub-Email-Type": email_type,
         },
     )
     email.attach_alternative(_message_to_html(message), "text/html")
@@ -147,6 +148,50 @@ def send_member_creation_email(member, temporary_password="", portal_url=""):
         organization_name=organization_name,
         organization=organization,
         attachments=card_attachment,
+    )
+
+
+def send_member_password_reset_email(member, temporary_password="", portal_url=""):
+    """
+    Previent un membre que son mot de passe a ete reinitialise par la salle.
+
+    Distinct de l'e-mail de creation : le membre est deja inscrit, lui souhaiter
+    la bienvenue serait deroutant. La carte membre n'est pas jointe non plus,
+    son QR code n'ayant pas change.
+    """
+    gym_name = member.gym.name if member.gym_id else "votre salle"
+    organization = getattr(member.gym, "organization", None) if member.gym_id else None
+    organization_name = organization.name if organization else ""
+    username = member.user.username if getattr(member, "user", None) else "inchange"
+    temporary_password = temporary_password or "communique par la salle"
+
+    lines = [
+        f"Bonjour {member.first_name},",
+        "",
+        f"Le mot de passe de votre espace membre chez {organization_name or gym_name} "
+        "vient d'etre reinitialise par l'equipe de la salle.",
+        "",
+        "Vos nouveaux identifiants :",
+        f"- Identifiant : {username}",
+        f"- Mot de passe temporaire : {temporary_password}",
+        "",
+        "Vous devrez choisir un nouveau mot de passe des votre prochaine connexion.",
+        "",
+        "Vos autres informations ne changent pas : votre carte membre et son QR code "
+        "restent valables.",
+        "",
+        "Si vous n'etes pas a l'origine de cette demande, contactez la salle sans tarder.",
+    ]
+    if portal_url:
+        lines.extend(["", f"Espace membre : {portal_url}"])
+
+    return _send_creation_email(
+        subject=f"{organization_name or gym_name} - Reinitialisation de votre mot de passe",
+        message="\n".join(lines),
+        recipient=member.email,
+        organization_name=organization_name,
+        organization=organization,
+        email_type="password-reset",
     )
 
 

@@ -25,7 +25,7 @@
 </div>
 
 <div class="row g-3 mb-4">
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-body">
                 <span class="badge bg-warning text-dark mb-2">En attente</span>
@@ -34,7 +34,7 @@
             </div>
         </div>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-body">
                 <span class="badge bg-success mb-2">Confirmees</span>
@@ -43,12 +43,21 @@
             </div>
         </div>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-body">
                 <span class="badge bg-secondary mb-2">Annulees</span>
                 <h2 class="mb-0 fw-bold">{{ cancelled_count }}</h2>
                 <small class="text-muted">Demandes refusees manuellement</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <span class="badge bg-dark mb-2">Expirees</span>
+                <h2 class="mb-0 fw-bold">{{ expired_count }}</h2>
+                <small class="text-muted">Sans suite apres 7 jours</small>
             </div>
         </div>
     </div>
@@ -68,6 +77,7 @@
                     <option value="pending" {% if status == "pending" %}selected{% endif %}>En attente</option>
                     <option value="confirmed" {% if status == "confirmed" %}selected{% endif %}>Confirmees</option>
                     <option value="cancelled" {% if status == "cancelled" %}selected{% endif %}>Annulees</option>
+                    <option value="expired" {% if status == "expired" %}selected{% endif %}>Expirees</option>
                 </select>
             </div>
             <div class="col-md-4 d-flex gap-2">
@@ -115,6 +125,8 @@
                                     <span class="badge bg-warning text-dark">En attente</span>
                                 {% elif item.status == "confirmed" %}
                                     <span class="badge bg-success">Confirmee</span>
+                                {% elif item.status == "expired" %}
+                                    <span class="badge bg-dark">Expiree</span>
                                 {% else %}
                                     <span class="badge bg-secondary">Annulee</span>
                                 {% endif %}
@@ -142,6 +154,21 @@
                                                 Annuler
                                             </button>
                                         </form>
+                                    </div>
+                                {% elif item.status == "confirmed" and item.member %}
+                                    <div class="d-inline-flex align-items-center gap-2">
+                                        <span class="badge bg-light text-dark">Membre #{{ item.member.id }}</span>
+                                        {% if item.member.user %}
+                                        <form method="post" action="{% url 'members:reset_member_password' item.member.id %}"
+                                              onsubmit="return confirm('Generer un nouveau mot de passe temporaire pour {{ item.full_name|escapejs }} ? L\'ancien cessera de fonctionner.');">
+                                            {% csrf_token %}
+                                            <button class="btn btn-sm btn-outline-secondary" type="submit"
+                                                    title="Utile si les identifiants ont ete perdus ou l'e-mail non recu">
+                                                <span class="material-icons me-1" style="font-size:16px;">key</span>
+                                                Renvoyer les identifiants
+                                            </button>
+                                        </form>
+                                        {% endif %}
                                     </div>
                                 {% elif item.member %}
                                     <span class="badge bg-light text-dark">Membre #{{ item.member.id }}</span>
@@ -222,6 +249,32 @@
                     <input type="text" id="preRegistrationUrl" class="form-control" value="{{ pre_registration_url }}" readonly>
                     <button class="btn btn-primary" type="button" onclick="copyPreRegistrationLink()">Copier</button>
                 </div>
+
+                {% if pre_registration_url_is_local %}
+                <div class="alert alert-warning mt-3 mb-0">
+                    <strong>Ce lien pointe vers cette machine.</strong>
+                    Il ne fonctionnera pour personne d'autre. Renseignez
+                    <code>DJANGO_PUBLIC_BASE_URL</code> avec l'adresse publique
+                    du site pour obtenir un lien partageable.
+                </div>
+                {% endif %}
+
+                {% if can_member_status_admin %}
+                <hr class="my-4">
+                <p class="text-muted small mb-2">
+                    Si ce lien a ete diffuse par erreur, generez-en un nouveau :
+                    l'ancien cessera immediatement de fonctionner et les demandes
+                    deja recues seront conservees.
+                </p>
+                <form method="post" action="{% url 'members:regenerate_pre_registration_link' %}"
+                      onsubmit="return confirm('Generer un nouveau lien ? L\'ancien cessera aussitot de fonctionner pour tout le monde.');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline-danger btn-sm">
+                        <span class="material-icons me-2" style="font-size:16px;">autorenew</span>
+                        Regenerer le lien
+                    </button>
+                </form>
+                {% endif %}
             </div>
         </div>
     </div>

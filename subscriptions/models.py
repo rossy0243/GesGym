@@ -261,13 +261,19 @@ class MemberSubscription(models.Model):
         return super().save(*args, **kwargs)
 
     def resume_subscription(self):
-        """Reprend l'abonnement après une pause"""
-        if self.is_paused and self.paused_at:
-            paused_duration = (timezone.now() - self.paused_at).days
-            self.end_date += timedelta(days=paused_duration)
-            self.is_paused = False
-            self.paused_at = None
-            self.save()
+        """
+        Reprend l'abonnement apres une pause et renvoie le nombre de jours
+        rendus au membre, afin que l'interface puisse l'annoncer.
+        """
+        if not (self.is_paused and self.paused_at):
+            return 0
+
+        paused_duration = (timezone.now() - self.paused_at).days
+        self.end_date += timedelta(days=paused_duration)
+        self.is_paused = False
+        self.paused_at = None
+        self.save()
+        return paused_duration
     
     def __str__(self):
         return f"{self.member} - {self.plan}"

@@ -13,23 +13,38 @@ from core.creation_emails import (
     send_member_creation_email,
     send_pre_registration_received_email,
 )
-from smartclub.access_control import MEMBER_ROLES, has_role
+from smartclub.access_control import MEMBER_ADMIN_ROLES, MEMBER_ROLES, has_role
+from smartclub.public_links import build_public_url, is_local_url
 from .forms import MemberPreRegistrationForm
-from .models import Member, MemberPreRegistration, MemberPreRegistrationLink
+from .models import MemberPreRegistration, MemberPreRegistrationLink
 
 
 def _cleanup_expired_pre_registrations():
-    MemberPreRegistration.delete_expired_pending()
+    MemberPreRegistration.mark_expired_pending()
 
 
 def _member_management_allowed(request):
     return has_role(request, MEMBER_ROLES) and request.gym
 
 
+def _link_management_allowed(request):
+    """Revoquer un lien est plus sensible que consulter les demandes."""
+    return has_role(request, MEMBER_ADMIN_ROLES) and request.gym
+
+
 def _get_pre_registration_public_url(request, link):
-    return request.build_absolute_uri(
-        reverse("members:public_pre_registration", args=[link.token])
+    return build_public_url(
+        request,
+        reverse("members:public_pre_registration", args=[link.token]),
     )
+
+
+def _client_ip(request):
+    """IP du visiteur, en tenant compte du proxy de Render."""
+    forwarded = (request.META.get("HTTP_X_FORWARDED_FOR") or "").split(",")
+    if forwarded and forwarded[0].strip():
+        return forwarded[0].strip()
+    return request.META.get("REMOTE_ADDR") or ""
 
 
 def public_pre_registration(request, token):
@@ -43,21 +58,24 @@ def public_pre_registration(request, token):
     )
     gym = link.gym
     saved_pre_registration = None
+    ip_address = _client_ip(request)
+    form_kwargs = {"gym": gym, "link": link, "ip_address": ip_address}
 
     if request.method == "POST":
-        form = MemberPreRegistrationForm(request.POST, gym=gym)
+        form = MemberPreRegistrationForm(request.POST, **form_kwargs)
         if form.is_valid():
             saved_pre_registration = form.save(commit=False)
             saved_pre_registration.gym = gym
             saved_pre_registration.link = link
+            saved_pre_registration.ip_address = ip_address or None
             saved_pre_registration.save()
             try:
                 send_pre_registration_received_email(saved_pre_registration)
             except Exception as exc:
                 notify_creation_email_failure(str(saved_pre_registration), exc)
-            form = MemberPreRegistrationForm(gym=gym)
+            form = MemberPreRegistrationForm(**form_kwargs)
     else:
-        form = MemberPreRegistrationForm(gym=gym)
+        form = MemberPreRegistrationForm(**form_kwargs)
 
     return render(
         request,
@@ -95,6 +113,7 @@ def pre_registration_list(request):
         MemberPreRegistration.STATUS_PENDING,
         MemberPreRegistration.STATUS_CONFIRMED,
         MemberPreRegistration.STATUS_CANCELLED,
+        MemberPreRegistration.STATUS_EXPIRED,
     ]
     if status not in allowed_statuses:
         status = MemberPreRegistration.STATUS_PENDING
@@ -122,6 +141,8 @@ def pre_registration_list(request):
         "search": search,
         "pre_registration_link": link,
         "pre_registration_url": pre_registration_url,
+        # Alerte l'utilisateur avant qu'il n'envoie un lien local a un prospect.
+        "pre_registration_url_is_local": is_local_url(pre_registration_url),
         "pending_count": MemberPreRegistration.objects.filter(
             gym=gym,
             status=MemberPreRegistration.STATUS_PENDING,
@@ -135,10 +156,36 @@ def pre_registration_list(request):
             gym=gym,
             status=MemberPreRegistration.STATUS_CANCELLED,
         ).count(),
+        "expired_count": MemberPreRegistration.objects.filter(
+            gym=gym,
+            status=MemberPreRegistration.STATUS_EXPIRED,
+        ).count(),
         "nav_active": "clients",
         "nav_sub": "pre_registrations",
     }
     return render(request, "members/pre_registration_list.html", context)
+
+
+@login_required
+@require_POST
+def regenerate_pre_registration_link(request):
+    """
+    Renouvelle le jeton du lien public : l'ancien cesse aussitot de fonctionner.
+
+    Reserve aux proprietaires et gerants, car l'operation coupe l'acces a
+    toute personne detenant l'ancienne adresse.
+    """
+    if not _link_management_allowed(request):
+        raise PermissionDenied
+
+    link, _ = MemberPreRegistrationLink.objects.get_or_create(gym=request.gym)
+    link.regenerate_token()
+
+    messages.success(
+        request,
+        "Nouveau lien de preinscription genere. L'ancien lien ne fonctionne plus.",
+    )
+    return redirect("members:pre_registration_list")
 
 
 @login_required
@@ -154,19 +201,18 @@ def confirm_pre_registration(request, pre_registration_id):
     )
 
     if pre_registration.is_expired:
-        pre_registration.delete()
-        messages.warning(request, "Cette preinscription a expire et a ete supprimee.")
+        if pre_registration.status == MemberPreRegistration.STATUS_PENDING:
+            pre_registration.status = MemberPreRegistration.STATUS_EXPIRED
+            pre_registration.save(update_fields=["status"])
+        messages.warning(
+            request,
+            "Cette preinscription a expire. Elle reste consultable dans le filtre "
+            "« Expirees », mais ne peut plus etre confirmee.",
+        )
         return redirect("members:pre_registration_list")
 
     if pre_registration.status != MemberPreRegistration.STATUS_PENDING:
         messages.error(request, "Cette preinscription n'est plus en attente.")
-        return redirect("members:pre_registration_list")
-
-    duplicate_query = Q(phone=pre_registration.phone)
-    if pre_registration.email:
-        duplicate_query |= Q(email=pre_registration.email)
-    if Member.objects.filter(duplicate_query, gym=request.gym).exists():
-        messages.error(request, "Impossible de confirmer : un membre existe deja avec ces coordonnees.")
         return redirect("members:pre_registration_list")
 
     try:
@@ -175,25 +221,44 @@ def confirm_pre_registration(request, pre_registration_id):
         messages.error(request, str(exc))
         return redirect("members:pre_registration_list")
 
+    _announce_member_credentials(request, member, action="Preinscription confirmee.")
+    return redirect("members:pre_registration_list")
+
+
+def _announce_member_credentials(request, member, action):
+    """
+    Envoie les identifiants par e-mail et les affiche de facon persistante.
+
+    Le mot de passe temporaire n'est stocke nulle part en clair : s'il n'est ni
+    lu ni recu, il est perdu. Le message ne doit donc pas s'effacer tout seul.
+    """
     username = member.user.username if member.user else "genere automatiquement"
     temporary_password = getattr(member, "_temporary_password", "")
+
     try:
         email_sent = send_member_creation_email(
             member,
             temporary_password=temporary_password,
-            portal_url=request.build_absolute_uri(reverse("members:member_portal")),
+            portal_url=build_public_url(request, reverse("members:member_portal")),
         )
     except Exception as exc:
         notify_creation_email_failure(str(member), exc)
         email_sent = False
+
+    delivery = (
+        "Identifiants egalement envoyes par e-mail."
+        if email_sent
+        else "L'envoi de l'e-mail a echoue : notez ces identifiants avant de fermer ce message."
+    )
+
     messages.success(
         request,
-        f"Preinscription confirmee. Membre cree : {member.first_name} {member.last_name}. "
+        f"{action} Membre : {member.first_name} {member.last_name}. "
         f"Identifiant : {username}. Mot de passe temporaire : {temporary_password}. "
-        "Ce mot de passe devra etre change a la premiere connexion. "
-        f"Email envoye : {'oui' if email_sent else 'non'}."
+        f"Il devra etre change a la premiere connexion. {delivery}",
+        extra_tags="persistent",
     )
-    return redirect("members:pre_registration_list")
+    return email_sent
 
 
 @login_required

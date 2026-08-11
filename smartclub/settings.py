@@ -126,6 +126,17 @@ if not DEBUG and not ALLOWED_HOSTS:
     raise ImproperlyConfigured("DJANGO_ALLOWED_HOSTS is required when DJANGO_DEBUG=False.")
 
 CANONICAL_HOST = _env("DJANGO_CANONICAL_HOST", "" if DEBUG else "smartclubpro.org")
+
+# Racine des liens partages a l'exterieur (preinscription, e-mails). Voir
+# smartclub/public_links.py. Laisser vide retombe sur CANONICAL_HOST, puis sur
+# l'adresse de la requete courante.
+PUBLIC_BASE_URL = _env("DJANGO_PUBLIC_BASE_URL", "")
+
+# Duree de validite du QR code d'un membre, en jours. Les QR sont imprimes sur
+# les cartes membres : une validite courte rendrait les cartes inutilisables au
+# bout de quelques jours. La rotation est donc une action explicite (bouton
+# reserve aux proprietaires et gerants), pas un effet du temps.
+MEMBER_QR_VALIDITY_DAYS = _env_int("DJANGO_MEMBER_QR_VALIDITY_DAYS", 1825)
 CANONICAL_HOST_EXEMPT_PATHS = tuple(
     _env_list("DJANGO_CANONICAL_HOST_EXEMPT_PATHS", [])
 )
