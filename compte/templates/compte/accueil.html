@@ -176,6 +176,50 @@
     .footer-dark {
       background: linear-gradient(180deg, #0B0B0B 0%, #141414 100%);
     }
+
+    .stat-band {
+      background: linear-gradient(135deg, #0B0B0B 0%, #1a1a1a 60%, #2b2409 100%);
+    }
+
+    .stat-band .stat-divider {
+      width: 1px;
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .plan-card {
+      position: relative;
+      overflow: hidden;
+      border-radius: 28px;
+      transition: transform .25s ease, box-shadow .25s ease;
+    }
+
+    .plan-card:hover {
+      transform: translateY(-4px);
+    }
+
+    .plan-card.is-featured {
+      background: linear-gradient(180deg, #0B0B0B 0%, #1a1a1a 100%);
+      color: #fff;
+      box-shadow: 0 24px 48px rgba(11, 11, 11, 0.28);
+    }
+
+    .plan-card.is-featured .plan-feature {
+      color: rgba(255, 255, 255, 0.78);
+    }
+
+    .plan-badge {
+      position: absolute;
+      top: 1.25rem;
+      right: 1.25rem;
+      background: linear-gradient(135deg, #C9A227, #8A6D1D);
+      color: #fff;
+      font-size: .68rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      padding: .35rem .75rem;
+      border-radius: 999px;
+    }
   </style>
 </head>
 <body class="antialiased">
@@ -194,6 +238,7 @@
         <a href="#accueil" class="hover:text-[#C9A227] transition">Accueil</a>
         <a href="#services" class="hover:text-[#C9A227] transition">Services</a>
         <a href="#equipements" class="hover:text-[#C9A227] transition">Équipements</a>
+        <a href="#formules" class="hover:text-[#C9A227] transition">Formules</a>
         <a href="#horaires" class="hover:text-[#C9A227] transition">Horaires</a>
         <a href="#faq" class="hover:text-[#C9A227] transition">FAQ</a>
         <a href="#contact" class="hover:text-[#C9A227] transition">Contact</a>
@@ -244,8 +289,8 @@
             <a href="#contact-form" class="px-6 py-3.5 bg-[#0B0B0B] text-white font-bold rounded-full hover:bg-[#8A6D1D] transition shadow-lg">
               Nous contacter
             </a>
-            <a href="#services" class="px-6 py-3.5 border-2 border-[#0B0B0B] text-[#0B0B0B] font-bold rounded-full hover:bg-[#0B0B0B] hover:text-white transition">
-              Découvrir nos services
+            <a href="#formules" class="px-6 py-3.5 border-2 border-[#0B0B0B] text-[#0B0B0B] font-bold rounded-full hover:bg-[#0B0B0B] hover:text-white transition">
+              Voir nos formules
             </a>
           </div>
 
@@ -275,6 +320,30 @@
               </div>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BANDE STATS -->
+  <section class="stat-band py-8">
+    <div class="container-premium mx-auto px-6 lg:px-8">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-6 text-center text-white">
+        <div>
+          <i class="fas fa-dumbbell text-[#C9A227] text-2xl mb-2"></i>
+          <p class="font-bold">Équipements dernière génération</p>
+        </div>
+        <div class="md:border-l stat-divider md:pl-6">
+          <i class="fas fa-user-tie text-[#C9A227] text-2xl mb-2"></i>
+          <p class="font-bold">Coachs certifiés</p>
+        </div>
+        <div class="md:border-l stat-divider md:pl-6">
+          <i class="fas fa-qrcode text-[#C9A227] text-2xl mb-2"></i>
+          <p class="font-bold">Accès sécurisé par QR code</p>
+        </div>
+        <div class="md:border-l stat-divider md:pl-6">
+          <i class="fas fa-crown text-[#C9A227] text-2xl mb-2"></i>
+          <p class="font-bold">Ambiance premium</p>
         </div>
       </div>
     </div>
@@ -418,57 +487,95 @@
     </div>
   </section>
 
-  <!-- HORAIRES / LOCALISATION -->
-  <section id="horaires" class="py-10 lg:py-12 bg-slate-50">
+  <!-- FORMULES -->
+  <section id="formules" class="py-10 lg:py-12 bg-slate-50">
     <div class="container-premium mx-auto px-6 lg:px-8">
-      <div class="grid lg:grid-cols-2 gap-8 items-center">
-        <div>
-          <span class="section-kicker mb-4">Horaires &amp; localisation</span>
-          <h2 class="text-3xl md:text-4xl font-bold mb-5 tracking-tight">
-            Retrouvez-nous à Kinshasa
-          </h2>
-          <div class="space-y-4">
-            <div class="soft-card rounded-2xl p-5 flex items-start gap-4">
-              <i class="fas fa-location-dot text-[#C9A227] text-xl mt-1"></i>
-              <div>
-                <p class="font-semibold text-gray-900">Adresse</p>
-                <p class="text-gray-500"><!-- TODO Royal Gym : indiquer l'adresse exacte -->Adresse à confirmer, Kinshasa</p>
-              </div>
-            </div>
-            <div class="soft-card rounded-2xl p-5 flex items-start gap-4">
-              <i class="fas fa-clock text-[#C9A227] text-xl mt-1"></i>
-              <div>
-                <p class="font-semibold text-gray-900">Horaires</p>
-                <p class="text-gray-500"><!-- TODO Royal Gym : indiquer les horaires réels -->Contactez-nous pour connaître nos horaires à jour</p>
-              </div>
-            </div>
-            <div class="soft-card rounded-2xl p-5 flex items-start gap-4">
-              <i class="fab fa-whatsapp text-[#C9A227] text-xl mt-1"></i>
-              <div>
-                <p class="font-semibold text-gray-900">WhatsApp</p>
-                <p class="text-gray-500"><!-- TODO Royal Gym : indiquer le vrai numéro -->Écrivez-nous directement sur WhatsApp</p>
-              </div>
-            </div>
-          </div>
+      <div class="max-w-3xl mx-auto text-center mb-10">
+        <span class="section-kicker mb-4">Nos formules</span>
+        <h2 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">
+          Une formule pour chaque objectif
+        </h2>
+        <p class="text-lg text-gray-600 leading-relaxed">
+          De la séance découverte à l'engagement annuel, choisissez le rythme qui
+          vous convient. Tarifs communiqués sur demande.
+        </p>
+      </div>
+
+      <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
+        <div class="plan-card soft-card p-7">
+          <h3 class="text-lg font-bold mb-1">Journalier</h3>
+          <p class="text-sm text-gray-500 mb-5">Pour découvrir la salle</p>
+          <ul class="space-y-2 text-sm plan-feature text-gray-600 mb-6">
+            <li><i class="fas fa-check text-[#C9A227] mr-2"></i>Accès à la salle 1 jour</li>
+            <li><i class="fas fa-check text-[#C9A227] mr-2"></i>Musculation &amp; cardio</li>
+            <li><i class="fas fa-check text-[#C9A227] mr-2"></i>Sans engagement</li>
+          </ul>
+          <a href="#contact-form" class="block text-center border-2 border-[#0B0B0B] text-[#0B0B0B] font-bold py-3 rounded-full hover:bg-[#0B0B0B] hover:text-white transition">Nous contacter</a>
         </div>
 
-        <div class="premium-card rounded-[32px] p-8">
-          <h3 class="text-2xl font-bold mb-6">Nos formules</h3>
-          <div class="space-y-4 text-gray-600">
-            <div class="soft-card rounded-2xl p-5">
-              <p class="font-semibold text-gray-900">Abonnement journalier</p>
-              <p class="text-gray-500">Idéal pour découvrir la salle.</p>
-            </div>
-            <div class="soft-card rounded-2xl p-5">
-              <p class="font-semibold text-gray-900">Abonnement mensuel</p>
-              <p class="text-gray-500">Notre formule la plus populaire.</p>
-            </div>
-            <div class="soft-card rounded-2xl p-5">
-              <p class="font-semibold text-gray-900">Abonnement trimestriel / annuel</p>
-              <p class="text-gray-500">Pour vous engager durablement, à meilleur prix.</p>
-            </div>
-          </div>
-          <p class="mt-6 text-sm text-gray-500">Contactez-nous pour connaître nos tarifs et offres en cours.</p>
+        <div class="plan-card soft-card p-7">
+          <h3 class="text-lg font-bold mb-1">Mensuel</h3>
+          <p class="text-sm text-gray-500 mb-5">La formule la plus flexible</p>
+          <ul class="space-y-2 text-sm plan-feature text-gray-600 mb-6">
+            <li><i class="fas fa-check text-[#C9A227] mr-2"></i>Accès illimité 1 mois</li>
+            <li><i class="fas fa-check text-[#C9A227] mr-2"></i>Cours collectifs inclus</li>
+            <li><i class="fas fa-check text-[#C9A227] mr-2"></i>Carte membre &amp; QR code</li>
+          </ul>
+          <a href="#contact-form" class="block text-center border-2 border-[#0B0B0B] text-[#0B0B0B] font-bold py-3 rounded-full hover:bg-[#0B0B0B] hover:text-white transition">Nous contacter</a>
+        </div>
+
+        <div class="plan-card is-featured p-7">
+          <span class="plan-badge">Populaire</span>
+          <h3 class="text-lg font-bold mb-1">Trimestriel</h3>
+          <p class="text-sm text-gray-300 mb-5">Le meilleur rapport engagement / prix</p>
+          <ul class="space-y-2 text-sm plan-feature mb-6">
+            <li><i class="fas fa-check text-[#C9A227] mr-2"></i>Tout le mensuel, inclus</li>
+            <li><i class="fas fa-check text-[#C9A227] mr-2"></i>Suivi coaching renforcé</li>
+            <li><i class="fas fa-check text-[#C9A227] mr-2"></i>Tarif préférentiel</li>
+          </ul>
+          <a href="#contact-form" class="block text-center bg-[#C9A227] text-[#0B0B0B] font-bold py-3 rounded-full hover:bg-white transition">Nous contacter</a>
+        </div>
+
+        <div class="plan-card soft-card p-7">
+          <h3 class="text-lg font-bold mb-1">Annuel</h3>
+          <p class="text-sm text-gray-500 mb-5">Pour s'engager sur la durée</p>
+          <ul class="space-y-2 text-sm plan-feature text-gray-600 mb-6">
+            <li><i class="fas fa-check text-[#C9A227] mr-2"></i>Tout le trimestriel, inclus</li>
+            <li><i class="fas fa-check text-[#C9A227] mr-2"></i>Meilleur tarif à l'année</li>
+            <li><i class="fas fa-check text-[#C9A227] mr-2"></i>Coaching personnalisé</li>
+          </ul>
+          <a href="#contact-form" class="block text-center border-2 border-[#0B0B0B] text-[#0B0B0B] font-bold py-3 rounded-full hover:bg-[#0B0B0B] hover:text-white transition">Nous contacter</a>
+        </div>
+      </div>
+      <p class="mt-8 text-center text-sm text-gray-500">Les tarifs exacts et offres en cours vous sont communiqués par notre équipe.</p>
+    </div>
+  </section>
+
+  <!-- HORAIRES / LOCALISATION -->
+  <section id="horaires" class="py-10 lg:py-12 bg-white">
+    <div class="container-premium mx-auto px-6 lg:px-8">
+      <div class="max-w-3xl mx-auto text-center mb-10">
+        <span class="section-kicker mb-4">Horaires &amp; localisation</span>
+        <h2 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">
+          Retrouvez-nous à Kinshasa
+        </h2>
+      </div>
+
+      <div class="grid sm:grid-cols-3 gap-6 max-w-4xl mx-auto">
+        <div class="soft-card rounded-2xl p-6 text-center">
+          <i class="fas fa-location-dot text-[#C9A227] text-2xl mb-3"></i>
+          <p class="font-semibold text-gray-900 mb-1">Adresse</p>
+          <p class="text-gray-500"><!-- TODO Royal Gym : indiquer l'adresse exacte -->Adresse à confirmer, Kinshasa</p>
+        </div>
+        <div class="soft-card rounded-2xl p-6 text-center">
+          <i class="fas fa-clock text-[#C9A227] text-2xl mb-3"></i>
+          <p class="font-semibold text-gray-900 mb-1">Horaires</p>
+          <p class="text-gray-500"><!-- TODO Royal Gym : indiquer les horaires réels -->Contactez-nous pour connaître nos horaires à jour</p>
+        </div>
+        <div class="soft-card rounded-2xl p-6 text-center">
+          <i class="fab fa-whatsapp text-[#C9A227] text-2xl mb-3"></i>
+          <p class="font-semibold text-gray-900 mb-1">WhatsApp</p>
+          <p class="text-gray-500"><!-- TODO Royal Gym : indiquer le vrai numéro -->Écrivez-nous directement sur WhatsApp</p>
         </div>
       </div>
     </div>
