@@ -6,7 +6,7 @@ from unittest.mock import PropertyMock, patch
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
-from django.test import TestCase, override_settings
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from PIL import Image
@@ -14,7 +14,7 @@ from PIL import Image
 from access.models import AccessLog
 from coaching.models import Coach, CoachAssignment, CoachingFeedback, GroupCoachingProgram
 from compte.models import User, UserGymRole
-from members.forms import MemberCreationForm
+from members.forms import MemberCreationForm, MemberPreRegistrationForm
 from members.models import (
     Member,
     MemberGoal,
@@ -250,7 +250,7 @@ class MemberPreRegistrationTests(TestCase):
         self.assertEqual(log.metadata["phone"], "+243810000112")
         self.assertEqual(log.metadata["email"], "delete.target@example.com")
 
-    def test_only_owner_can_regenerate_member_qr_and_action_is_logged(self):
+    def test_managers_and_owners_can_regenerate_member_qr_and_action_is_logged(self):
         member = Member.objects.create(
             gym=self.gym,
             first_name="Qr",
@@ -260,7 +260,8 @@ class MemberPreRegistrationTests(TestCase):
         )
         old_qr_code = str(member.qr_code)
 
-        self.client.force_login(self.manager)
+        # La reception n'y a pas droit : regenerer invalide la carte imprimee.
+        self.client.force_login(self.reception)
         denied_response = self.client.post(reverse("members:regenerate_member_qr", args=[member.id]))
         self.assertEqual(denied_response.status_code, 403)
         member.refresh_from_db()
@@ -534,7 +535,8 @@ class MemberPreRegistrationTests(TestCase):
         self.assertContains(response, "Visible")
         self.assertNotContains(response, "Hidden")
 
-    def test_expired_pending_pre_registrations_are_deleted_by_command(self):
+    def test_expired_pending_pre_registrations_are_marked_by_command(self):
+        """Elles sont conservees pour le suivi commercial, plus supprimees."""
         expired = MemberPreRegistration.objects.create(
             gym=self.gym,
             first_name="Expired",
@@ -554,8 +556,10 @@ class MemberPreRegistrationTests(TestCase):
         output = StringIO()
         call_command("cleanup_expired_preregistrations", stdout=output)
 
-        self.assertFalse(MemberPreRegistration.objects.filter(id=expired.id).exists())
-        self.assertTrue(MemberPreRegistration.objects.filter(id=confirmed.id).exists())
+        expired.refresh_from_db()
+        confirmed.refresh_from_db()
+        self.assertEqual(expired.status, MemberPreRegistration.STATUS_EXPIRED)
+        self.assertEqual(confirmed.status, MemberPreRegistration.STATUS_CONFIRMED)
         self.assertIn("1 preinscription", output.getvalue())
 
 
@@ -1246,7 +1250,8 @@ class MemberPortalTests(TestCase):
         self.assertEqual(response["Content-Type"], "image/png")
         self.assertTrue(response.content.startswith(b"\x89PNG"))
 
-    def test_member_portal_qr_regenerates_expired_qr_code(self):
+    def test_member_portal_qr_never_rotates_the_printed_code(self):
+        """Le QR est imprime sur la carte : le consulter ne doit pas le changer."""
         old_qr_code = str(self.member.qr_code)
         self.member.qr_code_expires_at = timezone.now() - timedelta(minutes=1)
         self.member.save(update_fields=["qr_code_expires_at"])
@@ -1256,10 +1261,9 @@ class MemberPortalTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.member.refresh_from_db()
-        self.assertNotEqual(str(self.member.qr_code), old_qr_code)
-        self.assertGreater(self.member.qr_code_expires_at, timezone.now())
+        self.assertEqual(str(self.member.qr_code), old_qr_code)
 
-    def test_member_api_payload_regenerates_expired_qr_code(self):
+    def test_member_api_payload_never_rotates_the_printed_code(self):
         old_qr_code = str(self.member.qr_code)
         self.member.qr_code_expires_at = timezone.now() - timedelta(minutes=1)
         self.member.save(update_fields=["qr_code_expires_at"])
@@ -1278,8 +1282,8 @@ class MemberPortalTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.member.refresh_from_db()
         payload = response.json()
-        self.assertNotEqual(str(self.member.qr_code), old_qr_code)
-        self.assertEqual(payload["data"]["member"]["qr_data"], str(self.member.qr_code))
+        self.assertEqual(str(self.member.qr_code), old_qr_code)
+        self.assertEqual(payload["data"]["member"]["qr_data"], old_qr_code)
 
     def test_rotate_member_qrcodes_command_rotates_expired_members(self):
         old_qr_code = str(self.member.qr_code)
@@ -1462,3 +1466,1063 @@ class MemberPortalTests(TestCase):
         notification.refresh_from_db()
         self.assertIsNotNone(notification.read_at)
         self.assertTrue(self.second_coach.members.filter(id=self.member.id).exists())
+
+
+class PreRegistrationLinkHardeningTests(TestCase):
+    """Lien public : domaine partageable, revocation, protection anti-robot."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(name="Org Lien", slug="org-lien")
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Lien",
+            slug="gym-lien",
+            subdomain="gym-lien",
+        )
+        self.owner = User.objects.create_user(
+            username="owner-lien",
+            password="pass12345",
+            owned_organization=self.organization,
+        )
+        self.reception = User.objects.create_user(
+            username="reception-lien",
+            password="pass12345",
+        )
+        UserGymRole.objects.create(
+            user=self.reception, gym=self.gym, role="reception", is_active=True
+        )
+
+    def _link(self):
+        return MemberPreRegistrationLink.objects.get(gym=self.gym)
+
+    def _public_path(self, token):
+        return reverse("members:public_pre_registration", args=[token])
+
+    def _form_data(self, index=1, **overrides):
+        data = {
+            "first_name": f"Prospect{index}",
+            "last_name": "Lien",
+            "phone": f"+2438100001{index:02d}",
+            "email": f"prospect{index}.lien@example.com",
+            "address": "Kinshasa",
+        }
+        data.update(overrides)
+        return data
+
+    # --- 1. Domaine des liens partages ------------------------------------
+
+    @override_settings(PUBLIC_BASE_URL="https://royalgym-fitness.com")
+    def test_link_uses_public_domain_not_browsing_address(self):
+        self.client.force_login(self.owner)
+
+        response = self.client.get(reverse("members:pre_registration_list"))
+
+        url = response.context["pre_registration_url"]
+        self.assertTrue(url.startswith("https://royalgym-fitness.com/"))
+        self.assertFalse(response.context["pre_registration_url_is_local"])
+
+    @override_settings(PUBLIC_BASE_URL="", CANONICAL_HOST="")
+    def test_local_link_is_flagged_to_the_user(self):
+        self.client.force_login(self.owner)
+
+        response = self.client.get(reverse("members:pre_registration_list"))
+
+        self.assertTrue(response.context["pre_registration_url_is_local"])
+
+    # --- 2. Revocation du lien --------------------------------------------
+
+    def test_regenerating_the_link_breaks_the_previous_one(self):
+        self.client.force_login(self.owner)
+        self.client.get(reverse("members:pre_registration_list"))
+        previous_token = self._link().token
+
+        self.assertEqual(
+            self.client.get(self._public_path(previous_token)).status_code, 200
+        )
+
+        response = self.client.post(
+            reverse("members:regenerate_pre_registration_link")
+        )
+
+        self.assertEqual(response.status_code, 302)
+        new_token = self._link().token
+        self.assertNotEqual(new_token, previous_token)
+        self.assertEqual(
+            self.client.get(self._public_path(previous_token)).status_code, 404
+        )
+        self.assertEqual(self.client.get(self._public_path(new_token)).status_code, 200)
+
+    def test_regeneration_keeps_existing_requests(self):
+        self.client.force_login(self.owner)
+        self.client.get(reverse("members:pre_registration_list"))
+        link = self._link()
+        MemberPreRegistration.objects.create(
+            gym=self.gym,
+            link=link,
+            first_name="Deja",
+            last_name="Inscrit",
+            phone="+243810000900",
+            email="deja.inscrit@example.com",
+        )
+
+        self.client.post(reverse("members:regenerate_pre_registration_link"))
+
+        self.assertEqual(MemberPreRegistration.objects.filter(gym=self.gym).count(), 1)
+
+    def test_reception_cannot_regenerate_the_link(self):
+        self.client.force_login(self.owner)
+        self.client.get(reverse("members:pre_registration_list"))
+        previous_token = self._link().token
+
+        self.client.force_login(self.reception)
+        response = self.client.post(
+            reverse("members:regenerate_pre_registration_link")
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(self._link().token, previous_token)
+
+    # --- 3. Protection du formulaire public --------------------------------
+
+    def test_honeypot_field_rejects_bot_submission(self):
+        self.client.force_login(self.owner)
+        self.client.get(reverse("members:pre_registration_list"))
+        path = self._public_path(self._link().token)
+
+        self.client.logout()
+        response = self.client.post(
+            path, self._form_data(website="http://spam.example")
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(MemberPreRegistration.objects.count(), 0)
+
+    def test_submissions_are_capped_per_ip(self):
+        self.client.force_login(self.owner)
+        self.client.get(reverse("members:pre_registration_list"))
+        path = self._public_path(self._link().token)
+        self.client.logout()
+
+        allowed = MemberPreRegistrationForm.MAX_PER_IP_PER_HOUR
+        for index in range(allowed):
+            self.client.post(
+                path, self._form_data(index), REMOTE_ADDR="203.0.113.7"
+            )
+        self.assertEqual(MemberPreRegistration.objects.count(), allowed)
+
+        response = self.client.post(
+            path, self._form_data(allowed + 1), REMOTE_ADDR="203.0.113.7"
+        )
+
+        self.assertEqual(MemberPreRegistration.objects.count(), allowed)
+        self.assertContains(response, "Trop de demandes")
+
+    def test_another_ip_is_not_blocked_by_a_saturated_one(self):
+        self.client.force_login(self.owner)
+        self.client.get(reverse("members:pre_registration_list"))
+        path = self._public_path(self._link().token)
+        self.client.logout()
+
+        allowed = MemberPreRegistrationForm.MAX_PER_IP_PER_HOUR
+        for index in range(allowed):
+            self.client.post(
+                path, self._form_data(index), REMOTE_ADDR="203.0.113.7"
+            )
+
+        self.client.post(
+            path, self._form_data(90), REMOTE_ADDR="203.0.113.8"
+        )
+
+        self.assertEqual(MemberPreRegistration.objects.count(), allowed + 1)
+
+    def test_visitor_ip_is_recorded(self):
+        self.client.force_login(self.owner)
+        self.client.get(reverse("members:pre_registration_list"))
+        path = self._public_path(self._link().token)
+        self.client.logout()
+
+        self.client.post(path, self._form_data(), REMOTE_ADDR="203.0.113.7")
+
+        self.assertEqual(
+            MemberPreRegistration.objects.get().ip_address, "203.0.113.7"
+        )
+
+    def test_ip_behind_proxy_is_taken_from_forwarded_header(self):
+        self.client.force_login(self.owner)
+        self.client.get(reverse("members:pre_registration_list"))
+        path = self._public_path(self._link().token)
+        self.client.logout()
+
+        self.client.post(
+            path,
+            self._form_data(),
+            REMOTE_ADDR="10.0.0.5",
+            HTTP_X_FORWARDED_FOR="198.51.100.4, 10.0.0.5",
+        )
+
+        self.assertEqual(
+            MemberPreRegistration.objects.get().ip_address, "198.51.100.4"
+        )
+
+
+class PreRegistrationConfirmationHardeningTests(TestCase):
+    """Remise des identifiants, atomicite de la confirmation, sort des expirees."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Confirm", slug="org-confirm"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Confirm",
+            slug="gym-confirm",
+            subdomain="gym-confirm",
+        )
+        self.owner = User.objects.create_user(
+            username="owner-confirm",
+            password="pass12345",
+            owned_organization=self.organization,
+        )
+        self.client.force_login(self.owner)
+
+    def _pending(self, tag="01", **overrides):
+        data = {
+            "gym": self.gym,
+            "first_name": f"Cand{tag}",
+            "last_name": "Confirm",
+            "phone": f"+2438200000{tag}",
+            "email": f"cand{tag}.confirm@example.com",
+        }
+        data.update(overrides)
+        return MemberPreRegistration.objects.create(**data)
+
+    def _messages(self, response):
+        return list(response.context["messages"])
+
+    # --- 1. Les identifiants ne peuvent plus etre perdus -------------------
+
+    def test_credentials_message_does_not_auto_dismiss(self):
+        pre_registration = self._pending()
+
+        response = self.client.post(
+            reverse("members:confirm_pre_registration", args=[pre_registration.id]),
+            follow=True,
+        )
+
+        message = self._messages(response)[0]
+        self.assertIn("persistent", message.tags)
+        self.assertIn("Mot de passe temporaire", str(message))
+
+    def test_resetting_password_issues_new_credentials_and_emails_them(self):
+        """Filet de securite quand les identifiants d'origine ont ete perdus."""
+        pre_registration = self._pending()
+        self.client.post(
+            reverse("members:confirm_pre_registration", args=[pre_registration.id])
+        )
+        pre_registration.refresh_from_db()
+        member = pre_registration.member
+        previous_hash = member.user.password
+        mail.outbox.clear()
+
+        self.client.post(
+            reverse("members:reset_member_password", args=[member.id]), follow=True
+        )
+
+        member.user.refresh_from_db()
+        self.assertNotEqual(member.user.password, previous_hash)
+        self.assertTrue(member.user.force_password_change)
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_reset_credentials_are_shown_on_the_member_list(self):
+        pre_registration = self._pending()
+        self.client.post(
+            reverse("members:confirm_pre_registration", args=[pre_registration.id])
+        )
+        pre_registration.refresh_from_db()
+
+        self.client.post(
+            reverse("members:reset_member_password", args=[pre_registration.member.id])
+        )
+
+        credentials = self.client.session.get("member_password_credentials")
+        self.assertIsNotNone(credentials)
+        self.assertEqual(credentials["username"], pre_registration.member.user.username)
+
+    # --- 2. Garde-fous portes par le modele -------------------------------
+
+    def test_model_refuses_to_confirm_a_duplicate_member(self):
+        first = self._pending("01")
+        self.client.post(
+            reverse("members:confirm_pre_registration", args=[first.id])
+        )
+        first.refresh_from_db()
+
+        duplicate = self._pending("02", phone=first.member.phone)
+
+        with self.assertRaises(ValueError):
+            duplicate.confirm(self.owner)
+
+        self.assertEqual(
+            Member.objects.filter(gym=self.gym, phone=first.member.phone).count(), 1
+        )
+
+    def test_confirmation_leaves_nothing_behind_when_it_fails(self):
+        pre_registration = self._pending()
+        member_count = Member.objects.count()
+
+        with patch(
+            "members.models.MemberPreRegistration.save",
+            side_effect=RuntimeError("panne"),
+        ):
+            with self.assertRaises(RuntimeError):
+                pre_registration.confirm(self.owner)
+
+        self.assertEqual(Member.objects.count(), member_count)
+
+    # --- 3. Les demandes expirees sont conservees --------------------------
+
+    def test_expired_requests_are_marked_not_deleted(self):
+        pre_registration = self._pending()
+        MemberPreRegistration.objects.filter(pk=pre_registration.pk).update(
+            expires_at=timezone.now() - timedelta(days=1)
+        )
+
+        marked = MemberPreRegistration.mark_expired_pending()
+
+        pre_registration.refresh_from_db()
+        self.assertEqual(marked, 1)
+        self.assertEqual(pre_registration.status, MemberPreRegistration.STATUS_EXPIRED)
+
+    def test_confirming_an_expired_request_keeps_it_for_follow_up(self):
+        pre_registration = self._pending()
+        MemberPreRegistration.objects.filter(pk=pre_registration.pk).update(
+            expires_at=timezone.now() - timedelta(days=1)
+        )
+
+        response = self.client.post(
+            reverse("members:confirm_pre_registration", args=[pre_registration.id]),
+            follow=True,
+        )
+
+        pre_registration.refresh_from_db()
+        self.assertEqual(pre_registration.status, MemberPreRegistration.STATUS_EXPIRED)
+        self.assertIsNone(pre_registration.member)
+        self.assertIn("expire", str(self._messages(response)[0]).lower())
+
+    def test_expired_requests_are_listed_under_their_own_filter(self):
+        pre_registration = self._pending()
+        MemberPreRegistration.objects.filter(pk=pre_registration.pk).update(
+            expires_at=timezone.now() - timedelta(days=1)
+        )
+
+        response = self.client.get(
+            reverse("members:pre_registration_list"), {"status": "expired"}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["expired_count"], 1)
+        self.assertIn(pre_registration, response.context["page_obj"].object_list)
+
+    def test_cleanup_command_marks_instead_of_deleting(self):
+        pre_registration = self._pending()
+        MemberPreRegistration.objects.filter(pk=pre_registration.pk).update(
+            expires_at=timezone.now() - timedelta(days=1)
+        )
+
+        output = StringIO()
+        call_command("cleanup_expired_preregistrations", stdout=output)
+
+        pre_registration.refresh_from_db()
+        self.assertEqual(pre_registration.status, MemberPreRegistration.STATUS_EXPIRED)
+        self.assertIn("expiree", output.getvalue())
+
+
+class MemberCreationHardeningTests(TestCase):
+    """Creation et modification d'un membre : doublons, erreurs, identifiants."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Saisie", slug="org-saisie"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Saisie",
+            slug="gym-saisie",
+            subdomain="gym-saisie",
+        )
+        self.other_gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Voisin",
+            slug="gym-voisin",
+            subdomain="gym-voisin",
+        )
+        self.owner = User.objects.create_user(
+            username="owner-saisie",
+            password="pass12345",
+            owned_organization=self.organization,
+        )
+        self.client.force_login(self.owner)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _create(self, **overrides):
+        payload = {
+            "first_name": "Alpha",
+            "last_name": "Saisie",
+            "phone": "+243830000001",
+            "email": "alpha.saisie@example.com",
+            "address": "Kinshasa",
+        }
+        payload.update(overrides)
+        return self.client.post(
+            reverse("members:create_member"), payload, follow=True
+        )
+
+    def _messages(self, response):
+        return [str(item) for item in response.context["messages"]]
+
+    # --- Doublons : plus de plantage -------------------------------------
+
+    def test_duplicate_phone_is_reported_instead_of_crashing(self):
+        self._create()
+
+        response = self._create(email="autre.saisie@example.com")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Member.objects.filter(gym=self.gym).count(), 1)
+        self.assertIn(
+            "Telephone : Un membre de cette salle utilise deja ce numero de telephone.",
+            self._messages(response),
+        )
+
+    def test_duplicate_email_is_reported_instead_of_crashing(self):
+        self._create()
+
+        response = self._create(phone="+243830000002")
+
+        self.assertEqual(Member.objects.filter(gym=self.gym).count(), 1)
+        self.assertIn(
+            "E-mail : Un membre de cette salle utilise deja cette adresse e-mail.",
+            self._messages(response),
+        )
+
+    def test_same_phone_is_allowed_in_another_gym(self):
+        self._create()
+        Member.objects.create(
+            gym=self.other_gym,
+            first_name="Homonyme",
+            last_name="Saisie",
+            phone="+243830000001",
+            email="homonyme.saisie@example.com",
+        )
+
+        self.assertEqual(Member.objects.filter(phone="+243830000001").count(), 2)
+
+    def test_two_members_without_email_can_coexist(self):
+        self._create(email="")
+        response = self._create(phone="+243830000002", email="")
+
+        self.assertEqual(Member.objects.filter(gym=self.gym).count(), 2)
+        self.assertNotIn(
+            "utilise deja cette adresse", " ".join(self._messages(response))
+        )
+        self.assertTrue(
+            all(member.email is None for member in Member.objects.filter(gym=self.gym))
+        )
+
+    # --- Erreurs de saisie visibles ---------------------------------------
+
+    def test_invalid_form_reports_the_reason(self):
+        response = self._create(first_name="")
+
+        self.assertEqual(Member.objects.filter(gym=self.gym).count(), 0)
+        self.assertIn("Prenom : Ce champ est obligatoire.", self._messages(response))
+
+    # --- Identifiants et securite du message ------------------------------
+
+    def test_credentials_message_does_not_auto_dismiss(self):
+        response = self._create()
+
+        message = response.context["messages"]._loaded_messages[0]
+        self.assertIn("persistent", message.tags)
+        self.assertIn("Mot de passe temporaire", str(message))
+
+    def test_member_name_is_escaped_in_the_html_message(self):
+        response = self._create(first_name="<img src=x onerror=alert(1)>")
+
+        self.assertIn("&lt;img", self._messages(response)[0])
+
+    # --- Modification ------------------------------------------------------
+
+    def test_editing_a_member_keeps_its_own_phone(self):
+        self._create()
+        member = Member.objects.get(gym=self.gym)
+
+        response = self.client.post(
+            reverse("members:edit_member", args=[member.id]),
+            {
+                "first_name": "Beta",
+                "last_name": "Saisie",
+                "phone": member.phone,
+                "email": member.email,
+                "address": "Gombe",
+            },
+        )
+
+        member.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(member.first_name, "Beta")
+
+    def test_editing_cannot_steal_another_member_phone(self):
+        self._create()
+        other = Member.objects.create(
+            gym=self.gym,
+            first_name="Gamma",
+            last_name="Saisie",
+            phone="+243830000009",
+            email="gamma.saisie@example.com",
+        )
+
+        response = self.client.post(
+            reverse("members:edit_member", args=[other.id]),
+            {
+                "first_name": "Gamma",
+                "last_name": "Saisie",
+                "phone": "+243830000001",
+                "email": other.email,
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("phone", response.json()["errors"])
+
+
+class MemberQrCodeStabilityTests(TestCase):
+    """Le QR est imprime sur les cartes : il ne change que sur decision humaine."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(name="Org QR", slug="org-qr")
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym QR",
+            slug="gym-qr",
+            subdomain="gym-qr",
+        )
+        self.owner = User.objects.create_user(
+            username="owner-qr",
+            password="pass12345",
+            owned_organization=self.organization,
+        )
+        self.manager = User.objects.create_user(username="manager-qr", password="pass12345")
+        self.reception = User.objects.create_user(username="reception-qr", password="pass12345")
+        UserGymRole.objects.create(
+            user=self.manager, gym=self.gym, role="manager", is_active=True
+        )
+        UserGymRole.objects.create(
+            user=self.reception, gym=self.gym, role="reception", is_active=True
+        )
+        self.member = Member.objects.create(
+            gym=self.gym,
+            first_name="Carte",
+            last_name="Imprimee",
+            phone="+243840000001",
+            email="carte.imprimee@example.com",
+        )
+
+    def _expire_qr(self):
+        Member.objects.filter(pk=self.member.pk).update(
+            qr_code_expires_at=timezone.now() - timedelta(days=1)
+        )
+
+    def _current_qr(self):
+        return Member.objects.get(pk=self.member.pk).qr_code
+
+    # --- Aucune rotation implicite ----------------------------------------
+
+    def test_viewing_details_never_changes_the_qr_code(self):
+        self._expire_qr()
+        before = self._current_qr()
+        self.client.force_login(self.owner)
+
+        self.client.get(reverse("members:member_detail", args=[self.member.id]))
+
+        self.assertEqual(self._current_qr(), before)
+
+    def test_reading_the_qr_image_never_changes_it(self):
+        self._expire_qr()
+        before = self._current_qr()
+        self.client.force_login(self.owner)
+
+        self.client.get(reverse("members:member_qr", args=[before]))
+
+        self.assertEqual(self._current_qr(), before)
+
+    def test_new_members_get_a_long_lived_qr(self):
+        """Une carte imprimee doit rester valable bien au-dela de quelques jours."""
+        self.assertGreater(
+            self.member.qr_code_expires_at, timezone.now() + timedelta(days=365)
+        )
+
+    # --- Rotation explicite seulement --------------------------------------
+
+    def test_manager_can_regenerate_the_qr(self):
+        before = self._current_qr()
+        self.client.force_login(self.manager)
+
+        response = self.client.post(
+            reverse("members:regenerate_member_qr", args=[self.member.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotEqual(self._current_qr(), before)
+
+    def test_owner_can_regenerate_the_qr(self):
+        before = self._current_qr()
+        self.client.force_login(self.owner)
+
+        self.client.post(
+            reverse("members:regenerate_member_qr", args=[self.member.id])
+        )
+
+        self.assertNotEqual(self._current_qr(), before)
+
+    def test_reception_cannot_regenerate_the_qr(self):
+        before = self._current_qr()
+        self.client.force_login(self.reception)
+
+        response = self.client.post(
+            reverse("members:regenerate_member_qr", args=[self.member.id])
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(self._current_qr(), before)
+
+    def test_regeneration_flag_is_a_boolean_in_the_payload(self):
+        self.client.force_login(self.manager)
+
+        response = self.client.get(
+            reverse("members:member_detail", args=[self.member.id])
+        )
+
+        self.assertIs(response.json()["can_regenerate_qr"], True)
+
+    @override_settings(PUBLIC_BASE_URL="https://royalgym-fitness.com")
+    def test_member_portal_url_uses_the_public_domain(self):
+        self.client.force_login(self.manager)
+
+        response = self.client.get(
+            reverse("members:member_detail", args=[self.member.id])
+        )
+
+        self.assertTrue(
+            response.json()["member_portal_url"].startswith(
+                "https://royalgym-fitness.com/"
+            )
+        )
+
+
+class MemberPasswordResetEmailTests(TestCase):
+    """L'e-mail de reinitialisation est distinct de celui de creation."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Reinit", slug="org-reinit"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Reinit",
+            slug="gym-reinit",
+            subdomain="gym-reinit",
+        )
+        self.owner = User.objects.create_user(
+            username="owner-reinit",
+            password="pass12345",
+            owned_organization=self.organization,
+        )
+        self.member = Member.objects.create(
+            gym=self.gym,
+            first_name="Ancien",
+            last_name="Membre",
+            phone="+243850000001",
+            email="ancien.membre@example.com",
+        )
+        self.client.force_login(self.owner)
+        mail.outbox.clear()
+
+    def _reset(self):
+        return self.client.post(
+            reverse("members:reset_member_password", args=[self.member.id]),
+            follow=True,
+        )
+
+    def test_reset_email_does_not_welcome_an_existing_member(self):
+        self._reset()
+
+        body = mail.outbox[0].body
+        self.assertIn("reinitialise par l'equipe", body)
+        self.assertNotIn("Votre fiche membre a ete creee", body)
+
+    def test_reset_email_has_its_own_subject_and_type(self):
+        self._reset()
+
+        message = mail.outbox[0]
+        self.assertIn("Reinitialisation de votre mot de passe", message.subject)
+        self.assertEqual(
+            message.extra_headers["X-SmartClub-Email-Type"], "password-reset"
+        )
+
+    def test_reset_email_carries_the_new_credentials(self):
+        self._reset()
+
+        credentials = self.client.session.get("member_password_credentials")
+        body = mail.outbox[0].body
+        self.assertIn(self.member.user.username, body)
+        self.assertIn("Mot de passe temporaire", body)
+        self.assertIsNone(credentials)  # consommees par l'affichage de la liste
+
+    def test_reset_email_does_not_attach_the_membership_card(self):
+        """Le QR code n'a pas change : rejoindre la carte n'aurait pas de sens."""
+        self._reset()
+
+        self.assertEqual(len(mail.outbox[0].attachments), 0)
+
+    def test_reset_email_warns_about_an_unexpected_request(self):
+        self._reset()
+
+        self.assertIn("contactez la salle", mail.outbox[0].body)
+
+    def test_creation_still_sends_the_welcome_email(self):
+        self.client.post(
+            reverse("members:create_member"),
+            {
+                "first_name": "Tout",
+                "last_name": "Neuf",
+                "phone": "+243850000002",
+                "email": "tout.neuf@example.com",
+            },
+        )
+
+        message = mail.outbox[-1]
+        self.assertIn("Votre fiche membre a ete creee", message.body)
+        self.assertEqual(
+            message.extra_headers["X-SmartClub-Email-Type"], "account-creation"
+        )
+
+
+class SuspendedMemberTests(TestCase):
+    """Suspension : messages fideles, portail bride, actions refusees."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(name="Org Susp", slug="org-susp")
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Susp",
+            slug="gym-susp",
+            subdomain="gym-susp",
+        )
+        self.owner = User.objects.create_user(
+            username="owner-susp",
+            password="pass12345",
+            owned_organization=self.organization,
+        )
+        self.plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Mensuel", duration_days=30, price=30
+        )
+        self.member = Member.objects.create(
+            gym=self.gym,
+            first_name="Suspendu",
+            last_name="Test",
+            phone="+243860000001",
+            email="suspendu.test@example.com",
+        )
+        today = timezone.now().date()
+        self.subscription = MemberSubscription.objects.create(
+            gym=self.gym,
+            member=self.member,
+            plan=self.plan,
+            start_date=today,
+            end_date=today + timedelta(days=30),
+            is_active=True,
+        )
+        self.member.user.set_password("MembrePortail123!")
+        self.member.user.force_password_change = False
+        self.member.user.save()
+
+    def _staff(self):
+        client = Client()
+        client.force_login(self.owner)
+        return client
+
+    def _portal(self):
+        client = Client()
+        client.login(username=self.member.user.username, password="MembrePortail123!")
+        return client
+
+    def _suspend(self):
+        return self._staff().post(
+            reverse("members:suspend_member", args=[self.member.id]), follow=True
+        )
+
+    def _first_message(self, response):
+        return str(list(response.context["messages"])[0])
+
+    # --- Messages fideles a la situation -----------------------------------
+
+    def test_message_mentions_the_paused_subscription(self):
+        response = self._suspend()
+
+        self.assertIn("Son abonnement est en pause", self._first_message(response))
+
+    def test_message_admits_when_there_is_no_subscription(self):
+        orphan = Member.objects.create(
+            gym=self.gym,
+            first_name="Sans",
+            last_name="Abonnement",
+            phone="+243860000002",
+            email="sans.abonnement@example.com",
+        )
+
+        response = self._staff().post(
+            reverse("members:suspend_member", args=[orphan.id]), follow=True
+        )
+
+        self.assertIn("aucun abonnement actif", self._first_message(response))
+
+    def test_reactivation_message_states_the_recovered_days(self):
+        self._suspend()
+        MemberSubscription.objects.filter(pk=self.subscription.pk).update(
+            paused_at=timezone.now() - timedelta(days=6)
+        )
+
+        response = self._staff().post(
+            reverse("members:reactivate_member", args=[self.member.id]), follow=True
+        )
+
+        self.assertIn("prolonge de 6 jours", self._first_message(response))
+
+    def test_reactivation_message_when_the_pause_was_shorter_than_a_day(self):
+        self._suspend()
+
+        response = self._staff().post(
+            reverse("members:reactivate_member", args=[self.member.id]), follow=True
+        )
+
+        self.assertIn("moins d'une journee", self._first_message(response))
+
+    # --- Portail bride ------------------------------------------------------
+
+    def test_portal_shows_the_suspension_banner(self):
+        self._suspend()
+
+        response = self._portal().get(reverse("members:member_portal"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["member_is_suspended"])
+        self.assertContains(response, "Compte suspendu")
+
+    def test_portal_hides_the_subscribe_button(self):
+        self._suspend()
+
+        response = self._portal().get(reverse("members:member_portal"))
+
+        self.assertNotContains(response, ">Souscrire<")
+
+    def test_banner_disappears_after_reactivation(self):
+        self._suspend()
+        self._staff().post(reverse("members:reactivate_member", args=[self.member.id]))
+
+        response = self._portal().get(reverse("members:member_portal"))
+
+        self.assertFalse(response.context["member_is_suspended"])
+
+    # --- Actions refusees cote serveur --------------------------------------
+
+    def test_subscription_request_is_refused_from_the_web(self):
+        self._suspend()
+
+        response = self._portal().post(
+            reverse("members:member_subscription_request"),
+            {"plan_id": self.plan.id},
+            follow=True,
+        )
+
+        self.assertIn("suspendu", self._first_message(response))
+        self.assertFalse(SubscriptionRequest.objects.filter(member=self.member).exists())
+
+    def test_subscription_request_is_refused_from_the_mobile_app(self):
+        self._suspend()
+
+        response = self._portal().post(
+            reverse("members:member_api_subscription_request"),
+            data=json.dumps({"plan_id": self.plan.id}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(SubscriptionRequest.objects.filter(member=self.member).exists())
+
+    def test_choosing_a_coach_is_refused_from_the_mobile_app(self):
+        self._suspend()
+
+        response = self._portal().post(
+            reverse("members:member_api_choose_coach"),
+            data=json.dumps({"coach_id": 1}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_an_active_member_is_not_blocked(self):
+        response = self._portal().post(
+            reverse("members:member_subscription_request"),
+            {"plan_id": self.plan.id},
+            follow=True,
+        )
+
+        self.assertNotIn("suspendu", self._first_message(response))
+        self.assertTrue(SubscriptionRequest.objects.filter(member=self.member).exists())
+
+
+class MemberDownloadTests(TestCase):
+    """Telechargement du QR code et de la carte membre."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(name="Org Tele", slug="org-tele")
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Tele",
+            slug="gym-tele",
+            subdomain="gym-tele",
+        )
+        self.owner = User.objects.create_user(
+            username="owner-tele",
+            password="pass12345",
+            owned_organization=self.organization,
+        )
+        self.member = Member.objects.create(
+            gym=self.gym,
+            first_name="Jean",
+            last_name="Telechargement",
+            phone="+243870000001",
+            email="jean.telechargement@example.com",
+        )
+        self.client.force_login(self.owner)
+
+    def _image(self, response):
+        from PIL import Image
+
+        return Image.open(BytesIO(response.content))
+
+    def _qr_url(self):
+        return reverse("members:member_qr", args=[self.member.qr_code])
+
+    # --- Resolution adaptee a l'impression ---------------------------------
+
+    def test_downloaded_qr_is_high_resolution(self):
+        response = self.client.get(self._qr_url())
+
+        self.assertEqual(self._image(response).size, (1024, 1024))
+
+    def test_qr_size_can_be_requested(self):
+        response = self.client.get(self._qr_url(), {"size": 512})
+
+        self.assertEqual(self._image(response).size, (512, 512))
+
+    def test_absurd_qr_size_is_capped(self):
+        response = self.client.get(self._qr_url(), {"size": 99999})
+
+        self.assertEqual(self._image(response).size, (2048, 2048))
+
+    def test_invalid_qr_size_falls_back_to_the_default(self):
+        response = self.client.get(self._qr_url(), {"size": "abc"})
+
+        self.assertEqual(self._image(response).size, (1024, 1024))
+
+    def test_qr_modules_are_sharp(self):
+        """Deux nuances seulement : aucun reechantillonnage n'a floute le code."""
+        response = self.client.get(self._qr_url())
+
+        greyscale = self._image(response).convert("L")
+        shades = {value for _, value in greyscale.getcolors(maxcolors=100000)}
+        self.assertEqual(len(shades), 2)
+
+    # --- En-tete de telechargement ------------------------------------------
+
+    def test_qr_is_shown_inline_by_default(self):
+        response = self.client.get(self._qr_url())
+
+        self.assertNotIn("Content-Disposition", response)
+
+    def test_qr_download_carries_a_readable_filename(self):
+        response = self.client.get(self._qr_url(), {"download": "1"})
+
+        self.assertEqual(
+            response["Content-Disposition"],
+            'attachment; filename="qr_jean-telechargement.png"',
+        )
+
+    def test_card_download_carries_a_readable_filename(self):
+        response = self.client.get(
+            reverse("members:member_card_image", args=[self.member.id]),
+            {"download": "1"},
+        )
+
+        self.assertEqual(
+            response["Content-Disposition"],
+            'attachment; filename="carte_membre_jean-telechargement.png"',
+        )
+
+    def test_card_is_shown_inline_by_default(self):
+        response = self.client.get(
+            reverse("members:member_card_image", args=[self.member.id])
+        )
+
+        self.assertNotIn("Content-Disposition", response)
+        self.assertEqual(response["Cache-Control"], "private, no-store")
+
+    # --- URL fournies a l'interface ------------------------------------------
+
+    def test_detail_payload_exposes_download_urls(self):
+        response = self.client.get(
+            reverse("members:member_detail", args=[self.member.id])
+        )
+
+        payload = response.json()
+        self.assertTrue(payload["qr_download_url"].endswith("?download=1"))
+        self.assertTrue(payload["card_download_url"].endswith("?download=1"))
+
+    # --- Cloisonnement --------------------------------------------------------
+
+    def test_another_gym_member_cannot_be_downloaded(self):
+        # Autre organisation, sinon le proprietaire posseerait deux salles et
+        # le middleware ne saurait plus laquelle est active.
+        other_organization = Organization.objects.create(
+            name="Org Voisine Tele", slug="org-voisine-tele"
+        )
+        other_gym = Gym.objects.create(
+            organization=other_organization,
+            name="Gym Voisin Tele",
+            slug="gym-voisin-tele",
+            subdomain="gym-voisin-tele",
+        )
+        outsider = Member.objects.create(
+            gym=other_gym,
+            first_name="Etranger",
+            last_name="Tele",
+            phone="+243870000002",
+            email="etranger.tele@example.com",
+        )
+
+        self.assertEqual(
+            self.client.get(
+                reverse("members:member_card_image", args=[outsider.id])
+            ).status_code,
+            404,
+        )
+        self.assertEqual(
+            self.client.get(
+                reverse("members:member_qr", args=[outsider.qr_code])
+            ).status_code,
+            404,
+        )

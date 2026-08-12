@@ -59,7 +59,7 @@ function ouvrirModalNouvelleFormule() {
 function editerFormule(id) {
     const f = formulesData[id];
     if (!f) {
-        Swal.fire({ icon: 'warning', title: 'Formule inconnue', text: 'Données de la formule #' + id, confirmButtonColor: '#3454d1' });
+        Swal.fire({ icon: 'warning', title: 'Formule inconnue', text: 'Données de la formule #' + id, confirmButtonColor: '#8A6D1D' });
         return;
     }
     document.getElementById('formuleId').value = id;
@@ -120,7 +120,7 @@ function voirRenouvellement(el) {
             </div>
         `,
         icon: 'info',
-        confirmButtonColor: '#3454d1'
+        confirmButtonColor: '#8A6D1D'
     });
 }
 
@@ -137,7 +137,7 @@ function dupliquerFormule() {
             6: 'Entreprise'
         },
         inputPlaceholder: 'Choisir une formule',
-        confirmButtonColor: '#3454d1'
+        confirmButtonColor: '#8A6D1D'
     });
 }
 
@@ -260,7 +260,7 @@ function sauvegarderFormule() {
     const isEdit = id !== '';
     const nom = document.getElementById('formuleNom').value.trim();
     if (!nom) {
-        Swal.fire({ icon: 'warning', title: 'Champ requis', text: 'Le nom de la formule est obligatoire.', confirmButtonColor: '#3454d1' });
+        Swal.fire({ icon: 'warning', title: 'Champ requis', text: 'Le nom de la formule est obligatoire.', confirmButtonColor: '#8A6D1D' });
         return;
     }
     const modalEl = document.getElementById('addFormuleModal');
@@ -306,7 +306,7 @@ function showAide() {
             </div>
         `,
         icon: 'info',
-        confirmButtonColor: '#3454d1'
+        confirmButtonColor: '#8A6D1D'
     });
 }
 

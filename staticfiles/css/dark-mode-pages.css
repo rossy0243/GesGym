@@ -8,8 +8,8 @@
  *    les règles ci-dessous (sélecteur html.app-skin-dark ...) s'appliquent donc
  *    de façon identique sur Dashboard, Clients, Abonnements, Paiements, Accès,
  *    Rapports, Notifications, Paramètres, Profil.
- * 3. Palette (thème plus sombre) : fond #020617, cartes #0f172a, surfaces #1e293b,
- *    surfaces élevées #334155, texte #e2e8f0 / #94a3b8, accent #3454d1, bordures rgba(148,163,184,0.2).
+ * 3. Palette (thème plus sombre) : fond #020617, cartes #0B0B0B, surfaces #1e293b,
+ *    surfaces élevées #334155, texte #e2e8f0 / #94a3b8, accent #C9A227, bordures rgba(148,163,184,0.2).
  * 4. Aucune page ne doit redéfinir le mode sombre : ce fichier est la source unique.
  */
 
@@ -27,7 +27,7 @@ html.app-skin-dark .nxl-content {
 
 /* ========== Header / Breadcrumb ========== */
 html.app-skin-dark .nxl-header {
-    background-color: #0f172a;
+    background-color: #0B0B0B;
     border-bottom: 1px solid rgba(148, 163, 184, 0.2);
 }
 
@@ -42,7 +42,7 @@ html.app-skin-dark .breadcrumb-item a:hover {
 
 /* ========== Cartes ========== */
 html.app-skin-dark .card {
-    background-color: #0f172a;
+    background-color: #0B0B0B;
     border-color: rgba(148, 163, 184, 0.2);
     color: #e2e8f0;
 }
@@ -54,7 +54,7 @@ html.app-skin-dark .card-header {
 }
 
 html.app-skin-dark .card-body {
-    background-color: #0f172a;
+    background-color: #0B0B0B;
     color: #e2e8f0;
 }
 
@@ -75,7 +75,7 @@ html.app-skin-dark .table thead th {
 }
 
 html.app-skin-dark .table tbody tr {
-    background-color: #0f172a;
+    background-color: #0B0B0B;
 }
 
 html.app-skin-dark .table tbody tr:hover {
@@ -99,7 +99,7 @@ html.app-skin-dark .form-select {
 /* Options des select : fond sombre + texte clair (liste déroulante) */
 html.app-skin-dark .form-select option,
 html.app-skin-dark select option {
-    background-color: #0f172a;
+    background-color: #0B0B0B;
     color: #f1f5f9;
 }
 
@@ -110,7 +110,7 @@ html.app-skin-dark .form-control::placeholder {
 html.app-skin-dark .form-control:focus,
 html.app-skin-dark .form-select:focus {
     background-color: #1e293b;
-    border-color: #3454d1;
+    border-color: #C9A227;
     color: #f1f5f9;
 }
 
@@ -139,8 +139,8 @@ html.app-skin-dark .form-check-input {
 }
 
 html.app-skin-dark .form-check-input:checked {
-    background-color: #3454d1;
-    border-color: #3454d1;
+    background-color: #C9A227;
+    border-color: #C9A227;
 }
 
 html.app-skin-dark .form-check-label {
@@ -191,7 +191,7 @@ html.app-skin-dark .modal-backdrop.show {
 }
 
 html.app-skin-dark .modal-content {
-    background-color: #0f172a;
+    background-color: #0B0B0B;
     border-color: rgba(148, 163, 184, 0.2);
 }
 
@@ -202,12 +202,12 @@ html.app-skin-dark .modal-header {
 }
 
 html.app-skin-dark .modal-body {
-    background-color: #0f172a;
+    background-color: #0B0B0B;
     color: #e2e8f0;
 }
 
 html.app-skin-dark .modal-footer {
-    background-color: #0f172a;
+    background-color: #0B0B0B;
     border-top-color: rgba(148, 163, 184, 0.2);
 }
 
@@ -233,7 +233,7 @@ html.app-skin-dark .modal-body .table-borderless .fw-bold {
 /* Zone de résultats de recherche (liste clients, etc.) */
 html.app-skin-dark .border.rounded .client-result-item,
 html.app-skin-dark [id^="searchResults"] {
-    background-color: #0f172a;
+    background-color: #0B0B0B;
     color: #e2e8f0;
     border-color: rgba(148, 163, 184, 0.2) !important;
 }
@@ -255,7 +255,7 @@ html.app-skin-dark .modal-body .p-2.bg-light {
 
 /* ========== Dropdowns ========== */
 html.app-skin-dark .dropdown-menu {
-    background-color: #0f172a;
+    background-color: #0B0B0B;
     border-color: rgba(148, 163, 184, 0.2);
 }
 
@@ -295,14 +295,14 @@ html.app-skin-dark .nav-tabs-custom .nav-link:hover {
 
 html.app-skin-dark .nav-tabs .nav-link.active,
 html.app-skin-dark .nav-tabs-custom .nav-link.active {
-    background-color: #3454d1;
+    background-color: #C9A227;
     color: #ffffff;
-    border-color: #3454d1;
+    border-color: #C9A227;
 }
 
 /* ========== Sous-onglets (sub-tabs) ========== */
 html.app-skin-dark .sub-tabs {
-    background-color: #0f172a;
+    background-color: #0B0B0B;
     border: 1px solid rgba(148, 163, 184, 0.25);
     border-radius: 8px;
     padding: 0.5rem;
@@ -319,7 +319,7 @@ html.app-skin-dark .sub-tabs .btn:hover {
 }
 
 html.app-skin-dark .sub-tabs .btn.active {
-    background-color: #3454d1;
+    background-color: #C9A227;
     color: #ffffff;
 }
 
@@ -398,19 +398,19 @@ html.app-skin-dark .btn-outline-secondary:hover {
 }
 
 html.app-skin-dark .btn-light-brand {
-    background-color: rgba(52, 84, 209, 0.2);
-    border-color: #3454d1;
+    background-color: rgba(201, 162, 39, 0.2);
+    border-color: #C9A227;
     color: #93c5fd;
 }
 
 html.app-skin-dark .btn-light-brand:hover {
-    background-color: rgba(52, 84, 209, 0.35);
+    background-color: rgba(201, 162, 39, 0.35);
     color: #bfdbfe;
 }
 
 /* ========== Stat cards / alertes ========== */
 html.app-skin-dark .stat-card {
-    background-color: #0f172a !important;
+    background-color: #0B0B0B !important;
     border-color: rgba(148, 163, 184, 0.2);
 }
 
@@ -534,7 +534,7 @@ html.app-skin-dark .compact-info .info-value {
 /* Cartes avec fond forcé blanc par le thème */
 html.app-skin-dark .card.bg-white,
 html.app-skin-dark .card-body.bg-white {
-    background-color: #0f172a !important;
+    background-color: #0B0B0B !important;
 }
 
 /* ========== Footer ========== */
@@ -565,8 +565,8 @@ html.app-skin-dark .pagination .page-link:hover {
 }
 
 html.app-skin-dark .pagination .page-item.active .page-link {
-    background-color: #3454d1;
-    border-color: #3454d1;
+    background-color: #C9A227;
+    border-color: #C9A227;
     color: #fff;
 }
 
@@ -583,8 +583,8 @@ html.app-skin-dark .pagination-custom .page-item .page-link:hover {
 }
 
 html.app-skin-dark .pagination-custom .page-item.active .page-link {
-    background-color: #3454d1;
-    border-color: #3454d1;
+    background-color: #C9A227;
+    border-color: #C9A227;
     color: #e2e8f0;
 }
 
@@ -634,7 +634,7 @@ html.app-skin-dark .text-success {
 }
 
 html.app-skin-dark .bg-soft-primary {
-    background-color: rgba(52, 84, 209, 0.2) !important;
+    background-color: rgba(201, 162, 39, 0.2) !important;
 }
 
 html.app-skin-dark .bg-soft-primary.text-primary,
@@ -656,7 +656,7 @@ html.app-skin-dark .text-danger {
 }
 
 html.app-skin-dark .custom-card-action {
-    background-color: #0f172a;
+    background-color: #0B0B0B;
 }
 
 html.app-skin-dark .card-header-action .avatar-text,
@@ -709,12 +709,12 @@ html.app-skin-dark .card-footer {
 
 /* ========== Boutons outline (primary, success, danger) ========== */
 html.app-skin-dark .btn-outline-primary {
-    border-color: #3454d1;
+    border-color: #C9A227;
     color: #93c5fd;
 }
 html.app-skin-dark .btn-outline-primary:hover {
-    background-color: rgba(52, 84, 209, 0.25);
-    border-color: #3454d1;
+    background-color: rgba(201, 162, 39, 0.25);
+    border-color: #C9A227;
     color: #bfdbfe;
 }
 html.app-skin-dark .btn-outline-success {
@@ -758,7 +758,7 @@ html.app-skin-dark .p-3.border.rounded .fw-bold {
     color: #f1f5f9 !important;
 }
 html.app-skin-dark .p-3.border.rounded {
-    background-color: #0f172a !important;
+    background-color: #0B0B0B !important;
     border-color: rgba(148, 163, 184, 0.2) !important;
 }
 
@@ -770,7 +770,7 @@ html.app-skin-dark .api-card {
 }
 html.app-skin-dark .api-card .api-key,
 html.app-skin-dark .api-card .form-control.bg-light {
-    background-color: #0f172a !important;
+    background-color: #0B0B0B !important;
     color: #94a3b8;
     border-color: rgba(148, 163, 184, 0.2);
 }
@@ -794,7 +794,7 @@ html.app-skin-dark .btn-primary:hover .material-icons {
 
 /* ========== Header dropdown (user, notifications) ========== */
 html.app-skin-dark .nxl-h-dropdown {
-    background-color: #0f172a;
+    background-color: #0B0B0B;
     border-color: rgba(148, 163, 184, 0.2);
 }
 html.app-skin-dark .nxl-h-dropdown .dropdown-header {

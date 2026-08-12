@@ -35,7 +35,7 @@
             if (u.status === 'Actif') actions += '<div class="dropdown-divider"></div><a class="dropdown-item text-danger" href="javascript:void(0)" onclick="window.settingsSuspendUser(' + u.id + ')"><span class="material-icons me-2" style="font-size:16px;">pause_circle</span>Suspendre</a>';
             else actions += '<a class="dropdown-item text-success" href="javascript:void(0)" onclick="window.settingsReactivateUser(' + u.id + ')"><span class="material-icons me-2" style="font-size:16px;">play_circle</span>Réactiver</a>';
             actions += '</div></div>';
-            return '<tr id="user-row-' + u.id + '" data-user-id="' + u.id + '"><td><div class="d-flex align-items-center gap-2"><div class="rounded-circle d-inline-flex align-items-center justify-content-center text-white" style="width:36px;height:36px;font-size:12px;font-weight:bold;background:#3454d1;" id="user-initials-' + u.id + '">' + getInitials(u.name) + '</div><div><span class="fw-semibold d-block">' + (u.name || '') + '</span><small class="text-muted">' + (u.login || '') + '</small></div></div></td><td>' + (u.email || '') + '</td><td id="user-role-' + u.id + '">' + roleBadge + '</td><td>' + (u.center || '') + '</td><td id="user-status-' + u.id + '">' + statusBadge + '</td><td>' + (u.lastLogin || '-') + '</td><td>' + twoFABadge + '</td><td class="text-end">' + actions + '</td></tr>';
+            return '<tr id="user-row-' + u.id + '" data-user-id="' + u.id + '"><td><div class="d-flex align-items-center gap-2"><div class="rounded-circle d-inline-flex align-items-center justify-content-center text-white" style="width:36px;height:36px;font-size:12px;font-weight:bold;background:#8A6D1D;" id="user-initials-' + u.id + '">' + getInitials(u.name) + '</div><div><span class="fw-semibold d-block">' + (u.name || '') + '</span><small class="text-muted">' + (u.login || '') + '</small></div></div></td><td>' + (u.email || '') + '</td><td id="user-role-' + u.id + '">' + roleBadge + '</td><td>' + (u.center || '') + '</td><td id="user-status-' + u.id + '">' + statusBadge + '</td><td>' + (u.lastLogin || '-') + '</td><td>' + twoFABadge + '</td><td class="text-end">' + actions + '</td></tr>';
         }).join('');
     }
     function renderRolesTable() {
@@ -47,7 +47,7 @@
     }
 
     window.settingsSaveAll = function() {
-        if (typeof Swal !== 'undefined') Swal.fire({ icon: 'success', title: 'Paramètres enregistrés', text: 'Les modifications ont été sauvegardées.', confirmButtonColor: '#3454d1' });
+        if (typeof Swal !== 'undefined') Swal.fire({ icon: 'success', title: 'Paramètres enregistrés', text: 'Les modifications ont été sauvegardées.', confirmButtonColor: '#8A6D1D' });
         else alert('Paramètres enregistrés.');
     };
     window.settingsShowSubTab = function(tab) {
@@ -170,19 +170,19 @@
             var newId = Math.max.apply(null, users.map(function(u){ return u.id; })) + 1;
             users.push({ id: newId, name: name, login: login, email: email, phone: document.getElementById('userPhone').value, role: role, center: center, status: active ? 'Actif' : 'Suspendu', twoFA: twoFA, lastLogin: '-' });
             renderUsersTable();
-            if (typeof Swal !== 'undefined') Swal.fire({ icon: 'success', title: 'Utilisateur ajouté', confirmButtonColor: '#3454d1' });
+            if (typeof Swal !== 'undefined') Swal.fire({ icon: 'success', title: 'Utilisateur ajouté', confirmButtonColor: '#8A6D1D' });
         } else {
             var user = getUserById(parseInt(id, 10));
             if (user) {
                 user.name = name; user.login = login; user.email = email; user.phone = document.getElementById('userPhone').value; user.role = role; user.center = center; user.status = active ? 'Actif' : 'Suspendu'; user.twoFA = twoFA;
                 renderUsersTable();
-                if (typeof Swal !== 'undefined') Swal.fire({ icon: 'success', title: 'Utilisateur modifié', confirmButtonColor: '#3454d1' });
+                if (typeof Swal !== 'undefined') Swal.fire({ icon: 'success', title: 'Utilisateur modifié', confirmButtonColor: '#8A6D1D' });
             }
         }
         bootstrap.Modal.getInstance(document.getElementById('userModal')).hide();
     };
     window.settingsResetPassword = function(id) {
-        if (typeof Swal !== 'undefined') Swal.fire({ title: 'Réinitialiser le mot de passe', text: 'Un email de réinitialisation sera envoyé.', icon: 'info', showCancelButton: true, confirmButtonColor: '#3454d1', confirmButtonText: 'Envoyer' }).then(function(r){ if (r.isConfirmed) Swal.fire({ icon: 'success', title: 'Email envoyé' }); });
+        if (typeof Swal !== 'undefined') Swal.fire({ title: 'Réinitialiser le mot de passe', text: 'Un email de réinitialisation sera envoyé.', icon: 'info', showCancelButton: true, confirmButtonColor: '#8A6D1D', confirmButtonText: 'Envoyer' }).then(function(r){ if (r.isConfirmed) Swal.fire({ icon: 'success', title: 'Email envoyé' }); });
         else if (confirm('Envoyer un email de réinitialisation ?')) alert('Email envoyé.');
     };
     window.settingsSuspendUser = function(id) {
@@ -227,7 +227,7 @@
         r.nom = name;
         r.description = (document.getElementById('editRoleDescriptionInput') && document.getElementById('editRoleDescriptionInput').value || '').trim();
         renderRolesTable();
-        if (typeof Swal !== 'undefined') Swal.fire({ icon: 'success', title: 'Rôle mis à jour', confirmButtonColor: '#3454d1' });
+        if (typeof Swal !== 'undefined') Swal.fire({ icon: 'success', title: 'Rôle mis à jour', confirmButtonColor: '#8A6D1D' });
         bootstrap.Modal.getInstance(document.getElementById('editRoleModal')).hide();
     };
 
@@ -250,7 +250,7 @@
         var row = document.getElementById('currency-row-' + id);
         if (row && row.cells[4]) row.cells[4].innerHTML = '<span class="badge bg-success">Actif</span>';
         if (currenciesData[id]) currenciesData[id].status = 'Actif';
-        if (typeof Swal !== 'undefined') Swal.fire({ icon: 'success', title: 'Devise activée', confirmButtonColor: '#3454d1' });
+        if (typeof Swal !== 'undefined') Swal.fire({ icon: 'success', title: 'Devise activée', confirmButtonColor: '#8A6D1D' });
     };
     window.settingsConfirmRestore = function() {
         if (typeof Swal !== 'undefined') Swal.fire({ title: 'Attention', text: 'La restauration remplacera toutes les données. Irréversible.', icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'Oui, restaurer' }).then(function(r){ if (r.isConfirmed) Swal.fire('Restauration démarrée', 'Le processus a été lancé.', 'info'); });
@@ -302,7 +302,7 @@
                 icon: 'success',
                 title: 'Connexion réussie',
                 text: 'Les identifiants CinetPay sont valides. (Simulation)',
-                confirmButtonColor: '#3454d1'
+                confirmButtonColor: '#8A6D1D'
             });
         }, 1800);
     };
@@ -323,7 +323,7 @@
                 icon: 'success',
                 title: 'Configuration enregistrée',
                 text: 'Les paramètres API Paiements ont été sauvegardés. (Simulation)',
-                confirmButtonColor: '#3454d1'
+                confirmButtonColor: '#8A6D1D'
             });
         } else {
             alert('Configuration enregistrée (simulation).');
@@ -373,7 +373,7 @@
             if (!name || !code) { (typeof Swal !== 'undefined' ? Swal.fire({ icon: 'warning', title: 'Nom et code requis' }) : alert('Nom et code requis')); return; }
             bootstrap.Modal.getInstance(document.getElementById('addCurrencyModal')).hide();
             document.getElementById('addCurrencyForm').reset();
-            if (typeof Swal !== 'undefined') Swal.fire({ icon: 'success', title: 'Devise ajoutée', confirmButtonColor: '#3454d1' });
+            if (typeof Swal !== 'undefined') Swal.fire({ icon: 'success', title: 'Devise ajoutée', confirmButtonColor: '#8A6D1D' });
         });
         document.getElementById('btnSaveCurrency') && document.getElementById('btnSaveCurrency').addEventListener('click', function() {
             var id = document.getElementById('editCurrencyId').value;
@@ -390,7 +390,7 @@
             }
             if (currenciesData[id]) { currenciesData[id].name = name; currenciesData[id].code = code; currenciesData[id].symbol = symbol; currenciesData[id].rate = parseFloat(rate); }
             bootstrap.Modal.getInstance(document.getElementById('editCurrencyModal')).hide();
-            if (typeof Swal !== 'undefined') Swal.fire({ icon: 'success', title: 'Devise mise à jour', confirmButtonColor: '#3454d1' });
+            if (typeof Swal !== 'undefined') Swal.fire({ icon: 'success', title: 'Devise mise à jour', confirmButtonColor: '#8A6D1D' });
         });
         document.getElementById('btnSaveRate') && document.getElementById('btnSaveRate').addEventListener('click', function() {
             var id = document.getElementById('editRateCurrencyId').value;
@@ -399,7 +399,7 @@
             if (row) row.cells[3].textContent = parseFloat(rate).toLocaleString('fr-FR', { minimumFractionDigits: 2 });
             if (currenciesData[id]) currenciesData[id].rate = parseFloat(rate);
             bootstrap.Modal.getInstance(document.getElementById('editRateModal')).hide();
-            if (typeof Swal !== 'undefined') Swal.fire({ icon: 'success', title: 'Taux mis à jour', confirmButtonColor: '#3454d1' });
+            if (typeof Swal !== 'undefined') Swal.fire({ icon: 'success', title: 'Taux mis à jour', confirmButtonColor: '#8A6D1D' });
         });
     });
 })();

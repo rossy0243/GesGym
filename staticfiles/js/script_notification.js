@@ -148,7 +148,7 @@
             type: 'line',
             data: {
                 labels: notificationsData.graphData.labels,
-                datasets: [{ label: 'Notifications envoyées', data: notificationsData.graphData.values, borderColor: '#3454d1', backgroundColor: 'rgba(52, 84, 209, 0.1)', tension: 0.3, fill: true, pointBackgroundColor: '#3454d1' }]
+                datasets: [{ label: 'Notifications envoyées', data: notificationsData.graphData.values, borderColor: '#8A6D1D', backgroundColor: 'rgba(201, 162, 39, 0.1)', tension: 0.3, fill: true, pointBackgroundColor: '#8A6D1D' }]
             },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
         });
@@ -225,7 +225,7 @@
     }
 
     function editTemplate(id) {
-        if (typeof Swal !== 'undefined') Swal.fire({ icon: 'info', title: 'Édition de modèle', text: 'Fonctionnalité d\'édition du modèle #' + id + ' (simulation)', confirmButtonColor: '#3454d1' });
+        if (typeof Swal !== 'undefined') Swal.fire({ icon: 'info', title: 'Édition de modèle', text: 'Fonctionnalité d\'édition du modèle #' + id + ' (simulation)', confirmButtonColor: '#8A6D1D' });
     }
 
     function renderHistorique() {

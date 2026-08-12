@@ -62,7 +62,7 @@
             icon: 'error',
             title: 'Échec de connexion',
             text: 'Email ou mot de passe incorrect (utilisez test@demo.com / password)',
-            confirmButtonColor: '#004e92'
+            confirmButtonColor: '#0B0B0B'
           });
         }
       });
@@ -77,7 +77,7 @@
             text: 'Redirection vers le tableau de bord...',
             timer: 2000,
             showConfirmButton: true,
-            confirmButtonColor: '#004e92'
+            confirmButtonColor: '#0B0B0B'
           }).then(() => {
             // Ici vous pourrez rediriger vers index.html
             // window.location.href = 'index.html';
@@ -87,7 +87,7 @@
             icon: 'error',
             title: 'Code invalide',
             text: 'Le code attendu est 123456',
-            confirmButtonColor: '#004e92'
+            confirmButtonColor: '#0B0B0B'
           });
         }
       });

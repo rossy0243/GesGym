@@ -23,6 +23,21 @@
             </div>
         {% endif %}
 
+        {% if member_is_suspended %}
+            <div class="suspended-banner" role="alert">
+                <span class="suspended-banner__icon" aria-hidden="true">&#9888;</span>
+                <div>
+                    <strong>Compte suspendu</strong>
+                    <p>{{ suspended_member_message }}</p>
+                    <p class="suspended-banner__detail">
+                        L'acces a la salle est bloque et vous ne pouvez plus souscrire
+                        d'abonnement, choisir un coach ni rejoindre un programme.
+                        Vos informations restent consultables.
+                    </p>
+                </div>
+            </div>
+        {% endif %}
+
         <header class="member-topbar">
             <div class="member-brand">
                 {% if organization_brand_logo_url %}
@@ -806,11 +821,15 @@
                                 {% elif plan.id in pending_plan_ids %}
                                     <button type="button" class="action-button muted" disabled>En attente</button>
                                 {% else %}
+                                    {% if member_is_suspended %}
+                                        <button type="button" class="action-button muted" disabled>Compte suspendu</button>
+                                    {% else %}
                                     <form method="post" action="{% url 'members:member_subscription_request' %}">
                                         {% csrf_token %}
                                         <input type="hidden" name="plan_id" value="{{ plan.id }}">
                                         <button type="submit" class="action-button">Souscrire</button>
                                     </form>
+                                    {% endif %}
                                 {% endif %}
                             </div>
                         </article>

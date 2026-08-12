@@ -111,6 +111,15 @@
             color: #166534;
             padding: 24px;
         }
+
+        /* Champ piege anti-robot : hors ecran plutot que display:none, que
+           certains robots savent detecter. */
+        .pre-registration-trap {
+            position: absolute;
+            left: -9999px;
+            height: 0;
+            overflow: hidden;
+        }
     </style>
 </head>
 <body>
@@ -173,6 +182,11 @@
                                 {% if form.non_field_errors %}
                                     <div class="alert alert-danger">{{ form.non_field_errors }}</div>
                                 {% endif %}
+
+                                {# Champ piege anti-robot : invisible et sans role pour un humain. #}
+                                <div class="pre-registration-trap" aria-hidden="true">
+                                    {{ form.website }}
+                                </div>
 
                                 <div class="row g-3">
                                     <div class="col-md-6">

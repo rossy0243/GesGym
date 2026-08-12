@@ -97,10 +97,15 @@
                                 class="toast show align-items-center border-0 shadow-lg
                                         {% if 'success' in message.tags or 'toast-success' in message.tags %}bg-success text-white{% elif 'warning' in message.tags %}bg-warning text-dark{% elif 'error' in message.tags or 'danger' in message.tags %}bg-danger text-white{% else %}bg-primary text-white{% endif %}"
                                 data-smartclub-toast="true"
-                                role="alert" 
-                                aria-live="assertive" 
+                                role="alert"
+                                aria-live="assertive"
                                 aria-atomic="true"
-                                data-bs-delay="8000">
+                                {% comment %}
+                                Les messages marques "persistent" restent affiches jusqu'a
+                                fermeture manuelle : ils portent une information qu'on ne peut
+                                pas retrouver ensuite, comme un mot de passe temporaire.
+                                {% endcomment %}
+                                {% if 'persistent' in message.tags %}data-bs-autohide="false"{% else %}data-bs-delay="8000"{% endif %}>
                                 <div class="d-flex align-items-center">
                                     <div class="toast-body d-flex align-items-center gap-2">
                                         {% if 'success' in message.tags or 'toast-success' in message.tags %}
@@ -134,6 +139,7 @@
 
     <!-- Scripts -->
     <script src="{% static 'js/vendors.min.js' %}"></script>
+    <script src="{% static 'js/modal-stacking-fix.js' %}?v=20260809"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="{% static 'js/alert-to-swal.js' %}"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>

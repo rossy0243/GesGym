@@ -1112,6 +1112,8 @@ body.members-screen .modal.show .modal-dialog {
                 currentMemberData.qr_code = data.qr_code;
                 currentMemberData.qr_code_expires_at = data.qr_code_expires_at;
                 currentMemberData.card_image_url = data.card_image_url;
+                currentMemberData.card_download_url = data.card_download_url;
+                currentMemberData.qr_download_url = data.qr_download_url;
                 updateMemberQrControls(currentMemberData);
                 drawMemberQr(data.qr_code);
                 renderMemberCardPreview(currentMemberData);
@@ -1361,16 +1363,15 @@ body.members-screen .modal.show .modal-dialog {
     }
 
     function downloadQRCode() {
-        const canvas = document.getElementById("memberQRCode");
-        if (!canvas || canvas.tagName !== "CANVAS") {
+        /* On telecharge le QR rendu par le serveur (1024 px, modules nets,
+           correction d'erreur elevee) et non le canvas d'apercu, limite a
+           160 px : ces codes sont imprimes sur les cartes membres. */
+        if (!currentMemberData || !currentMemberData.qr_download_url) {
             alert("Aucun QR Code disponible à télécharger.");
             return;
         }
 
-        const link = document.createElement("a");
-        link.download = `qr_${document.getElementById("viewMemberName").innerText.replace(/\s+/g, '_')}.png`;
-        link.href = canvas.toDataURL("image/png");
-        link.click();
+        window.location.href = currentMemberData.qr_download_url;
     }
 
     function copyMemberPortalUrl() {
@@ -1659,12 +1660,10 @@ body.members-screen .modal.show .modal-dialog {
             return;
         }
 
-        const fullName = `${currentMemberData.first_name || ""}_${currentMemberData.last_name || ""}`.replace(
-            /\s+/g, "_");
-        const link = document.createElement("a");
-        link.download = `carte_membre_${fullName || currentMemberData.id}.png`;
-        link.href = currentMemberData.card_image_url;
-        link.click();
+        /* Le serveur pose lui-meme l'en-tete de telechargement et le nom du
+           fichier : l'URL ouverte directement se telecharge aussi. */
+        window.location.href =
+            currentMemberData.card_download_url || currentMemberData.card_image_url;
     }
 
     function openEditMemberModal(memberId) {

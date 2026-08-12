@@ -4,12 +4,16 @@ from members.models import MemberPreRegistration
 
 
 class Command(BaseCommand):
-    help = "Supprime les preinscriptions membres en attente dont la validite a expire."
+    help = (
+        "Bascule vers le statut 'expiree' les preinscriptions en attente dont "
+        "la validite est depassee. Elles restent consultables pour le suivi "
+        "commercial au lieu d'etre supprimees."
+    )
 
     def handle(self, *args, **options):
-        deleted_count, _ = MemberPreRegistration.delete_expired_pending()
+        expired_count = MemberPreRegistration.mark_expired_pending()
         self.stdout.write(
             self.style.SUCCESS(
-                f"{deleted_count} preinscription(s) expiree(s) supprimee(s)."
+                f"{expired_count} preinscription(s) marquee(s) comme expiree(s)."
             )
         )

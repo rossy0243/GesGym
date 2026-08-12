@@ -5,7 +5,14 @@ from members.models import Member
 
 
 class Command(BaseCommand):
-    help = "Regenerates expired member QR codes. Use --all to force rotation."
+    help = (
+        "Regenere les QR codes membres expires. --all force la rotation de "
+        "tous les membres actifs.\n"
+        "ATTENTION : les QR sont imprimes sur les cartes membres. Toute "
+        "rotation rend caduque la carte physique correspondante. A ne pas "
+        "planifier automatiquement : reservez cette commande a un incident "
+        "(fuite de codes, reimpression complete du parc de cartes)."
+    )
 
     def add_arguments(self, parser):
         parser.add_argument(

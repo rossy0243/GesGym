@@ -708,7 +708,7 @@ function createAccessChart(member) {
             datasets: [{
                 label: 'Nombre d\'accès',
                 data: counts,
-                borderColor: '#3454d1',
+                borderColor: '#8A6D1D',
                 tension: 0.1
             }]
         },

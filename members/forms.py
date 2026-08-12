@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django import forms
 from django.utils import timezone
 
@@ -21,6 +23,16 @@ class MemberCreationForm(forms.ModelForm):
             "address",
             "photo",
         ]
+
+        # Repris dans les messages d'erreur affiches a l'utilisateur.
+        labels = {
+            "first_name": "Prenom",
+            "last_name": "Nom",
+            "phone": "Telephone",
+            "email": "E-mail",
+            "address": "Adresse",
+            "photo": "Photo",
+        }
 
         widgets = {
             "first_name": forms.TextInput(attrs={
@@ -48,6 +60,42 @@ class MemberCreationForm(forms.ModelForm):
                 "class": "form-control"
             }),
         }
+
+    def __init__(self, *args, gym=None, **kwargs):
+        # La salle n'est pas un champ du formulaire : sans elle, Django ne peut
+        # pas verifier les contraintes d'unicite (gym, telephone) et
+        # (gym, email), et la base rejetait l'ecriture par une erreur 500.
+        self.gym = gym
+        super().__init__(*args, **kwargs)
+
+    def _duplicate_exists(self, field_name, value):
+        if not value or self.gym is None:
+            return False
+
+        others = Member.objects.filter(gym=self.gym, **{field_name: value})
+        if self.instance and self.instance.pk:
+            others = others.exclude(pk=self.instance.pk)
+        return others.exists()
+
+    def clean_phone(self):
+        phone = (self.cleaned_data.get("phone") or "").strip()
+        if self._duplicate_exists("phone", phone):
+            raise forms.ValidationError(
+                "Un membre de cette salle utilise deja ce numero de telephone."
+            )
+        return phone
+
+    def clean_email(self):
+        email = (self.cleaned_data.get("email") or "").strip()
+        if not email:
+            # Stocker None plutot qu'une chaine vide : deux membres sans email
+            # violeraient sinon la contrainte d'unicite (gym, email).
+            return None
+        if self._duplicate_exists("email", email):
+            raise forms.ValidationError(
+                "Un membre de cette salle utilise deja cette adresse e-mail."
+            )
+        return email
 
     def clean_photo(self):
         photo = self.cleaned_data.get("photo")
@@ -94,13 +142,70 @@ class MemberPreRegistrationForm(forms.ModelForm):
             }),
         }
 
-    def __init__(self, *args, gym=None, **kwargs):
+    # Nombre de demandes tolerees par heure. Le formulaire etant public, il
+    # faut empecher qu'un robot noie la liste des prospects.
+    MAX_PER_IP_PER_HOUR = 3
+    MAX_PER_LINK_PER_HOUR = 30
+
+    RATE_LIMIT_MESSAGE = (
+        "Trop de demandes envoyees depuis cet appareil. "
+        "Merci de reessayer dans une heure ou de contacter la salle directement."
+    )
+    LINK_SATURATED_MESSAGE = (
+        "Ce formulaire recoit trop de demandes en ce moment. "
+        "Merci de reessayer plus tard ou de contacter la salle directement."
+    )
+
+    # Champ piege : invisible pour un humain, souvent rempli par les robots.
+    website = forms.CharField(
+        required=False,
+        label="",
+        widget=forms.TextInput(attrs={
+            "autocomplete": "off",
+            "tabindex": "-1",
+            "aria-hidden": "true",
+        }),
+    )
+
+    def __init__(self, *args, gym=None, link=None, ip_address=None, **kwargs):
         self.gym = gym
+        self.link = link
+        self.ip_address = ip_address
         super().__init__(*args, **kwargs)
         self.fields["phone"].required = True
         self.fields["email"].required = True
         self.fields["phone"].widget.attrs["required"] = "required"
         self.fields["email"].widget.attrs["required"] = "required"
+
+    def clean_website(self):
+        # Un humain ne voit pas ce champ : s'il est rempli, c'est un robot.
+        if (self.cleaned_data.get("website") or "").strip():
+            raise forms.ValidationError("Envoi refuse.")
+        return ""
+
+    def clean(self):
+        cleaned = super().clean()
+        self._check_rate_limits()
+        return cleaned
+
+    def _check_rate_limits(self):
+        since = timezone.now() - timedelta(hours=1)
+
+        if self.ip_address:
+            recent_from_ip = MemberPreRegistration.objects.filter(
+                ip_address=self.ip_address,
+                created_at__gte=since,
+            ).count()
+            if recent_from_ip >= self.MAX_PER_IP_PER_HOUR:
+                raise forms.ValidationError(self.RATE_LIMIT_MESSAGE)
+
+        if self.link is not None:
+            recent_for_link = MemberPreRegistration.objects.filter(
+                link=self.link,
+                created_at__gte=since,
+            ).count()
+            if recent_for_link >= self.MAX_PER_LINK_PER_HOUR:
+                raise forms.ValidationError(self.LINK_SATURATED_MESSAGE)
 
     def clean_phone(self):
         phone = (self.cleaned_data.get("phone") or "").strip()

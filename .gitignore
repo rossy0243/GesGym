@@ -5,3 +5,13 @@ media/
 staticfiles/
 runserver.log
 runserver.err
+
+# Environnements virtuels : jamais versionnes. Le deploiement Render les
+# reconstruit via `pip install -r requirements.txt`.
+.venv/
+venv/
+env/
+
+# Sorties des scripts de diagnostic du lecteur d'acces (regenerees a chaque
+# execution) : rapport-lecteur.txt, journal-serveur.txt, verdict-qr.txt...
+tools/*.txt

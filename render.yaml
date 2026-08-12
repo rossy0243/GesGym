@@ -40,6 +40,11 @@ services:
         value: "https://smartclubpro.org,https://www.smartclubpro.org,https://*.onrender.com"
       - key: DJANGO_CANONICAL_HOST
         value: smartclubpro.org
+      # Racine des liens partages a l'exterieur (lien de preinscription,
+      # adresses inserees dans les e-mails). Sans elle, ces liens reprendraient
+      # l'adresse par laquelle le personnel consulte l'application.
+      - key: DJANGO_PUBLIC_BASE_URL
+        value: https://smartclubpro.org
       - key: DJANGO_USE_X_FORWARDED_HOST
         value: "True"
       - key: DJANGO_SECURE_SSL_REDIRECT
@@ -126,8 +131,9 @@ services:
         value: "https://royalgym-fitness.com,https://www.royalgym-fitness.com,https://*.onrender.com"
       - key: DJANGO_CANONICAL_HOST
         value: ""
-      # Non lue par le code actuellement (aucune reference dans settings.py) ;
-      # ajoutee sur demande, prete si un usage futur en a besoin.
+      # Racine des liens partages a l'exterieur (preinscription, e-mails).
+      # Domaine du client desormais resolu : renseignee avec
+      # https://royalgym-fitness.com.
       - key: DJANGO_PUBLIC_BASE_URL
         value: "https://royalgym-fitness.com"
       - key: DJANGO_USE_X_FORWARDED_HOST
