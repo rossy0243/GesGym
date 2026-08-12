@@ -352,7 +352,7 @@ class LoginConfigurationTests(TestCase):
         self.assertContains(response, 'id="toggle-password"')
         self.assertContains(response, "Afficher")
         self.assertContains(response, "Mot de passe oublié ?")
-        self.assertContains(response, "si vous ne retrouvez plus vos accès")
+        self.assertContains(response, "si vous ne retrouvez plus vos identifiants")
 
     def test_owner_create_user_form_requires_email_for_password_reset_autonomy(self):
         form = CreateUserForm(
@@ -589,7 +589,7 @@ class UserProfileTests(TestCase):
         self.assertEqual(self.user.first_name, "New")
         self.assertEqual(self.user.last_name, "Owner")
         self.assertEqual(self.user.email, "new@example.com")
-        self.assertContains(response, "Profil mis a jour avec succes.")
+        self.assertContains(response, "Profil mis à jour avec succès.")
         self.assertContains(response, "bg-success")
 
     def test_password_change_updates_password_and_keeps_user_logged_in(self):
@@ -607,7 +607,7 @@ class UserProfileTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.user.refresh_from_db()
         self.assertTrue(self.user.check_password("NewStrongPass123"))
-        self.assertContains(response, "Mot de passe modifie avec succes.")
+        self.assertContains(response, "Mot de passe modifié avec succès.")
 
         response = self.client.get(reverse("compte:profile"))
         self.assertEqual(response.status_code, 200)

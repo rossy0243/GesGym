@@ -1,4 +1,5 @@
 from datetime import timedelta
+from decimal import Decimal
 
 from django.contrib.messages import get_messages
 from django.core.exceptions import ValidationError
@@ -349,6 +350,9 @@ class SubscriptionTenantSafetyTests(TestCase):
         session.save()
         CashRegister.objects.create(
             gym=self.gym_a,
+            # Sans opened_by, aucune caisse n'est trouvee pour l'utilisateur
+            # connecte et l'abonnement est refuse.
+            opened_by=self.owner,
             opening_amount=0,
             exchange_rate=2800,
         )
@@ -471,3 +475,201 @@ class SubscriptionTenantSafetyTests(TestCase):
         self.assertEqual(response.context["active_subscriptions_count"], 1)
         plan = next(plan for plan in response.context["plans"] if plan.id == self.plan_a.id)
         self.assertEqual(plan.active_members_count, 1)
+
+
+class SubscriptionRenewalTests(TestCase):
+    """Renouvellement anticipe et encaissement d'un membre suspendu."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Renouv", slug="org-renouv"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Renouv",
+            slug="gym-renouv",
+            subdomain="gym-renouv",
+        )
+        module, _ = Module.objects.get_or_create(
+            code="SUBSCRIPTIONS", defaults={"name": "Subscriptions"}
+        )
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=module, defaults={"is_active": True}
+        )
+        self.owner = User.objects.create_user(
+            username="owner-renouv",
+            password="pass12345",
+            owned_organization=self.organization,
+        )
+        self.plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Mensuel", duration_days=30, price=Decimal("100.00")
+        )
+        self.member = Member.objects.create(
+            gym=self.gym,
+            first_name="Fidele",
+            last_name="Renouv",
+            phone="+243890000001",
+            email="fidele.renouv@example.com",
+        )
+        CashRegister.objects.create(
+            gym=self.gym,
+            opened_by=self.owner,
+            opening_amount=Decimal("0.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+        self.client.force_login(self.owner)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+        self.today = timezone.localdate()
+
+    def _buy(self, member=None):
+        return self.client.post(
+            reverse("subscriptions:create_subscription"),
+            {
+                "member": (member or self.member).id,
+                "plan": self.plan.id,
+                "start_date": self.today.isoformat(),
+                "currency": "USD",
+                "payment_method": "cash",
+            },
+            follow=True,
+        )
+
+    def _messages(self, response):
+        return [str(item) for item in response.context["messages"]]
+
+    def _active(self, member=None):
+        return MemberSubscription.objects.get(
+            member=member or self.member, is_active=True
+        )
+
+    # --- Report des jours restants ------------------------------------------
+
+    def test_early_renewal_carries_the_remaining_days_over(self):
+        MemberSubscription.objects.create(
+            gym=self.gym,
+            member=self.member,
+            plan=self.plan,
+            start_date=self.today - timedelta(days=10),
+            end_date=self.today + timedelta(days=20),
+            is_active=True,
+        )
+
+        self._buy()
+
+        subscription = self._active()
+        self.assertEqual(
+            (subscription.end_date - subscription.start_date).days,
+            self.plan.duration_days + 20,
+        )
+
+    def test_the_carried_over_days_are_announced(self):
+        MemberSubscription.objects.create(
+            gym=self.gym,
+            member=self.member,
+            plan=self.plan,
+            start_date=self.today - timedelta(days=10),
+            end_date=self.today + timedelta(days=20),
+            is_active=True,
+        )
+
+        response = self._buy()
+
+        self.assertTrue(
+            any("20 jour(s) restant(s)" in message for message in self._messages(response))
+        )
+
+    def test_a_first_subscription_gets_exactly_the_plan_duration(self):
+        response = self._buy()
+
+        subscription = self._active()
+        self.assertEqual(
+            (subscription.end_date - subscription.start_date).days,
+            self.plan.duration_days,
+        )
+        self.assertFalse(
+            any("reportes" in message for message in self._messages(response))
+        )
+
+    def test_an_expired_subscription_carries_nothing_over(self):
+        MemberSubscription.objects.create(
+            gym=self.gym,
+            member=self.member,
+            plan=self.plan,
+            start_date=self.today - timedelta(days=60),
+            end_date=self.today - timedelta(days=30),
+            is_active=True,
+        )
+
+        self._buy()
+
+        subscription = self._active()
+        self.assertEqual(
+            (subscription.end_date - subscription.start_date).days,
+            self.plan.duration_days,
+        )
+
+    def test_only_one_subscription_stays_active(self):
+        MemberSubscription.objects.create(
+            gym=self.gym,
+            member=self.member,
+            plan=self.plan,
+            start_date=self.today - timedelta(days=10),
+            end_date=self.today + timedelta(days=20),
+            is_active=True,
+        )
+
+        self._buy()
+
+        self.assertEqual(
+            MemberSubscription.objects.filter(
+                member=self.member, is_active=True
+            ).count(),
+            1,
+        )
+
+    # --- Membre suspendu ------------------------------------------------------
+
+    def test_paying_for_a_suspended_member_warns_the_desk(self):
+        suspended = Member.objects.create(
+            gym=self.gym,
+            first_name="Bloque",
+            last_name="Renouv",
+            phone="+243890000002",
+            email="bloque.renouv@example.com",
+            status="suspended",
+        )
+
+        response = self._buy(suspended)
+
+        self.assertTrue(
+            any(
+                "toujours suspendu" in message for message in self._messages(response)
+            )
+        )
+        self.assertTrue(
+            MemberSubscription.objects.filter(member=suspended).exists()
+        )
+
+    def test_suspended_members_are_flagged_in_the_dropdown(self):
+        Member.objects.create(
+            gym=self.gym,
+            first_name="Bloque",
+            last_name="Renouv",
+            phone="+243890000003",
+            email="bloque2.renouv@example.com",
+            status="suspended",
+        )
+
+        form = MemberSubscriptionForm(gym=self.gym)
+
+        labels = [str(label) for value, label in form.fields["member"].choices if value]
+        self.assertIn("Bloque Renouv - SUSPENDU", labels)
+        self.assertIn("Fidele Renouv", labels)
+
+    def test_an_active_member_is_not_flagged(self):
+        form = MemberSubscriptionForm(gym=self.gym)
+
+        labels = [str(label) for value, label in form.fields["member"].choices if value]
+        self.assertNotIn("Fidele Renouv - SUSPENDU", labels)

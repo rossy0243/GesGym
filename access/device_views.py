@@ -17,6 +17,7 @@ from django.utils.timezone import now
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
+from core.audit import log_sensitive_action
 from members.models import Member
 from smartclub.access_control import ACCESS_DEVICE_ROLES
 from smartclub.decorators import module_required, role_required
@@ -172,6 +173,14 @@ def device_create(request):
             status=400,
         )
 
+    log_sensitive_action(
+        request,
+        "access.device_registered",
+        "AccessDevice",
+        device.name,
+        metadata={"device_id": device.id, "host": device.host, "port": device.port},
+        gym=request.gym,
+    )
     status = _refresh_device_state(device)
     return JsonResponse({"device": _serialize_device(device), "test": status}, status=201)
 
@@ -206,6 +215,16 @@ def device_open_door(request, device_id):
     device.last_seen_at = now()
     device.last_error = ""
     device.save(update_fields=["last_seen_at", "last_error", "updated_at"])
+    # Ouvrir la porte a distance donne acces a la salle sans presenter de QR :
+    # l'operation doit pouvoir etre rattachee a quelqu'un.
+    log_sensitive_action(
+        request,
+        "access.door_opened_remotely",
+        "AccessDevice",
+        device.name,
+        metadata={"device_id": device.id, "host": device.host, "porte": device.door_number},
+        gym=request.gym,
+    )
     return JsonResponse({"ok": True, "message": "Commande d'ouverture envoyee."})
 
 
@@ -215,7 +234,17 @@ def device_open_door(request, device_id):
 @module_required("ACCESS")
 def device_delete(request, device_id):
     device = get_object_or_404(AccessDevice, id=device_id, gym=request.gym)
+    device_name = device.name
+    device_host = device.host
     device.delete()
+    log_sensitive_action(
+        request,
+        "access.device_deleted",
+        "AccessDevice",
+        device_name,
+        metadata={"device_id": device_id, "host": device_host},
+        gym=request.gym,
+    )
     return JsonResponse({"ok": True})
 
 

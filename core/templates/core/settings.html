@@ -583,9 +583,61 @@
 <div id="settings-activity" class="settings-section">
     <div class="settings-card">
         <div class="card-header">
-            <h5 class="card-title mb-1">Journal d'activite sensible</h5>
-            <small class="text-muted">Dernieres actions sensibles realisees dans l'organisation.</small>
+            <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+                <div>
+                    <h5 class="card-title mb-1">Journal d'activite sensible</h5>
+                    <small class="text-muted">
+                        {{ activity_total }} action{{ activity_total|pluralize }} du
+                        {{ log_filters.date_from|date:"d/m/Y" }} au {{ log_filters.date_to|date:"d/m/Y" }}.
+                    </small>
+                </div>
+                <a class="btn btn-light-brand btn-sm"
+                   href="{% url 'core:activity_log_export' %}?{{ log_query_string }}">
+                    <span class="material-icons me-1" style="font-size:16px;">download</span>
+                    Exporter la periode
+                </a>
+            </div>
         </div>
+
+        <div class="card-body border-bottom">
+            <form method="get" class="row g-2 align-items-end">
+                <input type="hidden" name="tab" value="activity">
+                <div class="col-md-2">
+                    <label class="form-label small text-muted mb-1">Du</label>
+                    <input type="date" class="form-control form-control-sm" name="log_from"
+                           value="{{ log_filters.date_from|date:'Y-m-d' }}">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small text-muted mb-1">Au</label>
+                    <input type="date" class="form-control form-control-sm" name="log_to"
+                           value="{{ log_filters.date_to|date:'Y-m-d' }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small text-muted mb-1">Domaine</label>
+                    <select class="form-select form-select-sm" name="log_group">
+                        <option value="">Tous les domaines</option>
+                        {% for value, label in log_group_choices %}
+                        <option value="{{ value }}" {% if log_filters.group == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small text-muted mb-1">Auteur</label>
+                    <input type="text" class="form-control form-control-sm" name="log_actor"
+                           value="{{ log_filters.actor }}" placeholder="Identifiant">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small text-muted mb-1">Recherche</label>
+                    <div class="input-group input-group-sm">
+                        <input type="text" class="form-control" name="log_q"
+                               value="{{ log_filters.search }}" placeholder="Cible ou action">
+                        <button class="btn btn-primary" type="submit">Filtrer</button>
+                        <a class="btn btn-light" href="{% url 'core:settings' %}?tab=activity">Reinitialiser</a>
+                    </div>
+                </div>
+            </form>
+        </div>
+
         <div class="card-body p-0">
             <div class="table-responsive settings-scroll-area">
                 <table class="table table-hover align-middle mb-0">
@@ -615,7 +667,7 @@
                             <td colspan="5">
                                 <div class="settings-empty">
                                     <span class="material-icons">shield</span>
-                                    <div>Aucune activite sensible enregistree pour le moment.</div>
+                                    <div>Aucune action ne correspond a ces criteres sur la periode choisie.</div>
                                 </div>
                             </td>
                         </tr>
@@ -623,6 +675,28 @@
                     </tbody>
                 </table>
             </div>
+
+            {% if activity_page.paginator.num_pages > 1 %}
+            <div class="d-flex justify-content-between align-items-center p-3 border-top">
+                <small class="text-muted">
+                    Page {{ activity_page.number }} sur {{ activity_page.paginator.num_pages }}
+                </small>
+                <div class="d-flex gap-2">
+                    {% if activity_page.has_previous %}
+                    <a class="btn btn-sm btn-light"
+                       href="?{{ log_query_string }}&log_page={{ activity_page.previous_page_number }}#settings-activity">
+                        Precedent
+                    </a>
+                    {% endif %}
+                    {% if activity_page.has_next %}
+                    <a class="btn btn-sm btn-light"
+                       href="?{{ log_query_string }}&log_page={{ activity_page.next_page_number }}#settings-activity">
+                        Suivant
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
         </div>
     </div>
 </div>

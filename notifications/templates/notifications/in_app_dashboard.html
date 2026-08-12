@@ -103,7 +103,7 @@
             <div class="card-body">
                 <div class="d-grid gap-3">
                     {% for batch in message_batches %}
-                        <div class="border rounded-4 p-3 bg-light bg-opacity-50">
+                        <div class="border rounded-4 p-3 {% if batch.is_cancelled %}bg-secondary bg-opacity-10 border-secondary{% else %}bg-light bg-opacity-50{% endif %}">
                             <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
                                 <div>
                                     <strong class="d-block mb-1">{{ batch.title }}</strong>
@@ -113,11 +113,41 @@
                                         {% if batch.sent_by %}- par {{ batch.sent_by.username }}{% endif %}
                                     </small>
                                 </div>
-                                <div class="d-flex flex-wrap justify-content-end gap-2">
-                                    <span class="badge rounded-pill bg-primary-subtle text-primary">{{ batch.total_count }} membre{{ batch.total_count|pluralize }}</span>
-                                    <span class="badge rounded-pill bg-success-subtle text-success">{{ batch.read_count }} lu{{ batch.read_count|pluralize }}</span>
-                                    {% if batch.has_unread %}
-                                        <span class="badge rounded-pill bg-warning-subtle text-warning">{{ batch.unread_count }} non lu{{ batch.unread_count|pluralize }}</span>
+                                <div class="d-flex flex-column align-items-end gap-2">
+                                    <div class="d-flex flex-wrap justify-content-end gap-2">
+                                        {% if batch.is_cancelled %}
+                                            <span class="badge rounded-pill bg-secondary">Annule</span>
+                                        {% endif %}
+                                        <span class="badge rounded-pill bg-primary-subtle text-primary">{{ batch.total_count }} membre{{ batch.total_count|pluralize }}</span>
+                                        <span class="badge rounded-pill bg-success-subtle text-success">{{ batch.read_count }} lu{{ batch.read_count|pluralize }}</span>
+                                        {% if batch.has_unread %}
+                                            <span class="badge rounded-pill bg-warning-subtle text-warning">{{ batch.unread_count }} non lu{{ batch.unread_count|pluralize }}</span>
+                                        {% endif %}
+                                    </div>
+
+                                    {% if batch.batch_id %}
+                                    <div class="d-flex gap-2">
+                                        {% if not batch.is_cancelled %}
+                                        <form method="post" action="{% url 'notifications:cancel_message_batch' batch.batch_id %}"
+                                              onsubmit="return confirm('Annuler cet envoi ? Il disparaitra de la boite de reception des {{ batch.total_count }} membre(s) concernes, mais restera dans votre historique.');">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-sm btn-outline-warning"
+                                                    title="Retire le message des boites de reception">
+                                                <span class="material-icons me-1" style="font-size:15px;">undo</span>
+                                                Annuler l'envoi
+                                            </button>
+                                        </form>
+                                        {% endif %}
+                                        <form method="post" action="{% url 'notifications:delete_message_batch' batch.batch_id %}"
+                                              onsubmit="return confirm('Supprimer definitivement cet envoi ? Il disparaitra aussi de votre historique, cette action est irreversible.');">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-sm btn-outline-danger"
+                                                    title="Efface l'envoi, y compris de l'historique">
+                                                <span class="material-icons me-1" style="font-size:15px;">delete</span>
+                                                Supprimer
+                                            </button>
+                                        </form>
+                                    </div>
                                     {% endif %}
                                 </div>
                             </div>

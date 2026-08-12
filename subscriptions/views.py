@@ -363,6 +363,31 @@ def create_subscription(request):
                     request,
                     f"Abonnement enregistre avec succes et paiement POS cree: {payment.amount} {payment.currency}.",
                 )
+
+                # Les jours restants de l'abonnement precedent ont ete reportes :
+                # l'agent doit pouvoir l'expliquer au membre qui voit une
+                # echeance plus lointaine que la duree de la formule.
+                carried_over = (
+                    subscription.end_date - subscription.start_date
+                ).days - plan.duration_days
+                if carried_over > 0:
+                    messages.info(
+                        request,
+                        f"{carried_over} jour(s) restant(s) de l'abonnement precedent "
+                        f"ont ete reportes. Echeance au "
+                        f"{subscription.end_date:%d/%m/%Y}.",
+                    )
+
+                # Encaisser ne leve pas la suspension : sans ce rappel, le
+                # membre repartirait en pensant pouvoir entrer.
+                if member.status == "suspended":
+                    messages.warning(
+                        request,
+                        f"{member.first_name} {member.last_name} est toujours "
+                        "suspendu et n'aura pas acces a la salle. Reactivez son "
+                        "compte depuis sa fiche membre.",
+                    )
+
                 return redirect("members:member_list")
     else:
         form = MemberSubscriptionForm(gym=request.gym)

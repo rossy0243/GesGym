@@ -3,6 +3,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.hashers import make_password
 from django.shortcuts import get_object_or_404, redirect, render
+from django.core.paginator import Paginator
 from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseForbidden, JsonResponse
 from django.urls import reverse
 from django.views.decorators.http import require_POST
@@ -18,6 +19,7 @@ from compte.models import User
 from compte.utils import generate_temporary_password, generate_username, has_other_active_access
 from coaching.models import CoachSpecialty
 from organizations.models import SensitiveActivityLog
+from . import activity_log
 from .audit import log_sensitive_action
 from .forms import CoachSpecialtyForm, InternalEmployeeForm, InternalEmployeeProfileForm, OrganizationSettingsForm
 from members.models import Member
@@ -589,6 +591,24 @@ def _employee_role_values_for_request(request):
     return ["coach", "reception", "cashier"]
 
 
+def _refuse_settings_action(request, action, reason, target="", **metadata):
+    """
+    Refuse une action de parametrage en la consignant.
+
+    Une tentative d'elever ses propres droits ou de toucher a un compte
+    au-dessus de son niveau doit laisser une trace : c'est precisement le
+    genre d'evenement qu'on cherche apres coup.
+    """
+    log_sensitive_action(
+        request,
+        "settings.action_refused",
+        "UserGymRole",
+        target or action,
+        metadata={"action": action, "reason": reason, **metadata},
+    )
+    return HttpResponseForbidden(reason)
+
+
 def _settings_redirect(tab):
     return redirect(f"{reverse('core:settings')}?tab={tab}")
 
@@ -636,7 +656,13 @@ def settings_dashboard(request):
             gym__in=accessible_gyms,
         )
         if employee_edit_role.role == "owner" or employee_edit_role.role not in allowed_employee_roles:
-            return HttpResponseForbidden("Role non autorise pour votre niveau d'acces.")
+            return _refuse_settings_action(
+                request,
+                "employee_edit_open",
+                "Ce compte a un niveau d'acces superieur au votre : sa fiche ne vous est pas ouverte.",
+                target=employee_edit_role.user.username,
+                target_role=employee_edit_role.role,
+            )
         if _scoped_identity_change_blocked(employee_edit_role.user, employee_edit_role):
             messages.error(
                 request,
@@ -656,7 +682,10 @@ def settings_dashboard(request):
 
         if action == "organization":
             if not can_manage_organization:
-                return HttpResponseForbidden("Seul l'Owner peut modifier l'organisation.")
+                return _refuse_settings_action(
+                    request, "organization", "Seul le proprietaire peut modifier l'organisation.",
+                    target=organization.name,
+                )
             active_tab = "organization"
             organization_form = OrganizationSettingsForm(request.POST, request.FILES, instance=organization)
             if organization_form.is_valid():
@@ -730,9 +759,16 @@ def settings_dashboard(request):
                 gym__in=accessible_gyms,
             )
             if role.role == "owner":
-                return HttpResponseForbidden("Impossible de modifier un Owner ici.")
+                return _refuse_settings_action(
+                    request, action, "Le compte proprietaire ne se modifie pas depuis les parametres.",
+                    target=role.user.username,
+                )
             if role.role not in allowed_employee_roles:
-                return HttpResponseForbidden("Role non autorise pour votre niveau d'acces.")
+                return _refuse_settings_action(
+                    request, action,
+                    "Ce compte a un niveau d'acces superieur au votre : vous ne pouvez pas le modifier.",
+                    target=role.user.username, target_role=role.role,
+                )
             if _scoped_identity_change_blocked(role.user, role):
                 messages.error(
                     request,
@@ -785,9 +821,16 @@ def settings_dashboard(request):
                 gym__in=accessible_gyms,
             )
             if role.role == "owner":
-                return HttpResponseForbidden("Impossible de modifier un Owner ici.")
+                return _refuse_settings_action(
+                    request, action, "Le compte proprietaire ne se modifie pas depuis les parametres.",
+                    target=role.user.username,
+                )
             if role.role not in allowed_employee_roles:
-                return HttpResponseForbidden("Role non autorise pour votre niveau d'acces.")
+                return _refuse_settings_action(
+                    request, action,
+                    "Ce compte a un niveau d'acces superieur au votre : vous ne pouvez pas le modifier.",
+                    target=role.user.username, target_role=role.role,
+                )
 
             if action == "employee_reset_password":
                 if _scoped_identity_change_blocked(role.user, role):
@@ -854,9 +897,16 @@ def settings_dashboard(request):
                 gym__in=accessible_gyms,
             )
             if role.role == "owner":
-                return HttpResponseForbidden("Impossible de supprimer un Owner ici.")
+                return _refuse_settings_action(
+                    request, action, "Le compte proprietaire ne se supprime pas depuis les parametres.",
+                    target=role.user.username,
+                )
             if role.role not in allowed_employee_roles:
-                return HttpResponseForbidden("Role non autorise pour votre niveau d'acces.")
+                return _refuse_settings_action(
+                    request, action,
+                    "Ce compte a un niveau d'acces superieur au votre : vous ne pouvez pas le modifier.",
+                    target=role.user.username, target_role=role.role,
+                )
             if role.user_id == request.user.id:
                 messages.error(request, "Vous ne pouvez pas supprimer votre propre profil d'acces.")
                 return _settings_redirect("employees")
@@ -927,10 +977,14 @@ def settings_dashboard(request):
         .order_by("gym__name", "user__first_name", "user__last_name")
     )
     specialties = CoachSpecialty.objects.filter(gym=gym).order_by("name")
-    activity_logs_qs = SensitiveActivityLog.objects.filter(organization=organization)
-    if not can_manage_organization:
-        activity_logs_qs = activity_logs_qs.filter(gym=gym)
-    activity_logs = activity_logs_qs.select_related("actor", "gym").order_by("-created_at")[:50]
+    log_filters = activity_log.parse_filters(request.GET)
+    activity_logs_qs = activity_log.filtered_logs(
+        organization,
+        log_filters,
+        gym=None if can_manage_organization else gym,
+    )
+    activity_paginator = Paginator(activity_logs_qs, activity_log.PAGE_SIZE)
+    activity_page = activity_paginator.get_page(request.GET.get("log_page"))
 
     context = {
         "organization": organization,
@@ -943,7 +997,12 @@ def settings_dashboard(request):
         "specialty_form": specialty_form,
         "employee_roles": employee_roles,
         "specialties": specialties,
-        "activity_logs": activity_logs,
+        "activity_logs": activity_page,
+        "activity_page": activity_page,
+        "activity_total": activity_paginator.count,
+        "log_filters": log_filters,
+        "log_group_choices": activity_log.group_choices(),
+        "log_query_string": request.GET.urlencode(),
         "active_tab": active_tab,
         "can_manage_organization": can_manage_organization,
         "allowed_employee_roles": allowed_employee_roles,
@@ -951,6 +1010,47 @@ def settings_dashboard(request):
     }
     return render(request, "core/settings.html", context)
 
+
+
+@login_required
+def activity_log_export(request):
+    """
+    Telecharge le journal filtre au format CSV.
+
+    Reprend exactement les filtres de la page : ce qu'on exporte est ce qu'on
+    voit, sans quoi un controle sur piece serait impossible a rejouer.
+    """
+    if not has_role(request, SETTINGS_ROLES):
+        return HttpResponseForbidden("Acces non autorise")
+
+    organization = getattr(request, "organization", None)
+    gym = getattr(request, "gym", None)
+    if not organization:
+        return HttpResponseForbidden("Aucune organisation active")
+
+    can_manage_organization = has_role(request, SETTINGS_ORGANIZATION_ROLES)
+    filters = activity_log.parse_filters(request.GET)
+    logs = activity_log.filtered_logs(
+        organization,
+        filters,
+        gym=None if can_manage_organization else gym,
+    )
+
+    log_sensitive_action(
+        request,
+        "settings.activity_log_exported",
+        "SensitiveActivityLog",
+        f"{filters['date_from']:%d/%m/%Y} - {filters['date_to']:%d/%m/%Y}",
+        metadata={"lignes": logs.count(), "groupe": filters["group"] or "tous"},
+    )
+
+    response = HttpResponse(
+        activity_log.build_csv(logs), content_type="text/csv; charset=utf-8"
+    )
+    response["Content-Disposition"] = (
+        f'attachment; filename="{activity_log.export_filename(organization, filters)}"'
+    )
+    return response
 
 @login_required
 def gym_dashboard(request, gym_id):
@@ -1028,7 +1128,17 @@ def gym_dashboard(request, gym_id):
         subscriptions__in=active_subscriptions_qs,
     ).distinct().count()
     suspended_members = members_qs.filter(status="suspended").count()
-    expired_members = max(total_members - active_members - suspended_members, 0)
+    # Un membre « expire » est un membre qui a eu un abonnement et n'en a plus
+    # de valable. Le deduire par soustraction comptait aussi ceux qui n'ont
+    # jamais souscrit, ce qui gonflait le chiffre sans qu'on sache pourquoi.
+    members_with_history = members_qs.filter(subscriptions__isnull=False).distinct()
+    expired_members = (
+        members_with_history.exclude(status="suspended")
+        .exclude(subscriptions__in=active_subscriptions_qs)
+        .distinct()
+        .count()
+    )
+    never_subscribed_members = members_qs.filter(subscriptions__isnull=True).count()
     active_member_rate = round((active_members / total_members) * 100, 1) if total_members else 0
 
     new_members_month = members_qs.filter(
@@ -1069,35 +1179,29 @@ def gym_dashboard(request, gym_id):
         member__gym=gym,
         end_date__range=(period_data["previous_start"], period_data["previous_end"]),
     ).count()
-    expiry_soon = MemberSubscription.objects.filter(
-        member__gym=gym,
-        is_active=True,
-        start_date__lte=today,
-        end_date__gte=today,
-        is_paused=False,
-        end_date__lte=today + timedelta(days=15),
-    ).count()
-    expiry_7_days = MemberSubscription.objects.filter(
-        member__gym=gym,
-        end_date=today + timedelta(days=7),
-        is_active=True,
-        start_date__lte=today,
-        is_paused=False,
-    ).count()
-    expiry_3_days = MemberSubscription.objects.filter(
-        member__gym=gym,
-        end_date=today + timedelta(days=3),
-        is_active=True,
-        start_date__lte=today,
-        is_paused=False,
-    ).count()
-    expiry_1_day = MemberSubscription.objects.filter(
-        member__gym=gym,
-        end_date=today + timedelta(days=1),
-        is_active=True,
-        start_date__lte=today,
-        is_paused=False,
-    ).count()
+    expiry_soon = None  # calcule juste apres, avec les autres paliers
+    def _expiring_within(days):
+        """
+        Abonnements qui s'eteignent dans les ``days`` jours a venir.
+
+        Ces compteurs utilisaient une date exacte : « expire dans 7 jours »
+        ne comptait que le septieme jour, et un membre a echeance dans cinq
+        jours n'apparaissait dans aucun palier. Ils cumulent desormais, comme
+        la liste vers laquelle ils renvoient.
+        """
+        return MemberSubscription.objects.filter(
+            member__gym=gym,
+            is_active=True,
+            is_paused=False,
+            start_date__lte=today,
+            end_date__gte=today,
+            end_date__lte=today + timedelta(days=days),
+        ).count()
+
+    expiry_7_days = _expiring_within(7)
+    expiry_3_days = _expiring_within(3)
+    expiry_1_day = _expiring_within(1)
+    expiry_soon = _expiring_within(15)
 
     access_period_qs = AccessLog.objects.filter(
         gym=gym,
@@ -1182,6 +1286,12 @@ def gym_dashboard(request, gym_id):
     renewals_trend = _build_trend(renewals_period, renewals_previous)
     visits_trend = _build_trend(visits_period, visits_previous)
     revenue_trend = _build_trend(period_revenue, previous_period_revenue)
+    # Les trois valeurs « periode precedente » etaient calculees sans jamais
+    # servir, alors que le template attendait deja ces badges : ils
+    # s'affichaient vides. On reconstitue la comparaison.
+    new_members_trend = _build_trend(new_members_period, new_members_previous)
+    renewals_trend = _build_trend(renewals_period, renewals_previous)
+    expirations_trend = _build_trend(expirations_period, expirations_previous)
     expirations_trend = _build_trend(expirations_period, expirations_previous)
 
     plans_stats = MemberSubscription.objects.filter(
@@ -1369,6 +1479,7 @@ def gym_dashboard(request, gym_id):
         "active_members": active_members,
         "active_member_rate": active_member_rate,
         "expired_members": expired_members,
+        "never_subscribed_members": never_subscribed_members,
         "suspended_members": suspended_members,
         "new_members_month": new_members_month,
         "new_members_period": new_members_period,
@@ -1382,6 +1493,9 @@ def gym_dashboard(request, gym_id):
         "renewals_trend": renewals_trend,
         "visits_trend": visits_trend,
         "revenue_trend": revenue_trend,
+        "new_members_trend": new_members_trend,
+        "renewals_trend": renewals_trend,
+        "expirations_trend": expirations_trend,
         "expirations_trend": expirations_trend,
         "daily_revenue": daily_revenue,
         "monthly_revenue": monthly_revenue,
@@ -1431,6 +1545,11 @@ def gym_dashboard(request, gym_id):
     context.update(rh_kpis)
     context.update(product_kpis)
     context.update(coaching_kpis)
+
+    # La vue d'ensemble affichait « 0:1 » en permanence : la cle n'etait
+    # calculee nulle part, seul le repli du template s'affichait. Le vrai
+    # chiffre existait deja sous un autre nom.
+    context["coach_member_ratio"] = coaching_kpis.get("average_members_per_coach", 0)
 
     return render(request, "core/dashboard_members.html", context)
 

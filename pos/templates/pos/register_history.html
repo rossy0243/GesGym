@@ -344,15 +344,28 @@
                         <td class="text-center">
                             {% if r.closed_at %}
                                 <span class="badge bg-success-subtle text-success border px-3 py-2">Clôturée</span>
+                                {% if r.was_force_closed %}
+                                    <div class="small text-muted mt-1" title="Clôturée par un responsable, pas par son titulaire">
+                                        clôture d'autorité
+                                    </div>
+                                {% endif %}
                             {% else %}
                                 <span class="badge bg-warning-subtle text-warning border px-3 py-2">Ouverte</span>
                             {% endif %}
                         </td>
 
                         <td class="text-end">
-                            <a href="{% url 'pos:register_detail' r.id %}" class="btn btn-sm btn-light">
-                                <span class="material-icons" style="font-size:18px;">visibility</span>
-                            </a>
+                            <div class="d-inline-flex gap-1">
+                                {% if not r.closed_at %}
+                                <a href="{% url 'pos:close_register' r.id %}" class="btn btn-sm btn-outline-danger"
+                                   title="Clôturer cette caisse restée ouverte">
+                                    <span class="material-icons" style="font-size:18px;">lock</span>
+                                </a>
+                                {% endif %}
+                                <a href="{% url 'pos:register_detail' r.id %}" class="btn btn-sm btn-light">
+                                    <span class="material-icons" style="font-size:18px;">visibility</span>
+                                </a>
+                            </div>
                         </td>
                     </tr>
                     {% empty %}

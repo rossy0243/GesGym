@@ -145,6 +145,23 @@
     font-size: .78rem;
     text-align: center;
 }
+
+    .expiry-link {
+        border-radius: 10px;
+        padding: 4px 8px;
+        margin: -4px -8px;
+        transition: background-color .15s ease;
+    }
+    .expiry-link:hover {
+        background: rgba(138, 109, 29, 0.08);
+    }
+    .expiry-link .material-icons {
+        opacity: 0;
+        transition: opacity .15s ease;
+    }
+    .expiry-link:hover .material-icons {
+        opacity: .6;
+    }
 </style>
 
 <div class="page-header">
@@ -424,22 +441,30 @@
                 </div>
                 <div class="card-body">
                     <div class="vstack gap-3">
-                        <div class="d-flex justify-content-between">
-                            <span>Expire dans 7 jours</span>
+                        <a class="d-flex justify-content-between text-decoration-none text-body expiry-link"
+                           href="{% url 'members:member_list' %}?status=expiring&expiring_days=7"
+                           title="Voir la liste des membres a rappeler, du plus urgent au moins urgent">
+                            <span>Expire dans 7 jours <span class="material-icons align-middle" style="font-size:14px;">call</span></span>
                             <strong>{{ expiry_7_days }}</strong>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <span>Expire dans 3 jours</span>
+                        </a>
+                        <a class="d-flex justify-content-between text-decoration-none text-body expiry-link"
+                           href="{% url 'members:member_list' %}?status=expiring&expiring_days=3"
+                           title="Voir la liste des membres a rappeler, du plus urgent au moins urgent">
+                            <span>Expire dans 3 jours <span class="material-icons align-middle" style="font-size:14px;">call</span></span>
                             <strong>{{ expiry_3_days }}</strong>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <span>Expire demain</span>
+                        </a>
+                        <a class="d-flex justify-content-between text-decoration-none text-body expiry-link"
+                           href="{% url 'members:member_list' %}?status=expiring&expiring_days=1"
+                           title="Voir la liste des membres a rappeler, du plus urgent au moins urgent">
+                            <span>Expire demain <span class="material-icons align-middle" style="font-size:14px;">call</span></span>
                             <strong>{{ expiry_1_day }}</strong>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <span>Expire sous 15 jours</span>
+                        </a>
+                        <a class="d-flex justify-content-between text-decoration-none text-body expiry-link"
+                           href="{% url 'members:member_list' %}?status=expiring&expiring_days=15"
+                           title="Voir la liste des membres a rappeler, du plus urgent au moins urgent">
+                            <span>Expire sous 15 jours <span class="material-icons align-middle" style="font-size:14px;">call</span></span>
                             <strong>{{ expiry_soon }}</strong>
-                        </div>
+                        </a>
                         <div class="d-flex justify-content-between">
                             <span>Paiements en attente</span>
                             <strong>{{ pending_count }} / {{ pending_total|floatformat:0 }} CDF</strong>
@@ -658,22 +683,30 @@
                 </div>
                 <div class="card-body">
                     <div class="vstack gap-3">
-                        <div class="d-flex justify-content-between">
-                            <span>Expire dans 7 jours</span>
+                        <a class="d-flex justify-content-between text-decoration-none text-body expiry-link"
+                           href="{% url 'members:member_list' %}?status=expiring&expiring_days=7"
+                           title="Voir la liste des membres a rappeler, du plus urgent au moins urgent">
+                            <span>Expire dans 7 jours <span class="material-icons align-middle" style="font-size:14px;">call</span></span>
                             <strong>{{ expiry_7_days }}</strong>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <span>Expire dans 3 jours</span>
+                        </a>
+                        <a class="d-flex justify-content-between text-decoration-none text-body expiry-link"
+                           href="{% url 'members:member_list' %}?status=expiring&expiring_days=3"
+                           title="Voir la liste des membres a rappeler, du plus urgent au moins urgent">
+                            <span>Expire dans 3 jours <span class="material-icons align-middle" style="font-size:14px;">call</span></span>
                             <strong>{{ expiry_3_days }}</strong>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <span>Expire demain</span>
+                        </a>
+                        <a class="d-flex justify-content-between text-decoration-none text-body expiry-link"
+                           href="{% url 'members:member_list' %}?status=expiring&expiring_days=1"
+                           title="Voir la liste des membres a rappeler, du plus urgent au moins urgent">
+                            <span>Expire demain <span class="material-icons align-middle" style="font-size:14px;">call</span></span>
                             <strong>{{ expiry_1_day }}</strong>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <span>Expire sous 15 jours</span>
+                        </a>
+                        <a class="d-flex justify-content-between text-decoration-none text-body expiry-link"
+                           href="{% url 'members:member_list' %}?status=expiring&expiring_days=15"
+                           title="Voir la liste des membres a rappeler, du plus urgent au moins urgent">
+                            <span>Expire sous 15 jours <span class="material-icons align-middle" style="font-size:14px;">call</span></span>
                             <strong>{{ expiry_soon }}</strong>
-                        </div>
+                        </a>
                         <div class="d-flex justify-content-between">
                             <span>Paiements en attente</span>
                             <strong>{{ pending_count }} / {{ pending_total|floatformat:0 }} CDF</strong>

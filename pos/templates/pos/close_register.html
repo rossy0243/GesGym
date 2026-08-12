@@ -117,13 +117,69 @@
                     <span class="material-icons">payments</span>
                 </div>
                 <div>
-                    <div class="fs-12 text-muted">Total attendu</div>
-                    <h4 class="mb-0">{{ expected_total }} CDF</h4>
+                    <div class="fs-12 text-muted">Especes attendues</div>
+                    <h4 class="mb-0 {% if has_negative_cash %}text-danger{% endif %}">{{ expected_total }} CDF</h4>
+                    <div class="fs-12 text-muted">C'est ce que vous devez compter</div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+{% if non_cash_entries or non_cash_exits %}
+<div class="alert alert-info d-flex align-items-start gap-3 mb-4">
+    <span class="material-icons" style="font-size:26px;">account_balance</span>
+    <div>
+        <strong>Mouvements hors tiroir-caisse</strong>
+        <p class="mb-2">
+            Mobile money, virements, cartes et cheques transitent par les comptes de
+            l'organisation, pas par votre tiroir. Ils ne sont donc pas comptes dans
+            les especes attendues ci-dessus.
+        </p>
+        <div class="d-flex flex-wrap gap-3">
+            <span class="badge bg-success-subtle text-success border px-3 py-2">
+                Encaisse : {{ non_cash_entries }} CDF
+            </span>
+            <span class="badge bg-danger-subtle text-danger border px-3 py-2">
+                Decaisse : {{ non_cash_exits }} CDF
+            </span>
+            <span class="badge bg-secondary px-3 py-2">
+                Solde a rapprocher : {{ non_cash_balance }} CDF
+            </span>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if has_negative_cash %}
+<div class="alert alert-danger d-flex align-items-start gap-3 mb-4">
+    <span class="material-icons" style="font-size:26px;">trending_down</span>
+    <div>
+        <strong>Solde especes negatif</strong>
+        <p class="mb-0">
+            Les sorties en especes depassent le fonds d'ouverture et les encaissements
+            de la session. Verifiez qu'aucun apport de fonds n'a ete oublie, ou qu'une
+            depense n'a pas ete saisie deux fois.
+        </p>
+    </div>
+</div>
+{% endif %}
+
+{% if is_forced_closure %}
+<div class="alert alert-warning d-flex align-items-start gap-3 mb-4">
+    <span class="material-icons" style="font-size:26px;">manage_accounts</span>
+    <div>
+        <strong>Clôture d'autorité</strong>
+        <p class="mb-0">
+            Cette caisse a été ouverte par
+            <strong>{{ register.opened_by.get_full_name|default:register.opened_by.username }}</strong>,
+            pas par vous. En la clôturant, vous validez un comptage que vous n'avez pas
+            effectué : l'écart restera attribué à son titulaire et l'opération sera
+            enregistrée à votre nom.
+        </p>
+    </div>
+</div>
+{% endif %}
 
 <div class="card close-register-card">
     <div class="card-header">

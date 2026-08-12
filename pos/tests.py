@@ -2,7 +2,7 @@ from datetime import date
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.test import Client, TestCase
 from django.urls import reverse
 
 from compte.models import User, UserGymRole
@@ -370,7 +370,13 @@ class PosAccountingTests(TestCase):
         self.assertEqual(payment.cash_register_id, manager_register.id)
         self.assertEqual(payment.created_by_id, self.manager.id)
 
-    def test_user_cannot_close_another_users_register(self):
+    def test_manager_can_force_close_another_users_register(self):
+        """
+        Regle revue : une caisse laissee ouverte par quelqu'un qui a quitte son
+        poste bloquait tout, personne ne pouvant la fermer. Gerants et
+        proprietaires peuvent desormais la cloturer d'autorite ; l'ecart reste
+        attribue a son titulaire et l'operation est tracee.
+        """
         cashier_register = CashRegister.objects.create(
             gym=self.gym_a,
             opened_by=self.cashier,
@@ -384,9 +390,11 @@ class PosAccountingTests(TestCase):
             {"real_amount": "100.00"},
         )
 
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 302)
         cashier_register.refresh_from_db()
-        self.assertFalse(cashier_register.is_closed)
+        self.assertTrue(cashier_register.is_closed)
+        self.assertEqual(cashier_register.opened_by, self.cashier)
+        self.assertTrue(cashier_register.was_force_closed)
 
     def test_manager_can_supervise_register_history(self):
         cashier_register = CashRegister.objects.create(
@@ -505,3 +513,300 @@ class PosAccountingTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Salaire")
         self.assertContains(response, "Salaire Bob RH - 5/2026")
+
+
+class ForcedRegisterClosureTests(TestCase):
+    """Une caisse laissee ouverte ne doit pas rester bloquee indefiniment."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Caisse", slug="org-caisse"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Caisse",
+            slug="gym-caisse",
+            subdomain="gym-caisse",
+        )
+        module, _ = Module.objects.get_or_create(code="POS", defaults={"name": "POS"})
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=module, defaults={"is_active": True}
+        )
+        self.owner = User.objects.create_user(
+            username="owner-caisse",
+            password="pass12345",
+            owned_organization=self.organization,
+        )
+        self.manager = User.objects.create_user(
+            username="manager-caisse", password="pass12345"
+        )
+        self.cashier = User.objects.create_user(
+            username="cashier-caisse", password="pass12345"
+        )
+        self.other_cashier = User.objects.create_user(
+            username="cashier-voisin", password="pass12345"
+        )
+        for user, role in [
+            (self.manager, "manager"),
+            (self.cashier, "cashier"),
+            (self.other_cashier, "cashier"),
+        ]:
+            UserGymRole.objects.create(
+                user=user, gym=self.gym, role=role, is_active=True
+            )
+
+        self.register = CashRegister.objects.create(
+            gym=self.gym,
+            opened_by=self.cashier,
+            opening_amount=Decimal("10000.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+
+    def _as(self, user):
+        client = Client()
+        client.force_login(user)
+        return client
+
+    def _close(self, user, amount="10000"):
+        return self._as(user).post(
+            reverse("pos:close_register", args=[self.register.id]),
+            {"real_amount": amount},
+            follow=True,
+        )
+
+    # --- Cloture d'autorite ---------------------------------------------------
+
+    def test_owner_can_close_a_register_left_open(self):
+        response = self._close(self.owner)
+
+        self.register.refresh_from_db()
+        self.assertTrue(self.register.is_closed)
+        self.assertEqual(self.register.closed_by, self.owner)
+        self.assertIn(
+            "cloturee d'autorite", str(list(response.context["messages"])[0])
+        )
+
+    def test_manager_can_close_a_register_left_open(self):
+        self._close(self.manager)
+
+        self.register.refresh_from_db()
+        self.assertTrue(self.register.is_closed)
+        self.assertEqual(self.register.closed_by, self.manager)
+
+    def test_the_difference_stays_attached_to_the_original_holder(self):
+        self._close(self.owner, amount="12000")
+
+        self.register.refresh_from_db()
+        self.assertEqual(self.register.opened_by, self.cashier)
+        self.assertEqual(self.register.difference, Decimal("2000.00"))
+        self.assertTrue(self.register.was_force_closed)
+
+    def test_a_forced_closure_is_audited_as_such(self):
+        self._close(self.owner)
+
+        entry = SensitiveActivityLog.objects.filter(
+            action="pos.register_closed"
+        ).latest("id")
+        self.assertTrue(entry.metadata["forced"])
+        self.assertEqual(entry.metadata["opened_by"], self.cashier.username)
+
+    def test_the_page_warns_before_a_forced_closure(self):
+        response = self._as(self.owner).get(
+            reverse("pos:close_register", args=[self.register.id])
+        )
+
+        self.assertTrue(response.context["is_forced_closure"])
+        self.assertContains(response, "Clôture d'autorité")
+
+    def test_the_holder_can_open_a_new_register_afterwards(self):
+        self._close(self.owner)
+
+        response = self._as(self.cashier).post(
+            reverse("pos:open_register"),
+            {"opening_amount": "5000", "exchange_rate": "2800"},
+            follow=True,
+        )
+
+        self.assertIn("Caisse ouverte", str(list(response.context["messages"])[0]))
+        self.assertTrue(
+            CashRegister.objects.filter(
+                gym=self.gym, opened_by=self.cashier, is_closed=False
+            ).exists()
+        )
+
+    # --- Ce qui reste interdit -------------------------------------------------
+
+    def test_a_cashier_still_cannot_close_someone_else_register(self):
+        response = self._as(self.other_cashier).post(
+            reverse("pos:close_register", args=[self.register.id]),
+            {"real_amount": "10000"},
+        )
+
+        self.register.refresh_from_db()
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(self.register.is_closed)
+
+    def test_a_normal_closure_is_not_flagged_as_forced(self):
+        response = self._close(self.cashier)
+
+        self.register.refresh_from_db()
+        self.assertFalse(self.register.was_force_closed)
+        self.assertNotIn(
+            "autorite", str(list(response.context["messages"])[0])
+        )
+
+    def test_another_gym_register_stays_out_of_reach(self):
+        other_organization = Organization.objects.create(
+            name="Org Voisine Caisse", slug="org-voisine-caisse"
+        )
+        other_gym = Gym.objects.create(
+            organization=other_organization,
+            name="Gym Voisin Caisse",
+            slug="gym-voisin-caisse",
+            subdomain="gym-voisin-caisse",
+        )
+        GymModule.objects.get_or_create(
+            gym=other_gym,
+            module=Module.objects.get(code="POS"),
+            defaults={"is_active": True},
+        )
+        intruder = User.objects.create_user(
+            username="owner-voisin-caisse",
+            password="pass12345",
+            owned_organization=other_organization,
+        )
+
+        response = self._as(intruder).post(
+            reverse("pos:close_register", args=[self.register.id]),
+            {"real_amount": "0"},
+        )
+
+        self.register.refresh_from_db()
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(self.register.is_closed)
+
+
+class CashDrawerSeparationTests(TestCase):
+    """Le tiroir ne contient que des especes ; le reste se rapproche ailleurs."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Tiroir", slug="org-tiroir"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Tiroir",
+            slug="gym-tiroir",
+            subdomain="gym-tiroir",
+        )
+        self.user = User.objects.create_user(username="caissier-tiroir", password="pass12345")
+        self.register = CashRegister.objects.create(
+            gym=self.gym,
+            opened_by=self.user,
+            opening_amount=Decimal("100000.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+
+    def _movement(self, amount, transaction_type, method):
+        return Payment.objects.create(
+            gym=self.gym,
+            cash_register=self.register,
+            amount=Decimal(amount),
+            currency="CDF",
+            amount_cdf=Decimal(amount),
+            exchange_rate=Decimal("2800.00"),
+            method=method,
+            type=transaction_type,
+            category="subscription" if transaction_type == "in" else "expense",
+            status="success",
+            created_by=self.user,
+        )
+
+    # --- Ce que le caissier doit compter --------------------------------------
+
+    def test_only_cash_counts_towards_the_expected_drawer(self):
+        self._movement("50000.00", "in", "cash")
+        self._movement("70000.00", "in", "mobile_money")
+
+        self.assertEqual(self.register.expected_total(), Decimal("150000.00"))
+
+    def test_a_bank_transfer_never_touches_the_drawer(self):
+        before = self.register.expected_total()
+
+        self._movement("50000.00", "out", "bank_transfer")
+
+        self.assertEqual(self.register.expected_total(), before)
+
+    def test_a_card_payment_never_touches_the_drawer(self):
+        before = self.register.expected_total()
+
+        self._movement("30000.00", "in", "card")
+
+        self.assertEqual(self.register.expected_total(), before)
+
+    def test_cash_movements_still_move_the_drawer(self):
+        self._movement("20000.00", "in", "cash")
+        self._movement("5000.00", "out", "cash")
+
+        self.assertEqual(self.register.expected_total(), Decimal("115000.00"))
+
+    # --- Ce qui reste a rapprocher ---------------------------------------------
+
+    def test_non_cash_movements_are_tracked_apart(self):
+        self._movement("70000.00", "in", "mobile_money")
+        self._movement("20000.00", "out", "bank_transfer")
+        self._movement("40000.00", "in", "cash")
+
+        self.assertEqual(self.register.non_cash_entries(), Decimal("70000.00"))
+        self.assertEqual(self.register.non_cash_exits(), Decimal("20000.00"))
+        self.assertEqual(self.register.non_cash_balance(), Decimal("50000.00"))
+
+    def test_global_totals_still_cover_every_method(self):
+        """Les rapports comptables continuent de tout voir."""
+        self._movement("40000.00", "in", "cash")
+        self._movement("70000.00", "in", "mobile_money")
+        self._movement("10000.00", "out", "cash")
+        self._movement("20000.00", "out", "bank_transfer")
+
+        self.assertEqual(self.register.total_entries(), Decimal("110000.00"))
+        self.assertEqual(self.register.total_exits(), Decimal("30000.00"))
+
+    # --- Solde negatif : signale, jamais bloque ---------------------------------
+
+    def test_a_negative_cash_balance_is_allowed_but_flagged(self):
+        self._movement("300000.00", "out", "cash")
+
+        self.assertEqual(self.register.expected_total(), Decimal("-200000.00"))
+        self.assertTrue(self.register.has_negative_cash())
+
+    def test_a_healthy_balance_is_not_flagged(self):
+        self._movement("10000.00", "out", "cash")
+
+        self.assertFalse(self.register.has_negative_cash())
+
+    def test_non_cash_exits_cannot_make_the_drawer_negative(self):
+        """Un virement important ne doit pas declencher une fausse alerte."""
+        self._movement("900000.00", "out", "bank_transfer")
+
+        self.assertEqual(self.register.expected_total(), Decimal("100000.00"))
+        self.assertFalse(self.register.has_negative_cash())
+
+    # --- Ce que voit le caissier -------------------------------------------------
+
+    def test_the_close_page_separates_both_natures(self):
+        self._movement("70000.00", "in", "mobile_money")
+        client = Client()
+        client.force_login(self.user)
+        UserGymRole.objects.create(
+            user=self.user, gym=self.gym, role="cashier", is_active=True
+        )
+        module, _ = Module.objects.get_or_create(code="POS", defaults={"name": "POS"})
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=module, defaults={"is_active": True}
+        )
+
+        response = client.get(reverse("pos:close_register", args=[self.register.id]))
+
+        self.assertEqual(response.context["expected_total"], Decimal("100000.00"))
+        self.assertEqual(response.context["non_cash_entries"], Decimal("70000.00"))
+        self.assertContains(response, "hors tiroir-caisse")

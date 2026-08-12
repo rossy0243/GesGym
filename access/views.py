@@ -21,6 +21,47 @@ def _today():
     return localtime(now()).date()
 
 
+NO_SUBSCRIPTION_REASON = "Aucun abonnement enregistre"
+
+
+def _subscription_refusal_reason(member):
+    """
+    Explique pourquoi un membre n'a pas d'abonnement valable aujourd'hui.
+
+    Quatre situations tres differentes se presentaient sous le meme libelle :
+    l'agent au portique ne savait pas s'il fallait encaisser, reactiver ou
+    simplement dire au membre de revenir. On nomme donc le cas exact.
+    """
+    today = _today()
+    subscriptions = member.subscriptions.filter(gym=member.gym, is_active=True)
+
+    paused = (
+        subscriptions.filter(is_paused=True, start_date__lte=today, end_date__gte=today)
+        .order_by("-end_date")
+        .first()
+    )
+    if paused:
+        return "Abonnement en pause"
+
+    upcoming = (
+        subscriptions.filter(is_paused=False, start_date__gt=today)
+        .order_by("start_date")
+        .first()
+    )
+    if upcoming:
+        return f"Abonnement valable a partir du {upcoming.start_date:%d/%m/%Y}"
+
+    expired = (
+        member.subscriptions.filter(gym=member.gym, end_date__lt=today)
+        .order_by("-end_date")
+        .first()
+    )
+    if expired:
+        return f"Abonnement echu le {expired.end_date:%d/%m/%Y}"
+
+    return NO_SUBSCRIPTION_REASON
+
+
 def _member_has_valid_access(member, require_valid_qr=False):
     if not member.is_active:
         return False, "Membre inactif"
@@ -40,7 +81,7 @@ def _member_has_valid_access(member, require_valid_qr=False):
     ).exists()
 
     if not has_valid_subscription:
-        return False, "Aucun abonnement actif"
+        return False, _subscription_refusal_reason(member)
 
     return True, ""
 

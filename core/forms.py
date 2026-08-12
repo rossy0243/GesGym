@@ -92,18 +92,41 @@ class InternalEmployeeForm(forms.Form):
             self.fields["gym"].queryset = Gym.objects.filter(id=locked_gym.id)
             self.fields["gym"].initial = locked_gym
             self.fields["gym"].widget = forms.HiddenInput()
-        if allowed_roles is not None:
-            allowed_roles = set(allowed_roles)
+        self.allowed_roles = set(allowed_roles) if allowed_roles is not None else None
+        if self.allowed_roles is not None:
             self.fields["role"].choices = [
                 (value, label)
                 for value, label in INTERNAL_ROLE_CHOICES
-                if value in allowed_roles
+                if value in self.allowed_roles
             ]
+            # Sans ce message, forcer un role interdit renvoyait la phrase brute
+            # de Django (« Selectionnez un choix valide. manager n'en fait pas
+            # partie. »), qui ressemble a une panne plutot qu'a une regle.
+            self.fields["role"].error_messages["invalid_choice"] = (
+                "Vous ne pouvez pas attribuer ce role. Votre niveau d'acces permet "
+                "d'affecter : %(roles)s."
+            ) % {"roles": self._readable_roles()}
+
+    def _readable_roles(self):
+        labels = dict(INTERNAL_ROLE_CHOICES)
+        return ", ".join(
+            str(labels.get(value, value))
+            for value, _ in INTERNAL_ROLE_CHOICES
+            if self.allowed_roles is None or value in self.allowed_roles
+        )
 
     def clean_role(self):
         role = self.cleaned_data["role"]
         if role == "owner":
-            raise forms.ValidationError("Impossible de creer un autre Owner depuis les parametres.")
+            raise forms.ValidationError(
+                "Seul un proprietaire peut exister par organisation : ce role ne "
+                "s'attribue pas depuis les parametres."
+            )
+        if self.allowed_roles is not None and role not in self.allowed_roles:
+            raise forms.ValidationError(
+                "Vous ne pouvez pas attribuer ce role. Votre niveau d'acces permet "
+                f"d'affecter : {self._readable_roles()}."
+            )
         return role
 
 

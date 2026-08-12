@@ -126,10 +126,13 @@ def get_report_period(params, today=None, default_period="month"):
         start_date = end_date = today - timedelta(days=1)
     elif period == "week":
         start_date = today - timedelta(days=today.weekday())
-        end_date = start_date + timedelta(days=6)
+        # Borne au jour courant, comme le mois : un rapport ne couvre pas des
+        # journees qui n'ont pas eu lieu. Sans cela, une moyenne journaliere
+        # serait divisee par sept des le lundi.
+        end_date = min(start_date + timedelta(days=6), today)
     elif period == "year":
         start_date = today.replace(month=1, day=1)
-        end_date = today.replace(month=12, day=31)
+        end_date = min(today.replace(month=12, day=31), today)
     elif period == "custom":
         start_date = parse_date(params.get("date_from") or "")
         end_date = parse_date(params.get("date_to") or "")

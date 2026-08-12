@@ -1802,12 +1802,15 @@ class AccountingReportCoverageMatrixTests(TestCase):
         self.assertEqual(self.coverage_matrix["groupings"], ["none", "day", "week", "month", "type"])
 
     def test_report_period_matrix_returns_expected_windows(self):
+        # Toutes les periodes s'arretent au jour courant : un rapport ne couvre
+        # pas des journees a venir. Seule une periode personnalisee peut aller
+        # au-dela, l'utilisateur l'ayant explicitement demandee.
         expectations = {
             "today": (date(2026, 5, 21), date(2026, 5, 21), "today"),
             "yesterday": (date(2026, 5, 20), date(2026, 5, 20), "yesterday"),
-            "week": (date(2026, 5, 18), date(2026, 5, 24), "week"),
+            "week": (date(2026, 5, 18), date(2026, 5, 21), "week"),
             "month": (date(2026, 5, 1), date(2026, 5, 21), "month"),
-            "year": (date(2026, 1, 1), date(2026, 12, 31), "year"),
+            "year": (date(2026, 1, 1), date(2026, 5, 21), "year"),
         }
         for period_key, (expected_start, expected_end, expected_key) in expectations.items():
             with self.subTest(period=period_key):
@@ -2484,3 +2487,509 @@ class DashboardKpiCoverageMatrixTests(TestCase):
                 self.assertEqual(response.context["stock_status_chart_values"], product_kpis["stock_status_chart_values"])
                 self.assertEqual(response.context["active_coaches"], coaching_kpis["active_coaches"])
                 self.assertEqual(response.context["coaching_workload_chart_values"], coaching_kpis["coaching_workload_chart_values"])
+
+
+class ReportPeriodBoundsTests(TestCase):
+    """Aucune periode relative ne doit deborder sur des journees a venir."""
+
+    reference = date(2026, 5, 21)  # un jeudi
+
+    def _period(self, key, **params):
+        return get_report_period({"period": key, **params}, today=self.reference)
+
+    def test_no_relative_period_ends_in_the_future(self):
+        for key in ["today", "yesterday", "week", "month", "year"]:
+            with self.subTest(period=key):
+                self.assertLessEqual(self._period(key)["end_date"], self.reference)
+
+    def test_the_current_week_stops_today(self):
+        period = self._period("week")
+
+        self.assertEqual(period["start_date"], date(2026, 5, 18))
+        self.assertEqual(period["end_date"], self.reference)
+
+    def test_the_current_year_stops_today(self):
+        period = self._period("year")
+
+        self.assertEqual(period["start_date"], date(2026, 1, 1))
+        self.assertEqual(period["end_date"], self.reference)
+
+    def test_a_custom_range_is_left_untouched(self):
+        """Une borne future explicitement saisie reste celle de l'utilisateur."""
+        period = self._period("custom", date_from="2026-05-01", date_to="2026-12-31")
+
+        self.assertEqual(period["end_date"], date(2026, 12, 31))
+
+    def test_period_windows_stay_consistent_between_each_other(self):
+        day = self._period("today")
+        week = self._period("week")
+        month = self._period("month")
+        year = self._period("year")
+
+        self.assertEqual(day["end_date"], week["end_date"])
+        self.assertEqual(week["end_date"], month["end_date"])
+        self.assertEqual(month["end_date"], year["end_date"])
+        self.assertLessEqual(year["start_date"], month["start_date"])
+        self.assertLessEqual(month["start_date"], week["start_date"])
+
+
+class SettingsRefusalAuditTests(TestCase):
+    """Un refus doit s'expliquer a l'utilisateur et laisser une trace."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Refus", slug="org-refus"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Refus",
+            slug="gym-refus",
+            subdomain="gym-refus",
+        )
+        self.owner = User.objects.create_user(
+            username="owner-refus",
+            password="pass12345",
+            owned_organization=self.organization,
+        )
+        self.manager = User.objects.create_user(
+            username="manager-refus", password="pass12345"
+        )
+        self.manager.force_password_change = False
+        self.manager.save()
+        self.manager_role = UserGymRole.objects.create(
+            user=self.manager, gym=self.gym, role="manager", is_active=True
+        )
+        self.client.force_login(self.manager)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+        self.url = reverse("core:settings")
+
+    def _refusals(self):
+        return SensitiveActivityLog.objects.filter(action="settings.action_refused")
+
+    # --- Des messages qui expliquent la regle ---------------------------------
+
+    def test_an_out_of_reach_role_is_explained_in_plain_words(self):
+        response = self.client.post(
+            self.url,
+            {
+                "action": "employee_create",
+                "first_name": "Nouveau",
+                "last_name": "Gerant",
+                "email": "nouveau@refus.test",
+                "phone": "+243920000001",
+                "role": "manager",
+                "gym": self.gym.id,
+            },
+        )
+
+        errors = response.context["employee_form"].errors["role"]
+        self.assertIn("Vous ne pouvez pas attribuer ce role", errors[0])
+        self.assertNotIn("Selectionnez un choix valide", errors[0])
+
+    def test_the_message_lists_the_roles_actually_allowed(self):
+        response = self.client.post(
+            self.url,
+            {
+                "action": "employee_create",
+                "first_name": "Nouveau",
+                "last_name": "Gerant",
+                "email": "nouveau2@refus.test",
+                "phone": "+243920000002",
+                "role": "owner",
+                "gym": self.gym.id,
+            },
+        )
+
+        errors = response.context["employee_form"].errors["role"]
+        self.assertTrue(any("Coach" in message for message in errors))
+
+    # --- Les tentatives laissent une trace -------------------------------------
+
+    def test_touching_a_higher_account_is_recorded(self):
+        before = self._refusals().count()
+
+        self.client.post(
+            self.url,
+            {"action": "employee_delete", "role_id": self.manager_role.id},
+        )
+
+        self.assertEqual(self._refusals().count(), before + 1)
+        entry = self._refusals().latest("id")
+        self.assertEqual(entry.actor, self.manager)
+        self.assertEqual(entry.metadata["action"], "employee_delete")
+        self.assertEqual(entry.metadata["target_role"], "manager")
+
+    def test_editing_the_organization_without_the_right_is_recorded(self):
+        before = self._refusals().count()
+
+        response = self.client.post(
+            self.url, {"action": "organization", "name": "Nom pirate"}
+        )
+
+        self.organization.refresh_from_db()
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(self.organization.name, "Org Refus")
+        self.assertEqual(self._refusals().count(), before + 1)
+
+    def test_opening_a_higher_account_sheet_is_recorded(self):
+        before = self._refusals().count()
+
+        self.client.get(
+            self.url, {"tab": "employees", "edit_role": self.manager_role.id}
+        )
+
+        self.assertEqual(self._refusals().count(), before + 1)
+        self.assertEqual(
+            self._refusals().latest("id").metadata["action"], "employee_edit_open"
+        )
+
+    def test_a_legitimate_action_is_not_recorded_as_refused(self):
+        before = self._refusals().count()
+
+        self.client.post(
+            self.url,
+            {
+                "action": "employee_create",
+                "first_name": "Vrai",
+                "last_name": "Caissier",
+                "email": "caissier@refus.test",
+                "phone": "+243920000003",
+                "role": "cashier",
+                "gym": self.gym.id,
+            },
+        )
+
+        self.assertEqual(self._refusals().count(), before)
+        self.assertTrue(
+            UserGymRole.objects.filter(gym=self.gym, role="cashier").exists()
+        )
+
+
+class ActivityLogConsultationTests(TestCase):
+    """Le journal doit rester exploitable : filtrable et exportable."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Trace", slug="org-trace"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Trace",
+            slug="gym-trace",
+            subdomain="gym-trace",
+        )
+        self.owner = User.objects.create_user(
+            username="owner-trace",
+            password="pass12345",
+            owned_organization=self.organization,
+        )
+        self.other_actor = User.objects.create_user(
+            username="agent-trace", password="pass12345"
+        )
+        self.cashier = User.objects.create_user(
+            username="cashier-trace", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.cashier, gym=self.gym, role="cashier", is_active=True
+        )
+        self.now = timezone.now()
+
+        self._trace("rh.employee_deactivated", "Agent Paie")
+        self._trace("member.updated", "Rebecca")
+        self._trace("pos.register_closed", "Caisse 1")
+        self._trace("machines.machine_deleted", "Tapis 1", actor=self.other_actor)
+        self._trace("access.door_opened_remotely", "Lecteur principal")
+        self.old_entry = self._trace("rh.employee_deactivated", "Vieux Dossier", days=90)
+
+        self.client.force_login(self.owner)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _trace(self, action, label, days=0, actor=None):
+        entry = SensitiveActivityLog.objects.create(
+            organization=self.organization,
+            gym=self.gym,
+            actor=actor or self.owner,
+            action=action,
+            target_type="Test",
+            target_label=label,
+            metadata={"ip": "127.0.0.1", "path": "/x", "detail": "valeur"},
+        )
+        if days:
+            SensitiveActivityLog.objects.filter(pk=entry.pk).update(
+                created_at=self.now - timedelta(days=days)
+            )
+        return entry
+
+    def _page(self, **params):
+        return self.client.get(
+            reverse("core:settings"), {"tab": "activity", **params}
+        )
+
+    # --- Perimetre par defaut --------------------------------------------------
+
+    def test_the_default_window_covers_the_last_thirty_days(self):
+        response = self._page()
+
+        self.assertEqual(response.context["activity_total"], 5)
+
+    def test_an_older_entry_reappears_on_a_wider_window(self):
+        response = self._page(
+            log_from=(self.now - timedelta(days=120)).date().isoformat(),
+            log_to=self.now.date().isoformat(),
+        )
+
+        self.assertEqual(response.context["activity_total"], 6)
+
+    def test_reversed_dates_are_reordered_instead_of_emptying_the_page(self):
+        response = self._page(
+            log_from=self.now.date().isoformat(),
+            log_to=(self.now - timedelta(days=120)).date().isoformat(),
+        )
+
+        filters = response.context["log_filters"]
+        self.assertLess(filters["date_from"], filters["date_to"])
+        self.assertEqual(response.context["activity_total"], 6)
+
+    def test_an_unreadable_date_falls_back_on_the_default_window(self):
+        response = self._page(log_from="pas-une-date")
+
+        self.assertEqual(response.context["activity_total"], 5)
+
+    # --- Filtres ----------------------------------------------------------------
+
+    def test_filtering_by_domain(self):
+        for group, expected in [
+            ("employee", 1),
+            ("member", 1),
+            ("money", 1),
+            ("stock", 1),
+            ("access", 1),
+        ]:
+            with self.subTest(group=group):
+                self.assertEqual(
+                    self._page(log_group=group).context["activity_total"], expected
+                )
+
+    def test_filtering_by_actor(self):
+        response = self._page(log_actor="agent-trace")
+
+        self.assertEqual(response.context["activity_total"], 1)
+
+    def test_searching_a_target(self):
+        response = self._page(log_q="Rebecca")
+
+        self.assertEqual(response.context["activity_total"], 1)
+
+    def test_an_unknown_domain_is_ignored_rather_than_emptying(self):
+        response = self._page(log_group="n-importe-quoi")
+
+        self.assertEqual(response.context["activity_total"], 5)
+
+    # --- Export -----------------------------------------------------------------
+
+    def test_the_export_mirrors_the_filters(self):
+        response = self.client.get(
+            reverse("core:activity_log_export"), {"log_group": "access"}
+        )
+
+        body = response.content.decode("utf-8-sig")
+        rows = [line for line in body.splitlines() if line.strip()]
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Lecteur principal", body)
+        self.assertNotIn("Tapis 1", body)
+        self.assertEqual(len(rows), 2)  # en-tete + une action
+
+    def test_the_export_is_named_after_the_period(self):
+        response = self.client.get(
+            reverse("core:activity_log_export"),
+            {
+                "log_from": "2026-01-01",
+                "log_to": "2026-01-31",
+            },
+        )
+
+        self.assertIn("20260101-20260131.csv", response["Content-Disposition"])
+
+    def test_the_export_hides_technical_metadata(self):
+        """L'IP et le chemin interne n'ont pas leur place dans un document remis."""
+        response = self.client.get(reverse("core:activity_log_export"))
+
+        body = response.content.decode("utf-8-sig")
+        self.assertNotIn("127.0.0.1", body)
+        self.assertIn("detail=valeur", body)
+
+    def test_exporting_is_itself_recorded(self):
+        self.client.get(reverse("core:activity_log_export"))
+
+        entry = SensitiveActivityLog.objects.filter(
+            action="settings.activity_log_exported"
+        ).latest("id")
+        self.assertEqual(entry.actor, self.owner)
+
+    def test_a_cashier_cannot_export_the_log(self):
+        self.client.force_login(self.cashier)
+
+        response = self.client.get(reverse("core:activity_log_export"))
+
+        self.assertEqual(response.status_code, 403)
+
+
+class DashboardKpiConsistencyTests(TestCase):
+    """Les indicateurs doivent dire vrai et mener a une action."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Kpi", slug="org-kpi"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Kpi",
+            slug="gym-kpi",
+            subdomain="gym-kpi",
+        )
+        for code in ["MEMBERS", "SUBSCRIPTIONS", "COACHING"]:
+            module, _ = Module.objects.get_or_create(code=code, defaults={"name": code})
+            GymModule.objects.get_or_create(
+                gym=self.gym, module=module, defaults={"is_active": True}
+            )
+        self.owner = User.objects.create_user(
+            username="owner-kpi",
+            password="pass12345",
+            owned_organization=self.organization,
+        )
+        self.plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Mensuel", duration_days=30, price=50
+        )
+        self.today = timezone.localdate()
+
+        self._member("Demain", self.today + timedelta(days=1))
+        self._member("Cinq", self.today + timedelta(days=5))
+        self._member("Quinze", self.today + timedelta(days=15))
+        self._member("Echu", self.today - timedelta(days=5))
+        self._member("Jamais")
+        self._member("Suspendu", self.today - timedelta(days=5), status="suspended")
+
+        self.client.force_login(self.owner)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _member(self, name, end=None, status="active"):
+        member = Member.objects.create(
+            gym=self.gym,
+            first_name=name,
+            last_name="Kpi",
+            phone=f"+2438500{abs(hash(name)) % 10000:04d}",
+            email=f"{name.lower()}.kpi@example.com",
+            status=status,
+        )
+        if end is not None:
+            MemberSubscription.objects.create(
+                gym=self.gym,
+                member=member,
+                plan=self.plan,
+                start_date=self.today - timedelta(days=20),
+                end_date=end,
+                is_active=True,
+            )
+        return member
+
+    def _dashboard(self):
+        return self.client.get(
+            reverse("core:gym_dashboard", args=[self.gym.id])
+        ).context
+
+    def _member_list(self, **params):
+        return self.client.get(reverse("members:member_list"), params)
+
+    # --- Membres expires : mesure et non deduction -----------------------------
+
+    def test_expired_members_only_counts_those_who_had_a_subscription(self):
+        context = self._dashboard()
+
+        self.assertEqual(context["expired_members"], 1)
+
+    def test_members_who_never_subscribed_are_counted_apart(self):
+        context = self._dashboard()
+
+        self.assertEqual(context["never_subscribed_members"], 1)
+
+    def test_the_old_subtraction_would_have_overcounted(self):
+        """Le calcul par soustraction comptait aussi ceux qui n'ont jamais souscrit."""
+        context = self._dashboard()
+
+        deduced = (
+            context["total_members"]
+            - context["active_members"]
+            - context["suspended_members"]
+        )
+        self.assertGreater(deduced, context["expired_members"])
+
+    # --- Paliers d'expiration : cumulatifs -------------------------------------
+
+    def test_expiry_tiers_accumulate(self):
+        """Un membre a echeance dans cinq jours n'apparaissait dans aucun palier."""
+        context = self._dashboard()
+
+        self.assertEqual(context["expiry_1_day"], 1)
+        self.assertEqual(context["expiry_3_days"], 1)
+        self.assertEqual(context["expiry_7_days"], 2)
+        self.assertEqual(context["expiry_soon"], 3)
+
+    def test_each_tier_matches_the_list_it_links_to(self):
+        context = self._dashboard()
+
+        for days, key in [(1, "expiry_1_day"), (7, "expiry_7_days"), (15, "expiry_soon")]:
+            with self.subTest(days=days):
+                listed = self._member_list(status="expiring", expiring_days=days)
+                self.assertEqual(
+                    listed.context["page_obj"].paginator.count, context[key]
+                )
+
+    # --- Liste d'appel ----------------------------------------------------------
+
+    def test_the_call_list_starts_with_the_most_urgent(self):
+        response = self._member_list(status="expiring", expiring_days=15)
+
+        names = [member.first_name for member in response.context["page_obj"]]
+        self.assertEqual(names, ["Demain", "Cinq", "Quinze"])
+
+    def test_an_explicit_sort_is_respected(self):
+        response = self._member_list(
+            status="expiring", expiring_days=15, sort="name_desc"
+        )
+
+        names = [member.first_name for member in response.context["page_obj"]]
+        self.assertEqual(names[0], "Quinze")
+
+    def test_an_unknown_window_falls_back_on_seven_days(self):
+        response = self._member_list(status="expiring", expiring_days="999")
+
+        self.assertEqual(response.context["page_obj"].paginator.count, 2)
+
+    # --- Indicateurs branches ----------------------------------------------------
+
+    def test_the_coach_ratio_is_no_longer_frozen_at_zero(self):
+        coach = Coach.objects.create(
+            gym=self.gym, name="Coach Kpi", phone="0850000009", is_active=True
+        )
+        coach.members.add(Member.objects.get(gym=self.gym, first_name="Demain"))
+
+        context = self._dashboard()
+
+        self.assertEqual(
+            context["coach_member_ratio"], context["average_members_per_coach"]
+        )
+
+    def test_period_comparisons_are_supplied_to_the_template(self):
+        """Les badges existaient dans le template sans donnee derriere."""
+        context = self._dashboard()
+
+        for key in ["revenue_trend", "new_members_trend", "renewals_trend", "expirations_trend"]:
+            with self.subTest(trend=key):
+                self.assertIn("display", context[key])
+                self.assertIn("badge_class", context[key])

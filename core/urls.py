@@ -1,6 +1,7 @@
 from django.urls import path
 from .views import (
     accounting_report_export,
+    activity_log_export,
     dashboard_redirect,
     gym_dashboard,
     reports_dashboard,
@@ -18,5 +19,6 @@ urlpatterns = [
     path('rapport/', reports_dashboard, name='rapport'),
     path('rapport/export/', accounting_report_export, name='rapport_export'),
     path('parametres/', settings_dashboard, name='settings'),
+    path('parametres/journal/export/', activity_log_export, name='activity_log_export'),
     path('switch-gym/<int:gym_id>/', switch_gym, name='switch_gym'),
 ]

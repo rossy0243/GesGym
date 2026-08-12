@@ -12,6 +12,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from core.audit import log_sensitive_action
 from core.creation_emails import notify_creation_email_failure, send_employee_creation_email
 from pos.services import record_expense
 from smartclub.access_control import RH_ATTENDANCE_ROLES, RH_EMPLOYEE_ROLES, RH_PAYROLL_ROLES
@@ -236,6 +237,18 @@ def employee_create(request):
                 notify_creation_email_failure(str(employee), exc)
                 email_sent = False
             email_status = "Email envoye." if email_sent else "Aucun email envoye."
+            log_sensitive_action(
+                request,
+                "rh.employee_created",
+                "Employee",
+                employee.name,
+                metadata={
+                    "employee_id": employee.id,
+                    "role": employee.role,
+                    "compensation": employee.get_compensation_label(),
+                },
+                gym=gym,
+            )
             messages.success(request, f'Employe "{employee.name}" cree avec succes. {email_status}')
             return redirect("rh:detail", employee_id=employee.id)
     else:
@@ -253,7 +266,24 @@ def employee_update(request, employee_id):
     if request.method == "POST":
         form = EmployeeForm(request.POST, instance=employee)
         if form.is_valid():
+            # Releve avant enregistrement : une modification de salaire doit
+            # pouvoir se relire plus tard, avec l'ancienne et la nouvelle valeur.
+            changes = {
+                field: {
+                    "avant": str(form.initial.get(field, "")),
+                    "apres": str(form.cleaned_data.get(field, "")),
+                }
+                for field in form.changed_data
+            }
             form.save()
+            log_sensitive_action(
+                request,
+                "rh.employee_updated",
+                "Employee",
+                employee.name,
+                metadata={"employee_id": employee.id, "changements": changes},
+                gym=request.gym,
+            )
             messages.success(request, f'Employe "{employee.name}" modifie avec succes.')
             return redirect("rh:detail", employee_id=employee.id)
     else:
@@ -275,6 +305,14 @@ def employee_delete(request, employee_id):
     if request.method == "POST":
         employee.is_active = False
         employee.save(update_fields=["is_active"])
+        log_sensitive_action(
+            request,
+            "rh.employee_deactivated",
+            "Employee",
+            employee.name,
+            metadata={"employee_id": employee.id, "role": employee.role},
+            gym=request.gym,
+        )
         messages.success(request, f'Employe "{employee.name}" desactive avec succes.')
         return redirect("rh:list")
 

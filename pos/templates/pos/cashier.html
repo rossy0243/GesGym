@@ -6,6 +6,21 @@
 
 {% block content %}
 
+{% if has_negative_cash %}
+<div class="alert alert-danger d-flex align-items-start gap-3 mb-4 mx-2">
+    <span class="material-icons" style="font-size:26px;">trending_down</span>
+    <div>
+        <strong>Solde especes negatif : {{ today_total }} CDF</strong>
+        <p class="mb-0">
+            Vous avez decaisse plus d'especes que la caisse n'en contenait. Signalez-le
+            a votre responsable : soit un apport de fonds n'a pas ete enregistre, soit
+            une depense a ete saisie en trop.
+        </p>
+    </div>
+</div>
+{% endif %}
+
+
 <div class="page-header mb-4">
     <div class="page-header-left d-flex align-items-center">
         <div class="page-header-title d-flex align-items-center gap-2">
@@ -135,12 +150,17 @@
                         <span class="material-icons">account_balance_wallet</span>
                     </div>
                     <div>
-                        <div class="fs-12 text-muted">Total attendu CDF</div>
-                        <h4 class="mb-0">
+                        <div class="fs-12 text-muted">Especes en caisse</div>
+                        <h4 class="mb-0 {% if has_negative_cash %}text-danger{% endif %}">
                             {% if register %}{{ today_total }}{% else %}0{% endif %} CDF
                         </h4>
                         {% if register %}
                             <small class="text-muted">Fonds ouverture : {{ register.opening_amount }} CDF</small>
+                            {% if non_cash_balance %}
+                                <small class="d-block text-muted">
+                                    Hors tiroir : {{ non_cash_balance }} CDF
+                                </small>
+                            {% endif %}
                         {% endif %}
                     </div>
                 </div>

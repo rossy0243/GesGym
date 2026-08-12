@@ -103,7 +103,25 @@ def record_subscription_payment(
     start = start_date or today
     if start > today:
         raise ValidationError("La date de debut ne peut pas etre dans le futur pour un abonnement encaisse.")
-    end = start + timedelta(days=plan.duration_days)
+
+    current = (
+        MemberSubscription.objects.filter(
+            gym=gym,
+            member=member,
+            is_active=True,
+            end_date__gt=start,
+        )
+        .order_by("-end_date")
+        .first()
+    )
+
+    # Renouvellement anticipe : le nouvel abonnement prolonge le temps qui
+    # restait au lieu de l'effacer. La date de debut reste celle de
+    # l'encaissement, exigee par la comptabilite, mais le membre ne perd aucun
+    # jour deja paye.
+    carried_over_days = (current.end_date - start).days if current else 0
+    end = start + timedelta(days=plan.duration_days + carried_over_days)
+
     amount_usd = _money(plan.price)
     amount = amount_usd if currency == "USD" else _money(amount_usd * register.exchange_rate)
 

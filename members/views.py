@@ -13,7 +13,7 @@ from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import redirect
-from django.db.models import Model
+from django.db.models import Model, Subquery
 from django.db.models import Q, Exists, OuterRef, Count
 from django.core.paginator import Paginator
 from django.urls import reverse
@@ -1649,6 +1649,10 @@ def member_api_coaching_feedback(request):
     return _json_success({"data": _member_mobile_payload(request, member)}, status=201)
 
 #######   liste  ######
+# Paliers d'expiration proposes par le tableau de bord.
+EXPIRING_WINDOWS = (1, 3, 7, 15)
+
+
 @login_required
 def member_list(request):
     """
@@ -1662,7 +1666,16 @@ def member_list(request):
     _cleanup_expired_pre_registrations()
     gym = request.gym
     today = timezone.now().date()
-    limit = today + timedelta(days=7)
+    # Fenetre d'expiration choisie depuis le tableau de bord : chaque palier
+    # renvoie ici pour que l'equipe puisse appeler les membres concernes.
+    try:
+        expiring_days = int(request.GET.get("expiring_days") or 7)
+    except (TypeError, ValueError):
+        expiring_days = 7
+    if expiring_days not in EXPIRING_WINDOWS:
+        expiring_days = 7
+    limit = today + timedelta(days=expiring_days)
+
     active_subscription_exists = MemberSubscription.objects.filter(
         member=OuterRef("pk"),
         is_active=True,
@@ -1676,6 +1689,19 @@ def member_list(request):
         start_date__lte=today,
         end_date__range=(today, limit),
         is_paused=False,
+    )
+    # Date de fin de l'abonnement en cours : sert a trier du plus urgent au
+    # moins urgent, l'ordre dans lequel on passe les appels.
+    active_subscription_end = (
+        MemberSubscription.objects.filter(
+            member=OuterRef("pk"),
+            is_active=True,
+            is_paused=False,
+            start_date__lte=today,
+            end_date__gte=today,
+        )
+        .order_by("end_date")
+        .values("end_date")[:1]
     )
     any_access_exists = AccessLog.objects.filter(member=OuterRef("pk"))
     recent_access_exists = AccessLog.objects.filter(
@@ -1693,6 +1719,7 @@ def member_list(request):
             has_expiring_subscription=Exists(expiring_subscription_exists),
             has_any_access=Exists(any_access_exists),
             has_recent_access=Exists(recent_access_exists),
+            active_subscription_end=Subquery(active_subscription_end),
         )
     )
 
@@ -1767,7 +1794,12 @@ def member_list(request):
         "expiry_asc": ["subscriptions__end_date", "-created_at"],
         "expiry_desc": ["-subscriptions__end_date", "-created_at"],
         "last_access": ["-access_logs__check_in_time", "-created_at"],
+        # Echeance de l'abonnement en cours, du plus proche au plus lointain :
+        # l'ordre dans lequel l'equipe passe ses appels de relance.
+        "urgency": ["active_subscription_end", "first_name", "last_name"],
     }
+    if status == "expiring" and not request.GET.get("sort"):
+        sort = "urgency"
     sort = sort if sort in sort_options else "newest"
     members = members.order_by(*sort_options[sort]).distinct()
 
@@ -1850,6 +1882,14 @@ def create_member(request):
     member.gym = request.gym
     member.save()  # déclenche signal → crée User automatiquement
 
+    log_sensitive_action(
+        request,
+        "member.created",
+        "Member",
+        f"{member.first_name} {member.last_name}",
+        metadata={"member_id": member.id, "phone": member.phone},
+    )
+
     temporary_password = getattr(member, "_temporary_password", "")
     try:
         email_sent = send_member_creation_email(
@@ -1923,7 +1963,21 @@ def edit_member(request, member_id):
         )
 
         if form.is_valid():
+            changes = {
+                field: {
+                    "avant": str(form.initial.get(field, "")),
+                    "apres": str(form.cleaned_data.get(field, "")),
+                }
+                for field in form.changed_data
+            }
             form.save()
+            log_sensitive_action(
+                request,
+                "member.updated",
+                "Member",
+                f"{member.first_name} {member.last_name}",
+                metadata={"member_id": member.id, "changements": changes},
+            )
             messages.success(request, "Membre modifié avec succès.")
             
             # Réponse JSON pour le modal (au lieu de redirect)
@@ -2140,6 +2194,13 @@ def reset_member_password(request, member_id):
         if email_sent
         else "L'envoi de l'e-mail a echoue : communiquez-les au membre."
     )
+    log_sensitive_action(
+        request,
+        "member.password_reset",
+        "Member",
+        f"{member.first_name} {member.last_name}",
+        metadata={"member_id": member.id, "email_envoye": email_sent},
+    )
     messages.success(
         request,
         f"Mot de passe temporaire regenere pour {member.first_name} {member.last_name}. "
@@ -2210,6 +2271,13 @@ def suspend_member(request, member_id):
         active_sub.save()
         detail = "Son abonnement est en pause."
 
+    log_sensitive_action(
+        request,
+        "member.suspended",
+        "Member",
+        f"{member.first_name} {member.last_name}",
+        metadata={"member_id": member.id, "abonnement": detail},
+    )
     messages.warning(
         request,
         f"{member.first_name} {member.last_name} a ete suspendu. {detail}",
@@ -2249,6 +2317,13 @@ def reactivate_member(request, member_id):
                 "l'echeance est inchangee."
             )
 
+    log_sensitive_action(
+        request,
+        "member.reactivated",
+        "Member",
+        f"{member.first_name} {member.last_name}",
+        metadata={"member_id": member.id, "abonnement": detail},
+    )
     messages.success(
         request,
         f"{member.first_name} {member.last_name} a ete reactive. {detail}",

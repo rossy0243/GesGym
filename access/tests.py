@@ -16,7 +16,7 @@ from . import hikvision
 from .device_views import UNKNOWN_CREDENTIAL_REASON
 from .hikvision import parse_event_payload
 from .models import AccessDevice, AccessLog
-from .views import DOUBLE_SCAN_REASON, EXPIRED_QR_REASON
+from .views import DOUBLE_SCAN_REASON, EXPIRED_QR_REASON, NO_SUBSCRIPTION_REASON
 
 
 class AccessControlTests(TestCase):
@@ -307,13 +307,13 @@ class AccessControlTests(TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertFalse(payload["access"])
-        self.assertEqual(payload["reason"], "Aucun abonnement actif")
-        self.assertEqual(payload["log"]["reason"], "Aucun abonnement actif")
+        self.assertEqual(payload["reason"], NO_SUBSCRIPTION_REASON)
+        self.assertEqual(payload["log"]["reason"], NO_SUBSCRIPTION_REASON)
         self.assertEqual(payload["log"]["status"], "denied")
 
         log = AccessLog.objects.get(member=member)
         self.assertFalse(log.access_granted)
-        self.assertEqual(log.denial_reason, "Aucun abonnement actif")
+        self.assertEqual(log.denial_reason, NO_SUBSCRIPTION_REASON)
 
     def test_member_with_future_subscription_is_denied_until_start_date(self):
         member = Member.objects.create(
@@ -340,7 +340,10 @@ class AccessControlTests(TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertFalse(payload["access"])
-        self.assertEqual(payload["reason"], "Aucun abonnement actif")
+        self.assertEqual(
+            payload["reason"],
+            f"Abonnement valable a partir du {(today + timedelta(days=2)):%d/%m/%Y}",
+        )
 
     def test_realtime_access_is_scoped_to_current_gym(self):
         AccessLog.objects.create(
@@ -774,3 +777,162 @@ class DashboardDoorOpeningTests(TestCase):
         self.assertTrue(payload["access"])
         self.assertFalse(payload["door"]["opened"])
         self.assertTrue(AccessLog.objects.get(member=self.member).access_granted)
+
+
+class AccessRefusalReasonTests(TestCase):
+    """Chaque refus doit dire quoi faire, pas seulement qu'il refuse."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Motif", slug="org-motif"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Motif",
+            slug="gym-motif",
+            subdomain="gym-motif",
+        )
+        module, _ = Module.objects.get_or_create(
+            code="ACCESS", defaults={"name": "Access"}
+        )
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=module, defaults={"is_active": True}
+        )
+        self.user = User.objects.create_user(
+            username="reception-motif", password="test-pass"
+        )
+        UserGymRole.objects.create(
+            user=self.user, gym=self.gym, role="reception", is_active=True
+        )
+        self.plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Mensuel", duration_days=30, price=30
+        )
+        self.member = Member.objects.create(
+            gym=self.gym,
+            first_name="Portique",
+            last_name="Motif",
+            phone="+243900000001",
+            email="portique.motif@example.com",
+        )
+        self.today = timezone.now().date()
+        self.client.login(username="reception-motif", password="test-pass")
+
+    def _reason(self):
+        response = self.client.post(
+            reverse("access:manual_access_entry", args=[self.member.id])
+        )
+        return response.json()["reason"]
+
+    def test_a_member_who_never_subscribed_is_named_as_such(self):
+        self.assertEqual(self._reason(), NO_SUBSCRIPTION_REASON)
+
+    def test_a_paused_subscription_says_so(self):
+        MemberSubscription.objects.create(
+            gym=self.gym,
+            member=self.member,
+            plan=self.plan,
+            start_date=self.today,
+            end_date=self.today + timedelta(days=30),
+            is_active=True,
+            is_paused=True,
+        )
+
+        self.assertEqual(self._reason(), "Abonnement en pause")
+
+    def test_an_expired_subscription_gives_its_end_date(self):
+        MemberSubscription.objects.create(
+            gym=self.gym,
+            member=self.member,
+            plan=self.plan,
+            start_date=self.today - timedelta(days=60),
+            end_date=self.today - timedelta(days=12),
+            is_active=True,
+        )
+
+        self.assertEqual(
+            self._reason(),
+            f"Abonnement echu le {(self.today - timedelta(days=12)):%d/%m/%Y}",
+        )
+
+    def test_a_future_subscription_gives_its_start_date(self):
+        MemberSubscription.objects.create(
+            gym=self.gym,
+            member=self.member,
+            plan=self.plan,
+            start_date=self.today + timedelta(days=5),
+            end_date=self.today + timedelta(days=35),
+            is_active=True,
+        )
+
+        self.assertEqual(
+            self._reason(),
+            f"Abonnement valable a partir du {(self.today + timedelta(days=5)):%d/%m/%Y}",
+        )
+
+    def test_a_paused_subscription_wins_over_an_old_expired_one(self):
+        """Le cas actionnable prime : c'est la pause qu'il faut lever."""
+        MemberSubscription.objects.create(
+            gym=self.gym,
+            member=self.member,
+            plan=self.plan,
+            start_date=self.today - timedelta(days=200),
+            end_date=self.today - timedelta(days=170),
+            is_active=False,
+        )
+        MemberSubscription.objects.create(
+            gym=self.gym,
+            member=self.member,
+            plan=self.plan,
+            start_date=self.today,
+            end_date=self.today + timedelta(days=30),
+            is_active=True,
+            is_paused=True,
+        )
+
+        self.assertEqual(self._reason(), "Abonnement en pause")
+
+    def test_the_reason_is_stored_in_the_access_log(self):
+        MemberSubscription.objects.create(
+            gym=self.gym,
+            member=self.member,
+            plan=self.plan,
+            start_date=self.today - timedelta(days=60),
+            end_date=self.today - timedelta(days=12),
+            is_active=True,
+        )
+
+        self._reason()
+
+        log = AccessLog.objects.get(member=self.member)
+        self.assertFalse(log.access_granted)
+        self.assertIn("Abonnement echu", log.denial_reason)
+
+    def test_a_suspended_member_keeps_its_own_reason(self):
+        Member.objects.filter(pk=self.member.pk).update(status="suspended")
+        MemberSubscription.objects.create(
+            gym=self.gym,
+            member=self.member,
+            plan=self.plan,
+            start_date=self.today,
+            end_date=self.today + timedelta(days=30),
+            is_active=True,
+        )
+
+        self.assertEqual(self._reason(), "Membre suspendu")
+
+    def test_a_valid_member_is_still_granted(self):
+        MemberSubscription.objects.create(
+            gym=self.gym,
+            member=self.member,
+            plan=self.plan,
+            start_date=self.today,
+            end_date=self.today + timedelta(days=30),
+            is_active=True,
+        )
+
+        response = self.client.post(
+            reverse("access:manual_access_entry", args=[self.member.id])
+        )
+
+        self.assertTrue(response.json()["access"])
+        self.assertEqual(response.json()["reason"], "")

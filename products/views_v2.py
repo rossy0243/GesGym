@@ -5,6 +5,7 @@ from django.db.models import Sum
 from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 
+from core.audit import log_sensitive_action
 from smartclub.access_control import PRODUCT_ROLES
 from smartclub.decorators import module_required, role_required
 
@@ -120,6 +121,20 @@ def product_update(request, product_id):
                         movement_type="in" if delta > 0 else "out",
                         reason="Ajustement manuel",
                     )
+            if delta:
+                log_sensitive_action(
+                    request,
+                    "products.stock_adjusted",
+                    "Product",
+                    product.name,
+                    metadata={
+                        "product_id": product.id,
+                        "avant": previous_quantity,
+                        "apres": product.quantity,
+                        "ecart": delta,
+                    },
+                    gym=request.gym,
+                )
             messages.success(request, f'Produit "{product.name}" modifie avec succes.')
             return redirect("products:detail", product_id=product.id)
     else:
@@ -146,6 +161,14 @@ def product_delete(request, product_id):
     if request.method == "POST":
         product.is_active = False
         product.save(update_fields=["is_active"])
+        log_sensitive_action(
+            request,
+            "products.product_deactivated",
+            "Product",
+            product.name,
+            metadata={"product_id": product.id, "stock_restant": product.quantity},
+            gym=request.gym,
+        )
         messages.success(request, f'Produit "{product.name}" desactive avec succes.')
         return redirect("products:list")
 
@@ -170,7 +193,23 @@ def stock_movement_create(request, product_id):
             reason = form.cleaned_data["reason"]
 
             try:
+                avant = product.quantity
                 product.update_stock(quantity, movement_type, reason)
+                log_sensitive_action(
+                    request,
+                    "products.stock_movement",
+                    "Product",
+                    product.name,
+                    metadata={
+                        "product_id": product.id,
+                        "sens": movement_type,
+                        "quantite": quantity,
+                        "avant": avant,
+                        "apres": product.quantity,
+                        "motif": reason or "",
+                    },
+                    gym=request.gym,
+                )
                 messages.success(request, f"Mouvement enregistre: {product.name} - {quantity}.")
                 return redirect("products:detail", product_id=product.id)
             except ValueError as exc:

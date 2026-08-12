@@ -1,0 +1,106 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ gym.name }} · Espace coach</title>
+    <style>
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+            background: #f1f5f9;
+            color: #0f172a;
+        }
+
+        .notice {
+            max-width: 520px;
+            background: #ffffff;
+            border: 1px solid rgba(148, 163, 184, 0.25);
+            border-radius: 20px;
+            padding: 32px;
+            box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+        }
+
+        .notice__icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #fef3c7;
+            color: #92400e;
+            font-size: 28px;
+            margin-bottom: 18px;
+        }
+
+        h1 {
+            font-size: 1.35rem;
+            margin: 0 0 12px;
+        }
+
+        p {
+            line-height: 1.6;
+            margin: 0 0 12px;
+            color: #475569;
+        }
+
+        .notice__account {
+            display: inline-block;
+            margin-top: 4px;
+            padding: 6px 12px;
+            border-radius: 10px;
+            background: #f8fafc;
+            border: 1px solid rgba(148, 163, 184, 0.25);
+            font-family: monospace;
+        }
+
+        .notice__actions {
+            margin-top: 24px;
+        }
+
+        .notice__actions a {
+            display: inline-block;
+            padding: 10px 18px;
+            border-radius: 12px;
+            background: #0f172a;
+            color: #ffffff;
+            text-decoration: none;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <main class="notice">
+        <div class="notice__icon" aria-hidden="true">&#9888;</div>
+
+        <h1>Aucun profil coach rattaché à votre compte</h1>
+
+        <p>
+            Vous êtes bien enregistré comme coach de <strong>{{ gym.name }}</strong>,
+            mais aucune fiche coach n'est encore reliée à votre compte.
+        </p>
+
+        <p>
+            Demandez à un gérant d'ouvrir votre fiche dans <strong>Coaching &rsaquo;
+            Coachs</strong> et d'y sélectionner votre compte&nbsp;:
+            <span class="notice__account">{{ request.user.username }}</span>
+        </p>
+
+        <p>
+            Ce rattachement est volontaire : il détermine quels membres vous suivez.
+            Il ne peut donc pas être deviné automatiquement.
+        </p>
+
+        <div class="notice__actions">
+            <a href="{% url 'compte:logout' %}">Se déconnecter</a>
+        </div>
+    </main>
+</body>
+</html>

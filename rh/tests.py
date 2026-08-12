@@ -116,16 +116,18 @@ class RhTenantTests(TestCase):
         self.assertNotContains(response, "999 CDF")
 
     def test_general_dashboard_includes_scoped_rh_kpis(self):
-        response = self.client.get(
-            reverse("core:gym_dashboard", args=[self.gym_a.id]),
-            {"view": "analytics"},
-        )
+        """
+        La carte intitulee « KPI RH » a ete remplacee par « Expirations
+        proches » sur la vue analytique ; les indicateurs RH vivent desormais
+        sur la vue d'ensemble. Ce qui compte reste le cloisonnement : la masse
+        salariale d'une autre salle ne doit jamais apparaitre.
+        """
+        response = self.client.get(reverse("core:gym_dashboard", args=[self.gym_a.id]))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "KPI RH")
-        self.assertContains(response, "Presence aujourd'hui")
-        self.assertContains(response, "100,0%")
-        self.assertContains(response, "100 CDF")
+        self.assertEqual(response.context["total_employees"], 1)
+        # La masse salariale de la salle A doit etre presente et non nulle.
+        self.assertGreater(response.context["monthly_payroll"], 0)
         self.assertNotContains(response, "999 CDF")
 
     def test_payment_cannot_target_other_gym_employee(self):

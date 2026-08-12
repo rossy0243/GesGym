@@ -691,7 +691,7 @@
                                 <span>Non lu</span>
                             {% endif %}
                         </div>
-                        <p>{{ selected_notification.message|striptags|linebreaksbr }}</p>
+                        <p>{{ selected_notification.message|linebreaksbr }}</p>
                     </article>
                 {% endif %}
 
@@ -709,7 +709,7 @@
                                         <span>Non lu</span>
                                     </div>
                                     <div class="message-row-body">
-                                        <p class="message-preview">{{ notification.message|striptags|truncatechars:120 }}</p>
+                                        <p class="message-preview">{{ notification.message|truncatechars:120 }}</p>
                                         <small>{{ notification.created_at|date:"d/m/Y H:i" }}</small>
                                     </div>
                                     <form method="post" action="{% url 'members:member_notification_read' notification.id %}" class="message-row-action">
@@ -736,7 +736,7 @@
                                         <small>{{ notification.created_at|date:"d/m H:i" }}</small>
                                     </div>
                                     <div class="message-row-body">
-                                        <p class="message-preview">{{ notification.message|striptags|truncatechars:120 }}</p>
+                                        <p class="message-preview">{{ notification.message|truncatechars:120 }}</p>
                                     </div>
                                     <a class="message-view-link" href="{% url 'members:member_portal' %}?tab=messages&amp;message={{ notification.id }}">Voir</a>
                                 </article>
@@ -755,7 +755,7 @@
                                         <strong>{{ notification.title|default:"Message de la salle" }}</strong>
                                         <small>{{ notification.created_at|date:"d/m/Y H:i" }}</small>
                                     </div>
-                                    <p>{{ notification.message|striptags|truncatechars:140 }}</p>
+                                    <p>{{ notification.message|truncatechars:140 }}</p>
                                 </article>
                             {% endfor %}
                         </div>

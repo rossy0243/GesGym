@@ -6,6 +6,7 @@ from django.db import transaction
 from django.db.models import Avg, Count, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 
+from core.audit import log_sensitive_action
 from pos.services import record_expense
 from smartclub.access_control import MACHINE_ROLES
 from smartclub.decorators import module_required, role_required
@@ -131,7 +132,16 @@ def machine_delete(request, machine_id):
             )
             return redirect("machines:detail", machine_id=machine.id)
         machine_name = machine.name
+        maintenance_count = machine.maintenance_logs.count()
         machine.delete()
+        log_sensitive_action(
+            request,
+            "machines.machine_deleted",
+            "Machine",
+            machine_name,
+            metadata={"machine_id": machine_id, "maintenances_supprimees": maintenance_count},
+            gym=request.gym,
+        )
         messages.success(request, f'Machine "{machine_name}" supprimee avec succes.')
         return redirect("machines:list")
 
@@ -186,6 +196,19 @@ def maintenance_log_create(request, machine_id):
                 messages.error(request, _validation_message(exc))
                 return redirect("machines:add_maintenance", machine_id=machine.id)
 
+            log_sensitive_action(
+                request,
+                "machines.maintenance_recorded",
+                "MaintenanceLog",
+                f"{machine.name} - {log.description[:60]}",
+                metadata={
+                    "maintenance_id": log.id,
+                    "machine_id": machine.id,
+                    "cout": str(log.cost or 0),
+                    "paiement_pos": log.pos_payment_id,
+                },
+                gym=request.gym,
+            )
             messages.success(request, f'Maintenance ajoutee pour "{machine.name}" avec succes.')
             return redirect("machines:detail", machine_id=machine.id)
     else:
@@ -293,7 +316,21 @@ def maintenance_delete(request, maintenance_id):
                 "Impossible de supprimer cette maintenance car elle est deja liee a un paiement POS.",
             )
             return redirect("machines:detail", machine_id=machine.id)
+        cost = maintenance.cost
+        description = maintenance.description
         maintenance.delete()
+        log_sensitive_action(
+            request,
+            "machines.maintenance_deleted",
+            "MaintenanceLog",
+            f"{machine.name} - {description[:60]}",
+            metadata={
+                "maintenance_id": maintenance_id,
+                "machine_id": machine.id,
+                "cout": str(cost),
+            },
+            gym=request.gym,
+        )
         messages.success(request, "Log de maintenance supprime avec succes.")
         return redirect("machines:detail", machine_id=machine.id)
 

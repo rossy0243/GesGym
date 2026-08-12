@@ -11,6 +11,7 @@ from django.views.decorators.http import require_POST
 
 from members.forms import MemberWeightMeasurementForm
 from members.models import Member, MemberGoal, MemberWeightMeasurement
+from core.audit import log_sensitive_action
 from smartclub.access_control import COACHING_ROLES, COACH_PORTAL_ROLES
 from smartclub.decorators import module_required, role_required
 from subscriptions.models import SubscriptionPlan
@@ -32,47 +33,39 @@ def _linked_coach_profile(user):
 
 
 def _resolve_current_coach(request):
+    """
+    Profil coach de l'utilisateur connecte, ou None.
+
+    La resolution repose uniquement sur le rattachement explicite du compte au
+    profil. L'ancienne version cherchait un coach dont le nom contenait le
+    prenom, le nom ou le pseudo de l'utilisateur, puis s'appropriait le profil
+    trouve : un employe prenomme Jean se voyait attribuer la fiche de
+    Jean-Pierre, avec les membres qu'elle suit. Elle creait aussi un profil a
+    la volee, peuplant la liste des coachs de fiches que personne n'avait
+    demandees.
+
+    Le rattachement est desormais un acte de gestion, fait depuis la fiche du
+    coach par un gerant, au meme titre que l'attribution d'un role.
+    """
+    coach = Coach.objects.filter(gym=request.gym, user=request.user).first()
+    if coach:
+        return coach
+
     linked_profile = _linked_coach_profile(request.user)
     if linked_profile and linked_profile.gym_id == request.gym.id:
         return linked_profile
-    if linked_profile:
-        return None
 
-    candidate = Coach.objects.filter(gym=request.gym, user=request.user).first()
-    if candidate:
-        return candidate
+    return None
 
-    first_name = (request.user.first_name or "").strip()
-    last_name = (request.user.last_name or "").strip()
-    username = (request.user.username or "").strip()
 
-    lookup = Q()
-    if first_name:
-        lookup |= Q(name__icontains=first_name)
-    if last_name:
-        lookup |= Q(name__icontains=last_name)
-    if username:
-        lookup |= Q(name__icontains=username)
-
-    if lookup:
-        candidate = Coach.objects.filter(gym=request.gym).filter(lookup).order_by("name").first()
-        if candidate and not candidate.user_id:
-            candidate.user = request.user
-            candidate.save(update_fields=["user"])
-            return candidate
-        if candidate:
-            return candidate
-
-    coach_data = {
-        "gym": request.gym,
-        "name": " ".join(part for part in [first_name, last_name] if part).strip() or username or "Coach",
-        "phone": "",
-        "specialty": "Coach sportif",
-        "is_active": True,
-    }
-    coach_data["user"] = request.user
-    candidate = Coach.objects.create(**coach_data)
-    return candidate
+def _coach_profile_missing_response(request):
+    """Explique la marche a suivre plutot que de renvoyer un 404 muet."""
+    return render(
+        request,
+        "coaching/coach_profile_missing.html",
+        {"gym": request.gym},
+        status=403,
+    )
 
 
 def _filter_members_with_current_coaching_access(queryset, coaching_modes):
@@ -460,6 +453,18 @@ def coach_delete(request, coach_id):
     if request.method == "POST":
         coach.is_active = False
         coach.save(update_fields=["is_active"])
+        log_sensitive_action(
+            request,
+            "coaching.coach_deactivated",
+            "Coach",
+            coach.name,
+            metadata={
+                "coach_id": coach.id,
+                "membres_suivis": coach.members.count(),
+                "compte_lie": coach.user.username if coach.user else "",
+            },
+            gym=request.gym,
+        )
         messages.success(request, f'Coach "{coach.name}" desactive avec succes.')
         return redirect("coaching:list")
 
@@ -483,6 +488,18 @@ def assign_member(request, coach_id):
             try:
                 coach.assign_member(form.cleaned_data["member"])
                 member = form.cleaned_data["member"]
+                log_sensitive_action(
+                    request,
+                    "coaching.member_assigned",
+                    "Coach",
+                    coach.name,
+                    metadata={
+                        "coach_id": coach.id,
+                        "member_id": member.id,
+                        "membre": f"{member.first_name} {member.last_name}".strip(),
+                    },
+                    gym=request.gym,
+                )
                 messages.success(
                     request,
                     f'Membre "{member.first_name} {member.last_name}" assigne a {coach.name}.',
@@ -506,6 +523,18 @@ def remove_member(request, coach_id, member_id):
     if request.method == "POST":
         try:
             coach.remove_member(member)
+            log_sensitive_action(
+                request,
+                "coaching.member_unassigned",
+                "Coach",
+                coach.name,
+                metadata={
+                    "coach_id": coach.id,
+                    "member_id": member.id,
+                    "membre": f"{member.first_name} {member.last_name}".strip(),
+                },
+                gym=request.gym,
+            )
             messages.success(request, f'Membre "{member.first_name}" retire de {coach.name}.')
         except ValidationError as exc:
             messages.error(request, _validation_message(exc))
@@ -608,6 +637,17 @@ def group_program_delete(request, program_id):
     if request.method == "POST":
         program.is_active = False
         program.save(update_fields=["is_active"])
+        log_sensitive_action(
+            request,
+            "coaching.program_deactivated",
+            "GroupCoachingProgram",
+            program.name,
+            metadata={
+                "program_id": program.id,
+                "participants": program.participants.count(),
+            },
+            gym=request.gym,
+        )
         messages.success(request, f'Programme "{program.name}" desactive avec succes.')
         return redirect("coaching:group_program_list")
 
@@ -624,7 +664,7 @@ def group_program_delete(request, program_id):
 def coach_portal(request):
     coach = _resolve_current_coach(request)
     if not coach:
-        raise Http404("Coach introuvable")
+        return _coach_profile_missing_response(request)
 
     active_tab = request.GET.get("tab", "home")
     if active_tab not in {"home", "members", "programs"}:
@@ -701,7 +741,7 @@ def coach_portal(request):
 def coach_member_detail(request, member_id):
     coach = _resolve_current_coach(request)
     if not coach:
-        raise Http404("Coach introuvable")
+        return _coach_profile_missing_response(request)
 
     member = get_object_or_404(_coach_portal_member_queryset(request, coach), id=member_id)
     follow_ups = CoachingFollowUp.objects.filter(
@@ -752,7 +792,7 @@ def coach_member_detail(request, member_id):
 def coach_member_weight_measurement_create(request, member_id):
     coach = _resolve_current_coach(request)
     if not coach:
-        raise Http404("Coach introuvable")
+        return _coach_profile_missing_response(request)
 
     member = get_object_or_404(_coach_portal_member_queryset(request, coach), id=member_id)
     goal = get_object_or_404(

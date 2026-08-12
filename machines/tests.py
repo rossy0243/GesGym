@@ -36,6 +36,9 @@ class MachinesTenantTests(TestCase):
         UserGymRole.objects.create(user=self.user, gym=self.gym_a, role="manager")
         self.register_a = CashRegister.objects.create(
             gym=self.gym_a,
+            # La caisse doit appartenir a l'utilisateur qui enregistre le
+            # mouvement : get_open_register filtre sur opened_by.
+            opened_by=self.user,
             opening_amount=Decimal("0.00"),
             exchange_rate=Decimal("2800.00"),
         )

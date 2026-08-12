@@ -106,22 +106,69 @@ class CashRegister(models.Model):
             self.session_code = f"{self.gym.id}-CS-{self.opened_at.year}-{self.id:04d}"
             super().save(update_fields=["session_code"])
 
-    def total_entries(self):
-        return self.payments.filter(
+    @property
+    def was_force_closed(self):
+        """Cloturee par quelqu'un d'autre que son titulaire."""
+        return (
+            self.is_closed
+            and self.closed_by_id is not None
+            and self.closed_by_id != self.opened_by_id
+        )
+
+    # Seules les especes transitent par le tiroir. Un paiement mobile money ou
+    # un virement arrive sur un compte de l'organisation : il appartient bien a
+    # la session, mais le caissier n'a pas ces billets a compter.
+    CASH_METHOD = "cash"
+
+    def _movements(self, transaction_type, method=None, exclude_method=None):
+        queryset = self.payments.filter(
             gym=self.gym,
-            type="in",
-            status="success"
-        ).aggregate(total=Sum("amount_cdf"))["total"] or 0
+            type=transaction_type,
+            status="success",
+        )
+        if method is not None:
+            queryset = queryset.filter(method=method)
+        if exclude_method is not None:
+            queryset = queryset.exclude(method=exclude_method)
+        return queryset.aggregate(total=Sum("amount_cdf"))["total"] or Decimal("0.00")
+
+    def total_entries(self):
+        """Toutes les entrees de la session, especes comprises."""
+        return self._movements("in")
 
     def total_exits(self):
-        return self.payments.filter(
-            gym=self.gym,
-            type="out",
-            status="success"
-        ).aggregate(total=Sum("amount_cdf"))["total"] or 0
+        """Toutes les sorties de la session, especes comprises."""
+        return self._movements("out")
+
+    def cash_entries(self):
+        return self._movements("in", method=self.CASH_METHOD)
+
+    def cash_exits(self):
+        return self._movements("out", method=self.CASH_METHOD)
+
+    def non_cash_entries(self):
+        return self._movements("in", exclude_method=self.CASH_METHOD)
+
+    def non_cash_exits(self):
+        return self._movements("out", exclude_method=self.CASH_METHOD)
 
     def expected_total(self):
-        return self.opening_amount + self.total_entries() - self.total_exits()
+        """
+        Montant que le caissier doit trouver dans le tiroir.
+
+        Ne retient que les especes : compter les virements et le mobile money
+        reprochait au caissier un ecart correspondant a de l'argent qui n'est
+        jamais passe entre ses mains.
+        """
+        return self.opening_amount + self.cash_entries() - self.cash_exits()
+
+    def non_cash_balance(self):
+        """Solde des encaissements recus hors tiroir, a rapprocher des comptes."""
+        return self.non_cash_entries() - self.non_cash_exits()
+
+    def has_negative_cash(self):
+        """Plus de sorties que d'especes disponibles : anomalie a signaler."""
+        return self.expected_total() < 0
     
     def clean(self):
 

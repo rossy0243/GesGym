@@ -1,5 +1,5 @@
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
 from datetime import timedelta
@@ -9,6 +9,7 @@ from members.models import Member, MemberGoal, MemberWeightMeasurement
 from organizations.models import Gym, GymModule, Module, Organization
 from subscriptions.models import MemberSubscription, SubscriptionOffer, SubscriptionPlan
 
+from .forms import CoachForm
 from .models import Coach, CoachAssignment, CoachingFeedback, CoachingFollowUp, GroupCoachingProgram
 
 
@@ -776,4 +777,172 @@ class CoachingTenantTests(TestCase):
                 member=self.member_a,
                 ended_at__isnull=True,
             ).exists()
+        )
+
+
+class CoachProfileBindingTests(TestCase):
+    """Le rattachement d'un compte a une fiche coach est un acte de gestion."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Bind", slug="org-bind"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Bind",
+            slug="gym-bind",
+            subdomain="gym-bind",
+        )
+        module, _ = Module.objects.get_or_create(
+            code="COACHING", defaults={"name": "Coaching"}
+        )
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=module, defaults={"is_active": True}
+        )
+        self.owner = User.objects.create_user(
+            username="owner-bind",
+            password="pass12345",
+            owned_organization=self.organization,
+        )
+        self.holder = Coach.objects.create(
+            gym=self.gym,
+            name="Jean-Pierre Kabila",
+            phone="0800000001",
+            specialty="Musculation",
+            is_active=True,
+        )
+        self.member = Member.objects.create(
+            gym=self.gym,
+            first_name="Suivi",
+            last_name="Bind",
+            phone="+243910000001",
+            email="suivi.bind@example.com",
+        )
+        self.holder.members.add(self.member)
+
+    def _coach_user(self, username, first_name="", last_name=""):
+        user = User.objects.create_user(
+            username=username,
+            password="pass12345",
+            first_name=first_name,
+            last_name=last_name,
+        )
+        user.force_password_change = False
+        user.save()
+        UserGymRole.objects.create(
+            user=user, gym=self.gym, role="coach", is_active=True
+        )
+        return user
+
+    def _as(self, user):
+        client = Client()
+        client.force_login(user)
+        return client
+
+    # --- Plus d'appropriation par ressemblance de nom -------------------------
+
+    def test_a_namesake_never_inherits_another_coach_profile(self):
+        """« Jean » ne doit pas hériter de la fiche de « Jean-Pierre »."""
+        intruder = self._coach_user("jean.autre", first_name="Jean", last_name="Mutombo")
+
+        response = self._as(intruder).get(reverse("coaching:coach_portal"))
+
+        self.holder.refresh_from_db()
+        self.assertEqual(response.status_code, 403)
+        self.assertIsNone(self.holder.user_id)
+
+    def test_a_namesake_sees_no_member(self):
+        intruder = self._coach_user("jean.autre", first_name="Jean")
+
+        response = self._as(intruder).get(reverse("coaching:coach_portal"))
+
+        self.assertNotContains(response, "Suivi", status_code=403)
+
+    def test_no_coach_profile_is_created_on_the_fly(self):
+        stranger = self._coach_user("zoe.inconnue", first_name="Zoe")
+        before = Coach.objects.filter(gym=self.gym).count()
+
+        self._as(stranger).get(reverse("coaching:coach_portal"))
+
+        self.assertEqual(Coach.objects.filter(gym=self.gym).count(), before)
+
+    def test_the_page_explains_what_to_ask_for(self):
+        stranger = self._coach_user("zoe.inconnue")
+
+        response = self._as(stranger).get(reverse("coaching:coach_portal"))
+
+        self.assertContains(
+            response, "Aucun profil coach", status_code=403
+        )
+        self.assertContains(response, "zoe.inconnue", status_code=403)
+
+    # --- Le rattachement explicite fonctionne ---------------------------------
+
+    def test_a_linked_coach_reaches_the_portal(self):
+        coach_user = self._coach_user("ali.coach")
+        self.holder.user = coach_user
+        self.holder.save(update_fields=["user"])
+
+        response = self._as(coach_user).get(reverse("coaching:coach_portal"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["coach"], self.holder)
+
+    def test_a_manager_can_link_an_account_from_the_coach_form(self):
+        coach_user = self._coach_user("ali.coach")
+
+        self._as(self.owner).post(
+            reverse("coaching:update", args=[self.holder.id]),
+            {
+                "name": self.holder.name,
+                "phone": self.holder.phone,
+                "specialty": self.holder.specialty,
+                "is_active": "on",
+                "user": coach_user.id,
+            },
+        )
+
+        self.holder.refresh_from_db()
+        self.assertEqual(self.holder.user, coach_user)
+
+    # --- Le choix propose reste coherent --------------------------------------
+
+    def test_only_coach_role_accounts_are_offered(self):
+        self._coach_user("ali.coach")
+        cashier = User.objects.create_user(username="caissier-bind", password="pass12345")
+        UserGymRole.objects.create(
+            user=cashier, gym=self.gym, role="cashier", is_active=True
+        )
+
+        form = CoachForm(gym=self.gym, instance=self.holder)
+
+        usernames = [user.username for user in form.fields["user"].queryset]
+        self.assertIn("ali.coach", usernames)
+        self.assertNotIn("caissier-bind", usernames)
+
+    def test_an_account_already_linked_is_not_offered_elsewhere(self):
+        coach_user = self._coach_user("ali.coach")
+        self.holder.user = coach_user
+        self.holder.save(update_fields=["user"])
+        other = Coach.objects.create(
+            gym=self.gym, name="Autre Coach", phone="0800000002", is_active=True
+        )
+
+        form = CoachForm(gym=self.gym, instance=other)
+
+        self.assertNotIn(
+            coach_user.username,
+            [user.username for user in form.fields["user"].queryset],
+        )
+
+    def test_its_own_account_stays_offered_when_editing(self):
+        coach_user = self._coach_user("ali.coach")
+        self.holder.user = coach_user
+        self.holder.save(update_fields=["user"])
+
+        form = CoachForm(gym=self.gym, instance=self.holder)
+
+        self.assertIn(
+            coach_user.username,
+            [user.username for user in form.fields["user"].queryset],
         )

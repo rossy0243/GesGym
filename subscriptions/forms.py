@@ -171,6 +171,10 @@ class MemberSubscriptionForm(forms.ModelForm):
                 gym=gym,
                 is_active=True,
             ).order_by('first_name', 'last_name')
+            # Un membre suspendu peut regulariser sa situation, mais l'agent
+            # doit le savoir avant d'encaisser : rien ne le distinguait dans
+            # la liste deroulante.
+            self.fields['member'].label_from_instance = self._member_label
             self.fields['plan'].queryset = SubscriptionPlan.objects.filter(
                 gym=gym,
                 is_active=True,
@@ -178,6 +182,13 @@ class MemberSubscriptionForm(forms.ModelForm):
 
         self.fields['start_date'].initial = timezone.now().date()
         self.fields['start_date'].input_formats = ['%Y-%m-%d']
+
+    @staticmethod
+    def _member_label(member):
+        label = f"{member.first_name} {member.last_name}".strip()
+        if member.status == "suspended":
+            return f"{label} - SUSPENDU"
+        return label
 
     class Meta:
         model = MemberSubscription

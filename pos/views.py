@@ -12,7 +12,7 @@ from django.utils import timezone
 from members.models import Member
 from products.models import Product
 from subscriptions.models import SubscriptionPlan
-from smartclub.access_control import POS_CASHIER_ROLES, POS_HISTORY_ROLES
+from smartclub.access_control import POS_CASHIER_ROLES, POS_HISTORY_ROLES, has_role
 from smartclub.decorators import module_required, role_required
 from core.audit import log_sensitive_action
 
@@ -211,11 +211,15 @@ def cashier_dashboard(request):
         entries_today = register.total_entries()
         exits_today = register.total_exits()
         cash_total = register.expected_total()
+        non_cash_balance = register.non_cash_balance()
+        has_negative_cash = register.has_negative_cash()
     else:
         payments = []
         entries_today = 0
         exits_today = 0
         cash_total = 0
+        non_cash_balance = 0
+        has_negative_cash = False
 
     return render(
         request,
@@ -229,6 +233,8 @@ def cashier_dashboard(request):
             "today_total": cash_total,
             "today_entries": entries_today,
             "today_exits": exits_today,
+            "non_cash_balance": non_cash_balance,
+            "has_negative_cash": has_negative_cash,
             "latest_exchange_rate": latest_exchange_rate,
         },
     )
@@ -291,17 +297,28 @@ def open_register(request):
 @role_required(POS_CASHIER_ROLES)
 @module_required("POS")
 def close_register(request, register_id):
-    register = get_object_or_404(
-        CashRegister,
-        id=register_id,
-        gym=request.gym,
-        opened_by=request.user,
-        is_closed=False,
-    )
+    # Un caissier ne ferme que sa propre caisse. Gerants et proprietaires
+    # peuvent forcer la cloture : sans cela, une caisse laissee ouverte par
+    # quelqu'un qui a quitte son poste restait bloquee indefiniment, et son
+    # titulaire ne pouvait plus en ouvrir une nouvelle.
+    can_force_close = has_role(request, POS_HISTORY_ROLES)
+
+    lookup = {
+        "id": register_id,
+        "gym": request.gym,
+        "is_closed": False,
+    }
+    if not can_force_close:
+        lookup["opened_by"] = request.user
+
+    register = get_object_or_404(CashRegister, **lookup)
+    is_forced = register.opened_by_id != request.user.id
 
     entries = register.total_entries()
     exits = register.total_exits()
     expected_total = register.expected_total()
+    non_cash_entries = register.non_cash_entries()
+    non_cash_exits = register.non_cash_exits()
 
     if request.method == "POST":
         try:
@@ -327,10 +344,24 @@ def close_register(request, register_id):
             metadata={
                 "real_amount": str(real_amount),
                 "difference": str(difference),
+                "forced": is_forced,
+                "opened_by": register.opened_by.username if register.opened_by else "",
             },
         )
 
-        messages.success(request, f"Caisse fermee. Difference : {difference} CDF")
+        if is_forced:
+            titulaire = (
+                register.opened_by.get_full_name() or register.opened_by.username
+                if register.opened_by
+                else "un utilisateur supprime"
+            )
+            messages.success(
+                request,
+                f"Caisse de {titulaire} cloturee d'autorite. "
+                f"Difference : {difference} CDF. L'ecart reste attribue a son titulaire.",
+            )
+        else:
+            messages.success(request, f"Caisse fermee. Difference : {difference} CDF")
         return redirect("pos:cashier_dashboard")
 
     return render(
@@ -341,6 +372,13 @@ def close_register(request, register_id):
             "expected_total": expected_total,
             "entries": entries,
             "exits": exits,
+            "cash_entries": register.cash_entries(),
+            "cash_exits": register.cash_exits(),
+            "non_cash_entries": non_cash_entries,
+            "non_cash_exits": non_cash_exits,
+            "non_cash_balance": register.non_cash_balance(),
+            "has_negative_cash": register.has_negative_cash(),
+            "is_forced_closure": is_forced,
         },
     )
 

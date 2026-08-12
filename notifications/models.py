@@ -15,11 +15,13 @@ class Notification(models.Model):
     STATUS_PENDING = "pending"
     STATUS_SENT = "sent"
     STATUS_FAILED = "failed"
+    STATUS_CANCELLED = "cancelled"
 
     STATUS_CHOICES = (
         (STATUS_PENDING, "Pending"),
         (STATUS_SENT, "Sent"),
         (STATUS_FAILED, "Failed"),
+        (STATUS_CANCELLED, "Annulee"),
     )
 
     CHANNEL_IN_APP = "in_app"
@@ -76,6 +78,21 @@ class Notification(models.Model):
         related_name="sent_notifications",
     )
 
+    # Identifie l'envoi groupe dont cette notification fait partie. Sans lui,
+    # annuler ou supprimer un envoi supposerait de le retrouver en comparant
+    # titre, message et horodatage.
+    batch_id = models.UUIDField(null=True, blank=True, db_index=True)
+
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+
+    cancelled_by = models.ForeignKey(
+        "compte.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cancelled_notifications",
+    )
+
     error_message = models.TextField(blank=True, null=True)
 
     class Meta:
@@ -86,6 +103,7 @@ class Notification(models.Model):
             models.Index(fields=["gym", "status"]),
             models.Index(fields=["gym", "member", "read_at"]),
             models.Index(fields=["created_at"]),
+            models.Index(fields=["gym", "batch_id"]),
         ]
         ordering = ["-created_at"]
 
@@ -96,6 +114,10 @@ class Notification(models.Model):
     @property
     def is_read(self):
         return self.read_at is not None
+
+    @property
+    def is_cancelled(self):
+        return self.status == self.STATUS_CANCELLED
 
     def __str__(self):
         return f"{self.member} - {self.channel}"

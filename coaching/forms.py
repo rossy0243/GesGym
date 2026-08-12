@@ -1,4 +1,6 @@
 from django import forms
+
+from compte.models import User
 from django.db.models import Q
 from django.utils import timezone
 
@@ -16,9 +18,22 @@ class CoachForm(forms.ModelForm):
         label="Specialite",
     )
 
+    user = forms.ModelChoiceField(
+        queryset=User.objects.none(),
+        required=False,
+        label="Compte utilisateur",
+        empty_label="Aucun compte rattache",
+        widget=forms.Select(attrs={"class": "form-select"}),
+        help_text=(
+            "Compte avec lequel ce coach se connectera a son portail. Seuls les "
+            "employes ayant le role coach dans cette salle sont proposes."
+        ),
+    )
+
     def __init__(self, *args, **kwargs):
         gym = kwargs.pop("gym", None)
         super().__init__(*args, **kwargs)
+        self.fields["user"].queryset = self._selectable_users(gym)
         choices = [("", "Choisir une specialite")]
         if gym:
             choices.extend(
@@ -30,9 +45,32 @@ class CoachForm(forms.ModelForm):
             choices.append((current_specialty, current_specialty))
         self.fields["specialty"].choices = choices
 
+    def _selectable_users(self, gym):
+        """
+        Employes de la salle ayant le role coach, hors ceux deja rattaches a
+        un autre profil : un compte ne peut animer qu'une seule fiche.
+        """
+        if not gym:
+            return User.objects.none()
+
+        already_linked = Coach.objects.filter(gym=gym, user__isnull=False)
+        if self.instance and self.instance.pk:
+            already_linked = already_linked.exclude(pk=self.instance.pk)
+
+        return (
+            User.objects.filter(
+                gym_roles__gym=gym,
+                gym_roles__role="coach",
+                gym_roles__is_active=True,
+            )
+            .exclude(pk__in=already_linked.values("user_id"))
+            .distinct()
+            .order_by("first_name", "last_name", "username")
+        )
+
     class Meta:
         model = Coach
-        fields = ["name", "phone", "specialty", "is_active"]
+        fields = ["name", "phone", "specialty", "is_active", "user"]
         widgets = {
             "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "Nom complet"}),
             "phone": forms.TextInput(attrs={"class": "form-control", "placeholder": "Telephone"}),
