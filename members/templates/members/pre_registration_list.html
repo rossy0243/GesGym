@@ -104,6 +104,7 @@
                         <th>Contact</th>
                         <th>Adresse</th>
                         <th>Statut</th>
+                        <th>Traitee par</th>
                         <th>Validite</th>
                         <th class="text-end">Actions</th>
                     </tr>
@@ -125,19 +126,27 @@
                                     <span class="badge bg-warning text-dark">En attente</span>
                                 {% elif item.status == "confirmed" %}
                                     <span class="badge bg-success">Confirmee</span>
-                                    <small class="text-muted d-block mt-1">
-                                        par {{ item.confirmed_by_label }}
-                                        {% if item.confirmed_at %}le {{ item.confirmed_at|date:"d/m/Y H:i" }}{% endif %}
-                                    </small>
                                 {% elif item.status == "expired" %}
                                     <span class="badge bg-dark">Expiree</span>
                                 {% else %}
                                     <span class="badge bg-secondary">Annulee</span>
-                                    {% if item.cancelled_at %}
-                                    <small class="text-muted d-block mt-1">
-                                        par {{ item.cancelled_by_label }} le {{ item.cancelled_at|date:"d/m/Y H:i" }}
-                                    </small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if item.status == "confirmed" %}
+                                    <div class="fw-semibold">{{ item.confirmed_by_label }}</div>
+                                    {% if item.confirmed_at %}
+                                    <small class="text-muted">{{ item.confirmed_at|date:"d/m/Y H:i" }}</small>
                                     {% endif %}
+                                {% elif item.status == "cancelled" %}
+                                    <div class="fw-semibold">{{ item.cancelled_by_label }}</div>
+                                    {% if item.cancelled_at %}
+                                    <small class="text-muted">{{ item.cancelled_at|date:"d/m/Y H:i" }}</small>
+                                    {% else %}
+                                    <small class="text-muted">Annulee avant le suivi</small>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-muted">-</span>
                                 {% endif %}
                             </td>
                             <td>
@@ -188,7 +197,7 @@
                         </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="6" class="text-center py-5">
+                            <td colspan="7" class="text-center py-5">
                                 <span class="material-icons text-muted" style="font-size:56px;">inbox</span>
                                 <p class="mt-2 mb-0 text-muted">Aucune preinscription trouvee</p>
                             </td>

@@ -1739,7 +1739,9 @@ def member_list(request):
     members = (
         Member.objects
         .filter(gym=gym)
-        .select_related("user")
+        # created_by est affiche sur chaque ligne : sans jointure, la liste
+        # declenchait une requete par membre.
+        .select_related("user", "created_by")
         .annotate(
             has_active_subscription=Exists(active_subscription_exists),
             has_expiring_subscription=Exists(expiring_subscription_exists),

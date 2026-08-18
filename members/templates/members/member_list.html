@@ -384,6 +384,17 @@ body.members-screen .modal.show .modal-dialog {
                                 {% endif %}
                                 <div>
                                     <strong>{{ member.first_name }} {{ member.last_name }}</strong>
+                                    <small class="text-muted d-block">
+                                        <span class="material-icons align-middle" style="font-size:13px;">how_to_reg</span>
+                                        {% if member.created_by_id %}
+                                        Inscrit par {{ member.registered_by_label }}
+                                        {% if member.registration_source == "pre_registration" %}
+                                        <span class="badge bg-light text-dark ms-1">préinscription</span>
+                                        {% endif %}
+                                        {% else %}
+                                        Auteur inconnu (fiche antérieure au suivi)
+                                        {% endif %}
+                                    </small>
                                 </div>
                             </div>
                         </td>

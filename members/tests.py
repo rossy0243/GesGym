@@ -2724,7 +2724,39 @@ class RegistrationAuthorshipTests(TestCase):
             reverse("members:pre_registration_list"), {"status": "confirmed"}
         )
 
-        self.assertContains(response, "par Claire Mbala")
+        self.assertContains(response, "Traitee par")
+        self.assertContains(response, "Claire Mbala")
+
+    def test_the_list_shows_who_cancelled(self):
+        demande = self._demande()
+        self.client.post(
+            reverse("members:cancel_pre_registration", args=[demande.id]), follow=True
+        )
+
+        response = self.client.get(
+            reverse("members:pre_registration_list"), {"status": "cancelled"}
+        )
+
+        self.assertContains(response, "Claire Mbala")
+
+    def test_the_member_list_names_the_author_on_each_row(self):
+        self._saisir()
+
+        response = self.client.get(reverse("members:member_list"))
+
+        self.assertContains(response, "Inscrit par Claire Mbala")
+
+    def test_the_member_list_says_plainly_when_the_author_is_unknown(self):
+        Member.objects.create(
+            gym=self.gym,
+            first_name="Ancien",
+            last_name="Dossier",
+            phone="+243840000098",
+        )
+
+        response = self.client.get(reverse("members:member_list"))
+
+        self.assertContains(response, "Auteur inconnu")
 
     # --- Annulation d'une preinscription -------------------------------------
 
