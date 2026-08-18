@@ -448,7 +448,7 @@
                         Mon profil
                     </a>
                     <div class="dropdown-divider"></div>
-                    <a href="{% url 'compte:logout' %}" class="dropdown-item">
+                    <a href="{% url 'compte:logout' %}" onclick="return confirm('Se deconnecter de votre session ?');" class="dropdown-item">
                         <span class="material-icons">logout</span>
                         Déconnexion
                     </a>

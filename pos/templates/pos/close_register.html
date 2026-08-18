@@ -205,7 +205,8 @@
             </div>
         </div>
 
-        <form method="POST">
+        <form method="POST"
+              onsubmit="return confirm('Cloturer definitivement cette caisse ? L'ecart sera enregistre et la session ne pourra plus recevoir de mouvement.');">
             {% csrf_token %}
 
             <div class="mb-3">

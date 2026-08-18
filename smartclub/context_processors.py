@@ -2,7 +2,7 @@
 from django.urls import NoReverseMatch, reverse
 
 from organizations.models import GymModule
-from .access_control import current_role, permission_flags
+from .access_control import current_role, has_role, permission_flags
 
 
 def _safe_file_url(file_field):
@@ -203,3 +203,25 @@ def modules_processor(request):
     }
 
     return context
+
+
+def maintenance_alert_processor(request):
+    """
+    Signale au gerant et au proprietaire les maintenances qui approchent.
+
+    L'alerte doit suivre l'utilisateur : une maintenance qui n'apparait que sur
+    la page des machines n'est vue que par celui qui y va deja, c'est-a-dire
+    trop tard. Elle est donc calculee ici pour etre affichee dans le bandeau
+    commun a toutes les pages.
+    """
+    from machines.alerts import maintenance_alert_summary
+    from smartclub.access_control import MACHINE_ROLES
+
+    gym = getattr(request, "gym", None)
+    if not request.user.is_authenticated or gym is None:
+        return {"maintenance_banner": None}
+
+    if not has_role(request, MACHINE_ROLES):
+        return {"maintenance_banner": None}
+
+    return {"maintenance_banner": maintenance_alert_summary(gym)}

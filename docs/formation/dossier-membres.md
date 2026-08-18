@@ -369,6 +369,8 @@ meilleure source pour les cas limites a montrer en formation.
 - rotate member qrcodes command rotates expired members
 - pwa manifest and service worker are available
 - pwa manifest uses authenticated member organization logo
+- pwa manifest keeps the gym brand without session cookie
+- pwa manifest falls back when the organization is unknown
 - member api login and me payload
 - member api rejects non member account
 - member api me scopes to current member gym
@@ -411,6 +413,7 @@ meilleure source pour les cas limites a montrer en formation.
 - duplicate email is reported instead of crashing
 - same phone is allowed in another gym
 - two members without email can coexist
+- email is required in the form
 - invalid form reports the reason
 - credentials message does not auto dismiss
 - member name is escaped in the html message

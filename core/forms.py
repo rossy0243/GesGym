@@ -38,6 +38,38 @@ class OrganizationSettingsForm(forms.ModelForm):
         return logo
 
 
+class GymMaintenanceSettingsForm(forms.ModelForm):
+    """
+    Delai de prevenance des maintenances, propre a chaque salle.
+
+    Une salle qui commande ses pieces a l'etranger a besoin de plus d'avance
+    qu'une salle servie par un atelier voisin : le delai ne peut pas etre fige
+    dans le code.
+    """
+
+    class Meta:
+        model = Gym
+        fields = ["maintenance_alert_lead_days"]
+        widgets = {
+            "maintenance_alert_lead_days": forms.NumberInput(attrs={
+                "class": "form-control",
+                "min": "1",
+                "max": "365",
+            }),
+        }
+        labels = {
+            "maintenance_alert_lead_days": "Prevenir combien de jours a l'avance",
+        }
+
+    def clean_maintenance_alert_lead_days(self):
+        jours = self.cleaned_data.get("maintenance_alert_lead_days")
+        if jours is None or jours < 1:
+            raise forms.ValidationError("Le delai doit valoir au moins un jour.")
+        if jours > 365:
+            raise forms.ValidationError("Un delai de plus d'un an n'a pas de sens.")
+        return jours
+
+
 class InternalEmployeeForm(forms.Form):
     first_name = forms.CharField(
         max_length=150,

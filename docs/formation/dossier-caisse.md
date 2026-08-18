@@ -108,6 +108,7 @@ formation : pourquoi la regle existe, et que faire quand on la rencontre.
 
 - Aucune caisse ouverte pour cet utilisateur. Ouvrez votre session POS avant tout mouvement financier.
 - Aucune caisse ouverte. Ouvrez une session POS avant tout mouvement financier.
+- Devise de decaissement invalide.
 - Impossible d'enregistrer un mouvement sur une caisse fermee.
 - L'abonnement n'appartient pas à ce gym.
 - La caisse n'appartient pas a ce gym.
@@ -230,6 +231,16 @@ meilleure source pour les cas limites a montrer en formation.
 - a healthy balance is not flagged
 - non cash exits cannot make the drawer negative — _Un virement important ne doit pas declencher une fausse alerte._
 - the close page separates both natures
+
+### ExpenseCurrencyTests
+
+> Le decaissement se saisit dans la devise reellement sortie du tiroir.
+
+- an expense in usd is converted at the session rate
+- an expense in cdf stays in cdf
+- the currency defaults to cdf when absent
+- an unknown currency is refused
+- the sensitive log keeps both amounts
 
 ## A completer par un humain
 

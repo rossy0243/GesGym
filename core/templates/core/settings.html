@@ -180,9 +180,93 @@
     <button type="button" class="btn btn-light settings-tab" data-tab-target="specialties">
         <span class="material-icons me-1" style="font-size:18px;">sports</span>Specialites coach
     </button>
+    <button type="button" class="btn btn-light settings-tab" data-tab-target="maintenance">
+        <span class="material-icons me-1" style="font-size:18px;">build</span>Maintenance
+        {% if maintenance_alerts %}
+        <span class="badge bg-danger ms-1">{{ maintenance_alerts.total }}</span>
+        {% endif %}
+    </button>
     <button type="button" class="btn btn-light settings-tab" data-tab-target="activity">
         <span class="material-icons me-1" style="font-size:18px;">shield</span>Journal sensible
     </button>
+</div>
+
+<div id="settings-maintenance" class="settings-section">
+    <div class="settings-card mb-4">
+        <div class="card-header">
+            <h5 class="card-title mb-1">Alerte de maintenance</h5>
+            <small class="text-muted">
+                Le logiciel signale une maintenance a venir a partir de ce delai.
+                L'echeance de chaque machine part de sa derniere intervention, ou de sa date d'achat.
+            </small>
+        </div>
+        <div class="card-body">
+            <form method="post" class="row g-3 align-items-end">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="maintenance">
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold" for="{{ maintenance_form.maintenance_alert_lead_days.id_for_label }}">
+                        {{ maintenance_form.maintenance_alert_lead_days.label }}
+                    </label>
+                    {{ maintenance_form.maintenance_alert_lead_days }}
+                    <small class="text-muted">{{ maintenance_form.maintenance_alert_lead_days.help_text }}</small>
+                    {{ maintenance_form.maintenance_alert_lead_days.errors }}
+                </div>
+                <div class="col-md-4">
+                    <button type="submit" class="btn btn-primary">
+                        <span class="material-icons me-2" style="font-size:18px;">save</span>Enregistrer
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="settings-card">
+        <div class="card-header">
+            <h5 class="card-title mb-1">Echeances a venir</h5>
+            <small class="text-muted">
+                {% if maintenance_alerts %}
+                {{ maintenance_alerts.total }} machine(s) dans les {{ maintenance_alerts.lead_days }} prochains jours.
+                {% else %}
+                Aucune maintenance n'approche pour cette salle.
+                {% endif %}
+            </small>
+        </div>
+        <div class="card-body">
+            {% if maintenance_alerts %}
+            <div class="table-responsive">
+                <table class="table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Machine</th>
+                            <th>Echeance</th>
+                            <th>Delai</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in maintenance_alerts.entries %}
+                        <tr>
+                            <td>{{ entry.machine.name }}</td>
+                            <td>{{ entry.due_on|date:"d/m/Y" }}</td>
+                            <td>
+                                {% if entry.is_overdue %}
+                                <span class="badge bg-danger">En retard de {{ entry.days_left|cut:"-" }} jour(s)</span>
+                                {% else %}
+                                <span class="badge bg-warning text-dark">Dans {{ entry.days_left }} jour(s)</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted mb-0">
+                Renseignez l'intervalle de maintenance d'une machine pour la voir apparaitre ici.
+            </p>
+            {% endif %}
+        </div>
+    </div>
 </div>
 
 {% if can_manage_organization %}

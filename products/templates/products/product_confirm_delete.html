@@ -11,7 +11,7 @@
                 <div class="card-body">
                     <p>Êtes-vous sûr de vouloir désactiver le produit suivant ?</p>
                     <p><strong>Nom:</strong> {{ product.name }}</p>
-                    <p><strong>Prix:</strong> {{ product.price }} USD</p>
+                    <p><strong>Prix:</strong> {{ product.price }} {{ product.currency }}</p>
                     <p><strong>Stock:</strong> {{ product.quantity }}</p>
                     
                     <div class="alert alert-warning">

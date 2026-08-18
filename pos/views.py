@@ -88,14 +88,20 @@ def cashier_dashboard(request):
         method = request.POST.get("method", "cash")
 
         if transaction_type == "out":
+            expense_currency = request.POST.get("expense_currency", "CDF")
+            if expense_currency not in {"USD", "CDF"}:
+                messages.error(request, "Devise invalide.")
+                return redirect("pos:cashier_dashboard")
+
             try:
-                amount_cdf = _to_decimal(request.POST.get("amount"), "Montant")
-                if amount_cdf <= 0:
+                montant = _to_decimal(request.POST.get("amount"), "Montant")
+                if montant <= 0:
                     raise ValidationError("Le montant doit etre superieur a zero.")
 
-                record_expense(
+                depense = record_expense(
                     gym=gym,
-                    amount_cdf=amount_cdf,
+                    amount=montant,
+                    currency=expense_currency,
                     method="cash",
                     category="expense",
                     description=request.POST.get("description") or "Decaissement",
@@ -108,7 +114,12 @@ def cashier_dashboard(request):
                     "pos.expense_recorded",
                     "CashRegister",
                     register.session_code or f"register-{register.id}",
-                    metadata={"amount_cdf": str(amount_cdf), "method": "cash"},
+                    metadata={
+                        "montant_saisi": str(montant),
+                        "devise": expense_currency,
+                        "amount_cdf": str(depense.amount_cdf),
+                        "method": "cash",
+                    },
                 )
             except ValidationError as exc:
                 messages.error(request, _validation_message(exc))

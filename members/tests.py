@@ -1351,6 +1351,34 @@ class MemberPortalTests(TestCase):
         self.assertEqual(icon_response["Cache-Control"], "public, max-age=3600")
         self.assertContains(portal_response, f'rel="apple-touch-icon" href="{expected_icon_512}"')
 
+    def test_pwa_manifest_keeps_the_gym_brand_without_session_cookie(self):
+        # Le navigateur telecharge le manifeste hors session : sans repli sur
+        # l'organisation passee en parametre, l'application installee
+        # s'appellerait "SmartClub" au lieu du nom de la salle.
+        self.client.force_login(self.member.user)
+        portal_response = self.client.get(reverse("members:member_portal"))
+        self.assertContains(
+            portal_response,
+            f'href="{reverse("members:member_app_manifest")}?org={self.organization.id}"',
+        )
+        self.assertContains(portal_response, 'crossorigin="use-credentials"')
+
+        self.client.logout()
+        anonyme = self.client.get(
+            reverse("members:member_app_manifest"), {"org": self.organization.id}
+        )
+
+        self.assertEqual(anonyme.status_code, 200)
+        self.assertEqual(anonyme.json()["name"], "Portal Org Membre")
+
+    def test_pwa_manifest_falls_back_when_the_organization_is_unknown(self):
+        anonyme = self.client.get(
+            reverse("members:member_app_manifest"), {"org": "n-importe-quoi"}
+        )
+
+        self.assertEqual(anonyme.status_code, 200)
+        self.assertEqual(anonyme.json()["name"], "SmartClub Membre")
+
     def test_member_api_login_and_me_payload(self):
         AccessLog.objects.create(gym=self.gym, member=self.member, access_granted=True)
 
@@ -1920,16 +1948,36 @@ class MemberCreationHardeningTests(TestCase):
         self.assertEqual(Member.objects.filter(phone="+243830000001").count(), 2)
 
     def test_two_members_without_email_can_coexist(self):
-        self._create(email="")
-        response = self._create(phone="+243830000002", email="")
+        # La saisie manuelle exige desormais un e-mail, mais les fiches creees
+        # hors formulaire (import, reprise de donnees) peuvent en manquer : la
+        # contrainte (gym, email) ne doit pas les faire entrer en collision.
+        Member.objects.create(
+            gym=self.gym,
+            first_name="Sans",
+            last_name="Mail Un",
+            phone="+243830000011",
+            email=None,
+        )
+        Member.objects.create(
+            gym=self.gym,
+            first_name="Sans",
+            last_name="Mail Deux",
+            phone="+243830000012",
+            email=None,
+        )
 
         self.assertEqual(Member.objects.filter(gym=self.gym).count(), 2)
-        self.assertNotIn(
-            "utilise deja cette adresse", " ".join(self._messages(response))
-        )
         self.assertTrue(
             all(member.email is None for member in Member.objects.filter(gym=self.gym))
         )
+
+    def test_email_is_required_in_the_form(self):
+        # Quatre coordonnees sont obligatoires a la saisie : prenom, nom,
+        # telephone et e-mail.
+        response = self._create(email="")
+
+        self.assertEqual(Member.objects.filter(gym=self.gym).count(), 0)
+        self.assertIn("E-mail : Ce champ est obligatoire.", self._messages(response))
 
     # --- Erreurs de saisie visibles ---------------------------------------
 

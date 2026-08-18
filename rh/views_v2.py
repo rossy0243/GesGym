@@ -597,7 +597,8 @@ def process_payment(request, employee_id, year, month):
                 with transaction.atomic():
                     pos_payment = record_expense(
                         gym=request.gym,
-                        amount_cdf=salary,
+                        amount=salary,
+                        currency="CDF",
                         method=form.cleaned_data["payment_method"],
                         category="salary",
                         description=f"Salaire {employee.name} - {month}/{year}",

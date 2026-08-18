@@ -183,8 +183,14 @@ def record_product_sale(*, gym, product, quantity, currency, method, created_by=
         except Product.DoesNotExist as exc:
             raise ValidationError("Produit introuvable pour ce gym.") from exc
 
-        amount_usd = _money(product.price * quantity)
-        amount = amount_usd if currency == "USD" else _money(amount_usd * register.exchange_rate)
+        # Le prix du produit peut etre fixe en francs : on part de sa propre
+        # devise et on convertit vers celle de l'encaissement, au taux de la
+        # session. Supposer le dollar facturait un prix faux aux produits CDF.
+        try:
+            amount = _money(product.price_in(currency, register.exchange_rate) * quantity)
+            amount_usd = _money(product.price_usd(register.exchange_rate) * quantity)
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
 
         try:
             product.update_stock(quantity, "out", "Vente POS")
@@ -215,7 +221,8 @@ def record_product_sale(*, gym, product, quantity, currency, method, created_by=
 def record_expense(
     *,
     gym,
-    amount_cdf,
+    amount,
+    currency="CDF",
     method="cash",
     category="expense",
     description="",
@@ -224,10 +231,21 @@ def record_expense(
     source_model="",
     source_id=None,
 ):
+    """
+    Sortie de caisse, saisie dans la devise reellement decaissee.
+
+    Le tiroir contient les deux devises : obliger a convertir avant la saisie
+    faisait porter au caissier une conversion que le logiciel sait faire, et
+    l'ecart de conversion se retrouvait dans l'ecart de cloture. Le montant en
+    CDF est recalcule par le modele a partir du taux de la session.
+    """
+    if currency not in {"CDF", "USD"}:
+        raise ValidationError("Devise de decaissement invalide.")
+
     return record_payment(
         gym=gym,
-        amount=amount_cdf,
-        currency="CDF",
+        amount=amount,
+        currency=currency,
         method=method,
         transaction_type="out",
         category=category,

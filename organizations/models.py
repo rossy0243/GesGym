@@ -148,6 +148,17 @@ class Gym(models.Model):
 
     is_active = models.BooleanField(default=True)
 
+    # Combien de jours a l'avance signaler une maintenance a venir. Deux
+    # semaines laissent le temps de commander une piece ou de reserver un
+    # technicien avant que la machine ne soit immobilisee.
+    MAINTENANCE_ALERT_DEFAULT_DAYS = 14
+
+    maintenance_alert_lead_days = models.PositiveIntegerField(
+        default=MAINTENANCE_ALERT_DEFAULT_DAYS,
+        verbose_name="Prevenance maintenance (jours)",
+        help_text="Nombre de jours avant l'echeance ou l'alerte apparait.",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

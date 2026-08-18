@@ -628,11 +628,11 @@ body.members-screen .modal.show .modal-dialog {
 
                             <div class="row">
                                 <div class="col-md-6 mb-3">
-                                    <label class="form-label">Téléphone</label>
+                                    <label class="form-label">Téléphone <span class="text-danger">*</span></label>
                                     {{ form.phone }}
                                 </div>
                                 <div class="col-md-6 mb-3">
-                                    <label class="form-label">Email</label>
+                                    <label class="form-label">Email <span class="text-danger">*</span></label>
                                     {{ form.email }}
                                 </div>
                             </div>
@@ -699,12 +699,12 @@ body.members-screen .modal.show .modal-dialog {
 
                             <div class="row">
                                 <div class="col-md-6 mb-3">
-                                    <label class="form-label">Téléphone</label>
-                                    <input type="text" id="edit_phone" name="phone" class="form-control">
+                                    <label class="form-label">Téléphone <span class="text-danger">*</span></label>
+                                    <input type="text" id="edit_phone" name="phone" class="form-control" required>
                                 </div>
                                 <div class="col-md-6 mb-3">
-                                    <label class="form-label">Email</label>
-                                    <input type="email" id="edit_email" name="email" class="form-control">
+                                    <label class="form-label">Email <span class="text-danger">*</span></label>
+                                    <input type="email" id="edit_email" name="email" class="form-control" required>
                                 </div>
                             </div>
 

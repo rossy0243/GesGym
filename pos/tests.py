@@ -810,3 +810,86 @@ class CashDrawerSeparationTests(TestCase):
         self.assertEqual(response.context["expected_total"], Decimal("100000.00"))
         self.assertEqual(response.context["non_cash_entries"], Decimal("70000.00"))
         self.assertContains(response, "hors tiroir-caisse")
+
+
+class ExpenseCurrencyTests(TestCase):
+    """Le decaissement se saisit dans la devise reellement sortie du tiroir."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Devise", slug="org-devise"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Devise",
+            slug="gym-devise",
+            subdomain="gym-devise",
+        )
+        self.user = User.objects.create_user(username="caissier-devise", password="pass12345")
+        UserGymRole.objects.create(
+            user=self.user, gym=self.gym, role="cashier", is_active=True
+        )
+        module, _ = Module.objects.get_or_create(code="POS", defaults={"name": "POS"})
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=module, defaults={"is_active": True}
+        )
+        self.register = CashRegister.objects.create(
+            gym=self.gym,
+            opened_by=self.user,
+            opening_amount=Decimal("500000.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+        self.client.force_login(self.user)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _decaisser(self, **overrides):
+        payload = {
+            "type": "out",
+            "amount": "10.00",
+            "expense_currency": "USD",
+            "description": "Achat fournitures",
+        }
+        payload.update(overrides)
+        return self.client.post(reverse("pos:cashier_dashboard"), payload, follow=True)
+
+    def test_an_expense_in_usd_is_converted_at_the_session_rate(self):
+        self._decaisser()
+
+        depense = Payment.objects.get(gym=self.gym, type="out")
+        self.assertEqual(depense.currency, "USD")
+        self.assertEqual(depense.amount, Decimal("10.00"))
+        self.assertEqual(depense.amount_cdf, Decimal("28000.00"))
+        self.assertEqual(self.register.expected_total(), Decimal("472000.00"))
+
+    def test_an_expense_in_cdf_stays_in_cdf(self):
+        self._decaisser(amount="28000.00", expense_currency="CDF")
+
+        depense = Payment.objects.get(gym=self.gym, type="out")
+        self.assertEqual(depense.currency, "CDF")
+        self.assertEqual(depense.amount_cdf, Decimal("28000.00"))
+
+    def test_the_currency_defaults_to_cdf_when_absent(self):
+        response = self.client.post(
+            reverse("pos:cashier_dashboard"),
+            {"type": "out", "amount": "5000.00", "description": "Taxi"},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        depense = Payment.objects.get(gym=self.gym, type="out")
+        self.assertEqual(depense.currency, "CDF")
+
+    def test_an_unknown_currency_is_refused(self):
+        self._decaisser(expense_currency="EUR")
+
+        self.assertFalse(Payment.objects.filter(gym=self.gym, type="out").exists())
+
+    def test_the_sensitive_log_keeps_both_amounts(self):
+        self._decaisser()
+
+        trace = SensitiveActivityLog.objects.get(action="pos.expense_recorded")
+        self.assertEqual(trace.metadata["devise"], "USD")
+        self.assertEqual(trace.metadata["montant_saisi"], "10.00")
+        self.assertEqual(trace.metadata["amount_cdf"], "28000.00")

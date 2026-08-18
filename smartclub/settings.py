@@ -198,6 +198,7 @@ TEMPLATES = [
                 'smartclub.context_processors.breadcrumbs_processor',
                 'smartclub.context_processors.modules_processor',
                 'smartclub.context_processors.user_owner_check',
+                'smartclub.context_processors.maintenance_alert_processor',
             ],
         },
     },

@@ -47,7 +47,9 @@ Refus opposes par le logiciel. Chacun merite une explication dans la
 formation : pourquoi la regle existe, et que faire quand on la rencontre.
 
 - Cet employe a deja un acces dans cette salle.
+- Le delai doit valoir au moins un jour.
 - Seul un proprietaire peut exister par organisation : ce role ne s'attribue pas depuis les parametres.
+- Un delai de plus d'un an n'a pas de sens.
 - Vous ne pouvez pas attribuer ce role. Votre niveau d'acces permet d'affecter : {valeur}.
 
 ## Ce que l'utilisateur lit a l'ecran
@@ -57,6 +59,7 @@ employer dans la formation : l'apprenant doit reconnaitre ce qu'il verra.
 
 ### Confirmations
 
+- Delai de prevenance des maintenances mis a jour.
 - Employe cree : {valeur}. Mot de passe temporaire : {valeur}. Changement obligatoire a la premiere connexion.
 - Employe {valeur} {valeur}.
 - Informations de l'organisation mises a jour.
@@ -86,6 +89,7 @@ et rassurer sur ce qui ne l'est pas.
 - `employee.deleted`
 - `employee.password_reset`
 - `employee.updated`
+- `gym.maintenance_alert_updated`
 - `organization.updated`
 - `settings.action_refused`
 - `settings.activity_log_exported`

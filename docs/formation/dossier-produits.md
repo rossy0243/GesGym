@@ -33,9 +33,16 @@ de ce que le logiciel fait reellement, pas de ce qu'on croit qu'il fait.
 | `gym` | ForeignKey |
 | `name` | CharField |
 | `price` | DecimalField |
+| `currency` | CharField |
 | `quantity` | IntegerField |
 | `is_active` | BooleanField |
 | `created_at` | DateTimeField |
+
+Valeurs possibles `CURRENCY_CHOICES` :
+
+```python
+((CURRENCY_USD, 'USD (Dollar americain)'), (CURRENCY_CDF, 'CDF (Franc congolais)'))
+```
 
 ### `StockMovement`
 
@@ -83,7 +90,7 @@ employer dans la formation : l'apprenant doit reconnaitre ce qu'il verra.
 
 ### Confirmations
 
-- Mouvement enregistre: {valeur} - {valeur}.
+- Entree de stock enregistree : {valeur} - {valeur}.
 - Produit "{valeur}" cree avec succes.
 - Produit "{valeur}" desactive avec succes.
 - Produit "{valeur}" modifie avec succes.
@@ -120,8 +127,24 @@ meilleure source pour les cas limites a montrer en formation.
 - general dashboard includes scoped product kpis
 - movement cannot target other gym product
 - stock movement rejects cross gym product
-- stock out updates quantity and creates scoped movement
+- manual movement is always an entry
 - form pages render without gym id urls
+
+### ProductCurrencyTests
+
+> Un produit peut etre price en francs ou en dollars.
+
+- a product keeps its own price in its own currency
+- a cdf product is converted to usd at the session rate
+- a usd product is converted to cdf at the session rate
+- converting without a rate is refused
+- selling a cdf product in cdf charges the shelf price
+- selling a cdf product in usd converts at the session rate
+- selling a usd product is unchanged
+- stock value converts cdf products to usd
+- stock value ignores cdf products when no rate is known
+- the open register rate is used for stock indicators
+- products without rate are counted rather than hidden
 
 ## A completer par un humain
 

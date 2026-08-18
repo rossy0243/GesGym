@@ -4,6 +4,7 @@ from django.db.models import Sum
 from django.utils import timezone
 
 from .models import Product, StockMovement
+from .pricing import gym_exchange_rate
 
 
 def products_queryset(gym):
@@ -14,8 +15,21 @@ def movements_queryset(gym):
     return StockMovement.objects.filter(gym=gym).select_related("product")
 
 
-def stock_value(product):
-    return (product.price or Decimal("0")) * product.quantity
+def stock_value(product, exchange_rate=None):
+    """
+    Valeur du stock d'un produit, toujours en dollars.
+
+    Un produit price en francs n'est comptabilise que si la salle dispose d'un
+    taux : sans lui, l'additionner aux produits en dollars donnerait un total
+    faux plutot qu'un total manquant.
+    """
+    if product.currency == Product.CURRENCY_USD:
+        return (product.price or Decimal("0")) * product.quantity
+
+    if not exchange_rate:
+        return Decimal("0")
+
+    return product.price_usd(exchange_rate) * product.quantity
 
 
 def build_product_kpis(gym, period_data=None):
@@ -34,16 +48,27 @@ def build_product_kpis(gym, period_data=None):
     period_movements = movements.filter(
         created_at__date__range=(period_data["start_date"], period_data["end_date"])
     )
+    taux = gym_exchange_rate(gym)
     top_value_products = sorted(
         [product for product in active_products_qs if product.quantity > 0],
-        key=stock_value,
+        key=lambda product: stock_value(product, taux),
         reverse=True,
     )[:5]
     for product in top_value_products:
-        product.stock_value = stock_value(product)
+        product.stock_value = stock_value(product, taux)
 
-    total_value = sum((stock_value(product) for product in active_products_qs), Decimal("0"))
-    stock_value_chart_values = [float(stock_value(product)) for product in top_value_products]
+    total_value = sum(
+        (stock_value(product, taux) for product in active_products_qs), Decimal("0")
+    )
+    stock_value_chart_values = [float(product.stock_value) for product in top_value_products]
+
+    # Un stock en francs sans taux disponible est invisible dans la valeur
+    # totale : il faut le dire plutot que de laisser croire a un stock vide.
+    produits_non_convertibles = (
+        0
+        if taux
+        else active_products_qs.filter(currency=Product.CURRENCY_CDF, quantity__gt=0).count()
+    )
 
     return {
         "total_products": active_products_qs.count(),
@@ -68,4 +93,6 @@ def build_product_kpis(gym, period_data=None):
         ],
         "stock_value_chart_labels": [product.name for product in top_value_products],
         "stock_value_chart_values": stock_value_chart_values,
+        "stock_exchange_rate": taux,
+        "products_without_rate": produits_non_convertibles,
     }

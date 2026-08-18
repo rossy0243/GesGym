@@ -4,18 +4,24 @@ from .models import Product, StockMovement
 class ProductForm(forms.ModelForm):
     class Meta:
         model = Product
-        fields = ['name', 'price', 'quantity', 'is_active']
+        fields = ['name', 'price', 'currency', 'quantity', 'is_active']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Nom du produit'}),
             'price': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'placeholder': 'Prix de vente'}),
+            'currency': forms.Select(attrs={'class': 'form-select'}),
             'quantity': forms.NumberInput(attrs={'class': 'form-control', 'min': '0'}),
             'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
         labels = {
             'name': 'Nom',
-            'price': 'Prix (USD)',
+            'price': 'Prix de vente',
+            'currency': 'Devise du prix',
             'quantity': 'Quantité initiale',
             'is_active': 'Actif',
+        }
+        help_texts = {
+            'currency': "Devise dans laquelle le prix est affiche en rayon. "
+                        "La caisse convertit au taux de la session si le client paie dans l'autre devise.",
         }
 
     def clean_price(self):
@@ -31,18 +37,25 @@ class ProductForm(forms.ModelForm):
         return quantity
 
 class StockMovementForm(forms.ModelForm):
+    """
+    Saisie manuelle d'une entree de stock.
+
+    Les sorties ne sont plus saisies ici : elles decoulent uniquement d'une
+    vente encaissee, qui decremente le stock elle-meme. Laisser une sortie
+    manuelle a cote de la caisse permettait de sortir deux fois le meme
+    produit, une fois a la vente et une fois a la main.
+    """
+
     class Meta:
         model = StockMovement
-        fields = ['quantity', 'movement_type', 'reason']
+        fields = ['quantity', 'reason']
         widgets = {
             'quantity': forms.NumberInput(attrs={'class': 'form-control', 'min': '1'}),
-            'movement_type': forms.Select(attrs={'class': 'form-select'}),
-            'reason': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Raison du mouvement (optionnel)'}),
+            'reason': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Provenance ou motif (optionnel)'}),
         }
         labels = {
-            'quantity': 'Quantité',
-            'movement_type': 'Type de mouvement',
-            'reason': 'Raison',
+            'quantity': 'Quantité reçue',
+            'reason': 'Motif',
         }
 
     def clean_quantity(self):

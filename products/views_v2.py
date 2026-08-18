@@ -12,6 +12,7 @@ from smartclub.decorators import module_required, role_required
 from .forms import ProductForm, StockMovementForm
 from .kpis import build_product_kpis, products_queryset, stock_value, movements_queryset
 from .models import Product, StockMovement
+from .pricing import gym_exchange_rate
 
 
 @login_required
@@ -51,7 +52,7 @@ def product_list(request):
 @role_required(PRODUCT_ROLES)
 def product_detail(request, product_id):
     product = get_object_or_404(Product, id=product_id, gym=request.gym)
-    product.stock_value = stock_value(product)
+    product.stock_value = stock_value(product, gym_exchange_rate(request.gym))
     movements = product.movements.filter(gym=request.gym).order_by("-created_at")[:20]
     total_in = product.movements.filter(gym=request.gym, movement_type="in").aggregate(Sum("quantity"))["quantity__sum"] or 0
     total_out = product.movements.filter(gym=request.gym, movement_type="out").aggregate(Sum("quantity"))["quantity__sum"] or 0
@@ -189,7 +190,9 @@ def stock_movement_create(request, product_id):
         form = StockMovementForm(request.POST)
         if form.is_valid():
             quantity = form.cleaned_data["quantity"]
-            movement_type = form.cleaned_data["movement_type"]
+            # Seules les entrees se saisissent a la main : une sortie provient
+            # forcement d'une vente encaissee, qui decremente deja le stock.
+            movement_type = "in"
             reason = form.cleaned_data["reason"]
 
             try:
@@ -210,7 +213,7 @@ def stock_movement_create(request, product_id):
                     },
                     gym=request.gym,
                 )
-                messages.success(request, f"Mouvement enregistre: {product.name} - {quantity}.")
+                messages.success(request, f"Entree de stock enregistree : {product.name} - {quantity}.")
                 return redirect("products:detail", product_id=product.id)
             except ValueError as exc:
                 messages.error(request, str(exc))
@@ -221,7 +224,7 @@ def stock_movement_create(request, product_id):
         "gym": request.gym,
         "product": product,
         "form": form,
-        "title": f"Ajouter un mouvement - {product.name}",
+        "title": f"Entree de stock - {product.name}",
     }
     return render(request, "products/stock_movement_form.html", context)
 

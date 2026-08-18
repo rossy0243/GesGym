@@ -67,6 +67,12 @@ class MemberCreationForm(forms.ModelForm):
         # (gym, email), et la base rejetait l'ecriture par une erreur 500.
         self.gym = gym
         super().__init__(*args, **kwargs)
+        # Quatre coordonnees sont indispensables pour joindre un membre : le
+        # modele tolere un email vide pour les fiches importees, mais la saisie
+        # manuelle l'exige.
+        for nom in ("first_name", "last_name", "phone", "email"):
+            self.fields[nom].required = True
+            self.fields[nom].widget.attrs["required"] = "required"
 
     def _duplicate_exists(self, field_name, value):
         if not value or self.gym is None:

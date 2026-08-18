@@ -204,6 +204,47 @@
     </div>
 </div>
 
+{% if upcoming_maintenances %}
+<div class="machine-dashboard-card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Maintenances a venir</h5>
+        <a href="{% url 'core:settings' %}?tab=maintenance" class="btn btn-sm btn-light-brand">
+            Regler la prevenance
+        </a>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Machine</th>
+                        <th>Echeance</th>
+                        <th>Delai</th>
+                        <th>Rythme</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in upcoming_maintenances %}
+                    <tr>
+                        <td class="fw-semibold">{{ entry.machine.name }}</td>
+                        <td>{{ entry.due_on|date:"d/m/Y" }}</td>
+                        <td>
+                            {% if entry.is_overdue %}
+                            <span class="badge bg-danger">En retard de {{ entry.days_left|cut:"-" }} jour(s)</span>
+                            {% else %}
+                            <span class="badge bg-warning text-dark">Dans {{ entry.days_left }} jour(s)</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-muted">tous les {{ entry.machine.maintenance_interval_days }} jours</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <div class="machine-dashboard-card">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0">Dernieres maintenances</h5>

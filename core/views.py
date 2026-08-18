@@ -21,7 +21,15 @@ from coaching.models import CoachSpecialty
 from organizations.models import SensitiveActivityLog
 from . import activity_log
 from .audit import log_sensitive_action
-from .forms import CoachSpecialtyForm, InternalEmployeeForm, InternalEmployeeProfileForm, OrganizationSettingsForm
+from machines.alerts import maintenance_alert_summary
+
+from .forms import (
+    CoachSpecialtyForm,
+    GymMaintenanceSettingsForm,
+    InternalEmployeeForm,
+    InternalEmployeeProfileForm,
+    OrganizationSettingsForm,
+)
 from members.models import Member
 from organizations.models import Gym, GymModule
 from pos.models import Payment
@@ -639,6 +647,7 @@ def settings_dashboard(request):
     allowed_employee_roles = _employee_role_values_for_request(request)
     locked_employee_gym = None if can_manage_organization else gym
     organization_form = OrganizationSettingsForm(instance=organization)
+    maintenance_form = GymMaintenanceSettingsForm(instance=gym)
     employee_form = InternalEmployeeForm(
         organization=organization,
         gyms=accessible_gyms,
@@ -698,6 +707,27 @@ def settings_dashboard(request):
                 )
                 messages.success(request, "Informations de l'organisation mises a jour.")
                 return _settings_redirect("organization")
+
+        elif action == "maintenance":
+            active_tab = "maintenance"
+            maintenance_form = GymMaintenanceSettingsForm(request.POST, instance=gym)
+            if maintenance_form.is_valid():
+                avant = Gym.objects.values_list(
+                    "maintenance_alert_lead_days", flat=True
+                ).get(pk=gym.pk)
+                maintenance_form.save()
+                log_sensitive_action(
+                    request,
+                    "gym.maintenance_alert_updated",
+                    "Gym",
+                    gym.name,
+                    metadata={
+                        "avant": avant,
+                        "apres": maintenance_form.cleaned_data["maintenance_alert_lead_days"],
+                    },
+                )
+                messages.success(request, "Delai de prevenance des maintenances mis a jour.")
+                return _settings_redirect("maintenance")
 
         elif action == "employee_create":
             active_tab = "employees"
@@ -990,6 +1020,8 @@ def settings_dashboard(request):
         "organization": organization,
         "gym": gym,
         "organization_form": organization_form,
+        "maintenance_form": maintenance_form,
+        "maintenance_alerts": maintenance_alert_summary(gym),
         "employee_form": employee_form,
         "employee_edit_form": employee_edit_form,
         "employee_edit_role": employee_edit_role,

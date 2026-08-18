@@ -11,6 +11,7 @@ from pos.services import record_expense
 from smartclub.access_control import MACHINE_ROLES
 from smartclub.decorators import module_required, role_required
 
+from .alerts import upcoming_maintenances
 from .forms import MachineForm, MaintenanceLogForm
 from .kpis import (
     PERIOD_CHOICES,
@@ -169,7 +170,8 @@ def maintenance_log_create(request, machine_id):
                     if log.cost and log.cost > 0:
                         pos_payment = record_expense(
                             gym=request.gym,
-                            amount_cdf=log.cost,
+                            amount=log.cost,
+                            currency="CDF",
                             method="cash",
                             category="maintenance",
                             description=f"Maintenance machine: {machine.name}",
@@ -291,6 +293,8 @@ def maintenance_dashboard(request):
         "period_end": period_data["end_date"],
         "machines_by_status": machines_by_status,
         "recent_maintenances": all_maintenances.order_by("-created_at")[:10],
+        # Le bandeau annonce l'echeance ; cette page doit dire laquelle.
+        "upcoming_maintenances": upcoming_maintenances(gym),
         "top_maintenance_machines": top_maintenance_machines,
         "maintenance_cost_by_machine": maintenance_cost_by_machine,
         **machine_kpis,

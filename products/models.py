@@ -1,6 +1,12 @@
+from decimal import Decimal, ROUND_HALF_UP
+
 from django.db import models, transaction
 from django.core.exceptions import ValidationError
 from organizations.models import Gym
+
+
+def _arrondi(valeur):
+    return Decimal(valeur).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 class Product(models.Model):
     """
@@ -16,7 +22,23 @@ class Product(models.Model):
 
     name = models.CharField(max_length=255)
 
+    CURRENCY_USD = "USD"
+    CURRENCY_CDF = "CDF"
+    CURRENCY_CHOICES = (
+        (CURRENCY_USD, "USD (Dollar americain)"),
+        (CURRENCY_CDF, "CDF (Franc congolais)"),
+    )
+
     price = models.DecimalField(max_digits=10, decimal_places=2)
+
+    # Certains produits sont achetes et revendus en francs : les afficher en
+    # dollars obligeait la salle a reconvertir un prix qu'elle n'a jamais fixe
+    # en dollars, et le prix affiche bougeait a chaque changement de taux.
+    currency = models.CharField(
+        max_length=3,
+        choices=CURRENCY_CHOICES,
+        default=CURRENCY_USD,
+    )
 
     quantity = models.IntegerField(default=0)
 
@@ -43,7 +65,30 @@ class Product(models.Model):
     def save(self, *args, **kwargs):
         self.full_clean()
         super().save(*args, **kwargs)
-    
+
+    def price_in(self, currency, exchange_rate):
+        """
+        Prix unitaire exprime dans la devise demandee.
+
+        Le prix saisi fait foi : c'est celui affiche en rayon. La conversion ne
+        sert qu'a encaisser dans l'autre devise, au taux de la session de
+        caisse, pour que la contre-valeur suive le taux du jour.
+        """
+        prix = self.price or Decimal("0")
+        if currency == self.currency:
+            return _arrondi(prix)
+
+        if not exchange_rate or exchange_rate <= 0:
+            raise ValueError("Taux de change indisponible pour convertir le prix.")
+
+        if self.currency == self.CURRENCY_USD:
+            return _arrondi(prix * exchange_rate)
+        return _arrondi(prix / exchange_rate)
+
+    def price_usd(self, exchange_rate):
+        """Contre-valeur en dollars, unite commune des indicateurs de stock."""
+        return self.price_in(self.CURRENCY_USD, exchange_rate)
+
     def update_stock(self, quantity, movement_type, reason=None):
         """Met à jour le stock et crée un mouvement"""
         if quantity <= 0:

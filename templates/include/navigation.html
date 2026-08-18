@@ -353,7 +353,7 @@
                 </li>
 
                 <li class="nxl-item nav-logout-link">
-                    <a class="nxl-link" href="{% url 'compte:logout' %}">
+                    <a class="nxl-link" href="{% url 'compte:logout' %}" onclick="return confirm('Se deconnecter de votre session ?');">
                         <span class="nxl-micon"><span class="material-icons">logout</span></span>
                         <span class="nxl-mtext">Déconnexion</span>
                     </a>

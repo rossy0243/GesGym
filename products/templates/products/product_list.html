@@ -103,7 +103,7 @@
                     </div>
                     
                     <p class="card-text">
-                        <strong>Prix:</strong> {{ product.price }} USD<br>
+                        <strong>Prix:</strong> {{ product.price }} {{ product.currency }}<br>
                         <strong>Stock:</strong> 
                         <span class="{% if product.quantity == 0 %}text-danger{% elif product.quantity <= 5 %}text-warning{% else %}text-success{% endif %}">
                             {{ product.quantity }}

@@ -204,7 +204,7 @@
                             <a class="stock-product-link" href="{% url 'products:detail' product.id %}">
                                 {{ product.name }}
                             </a>
-                            <div class="stock-meta">{{ product.price|floatformat:2 }} USD</div>
+                            <div class="stock-meta">{{ product.price|floatformat:2 }} {{ product.currency }}</div>
                         </div>
                         <span class="badge bg-warning text-dark">Stock {{ product.quantity }}</span>
                     </div>

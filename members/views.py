@@ -830,7 +830,12 @@ def member_portal(request):
         "group_feedback_form": group_feedback_form,
         "latest_coach_feedback": latest_coach_feedback,
         "latest_group_feedback": latest_group_feedback,
-        "pwa_manifest_url": reverse("members:member_app_manifest"),
+        # Le navigateur telecharge le manifeste sans cookie de session : sans
+        # l'organisation en parametre, il retomberait sur la marque generique
+        # et l'icone installee ne serait pas celle de la salle.
+        "pwa_manifest_url": (
+            f"{reverse('members:member_app_manifest')}?org={member.gym.organization_id}"
+        ),
         "pwa_service_worker_url": reverse("members:member_app_service_worker"),
         "pwa_icon_url": reverse("members:member_app_organization_icon", args=[member.gym.organization_id, 512]),
         "coaching_rights": _member_coaching_rights(subscription),
@@ -1193,9 +1198,31 @@ def member_organization_logo(request):
     return FileResponse(logo.open("rb"), content_type=content_type)
 
 
-def _member_app_brand(request):
+def _organization_from_request(request):
+    """
+    Organisation a afficher dans le manifeste.
+
+    Le membre connecte fait foi. A defaut, on accepte l'organisation passee en
+    parametre : le navigateur reclame le manifeste sans cookie de session, et
+    sans cette porte de sortie l'application installee porterait le nom et
+    l'icone generiques au lieu de ceux de la salle.
+    """
     member = _get_current_member(request.user) if request.user.is_authenticated else None
-    if not member or not member.gym_id:
+    if member and member.gym_id:
+        return member.gym.organization
+
+    demande = request.GET.get("org")
+    if not demande:
+        return None
+    try:
+        return Organization.objects.get(id=int(demande), is_active=True)
+    except (ValueError, TypeError, Organization.DoesNotExist):
+        return None
+
+
+def _member_app_brand(request):
+    organization = _organization_from_request(request)
+    if organization is None:
         return {
             "name": "SmartClub Membre",
             "short_name": "SmartClub",
@@ -1204,7 +1231,6 @@ def _member_app_brand(request):
             "icon_512_url": static("icons/1.png"),
         }
 
-    organization = member.gym.organization
     name = f"{organization.name} Membre"
     icon_192_url = reverse("members:member_app_organization_icon", args=[organization.id, 192])
     icon_512_url = reverse("members:member_app_organization_icon", args=[organization.id, 512])
@@ -1290,7 +1316,7 @@ def member_app_manifest(request):
 
 def member_app_service_worker(request):
     content = """
-const CACHE_NAME = "smartclub-member-v6";
+const CACHE_NAME = "smartclub-member-v7";
 const STATIC_ASSETS = [
   "/static/css/member-portal.css",
   "/static/js/member-portal.js",

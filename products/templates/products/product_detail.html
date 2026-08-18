@@ -25,7 +25,7 @@
                     <h5 class="mb-0">Informations</h5>
                 </div>
                 <div class="card-body">
-                    <p><strong>Prix:</strong> {{ product.price }} USD</p>
+                    <p><strong>Prix:</strong> {{ product.price }} {{ product.currency }}</p>
                     <p><strong>Stock actuel:</strong> 
                         <span class="{% if product.quantity == 0 %}text-danger{% elif product.quantity <= 5 %}text-warning{% else %}text-success{% endif %} fw-bold">
                             {{ product.quantity }}
@@ -52,7 +52,7 @@
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">Historique des mouvements</h5>
                     <a href="{% url 'products:add_movement' product.id %}" class="btn btn-primary btn-sm">
-                        <i class="fas fa-plus"></i> Ajouter un mouvement
+                        <i class="fas fa-plus"></i> Entrée de stock
                     </a>
                 </div>
                 <div class="card-body">

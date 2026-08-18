@@ -35,6 +35,7 @@ de ce que le logiciel fait reellement, pas de ce qu'on croit qu'il fait.
 | `name` | CharField |
 | `status` | CharField |
 | `purchase_date` | DateField |
+| `maintenance_interval_days` | PositiveIntegerField |
 | `created_at` | DateTimeField |
 
 Valeurs possibles `STATUS` :
@@ -135,6 +136,25 @@ meilleure source pour les cas limites a montrer en formation.
 - cannot delete maintenance linked to pos payment
 - cannot delete machine when paid maintenance exists
 - can delete maintenance without pos payment
+
+### MaintenanceAlertTests
+
+> Une maintenance periodique doit se signaler avant la panne.
+
+- a machine without interval has no deadline
+- the deadline starts from the purchase date
+- the last maintenance resets the cycle
+- an interval below one day is refused
+- a deadline two weeks away is announced
+- a deadline beyond the lead time stays quiet
+- a passed deadline is reported as overdue
+- the most urgent machine comes first
+- another gym machines are never counted
+- the lead time is configurable per gym
+- the settings page saves the new lead time
+- an absurd lead time is refused
+- the banner follows the manager on every page
+- a cashier never sees the maintenance banner
 
 ## A completer par un humain
 
