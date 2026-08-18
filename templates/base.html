@@ -127,8 +127,8 @@
                     {% endif %}
                 </div>
                 {% if maintenance_banner %}
-                {# Une maintenance qu'on decouvre le jour de la panne coute la
-                   journee d'exploitation : l'alerte suit le gerant partout. #}
+                {% comment %} Une maintenance qu'on decouvre le jour de la panne coute la
+                   journee d'exploitation : l'alerte suit le gerant partout. {% endcomment %}
                 <div class="alert {% if maintenance_banner.overdue_count %}alert-danger{% else %}alert-warning{% endif %} d-flex align-items-start gap-3 mb-4"
                      role="alert">
                     <span class="material-icons">build</span>

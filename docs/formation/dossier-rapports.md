@@ -206,6 +206,12 @@ meilleure source pour les cas limites a montrer en formation.
 - the coach ratio is no longer frozen at zero
 - period comparisons are supplied to the template — _Les badges existaient dans le template sans donnee derriere._
 
+### TemplateCommentSyntaxTests
+
+> Aucun gabarit ne doit afficher ses propres commentaires.
+
+- no template uses a multiline short comment
+
 ## A completer par un humain
 
 Le code ne dit pas tout. Avant de rediger, il faut trancher :

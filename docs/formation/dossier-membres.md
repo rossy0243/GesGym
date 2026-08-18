@@ -501,9 +501,36 @@ meilleure source pour les cas limites a montrer en formation.
 - the member born from a confirmation carries the confirmer
 - the confirmation is traced in the sensitive log
 - the list shows who confirmed
+- the list shows who cancelled
+- the member list names the author on each row
+- the member list says plainly when the author is unknown
 - a cancelled pre registration names its author
 - the cancellation is traced in the sensitive log
 - an already handled request cannot be cancelled again
+
+### MemberPortalGymIdentityTests
+
+> Le membre doit savoir dans quelle salle il est inscrit.
+
+- the portal names the gym not only the organization
+- the installed app is named after the gym
+- the portal never shows the software publisher
+- the member card block names the gym
+- the gym own address wins over the organization one
+- an empty field falls back to the organization
+- the hours are never borrowed from the organization
+- the portal shows the gym contact details
+- a gym without any contact says so plainly
+- the suspension banner names the gym and its phone
+
+### GymContactSettingsTests
+
+> Les coordonnees de la salle se saisissent dans Parametres.
+
+- the settings page saves the gym contact details
+- the change is traced in the sensitive log
+- a malformed email is refused
+- the settings page offers the gym tab
 
 ## A completer par un humain
 

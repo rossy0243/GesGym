@@ -6,7 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#0B0B0B">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-title" content="SmartClub">
+    {% comment %} Nom affiche sous l'icone une fois l'application installee : il doit
+       porter la salle, pas l'editeur du logiciel. {% endcomment %}
+    <meta name="apple-mobile-web-app-title" content="{{ gym.name }}">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>{{ gym.name }} | Espace membre</title>
     <link rel="manifest" href="{{ pwa_manifest_url }}" crossorigin="use-credentials">
@@ -34,6 +36,11 @@
                         d'abonnement, choisir un coach ni rejoindre un programme.
                         Vos informations restent consultables.
                     </p>
+                    {% comment %} "Contactez la salle" sans dire laquelle ni comment ne
+                       menait le membre nulle part. {% endcomment %}
+                    <p class="suspended-banner__detail">
+                        Salle concernee : <strong>{{ gym.name }}</strong>{% if gym.contact_phone %} - {{ gym.contact_phone }}{% endif %}.
+                    </p>
                 </div>
             </div>
         {% endif %}
@@ -45,7 +52,10 @@
                 {% elif organization.logo %}
                     <img src="{{ organization.logo.url }}" alt="{{ organization.name }}">
                 {% else %}
-                    <img src="{% static 'avatar/logo_smartclub.png' %}" alt="SmartClub">
+                    {% comment %} Repli sur l'icone generee aux initiales de l'organisation :
+                       afficher le logo de l'editeur ferait croire au membre
+                       qu'il s'est trompe d'application. {% endcomment %}
+                    <img src="{{ pwa_icon_url }}" alt="{{ organization.name }}">
                 {% endif %}
                 <div>
                     <p class="eyebrow">{{ organization.name }}</p>
@@ -130,11 +140,57 @@
                     <div class="qr-zone">
                         <img src="{% url 'members:member_portal_qr' %}" alt="QR code membre">
                         <div>
-                            <p>Carte membre</p>
+                            <p>Carte membre - {{ gym.name }}</p>
                             <strong>{{ member_code }}</strong>
-                            <small>Presentez ce QR code a l'accueil.</small>
+                            <small>Presentez ce QR code a l'accueil de {{ gym.name }}.</small>
                         </div>
                     </div>
+                </div>
+            </section>
+
+            {% comment %} Ou le membre est inscrit, et comment joindre cette salle
+               precisement. Une organisation peut exploiter plusieurs sites :
+               sans cela, le membre ne sait pas lequel est le sien. {% endcomment %}
+            <section class="content-panel" id="ma-salle">
+                <div class="section-heading">
+                    <div>
+                        <p class="eyebrow">{{ organization.name }}</p>
+                        <h2>Ma salle : {{ gym.name }}</h2>
+                    </div>
+                </div>
+
+                <div class="info-grid">
+                    {% if gym.contact_address %}
+                        <article class="info-block wide">
+                            <span>Adresse</span>
+                            <strong>{{ gym.contact_address|linebreaksbr }}</strong>
+                        </article>
+                    {% endif %}
+                    {% if gym.contact_hours %}
+                        <article class="info-block wide">
+                            <span>Horaires d'ouverture</span>
+                            <strong>{{ gym.contact_hours|linebreaksbr }}</strong>
+                        </article>
+                    {% endif %}
+                    {% if gym.contact_phone %}
+                        <article class="info-block">
+                            <span>Telephone</span>
+                            <strong>{{ gym.contact_phone }}</strong>
+                        </article>
+                    {% endif %}
+                    {% if gym.contact_email %}
+                        <article class="info-block">
+                            <span>E-mail</span>
+                            <strong>{{ gym.contact_email }}</strong>
+                        </article>
+                    {% endif %}
+                    {% if not gym.has_public_contact %}
+                        <article class="info-block wide">
+                            <span>Coordonnees</span>
+                            <strong>Non renseignees</strong>
+                            <small>Adressez-vous a l'accueil de {{ gym.name }}.</small>
+                        </article>
+                    {% endif %}
                 </div>
             </section>
 

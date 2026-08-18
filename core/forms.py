@@ -38,6 +38,61 @@ class OrganizationSettingsForm(forms.ModelForm):
         return logo
 
 
+class GymContactForm(forms.ModelForm):
+    """
+    Coordonnees de la salle, telles que le membre les verra.
+
+    Une organisation peut exploiter plusieurs sites : l'adresse du siege
+    envoie a la mauvaise porte un membre inscrit ailleurs. Les champs laisses
+    vides retombent sur les coordonnees de l'organisation.
+    """
+
+    class Meta:
+        model = Gym
+        fields = ["address", "phone", "email", "opening_hours"]
+        widgets = {
+            "address": forms.Textarea(attrs={
+                "class": "form-control",
+                "rows": 3,
+                "placeholder": "Ex : 12 avenue de la Justice, Gombe, Kinshasa",
+            }),
+            "phone": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Ex : +243 81 000 00 00",
+            }),
+            "email": forms.EmailInput(attrs={
+                "class": "form-control",
+                "placeholder": "Ex : kinshasa@royalgym.cd",
+            }),
+            "opening_hours": forms.Textarea(attrs={
+                "class": "form-control",
+                "rows": 4,
+                "placeholder": "Lundi au vendredi : 06h - 21h\nSamedi : 08h - 18h\nDimanche : ferme",
+            }),
+        }
+        labels = {
+            "address": "Adresse",
+            "phone": "Telephone",
+            "email": "E-mail",
+            "opening_hours": "Horaires d'ouverture",
+        }
+        help_texts = {
+            "address": "Laisser vide pour reprendre l'adresse de l'organisation.",
+            "phone": "Laisser vide pour reprendre le telephone de l'organisation.",
+            "email": "Laisser vide pour reprendre l'e-mail de l'organisation.",
+            "opening_hours": "Texte libre, une ligne par plage. Propre a cette salle.",
+        }
+
+    def clean_phone(self):
+        return (self.cleaned_data.get("phone") or "").strip()
+
+    def clean_address(self):
+        return (self.cleaned_data.get("address") or "").strip()
+
+    def clean_opening_hours(self):
+        return (self.cleaned_data.get("opening_hours") or "").strip()
+
+
 class GymMaintenanceSettingsForm(forms.ModelForm):
     """
     Delai de prevenance des maintenances, propre a chaque salle.

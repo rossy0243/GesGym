@@ -2790,3 +2790,215 @@ class RegistrationAuthorshipTests(TestCase):
 
         with self.assertRaises(ValueError):
             demande.cancel(self.receptionniste)
+
+
+class MemberPortalGymIdentityTests(TestCase):
+    """Le membre doit savoir dans quelle salle il est inscrit."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Royal Gym",
+            slug="royal-gym-identite",
+            address="Siege social, Gombe",
+            phone="+243800000000",
+            email="contact@royalgym.cd",
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Royal Gym Limete",
+            slug="royal-limete",
+            subdomain="royal-limete",
+            address="45 avenue Kabinda, Limete",
+            phone="+243811111111",
+            opening_hours="Lundi au vendredi : 06h - 21h\nSamedi : 08h - 18h",
+        )
+        self.member = Member.objects.create(
+            gym=self.gym,
+            first_name="Yann",
+            last_name="Ilunga",
+            phone="+243812222222",
+            email="yann.ilunga@example.com",
+        )
+        # Un membre nouvellement cree doit changer son mot de passe avant
+        # d'atteindre le portail : on simule cette premiere connexion faite.
+        self.member.user.set_password("MemberPortal123!")
+        self.member.user.force_password_change = False
+        self.member.user.save(update_fields=["password", "force_password_change"])
+        self.client.force_login(self.member.user)
+
+    def _portail(self):
+        return self.client.get(reverse("members:member_portal"))
+
+    # --- Identification de la salle ------------------------------------------
+
+    def test_the_portal_names_the_gym_not_only_the_organization(self):
+        response = self._portail()
+
+        self.assertContains(response, "Royal Gym Limete")
+        self.assertContains(response, "Ma salle : Royal Gym Limete")
+
+    def test_the_installed_app_is_named_after_the_gym(self):
+        response = self._portail()
+
+        self.assertContains(
+            response, '<meta name="apple-mobile-web-app-title" content="Royal Gym Limete">'
+        )
+
+    def test_the_portal_never_shows_the_software_publisher(self):
+        response = self._portail()
+
+        self.assertNotContains(response, "logo_smartclub")
+        self.assertNotContains(response, "SmartClub")
+
+    def test_the_member_card_block_names_the_gym(self):
+        response = self._portail()
+
+        self.assertContains(response, "Carte membre - Royal Gym Limete")
+
+    # --- Coordonnees propres a la salle ---------------------------------------
+
+    def test_the_gym_own_address_wins_over_the_organization_one(self):
+        self.assertEqual(self.gym.contact_address, "45 avenue Kabinda, Limete")
+        self.assertEqual(self.gym.contact_phone, "+243811111111")
+
+    def test_an_empty_field_falls_back_to_the_organization(self):
+        # L'e-mail n'est pas renseigne sur la salle : celui du siege vaut
+        # mieux que rien.
+        self.assertEqual(self.gym.contact_email, "contact@royalgym.cd")
+
+    def test_the_hours_are_never_borrowed_from_the_organization(self):
+        sans_horaires = Gym.objects.create(
+            organization=self.organization,
+            name="Royal Gym Bandal",
+            slug="royal-bandal",
+            subdomain="royal-bandal",
+        )
+
+        self.assertEqual(sans_horaires.contact_hours, "")
+        self.assertEqual(sans_horaires.contact_address, "Siege social, Gombe")
+
+    def test_the_portal_shows_the_gym_contact_details(self):
+        response = self._portail()
+
+        self.assertContains(response, "45 avenue Kabinda, Limete")
+        self.assertContains(response, "+243811111111")
+        self.assertContains(response, "Lundi au vendredi : 06h - 21h")
+
+    def test_a_gym_without_any_contact_says_so_plainly(self):
+        gym_vide = Gym.objects.create(
+            organization=Organization.objects.create(
+                name="Club Nu", slug="club-nu"
+            ),
+            name="Club Nu Centre",
+            slug="club-nu-centre",
+            subdomain="club-nu-centre",
+        )
+        membre = Member.objects.create(
+            gym=gym_vide,
+            first_name="Sans",
+            last_name="Contact",
+            phone="+243813333333",
+        )
+        membre.user.set_password("MemberPortal123!")
+        membre.user.force_password_change = False
+        membre.user.save(update_fields=["password", "force_password_change"])
+        self.client.force_login(membre.user)
+
+        response = self._portail()
+
+        self.assertFalse(gym_vide.has_public_contact)
+        self.assertContains(response, "Adressez-vous a l'accueil de Club Nu Centre")
+
+    # --- Bandeau de suspension ------------------------------------------------
+
+    def test_the_suspension_banner_names_the_gym_and_its_phone(self):
+        self.member.status = "suspended"
+        self.member.save(update_fields=["status"])
+
+        response = self._portail()
+
+        self.assertContains(response, "Salle concernee")
+        self.assertContains(response, "Royal Gym Limete")
+        self.assertContains(response, "+243811111111")
+
+
+class GymContactSettingsTests(TestCase):
+    """Les coordonnees de la salle se saisissent dans Parametres."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Coordonnees", slug="org-coordonnees"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Coordonnees",
+            slug="gym-coordonnees",
+            subdomain="gym-coordonnees",
+        )
+        self.manager = User.objects.create_user(
+            username="gerant-coordonnees", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.manager, gym=self.gym, role="manager", is_active=True
+        )
+        self.client.force_login(self.manager)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def test_the_settings_page_saves_the_gym_contact_details(self):
+        response = self.client.post(
+            reverse("core:settings"),
+            {
+                "action": "gym_contact",
+                "address": "12 avenue de la Justice",
+                "phone": "+243820000000",
+                "email": "limete@example.cd",
+                "opening_hours": "Tous les jours : 06h - 22h",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.gym.refresh_from_db()
+        self.assertEqual(self.gym.address, "12 avenue de la Justice")
+        self.assertEqual(self.gym.phone, "+243820000000")
+        self.assertEqual(self.gym.opening_hours, "Tous les jours : 06h - 22h")
+
+    def test_the_change_is_traced_in_the_sensitive_log(self):
+        self.client.post(
+            reverse("core:settings"),
+            {
+                "action": "gym_contact",
+                "address": "12 avenue de la Justice",
+                "phone": "",
+                "email": "",
+                "opening_hours": "",
+            },
+            follow=True,
+        )
+
+        trace = SensitiveActivityLog.objects.get(action="gym.contact_updated")
+        self.assertEqual(trace.actor, self.manager)
+        self.assertIn("address", trace.metadata["champs_modifies"])
+
+    def test_a_malformed_email_is_refused(self):
+        self.client.post(
+            reverse("core:settings"),
+            {
+                "action": "gym_contact",
+                "address": "",
+                "phone": "",
+                "email": "pas-une-adresse",
+                "opening_hours": "",
+            },
+        )
+
+        self.gym.refresh_from_db()
+        self.assertEqual(self.gym.email, "")
+
+    def test_the_settings_page_offers_the_gym_tab(self):
+        response = self.client.get(reverse("core:settings"), {"tab": "salle"})
+
+        self.assertContains(response, "Ma salle")
+        self.assertContains(response, "Coordonnees de Gym Coordonnees")

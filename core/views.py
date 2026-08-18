@@ -25,6 +25,7 @@ from machines.alerts import maintenance_alert_summary
 
 from .forms import (
     CoachSpecialtyForm,
+    GymContactForm,
     GymMaintenanceSettingsForm,
     InternalEmployeeForm,
     InternalEmployeeProfileForm,
@@ -648,6 +649,7 @@ def settings_dashboard(request):
     locked_employee_gym = None if can_manage_organization else gym
     organization_form = OrganizationSettingsForm(instance=organization)
     maintenance_form = GymMaintenanceSettingsForm(instance=gym)
+    gym_contact_form = GymContactForm(instance=gym)
     employee_form = InternalEmployeeForm(
         organization=organization,
         gyms=accessible_gyms,
@@ -708,8 +710,26 @@ def settings_dashboard(request):
                 messages.success(request, "Informations de l'organisation mises a jour.")
                 return _settings_redirect("organization")
 
+        elif action == "gym_contact":
+            active_tab = "salle"
+            gym_contact_form = GymContactForm(request.POST, instance=gym)
+            if gym_contact_form.is_valid():
+                modifies = list(gym_contact_form.changed_data)
+                gym_contact_form.save()
+                log_sensitive_action(
+                    request,
+                    "gym.contact_updated",
+                    "Gym",
+                    gym.name,
+                    metadata={"champs_modifies": modifies},
+                )
+                messages.success(
+                    request, "Coordonnees de la salle mises a jour."
+                )
+                return _settings_redirect("salle")
+
         elif action == "maintenance":
-            active_tab = "maintenance"
+            active_tab = "salle"
             maintenance_form = GymMaintenanceSettingsForm(request.POST, instance=gym)
             if maintenance_form.is_valid():
                 avant = Gym.objects.values_list(
@@ -727,7 +747,7 @@ def settings_dashboard(request):
                     },
                 )
                 messages.success(request, "Delai de prevenance des maintenances mis a jour.")
-                return _settings_redirect("maintenance")
+                return _settings_redirect("salle")
 
         elif action == "employee_create":
             active_tab = "employees"
@@ -1021,6 +1041,7 @@ def settings_dashboard(request):
         "gym": gym,
         "organization_form": organization_form,
         "maintenance_form": maintenance_form,
+        "gym_contact_form": gym_contact_form,
         "maintenance_alerts": maintenance_alert_summary(gym),
         "employee_form": employee_form,
         "employee_edit_form": employee_edit_form,

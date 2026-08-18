@@ -59,6 +59,7 @@ employer dans la formation : l'apprenant doit reconnaitre ce qu'il verra.
 
 ### Confirmations
 
+- Coordonnees de la salle mises a jour.
 - Delai de prevenance des maintenances mis a jour.
 - Employe cree : {valeur}. Mot de passe temporaire : {valeur}. Changement obligatoire a la premiere connexion.
 - Employe {valeur} {valeur}.
@@ -89,6 +90,7 @@ et rassurer sur ce qui ne l'est pas.
 - `employee.deleted`
 - `employee.password_reset`
 - `employee.updated`
+- `gym.contact_updated`
 - `gym.maintenance_alert_updated`
 - `organization.updated`
 - `settings.action_refused`
@@ -246,6 +248,12 @@ meilleure source pour les cas limites a montrer en formation.
 - an unknown window falls back on seven days
 - the coach ratio is no longer frozen at zero
 - period comparisons are supplied to the template — _Les badges existaient dans le template sans donnee derriere._
+
+### TemplateCommentSyntaxTests
+
+> Aucun gabarit ne doit afficher ses propres commentaires.
+
+- no template uses a multiline short comment
 
 ## A completer par un humain
 

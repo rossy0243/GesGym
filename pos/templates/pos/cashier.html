@@ -556,8 +556,8 @@
                         <select name="plan" id="planSelect" class="form-select" required>
                             <option value="">-- Choisir une formule --</option>
                             {% for p in plans %}
-                                {# Sans unlocalize, le prix arrive en francais ("19,99") et
-                                   Number() le lit comme NaN : le montant reste vide. #}
+                                {% comment %} Sans unlocalize, le prix arrive en francais ("19,99") et
+                                   Number() le lit comme NaN : le montant reste vide. {% endcomment %}
                                 <option value="{{ p.id }}"
                                         data-price="{{ p.price|unlocalize }}"
                                         data-currency="USD">
@@ -596,8 +596,8 @@
                             <select name="product" id="productSelect" class="form-select" disabled>
                                 <option value="">-- Choisir un produit --</option>
                                 {% for product in products %}
-                                    {# Le prix est saisi dans la devise du rayon : la caisse
-                                       convertit, elle ne suppose pas le dollar. #}
+                                    {% comment %} Le prix est saisi dans la devise du rayon : la caisse
+                                       convertit, elle ne suppose pas le dollar. {% endcomment %}
                                     <option value="{{ product.id }}"
                                             data-price="{{ product.price|unlocalize }}"
                                             data-currency="{{ product.currency }}"

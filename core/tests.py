@@ -1,6 +1,8 @@
+import re
 from decimal import Decimal
 from datetime import date, datetime, time, timedelta
 from io import BytesIO, StringIO
+from pathlib import Path
 from unittest.mock import patch
 from unittest.mock import patch
 from zipfile import ZipFile
@@ -8,7 +10,8 @@ from zipfile import ZipFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.http import QueryDict
-from django.test import TestCase, override_settings
+from django.conf import settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -2993,3 +2996,30 @@ class DashboardKpiConsistencyTests(TestCase):
             with self.subTest(trend=key):
                 self.assertIn("display", context[key])
                 self.assertIn("badge_class", context[key])
+
+
+class TemplateCommentSyntaxTests(SimpleTestCase):
+    """Aucun gabarit ne doit afficher ses propres commentaires."""
+
+    # {# ... #} ne tient que sur une ligne. Sur plusieurs, Django ne le
+    # reconnait pas comme un commentaire et l'ecrit tel quel dans la page :
+    # le visiteur lit les notes de developpement.
+    COMMENTAIRE_MULTILIGNE = re.compile(r"\{#[^#]*?\n.*?#\}", re.S)
+
+    def test_no_template_uses_a_multiline_short_comment(self):
+        racine = Path(settings.BASE_DIR)
+        fautifs = []
+
+        for gabarit in racine.rglob("*.html"):
+            if ".venv" in gabarit.parts or "node_modules" in gabarit.parts:
+                continue
+            texte = gabarit.read_text(encoding="utf-8", errors="replace")
+            if self.COMMENTAIRE_MULTILIGNE.search(texte):
+                fautifs.append(str(gabarit.relative_to(racine)))
+
+        self.assertEqual(
+            fautifs,
+            [],
+            "Ces gabarits afficheraient leurs commentaires : "
+            "utilisez {% comment %}...{% endcomment %}.",
+        )

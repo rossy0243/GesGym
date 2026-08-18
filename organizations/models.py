@@ -148,6 +148,36 @@ class Gym(models.Model):
 
     is_active = models.BooleanField(default=True)
 
+    # Coordonnees propres a la salle. Une organisation peut exploiter
+    # plusieurs sites : afficher l'adresse du siege a un membre inscrit
+    # ailleurs l'envoie a la mauvaise porte. Vide, on retombe sur celles de
+    # l'organisation, qui restent le point de contact par defaut.
+    address = models.TextField(
+        blank=True,
+        default="",
+        verbose_name="Adresse de la salle",
+    )
+
+    phone = models.CharField(
+        max_length=30,
+        blank=True,
+        default="",
+        verbose_name="Telephone de la salle",
+    )
+
+    email = models.EmailField(
+        blank=True,
+        default="",
+        verbose_name="E-mail de la salle",
+    )
+
+    opening_hours = models.TextField(
+        blank=True,
+        default="",
+        verbose_name="Horaires d'ouverture",
+        help_text="Texte libre, une ligne par plage. Ex : Lundi au vendredi 06h - 21h",
+    )
+
     # Combien de jours a l'avance signaler une maintenance a venir. Deux
     # semaines laissent le temps de commander une piece ou de reserver un
     # technicien avant que la machine ne soit immobilisee.
@@ -171,8 +201,47 @@ class Gym(models.Model):
 
     def __str__(self):
         return self.name
-    
-    
+
+    # --- Coordonnees a montrer au membre -----------------------------------
+    # La salle prime sur l'organisation : c'est la porte que le membre pousse.
+    # Sans coordonnee propre, celles de l'organisation valent mieux que rien.
+
+    def _repli(self, valeur, champ_organisation):
+        propre = (valeur or "").strip()
+        if propre:
+            return propre
+        return (getattr(self.organization, champ_organisation, "") or "").strip()
+
+    @property
+    def contact_address(self):
+        return self._repli(self.address, "address")
+
+    @property
+    def contact_phone(self):
+        return self._repli(self.phone, "phone")
+
+    @property
+    def contact_email(self):
+        return self._repli(self.email, "email")
+
+    @property
+    def contact_hours(self):
+        """Horaires propres a la salle : l'organisation n'en porte pas."""
+        return (self.opening_hours or "").strip()
+
+    @property
+    def has_public_contact(self):
+        """Vrai des qu'une coordonnee est affichable au membre."""
+        return any(
+            (
+                self.contact_address,
+                self.contact_phone,
+                self.contact_email,
+                self.contact_hours,
+            )
+        )
+
+
 class GymModule(models.Model):
     """
     Permet d'activer un module pour un gym spécifique.

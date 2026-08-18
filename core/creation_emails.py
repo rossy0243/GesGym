@@ -32,7 +32,7 @@ def _reply_to_for_organization(organization):
     return [email] if parsed_email else []
 
 
-def _message_to_html(message):
+def _message_to_html(message, organization_name=""):
     paragraphs = []
     current_lines = []
     for line in message.splitlines():
@@ -46,6 +46,16 @@ def _message_to_html(message):
         paragraphs.append("<br>".join(current_lines))
 
     body = "\n".join(f"<p>{paragraph}</p>" for paragraph in paragraphs)
+    # Le pied de page signait l'editeur du logiciel. Un membre qui recoit ce
+    # courriel connait sa salle, pas SmartClub : voir un nom inconnu au bas
+    # d'un message contenant son mot de passe ressemble a une tentative de
+    # hameconnage.
+    emetteur = _clean_header_value(organization_name)
+    signature = (
+        f"Email envoye automatiquement par {escape(emetteur)} suite a une action sur votre compte."
+        if emetteur
+        else "Email envoye automatiquement suite a une action sur votre compte."
+    )
     return f"""<!doctype html>
 <html>
   <body style="margin:0;padding:0;background:#f6f7f9;font-family:Arial,sans-serif;color:#111827;">
@@ -54,7 +64,7 @@ def _message_to_html(message):
         {body}
       </div>
       <p style="font-size:12px;color:#6b7280;margin:16px 4px 0;">
-        Email transactionnel envoye suite a une action effectuee dans SmartClub Pro.
+        {signature}
       </p>
     </div>
   </body>
@@ -86,11 +96,35 @@ def _send_creation_email(
             "X-SmartClub-Email-Type": email_type,
         },
     )
-    email.attach_alternative(_message_to_html(message), "text/html")
+    email.attach_alternative(
+        _message_to_html(message, organization_name), "text/html"
+    )
     for filename, content, mimetype in attachments or []:
         email.attach(filename, content, mimetype)
     email.send(fail_silently=False)
     return True
+
+
+def _gym_contact_lines(gym):
+    """
+    Coordonnees de la salle, en bloc, si elles sont renseignees.
+
+    Rien a ecrire si la salle n'a rien declare : un bloc "Non renseigne" n'aide
+    personne et alourdit le message.
+    """
+    if gym is None or not getattr(gym, "has_public_contact", False):
+        return []
+
+    lignes = ["", f"Votre salle : {gym.name}"]
+    if gym.contact_address:
+        lignes.append(f"- Adresse : {gym.contact_address}")
+    if gym.contact_hours:
+        lignes.append(f"- Horaires : {gym.contact_hours}")
+    if gym.contact_phone:
+        lignes.append(f"- Telephone : {gym.contact_phone}")
+    if gym.contact_email:
+        lignes.append(f"- E-mail : {gym.contact_email}")
+    return lignes
 
 
 def send_member_creation_email(member, temporary_password="", portal_url=""):
@@ -140,6 +174,10 @@ def send_member_creation_email(member, temporary_password="", portal_url=""):
     )
     if portal_url:
         lines.extend(["", f"Espace membre : {portal_url}"])
+
+    # Ou se presenter. Une organisation peut exploiter plusieurs salles :
+    # sans adresse, le membre ne sait pas laquelle est la sienne.
+    lines.extend(_gym_contact_lines(member.gym if member.gym_id else None))
 
     return _send_creation_email(
         subject=f"{organization_name or gym_name} - Vos coordonnees membre",

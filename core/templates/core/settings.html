@@ -180,8 +180,8 @@
     <button type="button" class="btn btn-light settings-tab" data-tab-target="specialties">
         <span class="material-icons me-1" style="font-size:18px;">sports</span>Specialites coach
     </button>
-    <button type="button" class="btn btn-light settings-tab" data-tab-target="maintenance">
-        <span class="material-icons me-1" style="font-size:18px;">build</span>Maintenance
+    <button type="button" class="btn btn-light settings-tab" data-tab-target="salle">
+        <span class="material-icons me-1" style="font-size:18px;">storefront</span>Ma salle
         {% if maintenance_alerts %}
         <span class="badge bg-danger ms-1">{{ maintenance_alerts.total }}</span>
         {% endif %}
@@ -191,7 +191,65 @@
     </button>
 </div>
 
-<div id="settings-maintenance" class="settings-section">
+<div id="settings-salle" class="settings-section">
+    <div class="settings-card mb-4">
+        <div class="card-header">
+            <h5 class="card-title mb-1">Coordonnees de {{ gym.name }}</h5>
+            <small class="text-muted">
+                Ce que le membre lit dans son espace pour savoir ou il est inscrit.
+                Un champ laisse vide reprend la coordonnee de l'organisation ;
+                les horaires, eux, sont propres a cette salle.
+            </small>
+        </div>
+        <div class="card-body">
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="gym_contact">
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold" for="{{ gym_contact_form.address.id_for_label }}">
+                            {{ gym_contact_form.address.label }}
+                        </label>
+                        {{ gym_contact_form.address }}
+                        <small class="text-muted">{{ gym_contact_form.address.help_text }}</small>
+                        {{ gym_contact_form.address.errors }}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold" for="{{ gym_contact_form.opening_hours.id_for_label }}">
+                            {{ gym_contact_form.opening_hours.label }}
+                        </label>
+                        {{ gym_contact_form.opening_hours }}
+                        <small class="text-muted">{{ gym_contact_form.opening_hours.help_text }}</small>
+                        {{ gym_contact_form.opening_hours.errors }}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold" for="{{ gym_contact_form.phone.id_for_label }}">
+                            {{ gym_contact_form.phone.label }}
+                        </label>
+                        {{ gym_contact_form.phone }}
+                        <small class="text-muted">{{ gym_contact_form.phone.help_text }}</small>
+                        {{ gym_contact_form.phone.errors }}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold" for="{{ gym_contact_form.email.id_for_label }}">
+                            {{ gym_contact_form.email.label }}
+                        </label>
+                        {{ gym_contact_form.email }}
+                        <small class="text-muted">{{ gym_contact_form.email.help_text }}</small>
+                        {{ gym_contact_form.email.errors }}
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end mt-4">
+                    <button type="submit" class="btn btn-primary">
+                        <span class="material-icons me-2" style="font-size:18px;">save</span>Enregistrer
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div class="settings-card mb-4">
         <div class="card-header">
             <h5 class="card-title mb-1">Alerte de maintenance</h5>
