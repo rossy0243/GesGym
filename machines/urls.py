@@ -9,6 +9,8 @@ urlpatterns = [
     path('machines/<int:machine_id>/', views.machine_detail, name='detail'),
     path('machines/<int:machine_id>/update/', views.machine_update, name='update'),
     path('machines/<int:machine_id>/delete/', views.machine_delete, name='delete'),
+    path('machines/<int:machine_id>/declasser/', views.machine_declass, name='declass'),
+    path('machines/<int:machine_id>/remettre-en-service/', views.machine_return_to_service, name='return_to_service'),
     path('machines/<int:machine_id>/maintenances/add/', views.maintenance_log_create, name='add_maintenance'),
 
     path('maintenances/', views.maintenance_list, name='maintenance_list'),

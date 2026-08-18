@@ -17,6 +17,8 @@ de ce que le logiciel fait reellement, pas de ce qu'on croit qu'il fait.
 | `machines/<int:machine_id>/` | `views.machine_detail` | `detail` |
 | `machines/<int:machine_id>/update/` | `views.machine_update` | `update` |
 | `machines/<int:machine_id>/delete/` | `views.machine_delete` | `delete` |
+| `machines/<int:machine_id>/declasser/` | `views.machine_declass` | `declass` |
+| `machines/<int:machine_id>/remettre-en-service/` | `views.machine_return_to_service` | `return_to_service` |
 | `machines/<int:machine_id>/maintenances/add/` | `views.maintenance_log_create` | `add_maintenance` |
 | `maintenances/` | `views.maintenance_list` | `maintenance_list` |
 | `maintenances/dashboard/` | `views.maintenance_dashboard` | `maintenance_dashboard` |
@@ -26,27 +28,44 @@ de ce que le logiciel fait reellement, pas de ce qu'on croit qu'il fait.
 
 ### `Machine`
 
-> Machines du gym (tapis, vélo, etc.)
+> Equipement du gym.
+> 
+> Deux natures cohabitent, parce qu'elles ne se gerent pas pareil :
+> 
+> - une **machine** (tapis, velo, presse) s'entretient. Elle a un rythme de
+>   maintenance, un historique d'interventions, et un cout d'entretien ;
+> - un **accessoire** (halteres, tapis de sol, elastiques) ne s'entretient
+>   pas. Quand il est use, on ne le repare pas : on le sort du parc.
+> 
+> Les confondre revenait a proposer un entretien periodique pour une corde a
+> sauter, et a n'offrir aucun moyen propre de sortir du parc un accessoire
+> hors d'usage autrement qu'en le supprimant, ce qui effacait son historique.
 
 
 | Champ | Type |
 |---|---|
 | `gym` | ForeignKey |
 | `name` | CharField |
+| `equipment_type` | CharField |
 | `status` | CharField |
 | `purchase_date` | DateField |
 | `maintenance_interval_days` | PositiveIntegerField |
+| `declassed_on` | DateField |
+| `declassed_reason` | CharField |
 | `created_at` | DateTimeField |
 
 Valeurs possibles `STATUS` :
 
 ```python
-(('ok', 'OK'), ('maintenance', 'Maintenance'), ('broken', 'En panne'))
+((STATUS_OK, 'OK'), (STATUS_MAINTENANCE, 'Maintenance'), (STATUS_BROKEN, 'En panne'), (STATUS_DECLASSED, 'Declasse'))
 ```
 
 ### `MaintenanceLog`
 
-> Historique des maintenances machines
+> Historique des maintenances machines.
+> 
+> Reserve aux machines encore au parc : un accessoire ne se repare pas, et
+> un equipement declasse n'a plus a coûter d'entretien.
 
 
 | Champ | Type |
@@ -69,6 +88,8 @@ formation : « la reception peut pointer mais pas consulter les salaires ».
 | `machine_create` | `login_required`<br>`module_required('MACHINES')`<br>`role_required(MACHINE_ROLES)` |
 | `machine_update` | `login_required`<br>`module_required('MACHINES')`<br>`role_required(MACHINE_ROLES)` |
 | `machine_delete` | `login_required`<br>`module_required('MACHINES')`<br>`role_required(MACHINE_ROLES)` |
+| `machine_declass` | `login_required`<br>`module_required('MACHINES')`<br>`role_required(MACHINE_ROLES)` |
+| `machine_return_to_service` | `login_required`<br>`module_required('MACHINES')`<br>`role_required(MACHINE_ROLES)`<br>`require_POST` |
 | `maintenance_log_create` | `login_required`<br>`module_required('MACHINES')`<br>`role_required(MACHINE_ROLES)` |
 | `maintenance_list` | `login_required`<br>`module_required('MACHINES')`<br>`role_required(MACHINE_ROLES)` |
 | `maintenance_dashboard` | `login_required`<br>`module_required('MACHINES')`<br>`role_required(MACHINE_ROLES)` |
@@ -79,7 +100,11 @@ formation : « la reception peut pointer mais pas consulter les salaires ».
 Refus opposes par le logiciel. Chacun merite une explication dans la
 formation : pourquoi la regle existe, et que faire quand on la rencontre.
 
+- Cet equipement est declasse : remettez-le en service avant d'y engager une depense.
 - Le cout ne peut pas etre negatif.
+- Un accessoire ne s'entretient pas : il se declasse quand il est hors d'usage.
+- Un declassement ne se date pas dans le futur.
+- Un equipement en service ne peut pas porter de declassement.
 
 ## Ce que l'utilisateur lit a l'ecran
 
@@ -88,6 +113,8 @@ employer dans la formation : l'apprenant doit reconnaitre ce qu'il verra.
 
 ### Confirmations
 
+- "{valeur}" a ete sorti du parc.
+- "{valeur}" est de nouveau en service.
 - Log de maintenance supprime avec succes.
 - Machine "{valeur}" creee avec succes.
 - Machine "{valeur}" modifiee avec succes.
@@ -99,11 +126,18 @@ employer dans la formation : l'apprenant doit reconnaitre ce qu'il verra.
 - Impossible de supprimer cette machine car certaines maintenances sont deja liees a des paiements POS.
 - Impossible de supprimer cette maintenance car elle est deja liee a un paiement POS.
 
+### Informations
+
+- "{valeur}" est deja declasse.
+- "{valeur}" est deja en service.
+
 ## Traces laissees dans le journal sensible
 
 Actions consignees. Utile pour expliquer aux equipes ce qui est trace,
 et rassurer sur ce qui ne l'est pas.
 
+- `machines.equipment_declassed`
+- `machines.equipment_returned_to_service`
 - `machines.machine_deleted`
 - `machines.maintenance_deleted`
 - `machines.maintenance_recorded`
@@ -111,6 +145,7 @@ et rassurer sur ce qui ne l'est pas.
 ## Ecrans concernes
 
 - `machines\templates\machines\machine_confirm_delete.html`
+- `machines\templates\machines\machine_declass.html`
 - `machines\templates\machines\machine_detail.html`
 - `machines\templates\machines\machine_form.html`
 - `machines\templates\machines\machine_list.html`
@@ -155,6 +190,31 @@ meilleure source pour les cas limites a montrer en formation.
 - an absurd lead time is refused
 - the banner follows the manager on every page
 - a cashier never sees the maintenance banner
+
+### EquipmentNatureTests
+
+> Une machine s'entretient ; un accessoire se declasse.
+
+- an accessory cannot carry a maintenance interval
+- an accessory cannot be put under maintenance
+- an accessory refuses a maintenance log
+- the form refuses an interval on an accessory
+- the maintenance page turns an accessory away
+- an accessory is never in the maintenance alerts
+- an accessory is declassed directly
+- a machine can also be declassed at end of life
+- a declassement is never dated in the future
+- the declassement is traced in the sensitive log
+- a declassed machine no longer raises a maintenance alert
+- a declassed machine refuses a new maintenance
+- a declassement can be undone
+- a machine in service cannot carry a declassement
+- a maintenance form cannot declass the machine
+- the park counts both natures apart
+- a declassed item leaves the availability rate
+- the list hides declassed items unless asked
+- the list filters on the nature
+- the declassed status is not offered in the edit form
 
 ## A completer par un humain
 

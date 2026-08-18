@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+
+{% block page_titre %}Declasser un equipement{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-7 col-lg-6">
+            <div class="card border-0 shadow-sm" style="border-radius:18px;">
+                <div class="card-header bg-dark text-white" style="border-radius:18px 18px 0 0;">
+                    <h4 class="mb-0 d-flex align-items-center gap-2">
+                        <span class="material-icons">archive</span>
+                        Sortir du parc
+                    </h4>
+                </div>
+                <div class="card-body p-4">
+                    <p class="mb-1">
+                        <strong>{{ machine.get_equipment_type_display }} :</strong> {{ machine.name }}
+                    </p>
+                    <p class="text-muted mb-4"><strong>Salle :</strong> {{ gym.name }}</p>
+
+                    <div class="alert alert-light border">
+                        La fiche est conservee avec son historique et ses couts.
+                        L'equipement quitte simplement le parc exploite : il ne compte plus
+                        dans le taux de disponibilite et ne declenche plus d'alerte d'entretien.
+                        {% if machine.is_accessory %}
+                        <div class="mt-2 mb-0 small">
+                            Un accessoire ne se repare pas : le declassement est sa fin de vie normale.
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <form method="post">
+                        {% csrf_token %}
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold" for="{{ form.motif.id_for_label }}">
+                                {{ form.motif.label }}
+                            </label>
+                            {{ form.motif }}
+                            {{ form.motif.errors }}
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold" for="{{ form.precision.id_for_label }}">
+                                {{ form.precision.label }}
+                            </label>
+                            {{ form.precision }}
+                            {{ form.precision.errors }}
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold" for="{{ form.date_declassement.id_for_label }}">
+                                {{ form.date_declassement.label }}
+                            </label>
+                            {{ form.date_declassement }}
+                            {{ form.date_declassement.errors }}
+                        </div>
+
+                        <div class="d-flex justify-content-end gap-2 flex-wrap">
+                            <a href="{% url 'machines:detail' machine.id %}" class="btn btn-light">
+                                Annuler
+                            </a>
+                            <button type="submit" class="btn btn-dark d-flex align-items-center gap-2">
+                                <span class="material-icons" style="font-size:18px;">archive</span>
+                                Declasser
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

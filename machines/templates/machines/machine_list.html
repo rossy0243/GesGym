@@ -10,7 +10,7 @@
         <div class="page-header-title d-flex align-items-center gap-2">
             <span class="material-icons text-primary" style="font-size:28px;">precision_manufacturing</span>
             <div>
-                <h5 class="mb-0">Machines</h5>
+                <h5 class="mb-0">Machines &amp; accessoires</h5>
                 <small class="text-muted">{{ gym.name }}</small>
             </div>
         </div>
@@ -20,7 +20,7 @@
         <div class="d-flex align-items-center gap-2">
             <a href="{% url 'machines:create' %}" class="btn btn-primary d-flex align-items-center gap-2">
                 <span class="material-icons" style="font-size:18px;">add</span>
-                Ajouter une machine
+                Ajouter un équipement
             </a>
         </div>
     </div>
@@ -105,8 +105,11 @@
                     <span class="material-icons">inventory_2</span>
                 </div>
                 <div>
-                    <div class="fs-12 text-muted">Total machines</div>
+                    <div class="fs-12 text-muted">Parc en service</div>
                     <h4 class="mb-0">{{ total_machines }}</h4>
+                    <small class="text-muted">
+                        {{ machines_count }} machine(s), {{ accessories_count }} accessoire(s)
+                    </small>
                 </div>
             </div>
         </div>
@@ -164,8 +167,20 @@
 
         <form method="get" class="row g-3 align-items-end">
             <div class="col-md-3">
-                <label class="form-label small text-muted">Filtrer par statut</label>
-                <select name="status" class="form-select">
+                <label class="form-label small text-muted" for="filtreNature">Nature</label>
+                <select name="type" id="filtreNature" class="form-select">
+                    <option value="">Machines et accessoires</option>
+                    {% for value, label in type_choices %}
+                    <option value="{{ value }}" {% if type_filter == value %}selected{% endif %}>
+                        {{ label }}s
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-md-3">
+                <label class="form-label small text-muted" for="filtreStatut">Filtrer par statut</label>
+                <select name="status" id="filtreStatut" class="form-select">
                     <option value="">Tous</option>
                     {% for value, label in status_choices %}
                     <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>
@@ -173,6 +188,17 @@
                     </option>
                     {% endfor %}
                 </select>
+            </div>
+
+            <div class="col-md-3">
+                <div class="form-check">
+                    <input type="checkbox" name="declasses" value="1" id="filtreDeclasses"
+                           class="form-check-input" {% if show_declassed %}checked{% endif %}>
+                    <label class="form-check-label small" for="filtreDeclasses">
+                        Inclure les équipements déclassés
+                        {% if declassed_count %}({{ declassed_count }}){% endif %}
+                    </label>
+                </div>
             </div>
 
             <div class="col-md-3 d-flex gap-2">
@@ -190,15 +216,17 @@
             <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
                 <div class="d-flex align-items-center gap-3">
                     <div class="machine-avatar">
-                        <span class="material-icons">precision_manufacturing</span>
+                        <span class="material-icons">
+                            {% if machine.is_accessory %}fitness_center{% else %}precision_manufacturing{% endif %}
+                        </span>
                     </div>
                     <div>
                         <h5 class="mb-1">{{ machine.name }}</h5>
-                        <small class="text-muted">Équipement</small>
+                        <small class="text-muted">{{ machine.get_equipment_type_display }}</small>
                     </div>
                 </div>
 
-                <span class="badge {% if machine.status == 'ok' %}bg-success{% elif machine.status == 'maintenance' %}bg-warning text-dark{% else %}bg-danger{% endif %} px-3 py-2">
+                <span class="badge {% if machine.is_declassed %}bg-dark{% elif machine.status == 'ok' %}bg-success{% elif machine.status == 'maintenance' %}bg-warning text-dark{% else %}bg-danger{% endif %} px-3 py-2">
                     {{ machine.get_status_display }}
                 </span>
             </div>
@@ -212,9 +240,17 @@
                         -
                     {% endif %}
                 </div>
+                {% if machine.is_declassed %}
+                <div>
+                    <strong>Déclassé le :</strong> {{ machine.declassed_on|date:"d/m/Y" }}
+                </div>
+                {% elif machine.is_accessory %}
+                <div class="text-muted">Sans entretien périodique</div>
+                {% else %}
                 <div>
                     <strong>Maintenances :</strong> {{ machine.maintenance_logs.count }}
                 </div>
+                {% endif %}
             </div>
 
             <div class="d-flex gap-2 flex-wrap">
@@ -226,6 +262,12 @@
                     <span class="material-icons" style="font-size:16px;">edit</span>
                     Modifier
                 </a>
+                {% if not machine.is_declassed %}
+                <a href="{% url 'machines:declass' machine.id %}" class="btn btn-sm btn-outline-dark d-flex align-items-center gap-1">
+                    <span class="material-icons" style="font-size:16px;">archive</span>
+                    Déclasser
+                </a>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -250,7 +292,7 @@
     <ul class="pagination pagination-custom justify-content-center mb-0">
         {% if machines.has_previous %}
         <li class="page-item">
-            <a class="page-link" href="?page={{ machines.previous_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}">
+            <a class="page-link" href="?page={{ machines.previous_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if type_filter %}&type={{ type_filter }}{% endif %}{% if show_declassed %}&declasses=1{% endif %}">
                 <span class="material-icons" style="font-size:16px;">chevron_left</span>
             </a>
         </li>
@@ -264,7 +306,7 @@
 
         {% for num in machines.paginator.page_range %}
         <li class="page-item {% if machines.number == num %}active{% endif %}">
-            <a class="page-link" href="?page={{ num }}{% if status_filter %}&status={{ status_filter }}{% endif %}">
+            <a class="page-link" href="?page={{ num }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if type_filter %}&type={{ type_filter }}{% endif %}{% if show_declassed %}&declasses=1{% endif %}">
                 {{ num }}
             </a>
         </li>
@@ -272,7 +314,7 @@
 
         {% if machines.has_next %}
         <li class="page-item">
-            <a class="page-link" href="?page={{ machines.next_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}">
+            <a class="page-link" href="?page={{ machines.next_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if type_filter %}&type={{ type_filter }}{% endif %}{% if show_declassed %}&declasses=1{% endif %}">
                 <span class="material-icons" style="font-size:16px;">chevron_right</span>
             </a>
         </li>

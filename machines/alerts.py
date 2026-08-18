@@ -30,8 +30,11 @@ def upcoming_maintenances(gym):
         return []
 
     delai = lead_days(gym)
+    # Un accessoire ne s'entretient pas et un equipement declasse a quitte le
+    # parc : ni l'un ni l'autre ne doit declencher une alerte d'entretien.
     machines = (
-        Machine.objects.filter(gym=gym)
+        Machine.objects.filter(gym=gym, equipment_type=Machine.TYPE_MACHINE)
+        .exclude(status=Machine.STATUS_DECLASSED)
         .exclude(maintenance_interval_days=None)
         .prefetch_related("maintenance_logs")
     )

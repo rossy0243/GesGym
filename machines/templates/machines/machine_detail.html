@@ -8,10 +8,12 @@
 <div class="page-header mb-4">
     <div class="page-header-left d-flex align-items-center">
         <div class="page-header-title d-flex align-items-center gap-2">
-            <span class="material-icons text-primary" style="font-size:28px;">precision_manufacturing</span>
+            <span class="material-icons text-primary" style="font-size:28px;">
+                {% if machine.is_accessory %}fitness_center{% else %}precision_manufacturing{% endif %}
+            </span>
             <div>
                 <h5 class="mb-0">{{ machine.name }}</h5>
-                <small class="text-muted">{{ machine.gym.name }}</small>
+                <small class="text-muted">{{ machine.get_equipment_type_display }} — {{ machine.gym.name }}</small>
             </div>
         </div>
     </div>
@@ -22,6 +24,21 @@
                 <span class="material-icons" style="font-size:18px;">edit</span>
                 Modifier
             </a>
+            {% if machine.is_declassed %}
+            <form method="post" action="{% url 'machines:return_to_service' machine.id %}" class="d-inline"
+                  onsubmit="return confirm('Remettre &quot;{{ machine.name|escapejs }}&quot; en service ?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline-success d-flex align-items-center gap-2">
+                    <span class="material-icons" style="font-size:18px;">restart_alt</span>
+                    Remettre en service
+                </button>
+            </form>
+            {% else %}
+            <a href="{% url 'machines:declass' machine.id %}" class="btn btn-outline-dark d-flex align-items-center gap-2">
+                <span class="material-icons" style="font-size:18px;">archive</span>
+                Déclasser
+            </a>
+            {% endif %}
             <a href="{% url 'machines:delete' machine.id %}" class="btn btn-outline-danger d-flex align-items-center gap-2">
                 <span class="material-icons" style="font-size:18px;">delete</span>
                 Supprimer
@@ -151,11 +168,23 @@
         <div class="machine-detail-card p-4">
             <div class="text-center mb-3">
                 <div class="machine-avatar-lg">
-                    <span class="material-icons" style="font-size:36px;">precision_manufacturing</span>
+                    <span class="material-icons" style="font-size:36px;">
+                        {% if machine.is_accessory %}fitness_center{% else %}precision_manufacturing{% endif %}
+                    </span>
                 </div>
                 <h4 class="mb-1">{{ machine.name }}</h4>
-                <span class="badge {% if machine.status == 'ok' %}bg-success{% elif machine.status == 'maintenance' %}bg-warning text-dark{% else %}bg-danger{% endif %} px-3 py-2">
+                <span class="badge {% if machine.is_declassed %}bg-dark{% elif machine.status == 'ok' %}bg-success{% elif machine.status == 'maintenance' %}bg-warning text-dark{% else %}bg-danger{% endif %} px-3 py-2">
                     {{ machine.get_status_display }}
+                </span>
+            </div>
+
+            <div class="info-line">
+                <strong>Nature :</strong><br>
+                <span class="text-muted">
+                    {{ machine.get_equipment_type_display }}
+                    {% if machine.is_accessory %}
+                    <small class="d-block">Ne s'entretient pas : se déclasse quand il est hors d'usage.</small>
+                    {% endif %}
                 </span>
             </div>
 
@@ -163,6 +192,30 @@
                 <strong>Statut :</strong><br>
                 <span class="text-muted">{{ machine.get_status_display }}</span>
             </div>
+
+            {% if machine.is_declassed %}
+            <div class="info-line">
+                <strong>Déclassé le :</strong><br>
+                <span class="text-muted">
+                    {{ machine.declassed_on|date:"d/m/Y" }}
+                    {% if machine.declassed_reason %}
+                    <small class="d-block">{{ machine.declassed_reason }}</small>
+                    {% endif %}
+                </span>
+            </div>
+            {% elif machine.is_maintainable and machine.maintenance_interval_days %}
+            <div class="info-line">
+                <strong>Prochaine maintenance :</strong><br>
+                <span class="text-muted">
+                    {% if machine.next_maintenance_on %}
+                    {{ machine.next_maintenance_on|date:"d/m/Y" }}
+                    <small class="d-block">tous les {{ machine.maintenance_interval_days }} jours</small>
+                    {% else %}
+                    Renseignez la date d'achat pour calculer l'échéance.
+                    {% endif %}
+                </span>
+            </div>
+            {% endif %}
 
             <div class="info-line">
                 <strong>Date d'achat :</strong><br>
@@ -196,13 +249,28 @@
                     Historique des maintenances
                 </h5>
 
+                {% if machine.is_maintainable %}
                 <a href="{% url 'machines:add_maintenance' machine.id %}" class="btn btn-primary btn-sm d-flex align-items-center gap-1">
                     <span class="material-icons" style="font-size:16px;">add</span>
                     Ajouter une maintenance
                 </a>
+                {% endif %}
             </div>
 
             <div class="card-body">
+                {% if machine.is_accessory %}
+                    <div class="alert alert-light border mb-3">
+                        Un accessoire ne s'entretient pas. Quand il est usé, cassé ou perdu,
+                        déclassez-le : sa fiche et ses coûts restent consultables, mais il
+                        quitte le parc exploité.
+                    </div>
+                {% elif machine.is_declassed %}
+                    <div class="alert alert-light border mb-3">
+                        Cet équipement est sorti du parc. Remettez-le en service pour pouvoir
+                        y engager une nouvelle dépense d'entretien.
+                    </div>
+                {% endif %}
+
                 {% if maintenance_logs %}
                     <div class="table-responsive">
                         <table class="table table-hover mb-0">
@@ -234,7 +302,13 @@
                     <div class="text-center py-5">
                         <span class="material-icons empty-state-icon">build</span>
                         <p class="mt-3 mb-1 fw-semibold text-muted">Aucune maintenance enregistrée</p>
-                        <small class="text-muted">Les interventions de maintenance apparaîtront ici.</small>
+                        <small class="text-muted">
+                            {% if machine.is_accessory %}
+                            Un accessoire n'en reçoit pas.
+                            {% else %}
+                            Les interventions de maintenance apparaîtront ici.
+                            {% endif %}
+                        </small>
                     </div>
                 {% endif %}
             </div>

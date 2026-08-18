@@ -5,6 +5,8 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Avg, Count, Sum
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
+from django.views.decorators.http import require_POST
 
 from core.audit import log_sensitive_action
 from pos.services import record_expense
@@ -12,7 +14,7 @@ from smartclub.access_control import MACHINE_ROLES
 from smartclub.decorators import module_required, role_required
 
 from .alerts import upcoming_maintenances
-from .forms import MachineForm, MaintenanceLogForm
+from .forms import DeclassementForm, MachineForm, MaintenanceLogForm
 from .kpis import (
     PERIOD_CHOICES,
     build_machine_kpis,
@@ -38,6 +40,17 @@ def machine_list(request):
     if status_filter:
         machines = machines.filter(status=status_filter)
 
+    type_filter = request.GET.get("type")
+    if type_filter in dict(Machine.EQUIPMENT_TYPES):
+        machines = machines.filter(equipment_type=type_filter)
+
+    # Le parc courant est ce qui sert tous les jours. Les equipements
+    # declasses restent consultables, mais ne polluent plus la liste de
+    # travail : on les demande explicitement.
+    show_declassed = request.GET.get("declasses") == "1"
+    if not show_declassed and status_filter != Machine.STATUS_DECLASSED:
+        machines = machines.exclude(status=Machine.STATUS_DECLASSED)
+
     paginator = Paginator(machines, 10)
     machines_page = paginator.get_page(request.GET.get("page"))
     period_data = get_period_window("month")
@@ -46,7 +59,10 @@ def machine_list(request):
         "gym": gym,
         "machines": machines_page,
         "status_filter": status_filter,
+        "type_filter": type_filter,
+        "show_declassed": show_declassed,
         "status_choices": Machine.STATUS,
+        "type_choices": Machine.EQUIPMENT_TYPES,
         **build_machine_kpis(gym, period_data),
     }
     return render(request, "machines/machine_list.html", context)
@@ -88,7 +104,7 @@ def machine_create(request):
     return render(
         request,
         "machines/machine_form.html",
-        {"gym": gym, "form": form, "title": "Ajouter une machine"},
+        {"gym": gym, "form": form, "title": "Ajouter un equipement"},
     )
 
 
@@ -114,7 +130,7 @@ def machine_update(request, machine_id):
             "gym": request.gym,
             "form": form,
             "machine": machine,
-            "title": "Modifier la machine",
+            "title": "Modifier l'equipement",
         },
     )
 
@@ -156,8 +172,95 @@ def machine_delete(request, machine_id):
 @login_required
 @module_required("MACHINES")
 @role_required(MACHINE_ROLES)
+def machine_declass(request, machine_id):
+    """
+    Sortie d'un equipement du parc.
+
+    Un accessoire use n'a pas d'autre issue : on ne le repare pas. Une machine
+    en fin de vie suit le meme chemin, apres ses maintenances. Dans les deux
+    cas la fiche reste, avec sa date et son motif, pour que les couts deja
+    engages restent lisibles.
+    """
+    machine = get_object_or_404(Machine, id=machine_id, gym=request.gym)
+
+    if machine.is_declassed:
+        messages.info(request, f'"{machine.name}" est deja declasse.')
+        return redirect("machines:detail", machine_id=machine.id)
+
+    if request.method == "POST":
+        form = DeclassementForm(request.POST)
+        if form.is_valid():
+            motif = form.motif_complet()
+            machine.declass(reason=motif, on=form.cleaned_data["date_declassement"])
+            log_sensitive_action(
+                request,
+                "machines.equipment_declassed",
+                "Machine",
+                machine.name,
+                metadata={
+                    "machine_id": machine.id,
+                    "nature": machine.equipment_type,
+                    "motif": motif,
+                    "date": str(machine.declassed_on),
+                },
+                gym=request.gym,
+            )
+            messages.success(request, f'"{machine.name}" a ete sorti du parc.')
+            return redirect("machines:detail", machine_id=machine.id)
+    else:
+        form = DeclassementForm(initial={"date_declassement": timezone.localdate()})
+
+    return render(
+        request,
+        "machines/machine_declass.html",
+        {"gym": request.gym, "machine": machine, "form": form},
+    )
+
+
+@login_required
+@module_required("MACHINES")
+@role_required(MACHINE_ROLES)
+@require_POST
+def machine_return_to_service(request, machine_id):
+    """Annule un declassement : une erreur de saisie doit pouvoir se corriger."""
+    machine = get_object_or_404(Machine, id=machine_id, gym=request.gym)
+
+    if not machine.is_declassed:
+        messages.info(request, f'"{machine.name}" est deja en service.')
+        return redirect("machines:detail", machine_id=machine.id)
+
+    ancien_motif = machine.declassed_reason
+    machine.return_to_service()
+    log_sensitive_action(
+        request,
+        "machines.equipment_returned_to_service",
+        "Machine",
+        machine.name,
+        metadata={
+            "machine_id": machine.id,
+            "nature": machine.equipment_type,
+            "motif_annule": ancien_motif,
+        },
+        gym=request.gym,
+    )
+    messages.success(request, f'"{machine.name}" est de nouveau en service.')
+    return redirect("machines:detail", machine_id=machine.id)
+
+
+@login_required
+@module_required("MACHINES")
+@role_required(MACHINE_ROLES)
 def maintenance_log_create(request, machine_id):
     machine = get_object_or_404(Machine, id=machine_id, gym=request.gym)
+
+    if not machine.is_maintainable:
+        messages.error(
+            request,
+            "Un accessoire ne s'entretient pas : declassez-le s'il est hors d'usage."
+            if machine.is_accessory
+            else "Cet equipement est declasse : remettez-le en service avant d'y engager une depense.",
+        )
+        return redirect("machines:detail", machine_id=machine.id)
 
     if request.method == "POST":
         form = MaintenanceLogForm(request.POST)
@@ -191,7 +294,14 @@ def maintenance_log_create(request, machine_id):
 
                     if request.POST.get("change_status"):
                         new_status = request.POST.get("status")
-                        if new_status in dict(Machine.STATUS):
+                        # Le declassement exige une date et un motif : il ne
+                        # peut pas se glisser dans une fiche de maintenance.
+                        statuts_en_service = {
+                            Machine.STATUS_OK,
+                            Machine.STATUS_MAINTENANCE,
+                            Machine.STATUS_BROKEN,
+                        }
+                        if new_status in statuts_en_service:
                             machine.status = new_status
                             machine.save(update_fields=["status"])
             except ValidationError as exc:
