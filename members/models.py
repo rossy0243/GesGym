@@ -97,7 +97,44 @@ class Member(models.Model):
         default="active"
     )
 
+    # Qui a inscrit ce membre, et par quel chemin. Le journal sensible garde
+    # deja la trace de l'action, mais il se filtre par periode : quand une
+    # fiche pose question des mois plus tard, la reponse doit se lire sur la
+    # fiche elle-meme, pas se retrouver dans un journal.
+    SOURCE_MANUAL = "manual"
+    SOURCE_PRE_REGISTRATION = "pre_registration"
+    SOURCE_OTHER = "other"
+    SOURCE_CHOICES = (
+        (SOURCE_MANUAL, "Saisie directe"),
+        (SOURCE_PRE_REGISTRATION, "Preinscription confirmee"),
+        (SOURCE_OTHER, "Autre / reprise de donnees"),
+    )
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="members_registered",
+        verbose_name="Inscrit par",
+    )
+
+    registration_source = models.CharField(
+        max_length=20,
+        choices=SOURCE_CHOICES,
+        default=SOURCE_OTHER,
+        verbose_name="Origine de l'inscription",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def registered_by_label(self):
+        """Nom lisible de la personne qui a inscrit ce membre."""
+        if not self.created_by_id:
+            return "Inconnu"
+        complet = self.created_by.get_full_name()
+        return complet or self.created_by.username
 
     def _current_subscription_queryset(self):
         today = timezone.localdate()
@@ -588,6 +625,18 @@ class MemberPreRegistration(models.Model):
         related_name="confirmed_member_pre_registrations",
     )
 
+    # Refuser un prospect est une decision commerciale au meme titre que
+    # l'accepter : elle doit porter un nom.
+    cancelled_at = models.DateTimeField(blank=True, null=True)
+
+    cancelled_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cancelled_member_pre_registrations",
+    )
+
     objects = GymManager()
 
     class Meta:
@@ -650,6 +699,11 @@ class MemberPreRegistration(models.Model):
                 phone=self.phone,
                 email=self.email,
                 address=self.address,
+                # Le prospect a rempli le formulaire public, mais c'est cette
+                # personne qui a decide d'en faire un membre : c'est elle qui
+                # repond de la fiche.
+                created_by=confirmed_by,
+                registration_source=Member.SOURCE_PRE_REGISTRATION,
             )
 
             self.member = member
@@ -661,6 +715,30 @@ class MemberPreRegistration(models.Model):
             )
 
         return member
+
+    def cancel(self, cancelled_by):
+        """Refus d'une demande en attente, avec son auteur."""
+        if self.status != self.STATUS_PENDING:
+            raise ValueError("Cette preinscription n'est plus en attente.")
+
+        self.status = self.STATUS_CANCELLED
+        self.cancelled_at = timezone.now()
+        self.cancelled_by = cancelled_by
+        self.save(update_fields=["status", "cancelled_at", "cancelled_by"])
+
+    @staticmethod
+    def _user_label(user):
+        if user is None:
+            return "Inconnu"
+        return user.get_full_name() or user.username
+
+    @property
+    def confirmed_by_label(self):
+        return self._user_label(self.confirmed_by)
+
+    @property
+    def cancelled_by_label(self):
+        return self._user_label(self.cancelled_by)
 
     def __str__(self):
         return f"{self.full_name} - {self.gym}"

@@ -2574,3 +2574,187 @@ class MemberDownloadTests(TestCase):
             ).status_code,
             404,
         )
+
+
+class RegistrationAuthorshipTests(TestCase):
+    """Toute fiche membre porte le nom de qui l'a inscrite."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Auteur", slug="org-auteur"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Auteur",
+            slug="gym-auteur",
+            subdomain="gym-auteur",
+        )
+        self.receptionniste = User.objects.create_user(
+            username="reception-auteur",
+            password="pass12345",
+            first_name="Claire",
+            last_name="Mbala",
+        )
+        UserGymRole.objects.create(
+            user=self.receptionniste, gym=self.gym, role="reception", is_active=True
+        )
+        self.client.force_login(self.receptionniste)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _saisir(self, **overrides):
+        payload = {
+            "first_name": "Bruno",
+            "last_name": "Kalala",
+            "phone": "+243840000001",
+            "email": "bruno.kalala@example.com",
+            "address": "Kinshasa",
+        }
+        payload.update(overrides)
+        return self.client.post(
+            reverse("members:create_member"), payload, follow=True
+        )
+
+    def _demande(self, **overrides):
+        champs = {
+            "gym": self.gym,
+            "first_name": "Sarah",
+            "last_name": "Nkosi",
+            "phone": "+243840000002",
+            "email": "sarah.nkosi@example.com",
+        }
+        champs.update(overrides)
+        return MemberPreRegistration.objects.create(**champs)
+
+    # --- Saisie directe ------------------------------------------------------
+
+    def test_a_manually_created_member_carries_its_author(self):
+        self._saisir()
+
+        membre = Member.objects.get(gym=self.gym, phone="+243840000001")
+        self.assertEqual(membre.created_by, self.receptionniste)
+        self.assertEqual(membre.registration_source, Member.SOURCE_MANUAL)
+
+    def test_the_author_label_prefers_the_full_name(self):
+        self._saisir()
+
+        membre = Member.objects.get(gym=self.gym, phone="+243840000001")
+        self.assertEqual(membre.registered_by_label, "Claire Mbala")
+
+    def test_the_author_label_falls_back_to_the_username(self):
+        self.receptionniste.first_name = ""
+        self.receptionniste.last_name = ""
+        self.receptionniste.save(update_fields=["first_name", "last_name"])
+
+        self._saisir()
+
+        membre = Member.objects.get(gym=self.gym, phone="+243840000001")
+        self.assertEqual(membre.registered_by_label, "reception-auteur")
+
+    def test_a_member_without_author_is_not_attributed_to_anyone(self):
+        # Fiche reprise d'un ancien fichier : personne ne l'a saisie ici.
+        membre = Member.objects.create(
+            gym=self.gym,
+            first_name="Ancien",
+            last_name="Dossier",
+            phone="+243840000099",
+        )
+
+        self.assertIsNone(membre.created_by)
+        self.assertEqual(membre.registration_source, Member.SOURCE_OTHER)
+        self.assertEqual(membre.registered_by_label, "Inconnu")
+
+    def test_the_member_sheet_shows_who_registered_it(self):
+        self._saisir()
+        membre = Member.objects.get(gym=self.gym, phone="+243840000001")
+
+        response = self.client.get(reverse("members:member_detail", args=[membre.id]))
+
+        charge = response.json()
+        self.assertEqual(charge["registered_by"], "Claire Mbala")
+        self.assertEqual(charge["registration_source"], "Saisie directe")
+
+    # --- Confirmation d'une preinscription -----------------------------------
+
+    def test_a_confirmed_pre_registration_names_its_confirmer(self):
+        demande = self._demande()
+
+        self.client.post(
+            reverse("members:confirm_pre_registration", args=[demande.id]), follow=True
+        )
+
+        demande.refresh_from_db()
+        self.assertEqual(demande.confirmed_by, self.receptionniste)
+        self.assertIsNotNone(demande.confirmed_at)
+
+    def test_the_member_born_from_a_confirmation_carries_the_confirmer(self):
+        demande = self._demande()
+
+        self.client.post(
+            reverse("members:confirm_pre_registration", args=[demande.id]), follow=True
+        )
+
+        demande.refresh_from_db()
+        self.assertEqual(demande.member.created_by, self.receptionniste)
+        self.assertEqual(
+            demande.member.registration_source, Member.SOURCE_PRE_REGISTRATION
+        )
+
+    def test_the_confirmation_is_traced_in_the_sensitive_log(self):
+        demande = self._demande()
+
+        self.client.post(
+            reverse("members:confirm_pre_registration", args=[demande.id]), follow=True
+        )
+
+        trace = SensitiveActivityLog.objects.get(
+            action="member.pre_registration_confirmed"
+        )
+        self.assertEqual(trace.actor, self.receptionniste)
+        self.assertEqual(trace.target_label, "Sarah Nkosi")
+
+    def test_the_list_shows_who_confirmed(self):
+        demande = self._demande()
+        self.client.post(
+            reverse("members:confirm_pre_registration", args=[demande.id]), follow=True
+        )
+
+        response = self.client.get(
+            reverse("members:pre_registration_list"), {"status": "confirmed"}
+        )
+
+        self.assertContains(response, "par Claire Mbala")
+
+    # --- Annulation d'une preinscription -------------------------------------
+
+    def test_a_cancelled_pre_registration_names_its_author(self):
+        demande = self._demande()
+
+        self.client.post(
+            reverse("members:cancel_pre_registration", args=[demande.id]), follow=True
+        )
+
+        demande.refresh_from_db()
+        self.assertEqual(demande.status, MemberPreRegistration.STATUS_CANCELLED)
+        self.assertEqual(demande.cancelled_by, self.receptionniste)
+        self.assertIsNotNone(demande.cancelled_at)
+
+    def test_the_cancellation_is_traced_in_the_sensitive_log(self):
+        demande = self._demande()
+
+        self.client.post(
+            reverse("members:cancel_pre_registration", args=[demande.id]), follow=True
+        )
+
+        trace = SensitiveActivityLog.objects.get(
+            action="member.pre_registration_cancelled"
+        )
+        self.assertEqual(trace.actor, self.receptionniste)
+
+    def test_an_already_handled_request_cannot_be_cancelled_again(self):
+        demande = self._demande()
+        demande.cancel(self.receptionniste)
+
+        with self.assertRaises(ValueError):
+            demande.cancel(self.receptionniste)

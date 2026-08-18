@@ -1906,6 +1906,10 @@ def create_member(request):
 
     member = form.save(commit=False)
     member.gym = request.gym
+    # La fiche porte le nom de qui l'a saisie : une coordonnee erronee ou un
+    # doublon se remonte a son auteur sans fouiller le journal.
+    member.created_by = request.user
+    member.registration_source = Member.SOURCE_MANUAL
     member.save()  # déclenche signal → crée User automatiquement
 
     log_sensitive_action(
@@ -1913,7 +1917,11 @@ def create_member(request):
         "member.created",
         "Member",
         f"{member.first_name} {member.last_name}",
-        metadata={"member_id": member.id, "phone": member.phone},
+        metadata={
+            "member_id": member.id,
+            "phone": member.phone,
+            "origine": member.registration_source,
+        },
     )
 
     temporary_password = getattr(member, "_temporary_password", "")
@@ -2040,7 +2048,7 @@ def member_detail(request, member_id):
         raise PermissionDenied
 
     member = get_object_or_404(
-        Member.objects.select_related("user"),
+        Member.objects.select_related("user", "created_by"),
         id=member_id,
         gym=request.gym
     )
@@ -2097,6 +2105,10 @@ def member_detail(request, member_id):
         "card_download_url": reverse("members:member_card_image", args=[member.id]) + "?download=1",
         "qr_download_url": reverse("members:member_qr", args=[member.qr_code]) + "?download=1",
         "member_portal_url": build_public_url(request, reverse("members:member_portal")),
+        # Qui a inscrit ce membre, et par quel chemin.
+        "registered_by": member.registered_by_label,
+        "registration_source": member.get_registration_source_display(),
+        "registered_on": timezone.localtime(member.created_at).strftime("%d/%m/%Y %H:%M"),
         # abonnement
         "subscription_type": member.subscription_type,
         "start_date": subscription.start_date.strftime("%d/%m/%Y") if subscription else None,

@@ -776,9 +776,15 @@ body.members-screen .modal.show .modal-dialog {
                                 <span class="material-icons" style="font-size:14px;">phone</span>
                                 <span id="viewMemberPhone">-</span>
                             </p>
-                            <p class="mb-0">
+                            <p class="mb-1">
                                 <span class="material-icons" style="font-size:14px;">email</span>
                                 <span id="viewMemberEmail">-</span>
+                            </p>
+                            <p class="mb-0 small text-muted">
+                                <span class="material-icons" style="font-size:14px;">how_to_reg</span>
+                                Inscrit par <span id="viewMemberRegisteredBy">-</span>
+                                le <span id="viewMemberRegisteredOn">-</span>
+                                (<span id="viewMemberRegistrationSource">-</span>)
                             </p>
                         </div>
 
@@ -1255,6 +1261,9 @@ body.members-screen .modal.show .modal-dialog {
                     `${data.first_name || ''} ${data.last_name || ''}`.trim() || "-";
                 document.getElementById("viewMemberPhone").innerText = data.phone || "-";
                 document.getElementById("viewMemberEmail").innerText = data.email || "-";
+                document.getElementById("viewMemberRegisteredBy").innerText = data.registered_by || "Inconnu";
+                document.getElementById("viewMemberRegisteredOn").innerText = data.registered_on || "-";
+                document.getElementById("viewMemberRegistrationSource").innerText = data.registration_source || "-";
                 setMemberDetailStatus(data.status);
                 updateMemberQrControls(data);
 

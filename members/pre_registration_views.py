@@ -8,6 +8,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from core.audit import log_sensitive_action
 from core.creation_emails import (
     notify_creation_email_failure,
     send_member_creation_email,
@@ -121,6 +122,7 @@ def pre_registration_list(request):
     pre_registrations = MemberPreRegistration.objects.filter(gym=gym).select_related(
         "member",
         "confirmed_by",
+        "cancelled_by",
     )
     if status:
         pre_registrations = pre_registrations.filter(status=status)
@@ -221,6 +223,18 @@ def confirm_pre_registration(request, pre_registration_id):
         messages.error(request, str(exc))
         return redirect("members:pre_registration_list")
 
+    log_sensitive_action(
+        request,
+        "member.pre_registration_confirmed",
+        "MemberPreRegistration",
+        pre_registration.full_name,
+        metadata={
+            "preinscription_id": pre_registration.id,
+            "member_id": member.id,
+            "telephone": pre_registration.phone,
+        },
+        gym=request.gym,
+    )
     _announce_member_credentials(request, member, action="Preinscription confirmee.")
     return redirect("members:pre_registration_list")
 
@@ -273,7 +287,17 @@ def cancel_pre_registration(request, pre_registration_id):
         gym=request.gym,
         status=MemberPreRegistration.STATUS_PENDING,
     )
-    pre_registration.status = MemberPreRegistration.STATUS_CANCELLED
-    pre_registration.save(update_fields=["status"])
+    pre_registration.cancel(request.user)
+    log_sensitive_action(
+        request,
+        "member.pre_registration_cancelled",
+        "MemberPreRegistration",
+        pre_registration.full_name,
+        metadata={
+            "preinscription_id": pre_registration.id,
+            "telephone": pre_registration.phone,
+        },
+        gym=request.gym,
+    )
     messages.info(request, "Preinscription annulee.")
     return redirect("members:pre_registration_list")

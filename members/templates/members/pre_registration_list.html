@@ -125,10 +125,19 @@
                                     <span class="badge bg-warning text-dark">En attente</span>
                                 {% elif item.status == "confirmed" %}
                                     <span class="badge bg-success">Confirmee</span>
+                                    <small class="text-muted d-block mt-1">
+                                        par {{ item.confirmed_by_label }}
+                                        {% if item.confirmed_at %}le {{ item.confirmed_at|date:"d/m/Y H:i" }}{% endif %}
+                                    </small>
                                 {% elif item.status == "expired" %}
                                     <span class="badge bg-dark">Expiree</span>
                                 {% else %}
                                     <span class="badge bg-secondary">Annulee</span>
+                                    {% if item.cancelled_at %}
+                                    <small class="text-muted d-block mt-1">
+                                        par {{ item.cancelled_by_label }} le {{ item.cancelled_at|date:"d/m/Y H:i" }}
+                                    </small>
+                                    {% endif %}
                                 {% endif %}
                             </td>
                             <td>

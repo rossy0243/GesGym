@@ -78,12 +78,20 @@ de ce que le logiciel fait reellement, pas de ce qu'on croit qu'il fait.
 | `email` | EmailField |
 | `is_active` | BooleanField |
 | `status` | CharField |
+| `created_by` | ForeignKey |
+| `registration_source` | CharField |
 | `created_at` | DateTimeField |
 
 Valeurs possibles `STATUS_CHOICES` :
 
 ```python
 (('active', 'Active'), ('expired', 'Expired'), ('suspended', 'Suspended'))
+```
+
+Valeurs possibles `SOURCE_CHOICES` :
+
+```python
+((SOURCE_MANUAL, 'Saisie directe'), (SOURCE_PRE_REGISTRATION, 'Preinscription confirmee'), (SOURCE_OTHER, 'Autre / reprise de donnees'))
 ```
 
 ### `MemberGoal`
@@ -177,6 +185,8 @@ Valeurs possibles `SOURCE_CHOICES` :
 | `expires_at` | DateTimeField |
 | `confirmed_at` | DateTimeField |
 | `confirmed_by` | ForeignKey |
+| `cancelled_at` | DateTimeField |
+| `cancelled_by` | ForeignKey |
 
 Valeurs possibles `STATUS_CHOICES` :
 
@@ -302,6 +312,8 @@ et rassurer sur ce qui ne l'est pas.
 - `member.created`
 - `member.deleted`
 - `member.password_reset`
+- `member.pre_registration_cancelled`
+- `member.pre_registration_confirmed`
 - `member.qr_regenerated`
 - `member.reactivated`
 - `member.suspended`
@@ -475,6 +487,23 @@ meilleure source pour les cas limites a montrer en formation.
 - card is shown inline by default
 - detail payload exposes download urls
 - another gym member cannot be downloaded
+
+### RegistrationAuthorshipTests
+
+> Toute fiche membre porte le nom de qui l'a inscrite.
+
+- a manually created member carries its author
+- the author label prefers the full name
+- the author label falls back to the username
+- a member without author is not attributed to anyone
+- the member sheet shows who registered it
+- a confirmed pre registration names its confirmer
+- the member born from a confirmation carries the confirmer
+- the confirmation is traced in the sensitive log
+- the list shows who confirmed
+- a cancelled pre registration names its author
+- the cancellation is traced in the sensitive log
+- an already handled request cannot be cancelled again
 
 ## A completer par un humain
 
