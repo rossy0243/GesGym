@@ -371,7 +371,63 @@
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">{{ organization_form.email.label }}</label>
                             {{ organization_form.email }}
+                            <small class="text-muted">{{ organization_form.email.help_text }}</small>
                             {{ organization_form.email.errors }}
+                        </div>
+                    </div>
+
+                    <hr class="my-4">
+                    <h6 class="fw-semibold mb-1">Pied de page du site public</h6>
+                    <small class="text-muted d-block mb-3">
+                        Ce que lisent les visiteurs de la page d'accueil. L'adresse, le
+                        telephone et l'e-mail ci-dessus y figurent aussi.
+                    </small>
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="{{ organization_form.whatsapp_number.id_for_label }}">
+                                {{ organization_form.whatsapp_number.label }}
+                            </label>
+                            {{ organization_form.whatsapp_number }}
+                            <small class="text-muted">{{ organization_form.whatsapp_number.help_text }}</small>
+                            {{ organization_form.whatsapp_number.errors }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="{{ organization_form.opening_hours.id_for_label }}">
+                                {{ organization_form.opening_hours.label }}
+                            </label>
+                            {{ organization_form.opening_hours }}
+                            <small class="text-muted">{{ organization_form.opening_hours.help_text }}</small>
+                            {{ organization_form.opening_hours.errors }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="{{ organization_form.footer_services.id_for_label }}">
+                                {{ organization_form.footer_services.label }}
+                            </label>
+                            {{ organization_form.footer_services }}
+                            <small class="text-muted">{{ organization_form.footer_services.help_text }}</small>
+                            {{ organization_form.footer_services.errors }}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold" for="{{ organization_form.facebook_url.id_for_label }}">
+                                {{ organization_form.facebook_url.label }}
+                            </label>
+                            {{ organization_form.facebook_url }}
+                            {{ organization_form.facebook_url.errors }}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold" for="{{ organization_form.instagram_url.id_for_label }}">
+                                {{ organization_form.instagram_url.label }}
+                            </label>
+                            {{ organization_form.instagram_url }}
+                            {{ organization_form.instagram_url.errors }}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold" for="{{ organization_form.tiktok_url.id_for_label }}">
+                                {{ organization_form.tiktok_url.label }}
+                            </label>
+                            {{ organization_form.tiktok_url }}
+                            {{ organization_form.tiktok_url.errors }}
                         </div>
                     </div>
 

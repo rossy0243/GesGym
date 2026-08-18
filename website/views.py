@@ -9,12 +9,13 @@ from django.urls import reverse
 
 from organizations.models import Gym
 
+from .branding import landing_contact
 from .forms import ContactRequestForm
 
 
-# TODO Royal Gym : remplacer par le vrai numéro WhatsApp (indicatif + numéro, sans "+" ni espaces).
+# Valeurs de secours conservees pour compatibilite. Les coordonnees reelles
+# viennent desormais de l'organisation, reglees dans Parametres.
 CONTACT_WHATSAPP_NUMBER = "243000000000"
-# TODO Royal Gym : remplacer par l'adresse e-mail réelle de contact.
 CONTACT_EMAIL = "contact@royalgym.example"
 
 LANDING_META_DESCRIPTION = (
@@ -28,15 +29,16 @@ LANDING_KEYWORDS = (
 )
 
 
-def _build_whatsapp_url(message):
+def _build_whatsapp_url(message, numero=None):
+    numero = numero or CONTACT_WHATSAPP_NUMBER
     if message:
-        return f"https://wa.me/{CONTACT_WHATSAPP_NUMBER}?text={quote(message)}"
-    return f"https://wa.me/{CONTACT_WHATSAPP_NUMBER}"
+        return f"https://wa.me/{numero}?text={quote(message)}"
+    return f"https://wa.me/{numero}"
 
 
-def _build_contact_whatsapp_message(cleaned_data):
+def _build_contact_whatsapp_message(cleaned_data, nom_organisation="Royal Gym"):
     return (
-        "Bonjour Royal Gym, je viens de vous contacter depuis votre site.\n\n"
+        f"Bonjour {nom_organisation}, je viens de vous contacter depuis votre site.\n\n"
         f"Nom complet : {cleaned_data['full_name']}\n"
         f"Téléphone : {cleaned_data['phone']}\n"
         f"Email : {cleaned_data['email'] or 'Non renseigné'}\n\n"
@@ -50,7 +52,8 @@ def _absolute_url(request, path=""):
     return request.build_absolute_uri(request.path)
 
 
-def _build_landing_seo_context(request):
+def _build_landing_seo_context(request, contact=None):
+    contact = contact or landing_contact(request)
     canonical_url = _absolute_url(request)
     og_image_url = _absolute_url(request, LANDING_OG_IMAGE)
     title = "Royal Gym | Salle de sport premium à Kinshasa"
@@ -91,19 +94,20 @@ def _build_landing_seo_context(request):
             },
         ],
     }
+    # Les moteurs de recherche lisent ce bloc : y laisser "Adresse a confirmer"
+    # publiait une fiche etablissement incomplete.
     gym_schema = {
         "@context": "https://schema.org",
         "@type": "ExerciseGym",
-        "name": "Royal Gym",
+        "name": contact["name"],
         "description": LANDING_META_DESCRIPTION,
         "url": canonical_url,
         "image": og_image_url,
-        "telephone": f"+{CONTACT_WHATSAPP_NUMBER}",
-        "email": CONTACT_EMAIL,
+        "telephone": contact["phone"] or f"+{contact['whatsapp_number']}",
+        "email": contact["email"],
         "address": {
             "@type": "PostalAddress",
-            # TODO Royal Gym : remplacer par l'adresse réelle.
-            "streetAddress": "Adresse à confirmer",
+            "streetAddress": contact["address"] or "Adresse a confirmer",
             "addressLocality": "Kinshasa",
             "addressCountry": "CD",
         },
@@ -122,6 +126,7 @@ def _build_landing_seo_context(request):
 
 
 def landing(request):
+    contact = landing_contact(request)
     contact_sent = request.GET.get("contact") == "sent"
     contact_whatsapp_message = ""
     if contact_sent:
@@ -131,9 +136,9 @@ def landing(request):
         form = ContactRequestForm(request.POST)
         if form.is_valid():
             cleaned_data = form.cleaned_data
-            subject = f"Nouveau message Royal Gym - {cleaned_data['full_name']}"
+            subject = f"Nouveau message {contact['name']} - {cleaned_data['full_name']}"
             message = (
-                "Un nouveau message a été envoyé depuis le site Royal Gym.\n\n"
+                f"Un nouveau message a été envoyé depuis le site {contact['name']}.\n\n"
                 f"Nom complet : {cleaned_data['full_name']}\n"
                 f"Téléphone : {cleaned_data['phone']}\n"
                 f"Email : {cleaned_data['email'] or 'Non renseigné'}\n\n"
@@ -141,16 +146,19 @@ def landing(request):
                 f"{cleaned_data['message'] or 'Aucun message complémentaire.'}\n"
             )
             reply_to = [cleaned_data["email"]] if cleaned_data["email"] else []
+            # Destinataire pris sur l'organisation : les demandes partaient
+            # jusqu'ici vers une adresse d'exemple, donc nulle part.
             email = EmailMessage(
                 subject=subject,
                 body=message,
                 from_email=settings.DEFAULT_FROM_EMAIL,
-                to=[CONTACT_EMAIL],
+                to=[contact["email"]],
                 reply_to=reply_to,
             )
             email.send(fail_silently=False)
             request.session["contact_whatsapp_message"] = _build_contact_whatsapp_message(
                 cleaned_data,
+                contact["name"],
             )
             return redirect(f"{reverse('landing')}?contact=sent#contact-form")
     else:
@@ -162,9 +170,12 @@ def landing(request):
         {
             "contact_form": form,
             "contact_sent": contact_sent,
-            "contact_whatsapp_link": _build_whatsapp_url(contact_whatsapp_message),
-            "whatsapp_contact_url": _build_whatsapp_url(""),
-            **_build_landing_seo_context(request),
+            "contact_whatsapp_link": _build_whatsapp_url(
+                contact_whatsapp_message, contact["whatsapp_number"]
+            ),
+            "whatsapp_contact_url": _build_whatsapp_url("", contact["whatsapp_number"]),
+            "landing_contact": contact,
+            **_build_landing_seo_context(request, contact),
         },
     )
 

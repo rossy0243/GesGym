@@ -3,7 +3,8 @@ from django.core import mail
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from compte.models import User
+from compte.models import User, UserGymRole
+from organizations.models import Gym, Organization
 
 
 class PublicRouteTests(TestCase):
@@ -202,3 +203,200 @@ class PublicRouteTests(TestCase):
         self.assertIn("database", payload)
         self.assertNotIn("tenancy", payload)
         self.assertNotIn("debug", payload)
+
+
+class LandingFooterTests(TestCase):
+    """Le proprietaire renseigne le pied de page depuis Parametres."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Royal Gym",
+            slug="royal-gym-vitrine",
+            address="12 avenue de la Justice, Gombe, Kinshasa",
+            phone="+243 81 000 00 00",
+            email="contact@royalgym.cd",
+            whatsapp_number="243810000000",
+            footer_services="Musculation\nCross-training\nSauna",
+            facebook_url="https://facebook.com/royalgym",
+            instagram_url="https://instagram.com/royalgym",
+        )
+
+    def _pied_de_page(self, response):
+        """Contenu du <footer> seul : le reste de la page a ses propres textes."""
+        html = response.content.decode("utf-8", "replace")
+        debut = html.index("<footer")
+        return html[debut : html.index("</footer>", debut)]
+
+    # --- Ce que lit le visiteur ---------------------------------------------
+
+    def test_the_footer_shows_the_organization_contact_details(self):
+        response = self.client.get("/")
+
+        self.assertContains(response, "12 avenue de la Justice, Gombe, Kinshasa")
+        self.assertContains(response, "+243 81 000 00 00")
+        self.assertContains(response, "contact@royalgym.cd")
+
+    def test_the_placeholder_values_are_gone(self):
+        response = self.client.get("/")
+
+        # "Adresse a confirmer" figurait a deux endroits : le pied de page et
+        # le bloc "Horaires & localisation". Les deux doivent disparaitre.
+        self.assertNotContains(response, "Adresse à confirmer")
+        self.assertNotContains(response, "contact@royalgym.example")
+        self.assertNotContains(response, "+243 00 000 0000")
+
+    def test_the_footer_lists_the_declared_services(self):
+        response = self.client.get("/")
+        pied = self._pied_de_page(response)
+
+        self.assertIn("Cross-training", pied)
+        self.assertIn("Sauna", pied)
+        # "Cardio-training" reste ailleurs sur la page : c'est le pied de page
+        # qui doit suivre la liste declaree, pas le corps du site.
+        self.assertNotIn("Cardio-training", pied)
+
+    def test_only_the_declared_social_networks_appear(self):
+        response = self.client.get("/")
+
+        self.assertContains(response, "https://facebook.com/royalgym")
+        self.assertContains(response, "https://instagram.com/royalgym")
+        self.assertNotContains(response, "tiktok.com")
+
+    def test_the_whatsapp_link_uses_the_declared_number(self):
+        response = self.client.get("/")
+
+        self.assertContains(response, "https://wa.me/243810000000")
+        self.assertNotContains(response, "wa.me/243000000000")
+
+    # --- Referencement --------------------------------------------------------
+
+    def test_the_search_engine_block_carries_the_real_address(self):
+        response = self.client.get("/")
+        schema = response.context["seo_schema_json"]
+
+        self.assertIn("12 avenue de la Justice", schema)
+        self.assertIn("contact@royalgym.cd", schema)
+        self.assertNotIn("Adresse a confirmer", schema)
+
+    # --- Formulaire de contact -------------------------------------------------
+
+    def test_a_contact_request_reaches_the_organization_address(self):
+        self.client.post(
+            "/",
+            {
+                "full_name": "Rosette Mukendi",
+                "email": "rosette@example.com",
+                "phone": "+243821000000",
+                "message": "Vos tarifs ?",
+            },
+        )
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ["contact@royalgym.cd"])
+        self.assertIn("Royal Gym", mail.outbox[0].subject)
+
+    # --- Sans organisation renseignee ------------------------------------------
+
+    def test_the_page_still_stands_without_any_organization(self):
+        Organization.objects.all().delete()
+
+        response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Musculation")
+
+    def test_an_empty_field_hides_its_line_rather_than_showing_a_placeholder(self):
+        self.organization.address = ""
+        self.organization.phone = ""
+        self.organization.save(update_fields=["address", "phone"])
+
+        response = self.client.get("/")
+
+        self.assertNotContains(response, "fa-map-marker-alt")
+        self.assertNotContains(response, "fa-phone-alt")
+        self.assertContains(response, "contact@royalgym.cd")
+
+
+class OrganizationFooterSettingsTests(TestCase):
+    """Seul le proprietaire regle la vitrine, et le numero est verifie."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Vitrine", slug="org-vitrine"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Vitrine",
+            slug="gym-vitrine",
+            subdomain="gym-vitrine",
+        )
+        self.owner = User.objects.create_user(
+            username="proprio-vitrine",
+            password="pass12345",
+            owned_organization=self.organization,
+        )
+        self.client.force_login(self.owner)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _enregistrer(self, **overrides):
+        payload = {
+            "action": "organization",
+            "name": "Org Vitrine",
+            "address": "Avenue du Commerce",
+            "phone": "+243810000001",
+            "email": "vitrine@example.cd",
+            "whatsapp_number": "243 81 000 00 02",
+            "footer_services": "Musculation\nYoga",
+            "facebook_url": "",
+            "instagram_url": "",
+            "tiktok_url": "",
+        }
+        payload.update(overrides)
+        return self.client.post(reverse("core:settings"), payload, follow=True)
+
+    def test_the_owner_saves_the_footer_details(self):
+        self._enregistrer()
+
+        self.organization.refresh_from_db()
+        self.assertEqual(self.organization.address, "Avenue du Commerce")
+        self.assertEqual(self.organization.footer_services, "Musculation\nYoga")
+
+    def test_the_whatsapp_number_is_stripped_of_spaces_and_signs(self):
+        self._enregistrer()
+
+        self.organization.refresh_from_db()
+        self.assertEqual(self.organization.whatsapp_number, "243810000002")
+        self.assertEqual(
+            self.organization.whatsapp_url, "https://wa.me/243810000002"
+        )
+
+    def test_a_truncated_whatsapp_number_is_refused(self):
+        self._enregistrer(whatsapp_number="8100")
+
+        self.organization.refresh_from_db()
+        self.assertEqual(self.organization.whatsapp_number, "")
+
+    def test_a_manager_cannot_reach_the_organization_form(self):
+        manager = User.objects.create_user(
+            username="gerant-vitrine", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=manager, gym=self.gym, role="manager", is_active=True
+        )
+        self.client.force_login(manager)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+        self._enregistrer(address="Tentative")
+
+        self.organization.refresh_from_db()
+        self.assertEqual(self.organization.address, None)
+
+    def test_the_services_list_ignores_blank_lines(self):
+        self._enregistrer(footer_services="Musculation\n\n  \nYoga\n")
+
+        self.organization.refresh_from_db()
+        self.assertEqual(self.organization.services_list, ["Musculation", "Yoga"])

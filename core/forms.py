@@ -14,15 +14,61 @@ INTERNAL_ROLE_CHOICES = [
 
 
 class OrganizationSettingsForm(forms.ModelForm):
+    """
+    Identite de l'organisation, reprise sur le site vitrine.
+
+    Ces coordonnees alimentent le pied de page public et la destination du
+    formulaire de contact : elles etaient ecrites en dur dans le gabarit, avec
+    des mentions "a confirmer" que les visiteurs pouvaient lire.
+    """
+
     class Meta:
         model = Organization
-        fields = ["name", "logo", "address", "phone", "email"]
+        fields = [
+            "name",
+            "logo",
+            "address",
+            "phone",
+            "email",
+            "whatsapp_number",
+            "opening_hours",
+            "footer_services",
+            "facebook_url",
+            "instagram_url",
+            "tiktok_url",
+        ]
         widgets = {
             "name": forms.TextInput(attrs={"class": "form-control"}),
             "logo": forms.ClearableFileInput(attrs={"class": "form-control"}),
             "address": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
             "phone": forms.TextInput(attrs={"class": "form-control"}),
             "email": forms.EmailInput(attrs={"class": "form-control"}),
+            "whatsapp_number": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "243810000000",
+            }),
+            "opening_hours": forms.Textarea(attrs={
+                "class": "form-control",
+                "rows": 4,
+                "placeholder": "Lundi au samedi : 06h - 21h\nDimanche : ferme",
+            }),
+            "footer_services": forms.Textarea(attrs={
+                "class": "form-control",
+                "rows": 4,
+                "placeholder": "Musculation\nCardio-training\nCours collectifs\nCoaching personnel",
+            }),
+            "facebook_url": forms.URLInput(attrs={
+                "class": "form-control",
+                "placeholder": "https://facebook.com/...",
+            }),
+            "instagram_url": forms.URLInput(attrs={
+                "class": "form-control",
+                "placeholder": "https://instagram.com/...",
+            }),
+            "tiktok_url": forms.URLInput(attrs={
+                "class": "form-control",
+                "placeholder": "https://tiktok.com/@...",
+            }),
         }
         labels = {
             "name": "Nom de l'organisation",
@@ -30,12 +76,41 @@ class OrganizationSettingsForm(forms.ModelForm):
             "address": "Adresse",
             "phone": "Telephone",
             "email": "Email",
+            "whatsapp_number": "Numero WhatsApp",
+            "opening_hours": "Horaires affiches sur le site public",
+            "footer_services": "Services listes en pied de page",
+            "facebook_url": "Page Facebook",
+            "instagram_url": "Compte Instagram",
+            "tiktok_url": "Compte TikTok",
+        }
+        help_texts = {
+            "address": "Affichee dans le pied de page du site public.",
+            "phone": "Affiche dans le pied de page du site public.",
+            "email": "Affiche en pied de page, et destinataire du formulaire de contact.",
+            "whatsapp_number": "Indicatif et numero, sans + ni espaces. Ex : 243810000000",
+            "opening_hours": "Affiches dans le bloc \"Horaires & localisation\" de la page d'accueil.",
+            "footer_services": "Un service par ligne. Laisser vide pour la liste par defaut.",
         }
 
     def clean_logo(self):
         logo = self.cleaned_data.get("logo")
         validate_safe_image_upload(logo)
         return logo
+
+    def clean_whatsapp_number(self):
+        # wa.me n'accepte que des chiffres : un "+" ou des espaces produisent
+        # un lien mort, et rien ne le signale au visiteur.
+        brut = (self.cleaned_data.get("whatsapp_number") or "").strip()
+        if not brut:
+            return ""
+
+        chiffres = "".join(c for c in brut if c.isdigit())
+        if len(chiffres) < 8:
+            raise forms.ValidationError(
+                "Numero WhatsApp incomplet : indiquez l'indicatif et le numero, "
+                "par exemple 243810000000."
+            )
+        return chiffres
 
 
 class GymContactForm(forms.ModelForm):

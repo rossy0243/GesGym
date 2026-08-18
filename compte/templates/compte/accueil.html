@@ -565,17 +565,17 @@
         <div class="soft-card rounded-2xl p-6 text-center">
           <i class="fas fa-location-dot text-[#C9A227] text-2xl mb-3"></i>
           <p class="font-semibold text-gray-900 mb-1">Adresse</p>
-          <p class="text-gray-500"><!-- TODO Royal Gym : indiquer l'adresse exacte -->Adresse à confirmer, Kinshasa</p>
+          <p class="text-gray-500">{{ landing_contact.address|default:"Contactez-nous pour connaître notre adresse" }}</p>
         </div>
         <div class="soft-card rounded-2xl p-6 text-center">
           <i class="fas fa-clock text-[#C9A227] text-2xl mb-3"></i>
           <p class="font-semibold text-gray-900 mb-1">Horaires</p>
-          <p class="text-gray-500"><!-- TODO Royal Gym : indiquer les horaires réels -->Contactez-nous pour connaître nos horaires à jour</p>
+          <p class="text-gray-500">{{ landing_contact.hours|default:"Contactez-nous pour connaître nos horaires à jour"|linebreaksbr }}</p>
         </div>
         <div class="soft-card rounded-2xl p-6 text-center">
           <i class="fab fa-whatsapp text-[#C9A227] text-2xl mb-3"></i>
           <p class="font-semibold text-gray-900 mb-1">WhatsApp</p>
-          <p class="text-gray-500"><!-- TODO Royal Gym : indiquer le vrai numéro -->Écrivez-nous directement sur WhatsApp</p>
+          <p class="text-gray-500">{{ landing_contact.phone|default:"Écrivez-nous directement sur WhatsApp" }}</p>
         </div>
       </div>
     </div>
@@ -782,30 +782,43 @@
       <div class="grid grid-cols-1 md:grid-cols-3 gap-10 md:gap-8">
         <div class="text-center md:text-left">
           <div class="flex items-center justify-center md:justify-start gap-2 mb-4">
-            <img src="{% static 'images/royal-gym-logo.png' %}" alt="Royal Gym" class="h-9 w-9 rounded-lg object-cover">
-            <span class="text-xl font-bold text-white">Royal Gym</span>
+            {% if landing_contact.organization.logo %}
+              <img src="{{ landing_contact.organization.logo.url }}" alt="{{ landing_contact.name }}" class="h-9 w-9 rounded-lg object-cover">
+            {% else %}
+              <img src="{% static 'images/royal-gym-logo.png' %}" alt="{{ landing_contact.name }}" class="h-9 w-9 rounded-lg object-cover">
+            {% endif %}
+            <span class="text-xl font-bold text-white">{{ landing_contact.name }}</span>
           </div>
-          <p class="text-sm flex items-center justify-center md:justify-start gap-2"><i class="fas fa-map-marker-alt text-[#C9A227] w-4"></i> <!-- TODO Royal Gym : adresse réelle -->Adresse à confirmer, Kinshasa</p>
-          <p class="text-sm mt-2 flex items-center justify-center md:justify-start gap-2"><i class="fas fa-phone-alt text-[#C9A227] w-4"></i> <!-- TODO Royal Gym : téléphone réel -->+243 00 000 0000</p>
-          <p class="text-sm flex items-center justify-center md:justify-start gap-2"><i class="fas fa-envelope text-[#C9A227] w-4"></i> <!-- TODO Royal Gym : email réel -->contact@royalgym.example</p>
+          {% if landing_contact.address %}
+            <p class="text-sm flex items-center justify-center md:justify-start gap-2"><i class="fas fa-map-marker-alt text-[#C9A227] w-4"></i> {{ landing_contact.address }}</p>
+          {% endif %}
+          {% if landing_contact.phone %}
+            <p class="text-sm mt-2 flex items-center justify-center md:justify-start gap-2"><i class="fas fa-phone-alt text-[#C9A227] w-4"></i> {{ landing_contact.phone }}</p>
+          {% endif %}
+          {% if landing_contact.email %}
+            <p class="text-sm mt-2 flex items-center justify-center md:justify-start gap-2"><i class="fas fa-envelope text-[#C9A227] w-4"></i> {{ landing_contact.email }}</p>
+          {% endif %}
         </div>
 
         <div class="text-center">
           <h4 class="text-white font-bold text-lg mb-4">Nos services</h4>
           <ul class="space-y-2 text-sm">
-            <li>Musculation</li>
-            <li>Cardio-training</li>
-            <li>Cours collectifs</li>
-            <li>Coaching personnel</li>
+            {% for service in landing_contact.services %}
+              <li>{{ service }}</li>
+            {% endfor %}
           </ul>
         </div>
 
         <div class="text-center md:text-right">
           <h4 class="text-white font-bold text-lg mb-4">Suivez-nous</h4>
           <div class="flex justify-center md:justify-end gap-5 text-3xl">
-            <a href="{{ whatsapp_contact_url }}" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp Royal Gym" class="hover:text-[#C9A227] transition transform hover:scale-110"><i class="fab fa-whatsapp"></i></a>
+            {% for reseau in landing_contact.social_links %}
+              <a href="{{ reseau.url }}" target="_blank" rel="noopener noreferrer" aria-label="{{ reseau.label }} {{ landing_contact.name }}" class="hover:text-[#C9A227] transition transform hover:scale-110"><i class="{{ reseau.icon }}"></i></a>
+            {% empty %}
+              <a href="{{ whatsapp_contact_url }}" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp {{ landing_contact.name }}" class="hover:text-[#C9A227] transition transform hover:scale-110"><i class="fab fa-whatsapp"></i></a>
+            {% endfor %}
           </div>
-          <p class="text-xs text-gray-500 mt-6">Royal Gym</p>
+          <p class="text-xs text-gray-500 mt-6">{{ landing_contact.name }}</p>
         </div>
       </div>
       <hr class="border-gray-800 my-8">

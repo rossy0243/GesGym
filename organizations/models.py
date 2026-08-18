@@ -30,6 +30,39 @@ class Organization(models.Model):
 
     email = models.EmailField(blank=True, null=True)
 
+    # --- Ce que le public lit sur le site vitrine --------------------------
+    # Ces informations etaient ecrites en dur dans le gabarit, avec des
+    # marqueurs "a confirmer" visibles par les visiteurs. Elles appartiennent
+    # a l'organisation : elle doit pouvoir les corriger sans toucher au code.
+
+    whatsapp_number = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        verbose_name="Numero WhatsApp",
+        help_text="Indicatif et numero, sans + ni espaces. Ex : 243810000000",
+    )
+
+    facebook_url = models.URLField(blank=True, default="", verbose_name="Page Facebook")
+
+    instagram_url = models.URLField(blank=True, default="", verbose_name="Compte Instagram")
+
+    tiktok_url = models.URLField(blank=True, default="", verbose_name="Compte TikTok")
+
+    footer_services = models.TextField(
+        blank=True,
+        default="",
+        verbose_name="Services listes en pied de page",
+        help_text="Un service par ligne. Ex : Musculation",
+    )
+
+    opening_hours = models.TextField(
+        blank=True,
+        default="",
+        verbose_name="Horaires affiches sur le site public",
+        help_text="Texte libre. Ex : Lundi au samedi, 06h - 21h",
+    )
+
     subscription_pack = models.CharField(
         max_length=20,
         choices=PACK_CHOICES,
@@ -48,6 +81,36 @@ class Organization(models.Model):
 
     def __str__(self):
         return self.name
+
+    @property
+    def services_list(self):
+        """Services du pied de page, une entree par ligne non vide."""
+        return [
+            ligne.strip()
+            for ligne in (self.footer_services or "").splitlines()
+            if ligne.strip()
+        ]
+
+    @property
+    def whatsapp_url(self):
+        """Lien wa.me, ou chaine vide si aucun numero n'est declare."""
+        numero = "".join(c for c in (self.whatsapp_number or "") if c.isdigit())
+        return f"https://wa.me/{numero}" if numero else ""
+
+    @property
+    def social_links(self):
+        """Reseaux renseignes, prets a afficher : (libelle, icone, url)."""
+        candidats = (
+            ("WhatsApp", "fab fa-whatsapp", self.whatsapp_url),
+            ("Facebook", "fab fa-facebook", (self.facebook_url or "").strip()),
+            ("Instagram", "fab fa-instagram", (self.instagram_url or "").strip()),
+            ("TikTok", "fab fa-tiktok", (self.tiktok_url or "").strip()),
+        )
+        return [
+            {"label": libelle, "icon": icone, "url": url}
+            for libelle, icone, url in candidats
+            if url
+        ]
 
 
 class SensitiveActivityLog(models.Model):

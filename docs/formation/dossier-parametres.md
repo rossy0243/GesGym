@@ -48,6 +48,7 @@ formation : pourquoi la regle existe, et que faire quand on la rencontre.
 
 - Cet employe a deja un acces dans cette salle.
 - Le delai doit valoir au moins un jour.
+- Numero WhatsApp incomplet : indiquez l'indicatif et le numero, par exemple 243810000000.
 - Seul un proprietaire peut exister par organisation : ce role ne s'attribue pas depuis les parametres.
 - Un delai de plus d'un an n'a pas de sens.
 - Vous ne pouvez pas attribuer ce role. Votre niveau d'acces permet d'affecter : {valeur}.
