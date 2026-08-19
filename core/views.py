@@ -32,7 +32,7 @@ from .forms import (
     OrganizationSettingsForm,
 )
 from members.models import Member
-from organizations.models import Gym, GymModule
+from organizations.models import Gym, GymModule, LandingFaq
 from pos.models import Payment
 from subscriptions.models import MemberSubscription
 from .accounting_reports import (
@@ -622,6 +622,90 @@ def _settings_redirect(tab):
     return redirect(f"{reverse('core:settings')}?tab={tab}")
 
 
+def _handle_landing_faq(request, organization, action):
+    """
+    Questions frequentes du site public : ajout, correction, retrait.
+
+    Renvoie une redirection quand l'action aboutit, None pour laisser la page
+    se reafficher avec le message d'erreur.
+    """
+    if action == "faq_create":
+        question = (request.POST.get("question") or "").strip()
+        answer = (request.POST.get("answer") or "").strip()
+        if not question or not answer:
+            messages.error(request, "Une question frequente demande un intitule et une reponse.")
+            return None
+
+        derniere = (
+            LandingFaq.objects.filter(organization=organization)
+            .order_by("-position")
+            .values_list("position", flat=True)
+            .first()
+        )
+        faq = LandingFaq.objects.create(
+            organization=organization,
+            question=question,
+            answer=answer,
+            position=(derniere or 0) + 1,
+        )
+        log_sensitive_action(
+            request, "organization.faq_created", "LandingFaq", faq.question,
+            metadata={"faq_id": faq.id},
+        )
+        messages.success(request, "Question ajoutee a la page d'accueil.")
+        return _settings_redirect("organization")
+
+    faq = LandingFaq.objects.filter(
+        id=request.POST.get("faq_id"), organization=organization
+    ).first()
+    if faq is None:
+        messages.error(request, "Question introuvable.")
+        return _settings_redirect("organization")
+
+    if action == "faq_delete":
+        intitule = faq.question
+        faq.delete()
+        log_sensitive_action(
+            request, "organization.faq_deleted", "LandingFaq", intitule,
+        )
+        messages.success(request, "Question retiree.")
+        return _settings_redirect("organization")
+
+    if action == "faq_toggle":
+        faq.is_active = not faq.is_active
+        faq.save(update_fields=["is_active"])
+        log_sensitive_action(
+            request, "organization.faq_toggled", "LandingFaq", faq.question,
+            metadata={"affichee": faq.is_active},
+        )
+        messages.success(
+            request,
+            "Question affichee sur le site." if faq.is_active else "Question masquee.",
+        )
+        return _settings_redirect("organization")
+
+    # faq_update
+    question = (request.POST.get("question") or "").strip()
+    answer = (request.POST.get("answer") or "").strip()
+    if not question or not answer:
+        messages.error(request, "Une question frequente demande un intitule et une reponse.")
+        return None
+
+    faq.question = question
+    faq.answer = answer
+    try:
+        faq.position = max(0, int(request.POST.get("position") or faq.position))
+    except (TypeError, ValueError):
+        pass
+    faq.save(update_fields=["question", "answer", "position"])
+    log_sensitive_action(
+        request, "organization.faq_updated", "LandingFaq", faq.question,
+        metadata={"faq_id": faq.id},
+    )
+    messages.success(request, "Question mise a jour.")
+    return _settings_redirect("organization")
+
+
 @login_required
 def settings_dashboard(request):
     if not _settings_allowed(request):
@@ -700,15 +784,28 @@ def settings_dashboard(request):
             active_tab = "organization"
             organization_form = OrganizationSettingsForm(request.POST, request.FILES, instance=organization)
             if organization_form.is_valid():
+                modifies = list(organization_form.changed_data)
                 organization_form.save()
                 log_sensitive_action(
                     request,
                     "organization.updated",
                     "Organization",
                     organization.name,
+                    metadata={"champs_modifies": modifies},
                 )
                 messages.success(request, "Informations de l'organisation mises a jour.")
                 return _settings_redirect("organization")
+
+        elif action in {"faq_create", "faq_update", "faq_delete", "faq_toggle"}:
+            if not can_manage_organization:
+                return _refuse_settings_action(
+                    request, action, "Seul le proprietaire modifie la page d'accueil.",
+                    target=organization.name,
+                )
+            reponse = _handle_landing_faq(request, organization, action)
+            if reponse is not None:
+                return reponse
+            active_tab = "organization"
 
         elif action == "gym_contact":
             active_tab = "salle"
@@ -1042,6 +1139,18 @@ def settings_dashboard(request):
         "organization_form": organization_form,
         "maintenance_form": maintenance_form,
         "gym_contact_form": gym_contact_form,
+        # Les quatre champs image se rendent en boucle : les nommer un par un
+        # dans le gabarit multipliait le meme bloc de balisage.
+        "organization_images": [
+            organization_form[nom]
+            for nom in (
+                "landing_hero_image",
+                "landing_image_1",
+                "landing_image_2",
+                "landing_image_3",
+            )
+        ],
+        "landing_faqs": LandingFaq.objects.filter(organization=organization),
         "maintenance_alerts": maintenance_alert_summary(gym),
         "employee_form": employee_form,
         "employee_edit_form": employee_edit_form,

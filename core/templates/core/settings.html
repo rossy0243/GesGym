@@ -431,6 +431,82 @@
                         </div>
                     </div>
 
+                    <hr class="my-4">
+                    <h6 class="fw-semibold mb-1">Accroches de la page d'accueil</h6>
+                    <small class="text-muted d-block mb-3">
+                        Le texte de presentation. Laisse vide, chaque champ garde le
+                        texte d'origine plutot que d'afficher un vide.
+                    </small>
+
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold" for="{{ organization_form.city.id_for_label }}">
+                                {{ organization_form.city.label }}
+                            </label>
+                            {{ organization_form.city }}
+                            <small class="text-muted">{{ organization_form.city.help_text }}</small>
+                            {{ organization_form.city.errors }}
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label fw-semibold" for="{{ organization_form.landing_kicker.id_for_label }}">
+                                {{ organization_form.landing_kicker.label }}
+                            </label>
+                            {{ organization_form.landing_kicker }}
+                            <small class="text-muted">{{ organization_form.landing_kicker.help_text }}</small>
+                            {{ organization_form.landing_kicker.errors }}
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label fw-semibold" for="{{ organization_form.landing_title.id_for_label }}">
+                                {{ organization_form.landing_title.label }}
+                            </label>
+                            {{ organization_form.landing_title }}
+                            <small class="text-muted">{{ organization_form.landing_title.help_text }}</small>
+                            {{ organization_form.landing_title.errors }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="{{ organization_form.landing_intro.id_for_label }}">
+                                {{ organization_form.landing_intro.label }}
+                            </label>
+                            {{ organization_form.landing_intro }}
+                            {{ organization_form.landing_intro.errors }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="{{ organization_form.seo_description.id_for_label }}">
+                                {{ organization_form.seo_description.label }}
+                            </label>
+                            {{ organization_form.seo_description }}
+                            <small class="text-muted">{{ organization_form.seo_description.help_text }}</small>
+                            {{ organization_form.seo_description.errors }}
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label fw-semibold" for="{{ organization_form.seo_keywords.id_for_label }}">
+                                {{ organization_form.seo_keywords.label }}
+                            </label>
+                            {{ organization_form.seo_keywords }}
+                            <small class="text-muted">{{ organization_form.seo_keywords.help_text }}</small>
+                            {{ organization_form.seo_keywords.errors }}
+                        </div>
+                    </div>
+
+                    <hr class="my-4">
+                    <h6 class="fw-semibold mb-1">Photos de la salle</h6>
+                    <small class="text-muted d-block mb-3">
+                        Sans photo televersee, la page conserve les images livrees.
+                    </small>
+
+                    <div class="row g-3">
+                        {% for champ in organization_images %}
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold" for="{{ champ.id_for_label }}">
+                                {{ champ.label }}
+                            </label>
+                            {{ champ }}
+                            <small class="text-muted">{{ champ.help_text }}</small>
+                            {{ champ.errors }}
+                        </div>
+                        {% endfor %}
+                    </div>
+
                     <div class="d-flex justify-content-end mt-4">
                         <button type="submit" class="btn btn-primary">
                             <span class="material-icons me-2" style="font-size:18px;">save</span>Enregistrer
@@ -438,6 +514,115 @@
                     </div>
                 </form>
             </div>
+        </div>
+    </div>
+
+    <div class="settings-card mt-4">
+        <div class="card-header">
+            <h5 class="card-title mb-1">Questions frequentes du site</h5>
+            <small class="text-muted">
+                Affichees sur la page d'accueil et lues par les moteurs de recherche.
+                Tant qu'aucune question n'est enregistree, la page garde les trois
+                questions d'origine.
+            </small>
+        </div>
+        <div class="card-body">
+            <form method="post" class="row g-3 align-items-end mb-4">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="faq_create">
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold" for="faqNouvelleQuestion">Question</label>
+                    <input type="text" id="faqNouvelleQuestion" name="question" class="form-control"
+                           maxlength="255" placeholder="Proposez-vous des cours collectifs ?" required>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold" for="faqNouvelleReponse">Reponse</label>
+                    <textarea id="faqNouvelleReponse" name="answer" class="form-control" rows="2"
+                              placeholder="Oui, tous les jours de la semaine." required></textarea>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <span class="material-icons me-1" style="font-size:18px;">add</span>Ajouter
+                    </button>
+                </div>
+            </form>
+
+            {% if landing_faqs %}
+            {% comment %}
+            Une fiche par question plutot qu'un tableau : un <form> place entre
+            <tr> et <td> est du HTML invalide, le navigateur le sort du tableau
+            et la modification ne part jamais.
+            {% endcomment %}
+            <div class="d-flex flex-column gap-3">
+                {% for faq in landing_faqs %}
+                <div class="border rounded-3 p-3 {% if not faq.is_active %}bg-light{% endif %}">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        {% if faq.is_active %}
+                        <span class="badge bg-success">Affichee sur le site</span>
+                        {% else %}
+                        <span class="badge bg-secondary">Masquee</span>
+                        {% endif %}
+
+                        <div class="d-flex gap-1">
+                            <form method="post">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="faq_toggle">
+                                <input type="hidden" name="faq_id" value="{{ faq.id }}">
+                                <button type="submit" class="btn btn-sm btn-outline-secondary">
+                                    {% if faq.is_active %}Masquer{% else %}Afficher{% endif %}
+                                </button>
+                            </form>
+                            <form method="post"
+                                  onsubmit="return confirm('Retirer definitivement cette question du site ?');">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="faq_delete">
+                                <input type="hidden" name="faq_id" value="{{ faq.id }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                    Retirer
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <form method="post" class="row g-2 align-items-end">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="faq_update">
+                        <input type="hidden" name="faq_id" value="{{ faq.id }}">
+
+                        <div class="col-md-2">
+                            <label class="form-label small text-muted mb-1"
+                                   for="faqPosition{{ faq.id }}">Ordre</label>
+                            <input type="number" id="faqPosition{{ faq.id }}" name="position"
+                                   value="{{ faq.position }}" class="form-control form-control-sm" min="0">
+                        </div>
+                        <div class="col-md-10">
+                            <label class="form-label small text-muted mb-1"
+                                   for="faqQuestion{{ faq.id }}">Question</label>
+                            <input type="text" id="faqQuestion{{ faq.id }}" name="question"
+                                   value="{{ faq.question }}" class="form-control form-control-sm"
+                                   maxlength="255" required>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small text-muted mb-1"
+                                   for="faqAnswer{{ faq.id }}">Reponse</label>
+                            <textarea id="faqAnswer{{ faq.id }}" name="answer" rows="2"
+                                      class="form-control form-control-sm" required>{{ faq.answer }}</textarea>
+                        </div>
+                        <div class="col-12 d-flex justify-content-end">
+                            <button type="submit" class="btn btn-sm btn-outline-primary">
+                                Enregistrer cette question
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-muted mb-0">
+                Aucune question enregistree : le site affiche les trois questions livrees
+                par defaut. Ajoutez-en une pour les remplacer.
+            </p>
+            {% endif %}
         </div>
     </div>
 </div>

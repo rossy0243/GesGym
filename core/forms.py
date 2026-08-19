@@ -30,12 +30,22 @@ class OrganizationSettingsForm(forms.ModelForm):
             "address",
             "phone",
             "email",
+            "city",
             "whatsapp_number",
             "opening_hours",
             "footer_services",
             "facebook_url",
             "instagram_url",
             "tiktok_url",
+            "landing_kicker",
+            "landing_title",
+            "landing_intro",
+            "seo_description",
+            "seo_keywords",
+            "landing_hero_image",
+            "landing_image_1",
+            "landing_image_2",
+            "landing_image_3",
         ]
         widgets = {
             "name": forms.TextInput(attrs={"class": "form-control"}),
@@ -69,6 +79,36 @@ class OrganizationSettingsForm(forms.ModelForm):
                 "class": "form-control",
                 "placeholder": "https://tiktok.com/@...",
             }),
+            "city": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Kinshasa",
+            }),
+            "landing_kicker": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Salle de sport premium a Kinshasa",
+            }),
+            "landing_title": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Entrainez-vous comme un roi",
+            }),
+            "landing_intro": forms.Textarea(attrs={
+                "class": "form-control",
+                "rows": 3,
+                "placeholder": "Musculation, cardio-training, cours collectifs...",
+            }),
+            "seo_description": forms.Textarea(attrs={
+                "class": "form-control",
+                "rows": 3,
+                "placeholder": "Environ 160 caracteres.",
+            }),
+            "seo_keywords": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "salle de sport Kinshasa, musculation, fitness",
+            }),
+            "landing_hero_image": forms.ClearableFileInput(attrs={"class": "form-control"}),
+            "landing_image_1": forms.ClearableFileInput(attrs={"class": "form-control"}),
+            "landing_image_2": forms.ClearableFileInput(attrs={"class": "form-control"}),
+            "landing_image_3": forms.ClearableFileInput(attrs={"class": "form-control"}),
         }
         labels = {
             "name": "Nom de l'organisation",
@@ -82,6 +122,16 @@ class OrganizationSettingsForm(forms.ModelForm):
             "facebook_url": "Page Facebook",
             "instagram_url": "Compte Instagram",
             "tiktok_url": "Compte TikTok",
+            "city": "Ville",
+            "landing_kicker": "Petite accroche",
+            "landing_title": "Titre principal",
+            "landing_intro": "Phrase d'introduction",
+            "seo_description": "Description pour les moteurs de recherche",
+            "seo_keywords": "Mots-cles",
+            "landing_hero_image": "Photo principale",
+            "landing_image_1": "Photo espace 1",
+            "landing_image_2": "Photo espace 2",
+            "landing_image_3": "Photo espace 3",
         }
         help_texts = {
             "address": "Affichee dans le pied de page du site public.",
@@ -90,12 +140,39 @@ class OrganizationSettingsForm(forms.ModelForm):
             "whatsapp_number": "Indicatif et numero, sans + ni espaces. Ex : 243810000000",
             "opening_hours": "Affiches dans le bloc \"Horaires & localisation\" de la page d'accueil.",
             "footer_services": "Un service par ligne. Laisser vide pour la liste par defaut.",
+            "city": "Reprise dans les accroches et la fiche etablissement.",
+            "landing_kicker": "Petit texte au-dessus du titre. Sert aussi de sous-titre a l'onglet.",
+            "landing_title": "Affiche sous le nom de l'organisation.",
+            "landing_intro": "Le paragraphe sous le titre principal.",
+            "seo_description": "Environ 160 caracteres. Reprise lors d'un partage sur les reseaux.",
+            "seo_keywords": "Separes par des virgules.",
+            "landing_hero_image": "Grande photo a droite du titre.",
+            "landing_image_1": "Vignette de la section \"Nos espaces\".",
+            "landing_image_2": "Vignette de la section \"Nos espaces\".",
+            "landing_image_3": "Vignette de la section \"Nos espaces\".",
         }
 
+    # Toute image televersee passe par le meme controle que le logo : un
+    # fichier deguise en image reste un fichier execute par le serveur.
     def clean_logo(self):
-        logo = self.cleaned_data.get("logo")
-        validate_safe_image_upload(logo)
-        return logo
+        return self._image_verifiee("logo")
+
+    def clean_landing_hero_image(self):
+        return self._image_verifiee("landing_hero_image")
+
+    def clean_landing_image_1(self):
+        return self._image_verifiee("landing_image_1")
+
+    def clean_landing_image_2(self):
+        return self._image_verifiee("landing_image_2")
+
+    def clean_landing_image_3(self):
+        return self._image_verifiee("landing_image_3")
+
+    def _image_verifiee(self, nom):
+        image = self.cleaned_data.get(nom)
+        validate_safe_image_upload(image)
+        return image
 
     def clean_whatsapp_number(self):
         # wa.me n'accepte que des chiffres : un "+" ou des espaces produisent

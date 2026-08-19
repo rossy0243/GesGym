@@ -53,54 +53,38 @@ def _absolute_url(request, path=""):
 
 
 def _build_landing_seo_context(request, contact=None):
+    """
+    Balises et donnees structurees de la page d'accueil.
+
+    Tout vient de l'organisation : le titre, la description, les mots-cles et
+    les questions frequentes. Le bloc lu par les moteurs de recherche doit
+    decrire l'etablissement reel, pas un exemple.
+    """
     contact = contact or landing_contact(request)
     canonical_url = _absolute_url(request)
-    og_image_url = _absolute_url(request, LANDING_OG_IMAGE)
-    title = "Royal Gym | Salle de sport premium à Kinshasa"
+    og_image_url = contact["logo_url"] or _absolute_url(request, LANDING_OG_IMAGE)
+    if og_image_url.startswith("/"):
+        og_image_url = _absolute_url(request, og_image_url)
+
+    title = f"{contact['name']} | {contact['kicker']}"
+
     faq_schema = {
         "@context": "https://schema.org",
         "@type": "FAQPage",
         "mainEntity": [
             {
                 "@type": "Question",
-                "name": "Quels services propose Royal Gym ?",
-                "acceptedAnswer": {
-                    "@type": "Answer",
-                    "text": (
-                        "Musculation, cardio-training, cours collectifs et coaching "
-                        "personnalisé, dans un espace pensé pour progresser en toute "
-                        "sécurité."
-                    ),
-                },
-            },
-            {
-                "@type": "Question",
-                "name": "Quels sont les horaires d'ouverture ?",
-                "acceptedAnswer": {
-                    "@type": "Answer",
-                    "text": "Contactez-nous par WhatsApp ou téléphone pour connaître nos horaires à jour.",
-                },
-            },
-            {
-                "@type": "Question",
-                "name": "Proposez-vous un coaching personnalisé ?",
-                "acceptedAnswer": {
-                    "@type": "Answer",
-                    "text": (
-                        "Oui, nos coachs vous accompagnent avec un suivi personnalisé "
-                        "adapté à vos objectifs."
-                    ),
-                },
-            },
+                "name": entree["question"],
+                "acceptedAnswer": {"@type": "Answer", "text": entree["answer"]},
+            }
+            for entree in contact["faq"]
         ],
     }
-    # Les moteurs de recherche lisent ce bloc : y laisser "Adresse a confirmer"
-    # publiait une fiche etablissement incomplete.
     gym_schema = {
         "@context": "https://schema.org",
         "@type": "ExerciseGym",
         "name": contact["name"],
-        "description": LANDING_META_DESCRIPTION,
+        "description": contact["seo_description"],
         "url": canonical_url,
         "image": og_image_url,
         "telephone": contact["phone"] or f"+{contact['whatsapp_number']}",
@@ -108,14 +92,17 @@ def _build_landing_seo_context(request, contact=None):
         "address": {
             "@type": "PostalAddress",
             "streetAddress": contact["address"] or "Adresse a confirmer",
-            "addressLocality": "Kinshasa",
+            "addressLocality": contact["city"],
             "addressCountry": "CD",
         },
     }
+    if contact["hours"]:
+        gym_schema["openingHours"] = contact["hours"]
+
     return {
         "seo_title": title,
-        "seo_description": LANDING_META_DESCRIPTION,
-        "seo_keywords": LANDING_KEYWORDS,
+        "seo_description": contact["seo_description"],
+        "seo_keywords": contact["seo_keywords"],
         "seo_robots": "index, follow",
         "seo_canonical_url": canonical_url,
         "seo_og_type": "website",

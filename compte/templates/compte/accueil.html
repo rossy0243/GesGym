@@ -4,24 +4,29 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{{ seo_title|default:"Royal Gym | Salle de sport premium à Kinshasa" }}</title>
-  <meta name="description" content="{{ seo_description|default:'Royal Gym est une salle de sport premium à Kinshasa.' }}">
+  <title>{{ seo_title|default:landing_contact.name }}</title>
+  <meta name="description" content="{{ seo_description|default:landing_contact.seo_description }}">
   <meta name="keywords" content="{{ seo_keywords|default:'' }}">
   <meta name="robots" content="{{ seo_robots|default:'index, follow' }}">
   <meta property="og:locale" content="fr_FR">
   <meta property="og:type" content="{{ seo_og_type|default:'website' }}">
-  <meta property="og:title" content="{{ seo_title|default:'Royal Gym | Salle de sport premium à Kinshasa' }}">
-  <meta property="og:description" content="{{ seo_description|default:'Royal Gym est une salle de sport premium à Kinshasa.' }}">
+  <meta property="og:title" content="{{ seo_title|default:landing_contact.name }}">
+  <meta property="og:description" content="{{ seo_description|default:landing_contact.seo_description }}">
   <meta property="og:url" content="{{ seo_canonical_url|default:request.build_absolute_uri }}">
-  <meta property="og:site_name" content="Royal Gym">
+  <meta property="og:site_name" content="{{ landing_contact.name }}">
   <meta property="og:image" content="{{ seo_og_image|default:'' }}">
   <meta name="twitter:card" content="{{ seo_twitter_card|default:'summary_large_image' }}">
-  <meta name="twitter:title" content="{{ seo_title|default:'Royal Gym | Salle de sport premium à Kinshasa' }}">
-  <meta name="twitter:description" content="{{ seo_description|default:'Royal Gym est une salle de sport premium à Kinshasa.' }}">
+  <meta name="twitter:title" content="{{ seo_title|default:landing_contact.name }}">
+  <meta name="twitter:description" content="{{ seo_description|default:landing_contact.seo_description }}">
   <meta name="twitter:image" content="{{ seo_og_image|default:'' }}">
   <link rel="canonical" href="{{ seo_canonical_url|default:request.build_absolute_uri }}">
+  {% if landing_contact.logo_url %}
+  <link rel="icon" href="{{ landing_contact.logo_url }}">
+  <link rel="shortcut icon" href="{{ landing_contact.logo_url }}">
+  {% else %}
   <link rel="icon" type="image/png" href="{% static 'images/royal-gym-favicon.png' %}">
   <link rel="shortcut icon" type="image/png" href="{% static 'images/royal-gym-favicon.png' %}">
+  {% endif %}
   {% if seo_schema_json %}
   <script type="application/ld+json">{{ seo_schema_json|safe }}</script>
   {% endif %}
@@ -228,9 +233,13 @@
   <header class="sticky top-0 z-50 bg-white/85 backdrop-blur-md border-b border-slate-100 shadow-sm">
     <div class="container-premium mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-3">
       <div class="flex items-center gap-2 min-w-0">
-        <img src="{% static 'images/royal-gym-logo.png' %}" alt="Royal Gym" class="h-10 w-10 rounded-xl object-cover">
+        {% if landing_contact.logo_url %}
+          <img src="{{ landing_contact.logo_url }}" alt="{{ landing_contact.name }}" class="h-10 w-10 rounded-xl object-cover">
+        {% else %}
+          <img src="{% static 'images/royal-gym-logo.png' %}" alt="{{ landing_contact.name }}" class="h-10 w-10 rounded-xl object-cover">
+        {% endif %}
         <span class="text-xl sm:text-2xl font-extrabold italic tracking-tight whitespace-nowrap text-[#0B0B0B]">
-          Royal Gym
+          {{ landing_contact.name }}
         </span>
       </div>
 
@@ -265,17 +274,15 @@
     <div class="container-premium mx-auto px-6 lg:px-8 relative">
       <div class="grid lg:grid-cols-2 gap-10 items-center">
         <div class="text-center lg:text-left">
-          <span class="section-kicker mb-5">Salle de sport premium à Kinshasa</span>
+          <span class="section-kicker mb-5">{{ landing_contact.kicker }}</span>
 
           <h1 class="text-4xl md:text-5xl lg:text-6xl font-extrabold leading-tight mb-6 tracking-tight">
-            <span class="gradient-text">Royal Gym</span><br>
-            <span class="text-gray-900">Entraînez-vous comme un roi</span>
+            <span class="gradient-text">{{ landing_contact.name }}</span><br>
+            <span class="text-gray-900">{{ landing_contact.title }}</span>
           </h1>
 
           <p class="text-lg md:text-xl text-gray-600 mb-8 max-w-2xl mx-auto lg:mx-0 leading-relaxed">
-            Musculation, cardio-training, cours collectifs et coaching personnalisé
-            dans un espace pensé pour vous aider à progresser, en toute sécurité et
-            dans une ambiance motivante.
+            {{ landing_contact.intro|linebreaksbr }}
           </p>
 
           <div class="flex flex-wrap gap-3 justify-center lg:justify-start mb-8">
@@ -302,8 +309,10 @@
         <div class="relative">
           <div class="premium-card rounded-[32px] p-4 lg:p-5">
             <div class="relative rounded-[24px] overflow-hidden">
-              <img src="{% static 'images/royal-gym-equipment-2.jpg' %}" alt="Équipement de musculation Royal Gym" class="w-full h-auto object-cover">
-              <img src="{% static 'images/royal-gym-logo.png' %}" alt="Royal Gym" class="absolute bottom-4 left-4 w-14 h-14 rounded-xl shadow-lg object-cover">
+              <img src="{% if landing_contact.hero_image_url %}{{ landing_contact.hero_image_url }}{% else %}{% static 'images/royal-gym-equipment-2.jpg' %}{% endif %}"
+                   alt="Équipement de musculation {{ landing_contact.name }}" class="w-full h-auto object-cover">
+              <img src="{% if landing_contact.logo_url %}{{ landing_contact.logo_url }}{% else %}{% static 'images/royal-gym-logo.png' %}{% endif %}"
+                   alt="{{ landing_contact.name }}" class="absolute bottom-4 left-4 w-14 h-14 rounded-xl shadow-lg object-cover">
             </div>
             <div class="grid grid-cols-3 gap-3 mt-5">
               <div class="soft-card rounded-2xl p-4 text-center">
@@ -353,12 +362,12 @@
   <section class="py-10 lg:py-12 bg-white">
     <div class="container-premium mx-auto px-6 lg:px-8">
       <div class="max-w-3xl mx-auto text-center mb-8">
-        <span class="section-kicker mb-4">Pourquoi Royal Gym</span>
+        <span class="section-kicker mb-4">Pourquoi {{ landing_contact.name }}</span>
         <h2 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">
           Une salle pensée pour votre progression
         </h2>
         <p class="text-lg text-gray-600 leading-relaxed">
-          Royal Gym vous accompagne avec des équipements de qualité, des coachs
+          {{ landing_contact.name }} vous accompagne avec des équipements de qualité, des coachs
           expérimentés et un suivi personnalisé, dans un cadre motivant.
         </p>
       </div>
@@ -401,7 +410,7 @@
         </h2>
         <p class="text-lg text-gray-600 leading-relaxed">
           Que vous visiez la prise de masse, la perte de poids ou la remise en
-          forme, Royal Gym met à votre disposition les moyens d'y arriver.
+          forme, {{ landing_contact.name }} met à votre disposition les moyens d'y arriver.
         </p>
       </div>
 
@@ -448,21 +457,24 @@
 
       <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
         <div class="soft-card rounded-3xl overflow-hidden text-center">
-          <img src="{% static 'images/royal-gym-equipment-1.jpg' %}" alt="Zone musculation Royal Gym" class="w-full h-48 object-cover">
+          <img src="{% if landing_contact.image_1_url %}{{ landing_contact.image_1_url }}{% else %}{% static 'images/royal-gym-equipment-1.jpg' %}{% endif %}"
+               alt="Zone musculation {{ landing_contact.name }}" class="w-full h-48 object-cover">
           <div class="p-8 pt-6">
             <h3 class="font-bold text-lg mb-2">Zone musculation</h3>
             <p class="text-gray-500">Haltères, barres et machines guidées.</p>
           </div>
         </div>
         <div class="soft-card rounded-3xl overflow-hidden text-center">
-          <img src="{% static 'images/royal-gym-equipment-4.jpg' %}" alt="Zone cardio Royal Gym" class="w-full h-48 object-cover">
+          <img src="{% if landing_contact.image_2_url %}{{ landing_contact.image_2_url }}{% else %}{% static 'images/royal-gym-equipment-4.jpg' %}{% endif %}"
+               alt="Zone cardio {{ landing_contact.name }}" class="w-full h-48 object-cover">
           <div class="p-8 pt-6">
             <h3 class="font-bold text-lg mb-2">Zone cardio</h3>
             <p class="text-gray-500">Tapis de course, vélos et rameurs.</p>
           </div>
         </div>
         <div class="soft-card rounded-3xl overflow-hidden text-center">
-          <img src="{% static 'images/royal-gym-equipment-3.jpg' %}" alt="Espace fonctionnel Royal Gym" class="w-full h-48 object-cover">
+          <img src="{% if landing_contact.image_3_url %}{{ landing_contact.image_3_url }}{% else %}{% static 'images/royal-gym-equipment-3.jpg' %}{% endif %}"
+               alt="Espace fonctionnel {{ landing_contact.name }}" class="w-full h-48 object-cover">
           <div class="p-8 pt-6">
             <h3 class="font-bold text-lg mb-2">Espace fonctionnel</h3>
             <p class="text-gray-500">Cross-training, kettlebells et poids libres.</p>
@@ -557,7 +569,7 @@
       <div class="max-w-3xl mx-auto text-center mb-10">
         <span class="section-kicker mb-4">Horaires &amp; localisation</span>
         <h2 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">
-          Retrouvez-nous à Kinshasa
+          Retrouvez-nous à {{ landing_contact.city }}
         </h2>
       </div>
 
@@ -592,77 +604,23 @@
       </div>
 
       <div class="space-y-5" id="faqAccordion">
-        <div class="faq-item active">
+        {% for entree in landing_contact.faq %}
+        {% comment %}
+        La premiere question est ouverte : le visiteur voit tout de suite que
+        la section est depliable.
+        {% endcomment %}
+        <div class="faq-item{% if forloop.first %} active{% endif %}">
           <button class="faq-button" type="button">
-            <span>Quels sont vos horaires d'ouverture ?</span>
+            <span>{{ entree.question }}</span>
             <i class="fas fa-chevron-down faq-icon"></i>
           </button>
-          <div class="faq-content" style="max-height: 300px;">
+          <div class="faq-content"{% if forloop.first %} style="max-height: 300px;"{% endif %}>
             <div class="faq-content-inner">
-              Contactez-nous par WhatsApp ou téléphone pour connaître nos horaires à jour.
+              {{ entree.answer|linebreaksbr }}
             </div>
           </div>
         </div>
-
-        <div class="faq-item">
-          <button class="faq-button" type="button">
-            <span>Proposez-vous un coaching personnalisé ?</span>
-            <i class="fas fa-chevron-down faq-icon"></i>
-          </button>
-          <div class="faq-content">
-            <div class="faq-content-inner">
-              Oui. Nos coachs vous accompagnent avec un suivi adapté à vos objectifs, que vous débutiez ou souhaitiez aller plus loin.
-            </div>
-          </div>
-        </div>
-
-        <div class="faq-item">
-          <button class="faq-button" type="button">
-            <span>Faut-il réserver pour les cours collectifs ?</span>
-            <i class="fas fa-chevron-down faq-icon"></i>
-          </button>
-          <div class="faq-content">
-            <div class="faq-content-inner">
-              Contactez notre équipe pour connaître le planning des cours et les modalités d'inscription.
-            </div>
-          </div>
-        </div>
-
-        <div class="faq-item">
-          <button class="faq-button" type="button">
-            <span>Quelles formules d'abonnement proposez-vous ?</span>
-            <i class="fas fa-chevron-down faq-icon"></i>
-          </button>
-          <div class="faq-content">
-            <div class="faq-content-inner">
-              Des formules journalières, mensuelles, trimestrielles et annuelles. Contactez-nous pour connaître les tarifs en cours.
-            </div>
-          </div>
-        </div>
-
-        <div class="faq-item">
-          <button class="faq-button" type="button">
-            <span>Royal Gym convient-il aux débutants ?</span>
-            <i class="fas fa-chevron-down faq-icon"></i>
-          </button>
-          <div class="faq-content">
-            <div class="faq-content-inner">
-              Tout à fait. Nos coachs sont là pour vous guider dès votre première séance, quel que soit votre niveau.
-            </div>
-          </div>
-        </div>
-
-        <div class="faq-item">
-          <button class="faq-button" type="button">
-            <span>En tant que membre, ai-je un espace personnel ?</span>
-            <i class="fas fa-chevron-down faq-icon"></i>
-          </button>
-          <div class="faq-content">
-            <div class="faq-content-inner">
-              Oui. Chaque membre Royal Gym dispose d'un espace personnel avec sa carte, son code QR d'accès et le suivi de son abonnement.
-            </div>
-          </div>
-        </div>
+        {% endfor %}
       </div>
     </div>
   </section>
@@ -675,7 +633,7 @@
             Prêt à commencer votre transformation ?
           </h2>
           <p class="text-lg text-gray-300 mb-8 max-w-3xl mx-auto">
-            Rejoignez Royal Gym dès aujourd'hui et bénéficiez d'un accompagnement premium pour atteindre vos objectifs.
+            Rejoignez {{ landing_contact.name }} dès aujourd'hui et bénéficiez d'un accompagnement premium pour atteindre vos objectifs.
           </p>
           <div class="flex flex-col sm:flex-row gap-4 justify-center">
             <a href="#contact-form" class="px-6 py-3.5 border-2 border-white text-white font-bold rounded-full hover:bg-white hover:text-[#0B0B0B] transition">

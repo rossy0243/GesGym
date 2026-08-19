@@ -68,6 +68,9 @@ employer dans la formation : l'apprenant doit reconnaitre ce qu'il verra.
 - Mot de passe reinitialise pour {valeur} : {valeur}. Changement obligatoire a la premiere connexion.
 - Profil employe mis a jour : {valeur}.
 - Profil employe supprime : {valeur}.
+- Question ajoutee a la page d'accueil.
+- Question mise a jour.
+- Question retiree.
 - Specialite coach enregistree : {valeur}
 - Specialite {valeur} mise a jour.
 - Vous travaillez maintenant sur : <strong>{valeur}</strong>
@@ -78,6 +81,8 @@ employer dans la formation : l'apprenant doit reconnaitre ce qu'il verra.
 - Acces refuse a cette salle.
 - Ce compte est partage avec un autre acces actif. Utilisez une reinitialisation globale supervisee.
 - Ce compte est partage avec un autre profil actif. La modification globale est bloquee.
+- Question introuvable.
+- Une question frequente demande un intitule et une reponse.
 - Vous n'avez pas le droit de changer de gym.
 - Vous ne pouvez pas supprimer votre propre profil d'acces.
 - Vous ne pouvez pas vous desactiver vous-meme.
@@ -93,6 +98,10 @@ et rassurer sur ce qui ne l'est pas.
 - `employee.updated`
 - `gym.contact_updated`
 - `gym.maintenance_alert_updated`
+- `organization.faq_created`
+- `organization.faq_deleted`
+- `organization.faq_toggled`
+- `organization.faq_updated`
 - `organization.updated`
 - `settings.action_refused`
 - `settings.activity_log_exported`

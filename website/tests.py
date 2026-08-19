@@ -4,7 +4,12 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from compte.models import User, UserGymRole
-from organizations.models import Gym, Organization
+from organizations.models import (
+    Gym,
+    LandingFaq,
+    Organization,
+    SensitiveActivityLog,
+)
 
 
 class PublicRouteTests(TestCase):
@@ -400,3 +405,268 @@ class OrganizationFooterSettingsTests(TestCase):
 
         self.organization.refresh_from_db()
         self.assertEqual(self.organization.services_list, ["Musculation", "Yoga"])
+
+
+class LandingContentTests(TestCase):
+    """Le discours de la page d'accueil appartient a l'organisation."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Club Atlas",
+            slug="club-atlas",
+            city="Lubumbashi",
+            landing_kicker="Salle de sport premium a Lubumbashi",
+            landing_title="Depassez-vous chaque jour",
+            landing_intro="Musculation, cardio et cours collectifs.",
+            seo_description="Club Atlas, salle premium a Lubumbashi.",
+            seo_keywords="salle de sport Lubumbashi, fitness",
+        )
+
+    # --- Nom et accroches ----------------------------------------------------
+
+    def test_the_page_carries_the_organization_name_everywhere(self):
+        response = self.client.get("/")
+
+        self.assertContains(response, "Club Atlas")
+        self.assertNotContains(response, "Royal Gym")
+
+    def test_the_hero_uses_the_declared_wording(self):
+        response = self.client.get("/")
+
+        self.assertContains(response, "Salle de sport premium a Lubumbashi")
+        self.assertContains(response, "Depassez-vous chaque jour")
+        self.assertContains(response, "Musculation, cardio et cours collectifs.")
+
+    def test_the_city_replaces_the_hardcoded_one(self):
+        response = self.client.get("/")
+
+        self.assertContains(response, "Retrouvez-nous à Lubumbashi")
+        self.assertNotContains(response, "Retrouvez-nous à Kinshasa")
+
+    def test_the_search_engine_tags_follow_the_organization(self):
+        response = self.client.get("/")
+
+        self.assertEqual(
+            response.context["seo_title"],
+            "Club Atlas | Salle de sport premium a Lubumbashi",
+        )
+        self.assertEqual(
+            response.context["seo_description"],
+            "Club Atlas, salle premium a Lubumbashi.",
+        )
+        self.assertIn("Lubumbashi", response.context["seo_schema_json"])
+
+    def test_an_empty_wording_keeps_the_original_text(self):
+        self.organization.landing_title = ""
+        self.organization.landing_intro = ""
+        self.organization.save(update_fields=["landing_title", "landing_intro"])
+
+        response = self.client.get("/")
+
+        # Un champ vide ne doit pas produire une page trouee.
+        self.assertContains(response, "Entraînez-vous comme un roi")
+        self.assertContains(response, "Musculation, cardio-training")
+
+    def test_the_copyright_line_stays_untouched(self):
+        response = self.client.get("/")
+
+        self.assertContains(response, "SMART IT SOLUTION")
+
+    # --- Questions frequentes -------------------------------------------------
+
+    def test_without_any_question_the_original_three_remain(self):
+        response = self.client.get("/")
+
+        self.assertEqual(len(response.context["landing_contact"]["faq"]), 3)
+        self.assertContains(response, "Quels services proposez-vous ?")
+
+    def test_declared_questions_replace_the_original_ones(self):
+        LandingFaq.objects.create(
+            organization=self.organization,
+            question="Avez-vous un parking ?",
+            answer="Oui, gratuit et surveille.",
+            position=1,
+        )
+
+        response = self.client.get("/")
+
+        self.assertContains(response, "Avez-vous un parking ?")
+        self.assertContains(response, "Oui, gratuit et surveille.")
+        self.assertNotContains(response, "Quels services proposez-vous ?")
+
+    def test_a_hidden_question_disappears_from_the_site(self):
+        LandingFaq.objects.create(
+            organization=self.organization,
+            question="Visible",
+            answer="Oui.",
+            position=1,
+        )
+        LandingFaq.objects.create(
+            organization=self.organization,
+            question="Cachee",
+            answer="Non.",
+            position=2,
+            is_active=False,
+        )
+
+        response = self.client.get("/")
+
+        self.assertContains(response, "Visible")
+        self.assertNotContains(response, "Cachee")
+
+    def test_the_questions_follow_the_declared_order(self):
+        LandingFaq.objects.create(
+            organization=self.organization, question="Seconde", answer="B", position=5
+        )
+        LandingFaq.objects.create(
+            organization=self.organization, question="Premiere", answer="A", position=1
+        )
+
+        response = self.client.get("/")
+        html = response.content.decode("utf-8", "replace")
+
+        self.assertLess(html.index("Premiere"), html.index("Seconde"))
+
+    def test_the_questions_reach_the_search_engine_block(self):
+        LandingFaq.objects.create(
+            organization=self.organization,
+            question="Avez-vous un parking ?",
+            answer="Oui, gratuit et surveille.",
+            position=1,
+        )
+
+        response = self.client.get("/")
+
+        self.assertIn("Avez-vous un parking ?", response.context["seo_schema_json"])
+
+
+class LandingFaqSettingsTests(TestCase):
+    """Le proprietaire gere les questions depuis Parametres."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org FAQ", slug="org-faq"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym FAQ",
+            slug="gym-faq",
+            subdomain="gym-faq",
+        )
+        self.owner = User.objects.create_user(
+            username="proprio-faq",
+            password="pass12345",
+            owned_organization=self.organization,
+        )
+        self.client.force_login(self.owner)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _poster(self, **payload):
+        return self.client.post(reverse("core:settings"), payload, follow=True)
+
+    def test_the_owner_adds_a_question(self):
+        self._poster(
+            action="faq_create",
+            question="Ouvrez-vous le dimanche ?",
+            answer="Oui, de 08h a 14h.",
+        )
+
+        faq = LandingFaq.objects.get(organization=self.organization)
+        self.assertEqual(faq.question, "Ouvrez-vous le dimanche ?")
+        self.assertTrue(faq.is_active)
+
+    def test_a_question_without_an_answer_is_refused(self):
+        self._poster(action="faq_create", question="Sans reponse", answer="   ")
+
+        self.assertFalse(LandingFaq.objects.exists())
+
+    def test_the_owner_corrects_a_question(self):
+        faq = LandingFaq.objects.create(
+            organization=self.organization, question="Avant", answer="A", position=3
+        )
+
+        self._poster(
+            action="faq_update",
+            faq_id=faq.id,
+            question="Apres",
+            answer="B",
+            position="1",
+        )
+
+        faq.refresh_from_db()
+        self.assertEqual(faq.question, "Apres")
+        self.assertEqual(faq.answer, "B")
+        self.assertEqual(faq.position, 1)
+
+    def test_the_owner_hides_then_shows_a_question(self):
+        faq = LandingFaq.objects.create(
+            organization=self.organization, question="Q", answer="R"
+        )
+
+        self._poster(action="faq_toggle", faq_id=faq.id)
+        faq.refresh_from_db()
+        self.assertFalse(faq.is_active)
+
+        self._poster(action="faq_toggle", faq_id=faq.id)
+        faq.refresh_from_db()
+        self.assertTrue(faq.is_active)
+
+    def test_the_owner_removes_a_question(self):
+        faq = LandingFaq.objects.create(
+            organization=self.organization, question="Q", answer="R"
+        )
+
+        self._poster(action="faq_delete", faq_id=faq.id)
+
+        self.assertFalse(LandingFaq.objects.filter(id=faq.id).exists())
+
+    def test_a_question_of_another_organization_is_out_of_reach(self):
+        autre = Organization.objects.create(name="Autre", slug="autre-faq")
+        faq = LandingFaq.objects.create(
+            organization=autre, question="Chez le voisin", answer="R"
+        )
+
+        self._poster(action="faq_delete", faq_id=faq.id)
+
+        self.assertTrue(LandingFaq.objects.filter(id=faq.id).exists())
+
+    def test_a_manager_cannot_touch_the_questions(self):
+        manager = User.objects.create_user(
+            username="gerant-faq", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=manager, gym=self.gym, role="manager", is_active=True
+        )
+        self.client.force_login(manager)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+        self.client.post(
+            reverse("core:settings"),
+            {"action": "faq_create", "question": "Tentative", "answer": "R"},
+        )
+
+        self.assertFalse(LandingFaq.objects.exists())
+
+    def test_the_change_is_traced_in_the_sensitive_log(self):
+        self._poster(
+            action="faq_create", question="Tracee ?", answer="Oui."
+        )
+
+        trace = SensitiveActivityLog.objects.get(action="organization.faq_created")
+        self.assertEqual(trace.actor, self.owner)
+        self.assertEqual(trace.target_label, "Tracee ?")
+
+    def test_the_settings_page_lists_the_questions_in_editable_forms(self):
+        LandingFaq.objects.create(
+            organization=self.organization, question="Ma question", answer="Ma reponse"
+        )
+
+        response = self.client.get(reverse("core:settings"), {"tab": "organization"})
+
+        self.assertContains(response, "Questions frequentes du site")
+        self.assertContains(response, "Ma question")
+        self.assertContains(response, "Ma reponse")

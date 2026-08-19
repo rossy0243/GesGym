@@ -63,6 +63,86 @@ class Organization(models.Model):
         help_text="Texte libre. Ex : Lundi au samedi, 06h - 21h",
     )
 
+    city = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        verbose_name="Ville",
+        help_text="Reprise dans les accroches et la fiche etablissement.",
+    )
+
+    # --- Accroches de la page d'accueil -------------------------------------
+    # Le discours commercial appartient a la salle, pas au gabarit. Il etait
+    # ecrit en dur : changer une phrase demandait une mise en production.
+
+    landing_kicker = models.CharField(
+        max_length=160,
+        blank=True,
+        default="",
+        verbose_name="Petite accroche au-dessus du titre",
+        help_text="Ex : Salle de sport premium a Kinshasa",
+    )
+
+    landing_title = models.CharField(
+        max_length=160,
+        blank=True,
+        default="",
+        verbose_name="Titre principal",
+        help_text="Affiche sous le nom. Ex : Entrainez-vous comme un roi",
+    )
+
+    landing_intro = models.TextField(
+        blank=True,
+        default="",
+        verbose_name="Phrase d'introduction",
+        help_text="Le paragraphe sous le titre principal.",
+    )
+
+    seo_description = models.TextField(
+        blank=True,
+        default="",
+        verbose_name="Description pour les moteurs de recherche",
+        help_text="Environ 160 caracteres. Reprise aussi lors d'un partage sur les reseaux.",
+    )
+
+    seo_keywords = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        verbose_name="Mots-cles",
+        help_text="Separes par des virgules.",
+    )
+
+    # --- Photos de la salle --------------------------------------------------
+
+    landing_hero_image = models.ImageField(
+        upload_to="organizations/landing/",
+        blank=True,
+        null=True,
+        verbose_name="Photo principale",
+    )
+
+    landing_image_1 = models.ImageField(
+        upload_to="organizations/landing/",
+        blank=True,
+        null=True,
+        verbose_name="Photo espace 1",
+    )
+
+    landing_image_2 = models.ImageField(
+        upload_to="organizations/landing/",
+        blank=True,
+        null=True,
+        verbose_name="Photo espace 2",
+    )
+
+    landing_image_3 = models.ImageField(
+        upload_to="organizations/landing/",
+        blank=True,
+        null=True,
+        verbose_name="Photo espace 3",
+    )
+
     subscription_pack = models.CharField(
         max_length=20,
         choices=PACK_CHOICES,
@@ -337,3 +417,45 @@ class GymModule(models.Model):
 
     def __str__(self):
         return f"{self.gym} - {self.module}"
+
+
+class LandingFaq(models.Model):
+    """
+    Question frequente affichee sur la page d'accueil publique.
+
+    Les questions etaient ecrites dans le gabarit : y ajouter une reponse
+    demandait une mise en production. Elles varient pourtant d'une salle a
+    l'autre et se corrigent au fil des appels recus.
+    """
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="landing_faqs",
+    )
+
+    question = models.CharField(max_length=255)
+
+    answer = models.TextField()
+
+    # Ordre d'affichage : la question la plus posee doit pouvoir remonter.
+    position = models.PositiveIntegerField(default=0)
+
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Affichee",
+        help_text="Decochee, la question reste enregistree mais disparait du site.",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["position", "id"]
+        indexes = [
+            models.Index(fields=["organization", "is_active"]),
+        ]
+        verbose_name = "Question frequente"
+        verbose_name_plural = "Questions frequentes"
+
+    def __str__(self):
+        return self.question
