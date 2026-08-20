@@ -17,6 +17,12 @@ from .models import AccessLog
 # ouvre : refuser ici affichait un feu vert sur le terminal pendant que
 # le journal enregistrait un refus.
 RETURN_LABEL = "Retour dans la salle"
+
+# Refus oppose a un second passage presente autrement que par le visage.
+# Le message s'adresse a l'equipe autant qu'au membre : il dit pourquoi.
+SHARED_CREDENTIAL_REASON = (
+    "Deja entre aujourd'hui. Un second passage n'est accepte que par reconnaissance faciale."
+)
 EXPIRED_QR_REASON = "QR code expire. Ouvrez l'espace membre pour obtenir le nouveau QR code."
 
 
@@ -113,7 +119,19 @@ def _today_stats(gym):
     }
 
 
-def _record_access(gym, member, user, method, require_valid_qr=False, device=None):
+def _record_access(
+    gym, member, user, method, require_valid_qr=False, device=None,
+    allow_return=False,
+):
+    """
+    Enregistre un passage et tranche s'il ouvre la porte.
+
+    ``allow_return`` n'est vrai que pour un visage reconnu par le lecteur.
+    Un QR code se prete, un nom se donne a l'accueil, un badge se passe de
+    main en main : pour ces trois-la, un second passage le meme jour reste
+    refuse, sinon un membre ferait entrer un ami avec ses identifiants. Un
+    visage, personne ne peut le presenter a votre place.
+    """
     with transaction.atomic():
         member = Member.objects.select_for_update().get(id=member.id, gym=gym)
         access_granted, reason = _member_has_valid_access(
@@ -121,12 +139,20 @@ def _record_access(gym, member, user, method, require_valid_qr=False, device=Non
             require_valid_qr=require_valid_qr,
         )
 
-        # Un membre deja entre aujourd'hui n'est pas refoule : il est ressorti
-        # puis revenu. On le laisse passer et on marque le passage, pour que la
-        # frequentation continue de compter une visite par membre et par jour.
-        est_un_retour = access_granted and _member_already_checked_in_today(gym, member)
-        if est_un_retour:
+        deja_entre = access_granted and _member_already_checked_in_today(gym, member)
+
+        est_un_retour = False
+        if deja_entre and allow_return:
+            # Visage reconnu : le membre est ressorti puis revenu. Le lecteur
+            # lui a deja ouvert de toute facon ; refuser ici afficherait un
+            # feu vert sur le terminal pendant qu'on enregistre un refus.
+            est_un_retour = True
             reason = RETURN_LABEL
+        elif deja_entre:
+            # QR code, badge ou saisie du nom : ces identifiants se pretent.
+            # Un second passage le meme jour, c'est peut-etre quelqu'un d'autre.
+            access_granted = False
+            reason = SHARED_CREDENTIAL_REASON
 
         log = AccessLog.objects.create(
             gym=gym,

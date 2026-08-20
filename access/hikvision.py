@@ -720,6 +720,51 @@ _CREDENTIAL_KEYS = (
 )
 
 
+# Champs ou le lecteur indique comment la personne s'est presentee. Le nom
+# varie selon le firmware, on les interroge tous.
+_VERIFY_MODE_KEYS = (
+    "currentVerifyMode",
+    "CurrentVerifyMode",
+    "verifyMode",
+    "VerifyMode",
+    "currentVerifyModeStr",
+)
+
+
+def _mode_de_verification(event, payload):
+    """
+    Comment la personne s'est presentee : visage, badge, empreinte, code.
+
+    Distinction essentielle : un badge et un QR code se pretent, un visage et
+    une empreinte non. La regle du repassage en depend.
+    """
+    for source in (event, payload):
+        for cle in _VERIFY_MODE_KEYS:
+            valeur = source.get(cle)
+            if valeur and str(valeur).strip():
+                return str(valeur).strip()
+    return ""
+
+
+def est_un_visage(verify_mode):
+    """
+    Vrai si le lecteur affirme avoir reconnu un visage seul.
+
+    Prudence deliberee : une valeur absente ou ambigue renvoie faux. Mieux
+    vaut refuser a tort un repassage que laisser entrer deux personnes avec
+    un badge prete.
+    """
+    mode = (verify_mode or "").strip().lower()
+    if not mode:
+        return False
+
+    # "faceAndCard", "cardOrFace"... : des l'instant qu'un autre facteur peut
+    # suffire, on ne peut pas garantir que c'est bien le visage qui a servi.
+    if mode == "face":
+        return True
+    return False
+
+
 def parse_event_payload(raw_body, content_type=""):
     """
     Extrait les donnees utiles d'une notification poussee par le lecteur.
@@ -758,6 +803,7 @@ def parse_event_payload(raw_body, content_type=""):
 
     return {
         "credential": credential,
+        "verify_mode": _mode_de_verification(event, payload),
         "event": event,
         "payload": payload,
         "raw": text[:2000],

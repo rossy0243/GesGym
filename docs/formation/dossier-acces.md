@@ -174,8 +174,8 @@ meilleure source pour les cas limites a montrer en formation.
 ### AccessControlTests
 - access log rejects cross gym member
 - manual access creates scoped log for current gym
-- manual access accepts a return the same day — _Un membre deja entre aujourd'hui repasse : il est ressorti puis revenu._
-- qr access accepts a return the same day
+- manual access refuses a second entry the same day — _Le nom donne a l'accueil ne prouve rien : n'importe qui peut le donner._
+- qr access refuses a second scan the same day
 - qr access denies expired qr code
 - manual access still allows member when qr is expired
 - qr access allows multiple different members in sequence
@@ -207,7 +207,7 @@ meilleure source pour les cas limites a montrer en formation.
 - unknown credential is refused without log
 - member from another gym is not resolved
 - expired qr code is refused
-- a return the same day is accepted
+- a second qr scan the same day is refused
 - unknown token returns 404
 - inactive device is rejected
 - get is not allowed
@@ -222,11 +222,11 @@ meilleure source pour les cas limites a montrer en formation.
 
 - valid qr opens the door
 - expired qr leaves the door closed
-- a return the same day opens the door — _La porte s'ouvre au retour, et c'est voulu._
+- a second qr scan the same day leaves the door closed — _L'application commande le relais quand le passage vient d'un QR code :_
 - gym without device still grants access
 - manual entry opens the door
 - manual entry without subscription leaves the door closed
-- manual entry return the same day opens the door
+- manual entry second time same day leaves the door closed
 - manual entry survives a door failure
 
 ### AccessRefusalReasonTests
@@ -325,6 +325,20 @@ meilleure source pour les cas limites a montrer en formation.
 - a suspended member is still refused on a return
 - a member without subscription is refused not marked a return
 - the journal distinguishes a return from an entry
+
+### ReturnOnlyByFaceTests
+
+> Un QR code se prete, un badge se passe, un nom se donne a l'accueil.
+
+- a face may come back the same day
+- a badge may not come back the same day
+- a fingerprint is treated prudently
+- a combined mode does not prove the face was used
+- a missing mode never grants a return
+- the journal names the mode used
+- the refusal says why and what works
+- only the face alone counts as a face
+- the mode is read wherever the firmware puts it
 
 ## A completer par un humain
 

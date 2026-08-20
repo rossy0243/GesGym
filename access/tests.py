@@ -26,7 +26,12 @@ from . import enrollment, hikvision
 from .device_views import UNKNOWN_CREDENTIAL_REASON
 from .hikvision import parse_event_payload
 from .models import AccessDevice, AccessLog
-from .views import EXPIRED_QR_REASON, NO_SUBSCRIPTION_REASON, RETURN_LABEL
+from .views import (
+    EXPIRED_QR_REASON,
+    NO_SUBSCRIPTION_REASON,
+    RETURN_LABEL,
+    SHARED_CREDENTIAL_REASON,
+)
 
 
 class AccessControlTests(TestCase):
@@ -128,13 +133,13 @@ class AccessControlTests(TestCase):
         self.assertEqual(log.scanned_by, self.user)
         self.assertEqual(log.device_used, "Manuel")
 
-    def test_manual_access_accepts_a_return_the_same_day(self):
+    def test_manual_access_refuses_a_second_entry_the_same_day(self):
         """
-        Un membre deja entre aujourd'hui repasse : il est ressorti puis revenu.
+        Le nom donne a l'accueil ne prouve rien : n'importe qui peut le donner.
 
-        Refuser affichait un feu vert sur le lecteur, qui decide seul et ouvre,
-        pendant que le journal enregistrait un refus. Le passage est donc
-        accorde, marque comme retour, et ne compte pas une visite de plus.
+        Un second passage le meme jour reste donc refuse. Seule la
+        reconnaissance faciale autorise un retour, parce que personne ne peut
+        presenter le visage d'un autre.
         """
         first_response = self.client.post(
             reverse("access:manual_access_entry", args=[self.member_a.id])
@@ -148,22 +153,20 @@ class AccessControlTests(TestCase):
         self.assertTrue(first_response.json()["access"])
 
         payload = second_response.json()
-        self.assertTrue(payload["access"])
-        self.assertEqual(payload["reason"], RETURN_LABEL)
-        self.assertEqual(payload["log"]["status"], "return")
-        self.assertTrue(payload["log"]["is_return"])
+        self.assertFalse(payload["access"])
+        self.assertEqual(payload["reason"], SHARED_CREDENTIAL_REASON)
+        self.assertEqual(payload["log"]["status"], "denied")
+        self.assertFalse(payload["log"]["is_return"])
         self.assertEqual(payload["stats"]["entries"], 1)
-        self.assertEqual(payload["stats"]["returns"], 1)
-        self.assertEqual(payload["stats"]["denied"], 0)
+        self.assertEqual(payload["stats"]["denied"], 1)
 
         logs = AccessLog.objects.filter(member=self.member_a).order_by("id")
         self.assertEqual(logs.count(), 2)
         self.assertTrue(logs[0].access_granted)
-        self.assertFalse(logs[0].is_return)
-        self.assertTrue(logs[1].access_granted)
-        self.assertTrue(logs[1].is_return)
+        self.assertFalse(logs[1].access_granted)
+        self.assertFalse(logs[1].is_return)
 
-    def test_qr_access_accepts_a_return_the_same_day(self):
+    def test_qr_access_refuses_a_second_scan_the_same_day(self):
         first_response = self.client.post(
             reverse("access:member_access", args=[self.member_a.qr_code])
         )
@@ -176,14 +179,12 @@ class AccessControlTests(TestCase):
         self.assertTrue(first_response.json()["access"])
 
         payload = second_response.json()
-        self.assertTrue(payload["access"])
-        self.assertEqual(payload["reason"], RETURN_LABEL)
+        # Un QR code se prete : le second passage peut etre un ami.
+        self.assertFalse(payload["access"])
+        self.assertEqual(payload["reason"], SHARED_CREDENTIAL_REASON)
         self.assertEqual(payload["log"]["method"], "QR Scanner")
-        # La frequentation compte une visite par membre et par jour : un
-        # retour ne doit pas la gonfler.
         self.assertEqual(payload["stats"]["entries"], 1)
-        self.assertEqual(payload["stats"]["returns"], 1)
-        self.assertEqual(payload["stats"]["denied"], 0)
+        self.assertEqual(payload["stats"]["denied"], 1)
 
     def test_qr_access_denies_expired_qr_code(self):
         self.member_a.qr_code_expires_at = timezone.now() - timedelta(minutes=1)
@@ -575,13 +576,15 @@ class AccessDeviceWebhookTests(TestCase):
         self.assertFalse(payload["access"])
         self.assertEqual(payload["reason"], EXPIRED_QR_REASON)
 
-    def test_a_return_the_same_day_is_accepted(self):
+    def test_a_second_qr_scan_the_same_day_is_refused(self):
+        # Meme presente au lecteur, un QR code reste pretable : seul le visage
+        # ouvre droit a un retour.
         self._post_scan(self.member.qr_code)
         response = self._post_scan(self.member.qr_code)
 
         payload = response.json()
-        self.assertTrue(payload["access"])
-        self.assertEqual(payload["reason"], RETURN_LABEL)
+        self.assertFalse(payload["access"])
+        self.assertEqual(payload["reason"], SHARED_CREDENTIAL_REASON)
 
     def test_unknown_token_returns_404(self):
         response = self._post_scan(
@@ -724,13 +727,11 @@ class DashboardDoorOpeningTests(TestCase):
         open_door.assert_not_called()
         self.assertFalse(response.json()["access"])
 
-    def test_a_return_the_same_day_opens_the_door(self):
+    def test_a_second_qr_scan_the_same_day_leaves_the_door_closed(self):
         """
-        La porte s'ouvre au retour, et c'est voulu.
-
-        Le lecteur a reconnaissance faciale decide seul : il ouvrait deja,
-        quoi que reponde l'application. Garder la porte fermee ici ne fermait
-        rien et contredisait le terminal.
+        L'application commande le relais quand le passage vient d'un QR code :
+        garder la porte fermee a donc un effet reel, contrairement au cas du
+        visage ou le lecteur a deja ouvert de lui-meme.
         """
         with patch("access.hikvision.HikvisionClient.open_door"):
             self._scan(self.member.qr_code)
@@ -738,10 +739,10 @@ class DashboardDoorOpeningTests(TestCase):
         with patch("access.hikvision.HikvisionClient.open_door") as open_door:
             response = self._scan(self.member.qr_code)
 
-        open_door.assert_called_once()
+        open_door.assert_not_called()
         payload = response.json()
-        self.assertTrue(payload["access"])
-        self.assertEqual(payload["reason"], RETURN_LABEL)
+        self.assertFalse(payload["access"])
+        self.assertEqual(payload["reason"], SHARED_CREDENTIAL_REASON)
 
     def test_gym_without_device_still_grants_access(self):
         AccessDevice.objects.filter(pk=self.device.pk).delete()
@@ -783,17 +784,17 @@ class DashboardDoorOpeningTests(TestCase):
         open_door.assert_not_called()
         self.assertFalse(response.json()["access"])
 
-    def test_manual_entry_return_the_same_day_opens_the_door(self):
+    def test_manual_entry_second_time_same_day_leaves_the_door_closed(self):
         with patch("access.hikvision.HikvisionClient.open_door"):
             self._manual_entry(self.member)
 
         with patch("access.hikvision.HikvisionClient.open_door") as open_door:
             response = self._manual_entry(self.member)
 
-        open_door.assert_called_once()
+        open_door.assert_not_called()
         payload = response.json()
-        self.assertTrue(payload["access"])
-        self.assertEqual(payload["reason"], RETURN_LABEL)
+        self.assertFalse(payload["access"])
+        self.assertEqual(payload["reason"], SHARED_CREDENTIAL_REASON)
 
     def test_manual_entry_survives_a_door_failure(self):
         with patch(
@@ -1897,3 +1898,143 @@ class ReturnPassageTests(TestCase):
         logs = AccessLog.objects.filter(member=self.member).order_by("id")
         self.assertEqual(_serialize_log(logs[0])["status"], "success")
         self.assertEqual(_serialize_log(logs[1])["status"], "return")
+
+
+class ReturnOnlyByFaceTests(TestCase):
+    """
+    Un QR code se prete, un badge se passe, un nom se donne a l'accueil.
+
+    Seul le visage garantit que la personne devant le lecteur est bien le
+    membre : c'est le seul mode qui autorise un second passage le meme jour.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Partage", slug="org-partage"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Partage",
+            slug="gym-partage",
+            subdomain="gym-partage",
+        )
+        module, _ = Module.objects.get_or_create(
+            code="ACCESS", defaults={"name": "Access"}
+        )
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=module, defaults={"is_active": True}
+        )
+        self.device = AccessDevice.objects.create(
+            gym=self.gym, name="Terminal", host="10.0.0.9", password="secret"
+        )
+        self.member = Member.objects.create(
+            gym=self.gym,
+            first_name="Alice",
+            last_name="Nzuzi",
+            phone="+243880000001",
+        )
+        plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Mensuel", price=30, duration_days=30
+        )
+        today = timezone.localdate()
+        MemberSubscription.objects.create(
+            gym=self.gym,
+            member=self.member,
+            plan=plan,
+            start_date=today - timedelta(days=1),
+            end_date=today + timedelta(days=29),
+            is_active=True,
+        )
+        self.url = reverse("access:device_webhook", args=[self.device.webhook_token])
+
+        patcher = patch("access.hikvision.HikvisionClient.open_door")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _passage(self, mode):
+        """Passage remonte par le lecteur, dans le mode indique."""
+        evenement = {"employeeNoString": enrollment.employee_no(self.member)}
+        if mode is not None:
+            evenement["currentVerifyMode"] = mode
+        return self.client.post(
+            self.url,
+            data=json.dumps({"AccessControllerEvent": evenement}),
+            content_type="application/json",
+        )
+
+    # --- Le visage ouvre droit au retour --------------------------------------
+
+    def test_a_face_may_come_back_the_same_day(self):
+        self._passage("face")
+        reponse = self._passage("face")
+
+        self.assertTrue(reponse.json()["access"])
+        self.assertEqual(reponse.json()["reason"], RETURN_LABEL)
+
+    # --- Les autres modes, non ------------------------------------------------
+
+    def test_a_badge_may_not_come_back_the_same_day(self):
+        # Un badge se prete : le second passage peut etre quelqu'un d'autre.
+        self._passage("card")
+        reponse = self._passage("card")
+
+        self.assertFalse(reponse.json()["access"])
+        self.assertEqual(reponse.json()["reason"], SHARED_CREDENTIAL_REASON)
+
+    def test_a_fingerprint_is_treated_prudently(self):
+        # Une empreinte n'est pas pretable, mais tant qu'on n'a pas verifie ce
+        # que le materiel envoie exactement, on refuse plutot que de risquer
+        # d'ouvrir sur un mode mal identifie.
+        self._passage("fp")
+        reponse = self._passage("fp")
+
+        self.assertFalse(reponse.json()["access"])
+
+    def test_a_combined_mode_does_not_prove_the_face_was_used(self):
+        # "cardOrFace" : le badge seul a pu suffire.
+        self._passage("cardOrFace")
+        reponse = self._passage("cardOrFace")
+
+        self.assertFalse(reponse.json()["access"])
+
+    def test_a_missing_mode_never_grants_a_return(self):
+        # Firmware qui n'annonce pas le mode : on ne devine pas.
+        self._passage(None)
+        reponse = self._passage(None)
+
+        self.assertFalse(reponse.json()["access"])
+
+    # --- Ce que lit l'equipe ---------------------------------------------------
+
+    def test_the_journal_names_the_mode_used(self):
+        self._passage("face")
+        self._passage("card")
+
+        methodes = list(
+            AccessLog.objects.filter(member=self.member)
+            .order_by("id")
+            .values_list("device_used", flat=True)
+        )
+        self.assertEqual(methodes[0], "Terminal (visage)")
+        self.assertEqual(methodes[1], "Terminal (badge)")
+
+    def test_the_refusal_says_why_and_what_works(self):
+        self._passage("card")
+        reponse = self._passage("card")
+
+        motif = reponse.json()["reason"]
+        self.assertIn("reconnaissance faciale", motif)
+
+    # --- La lecture du mode ------------------------------------------------------
+
+    def test_only_the_face_alone_counts_as_a_face(self):
+        self.assertTrue(hikvision.est_un_visage("face"))
+        self.assertTrue(hikvision.est_un_visage("  FACE  "))
+        for autre in ("card", "fp", "cardOrFace", "faceAndCard", "", None):
+            self.assertFalse(hikvision.est_un_visage(autre), autre)
+
+    def test_the_mode_is_read_wherever_the_firmware_puts_it(self):
+        for cle in ("currentVerifyMode", "verifyMode", "CurrentVerifyMode"):
+            charge = json.dumps({"AccessControllerEvent": {cle: "face", "employeeNoString": "1"}})
+            lu = hikvision.parse_event_payload(charge, "application/json")
+            self.assertEqual(lu["verify_mode"], "face", cle)

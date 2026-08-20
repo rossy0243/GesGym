@@ -32,10 +32,17 @@ logger = logging.getLogger("access")
 UNKNOWN_CREDENTIAL_REASON = "Identifiant inconnu pour cette salle."
 
 
-def _libelle_methode(device, nature):
-    """Ce que lira l'equipe dans le journal d'acces."""
-    if nature == "lecteur":
+def _libelle_methode(device, nature, par_le_visage=False):
+    """
+    Ce que lira l'equipe dans le journal d'acces.
+
+    On ne dit "visage" que si le lecteur l'affirme : un badge remonte par le
+    meme champ ne doit pas passer pour une reconnaissance faciale.
+    """
+    if par_le_visage:
         return f"{device.name} (visage)"
+    if nature == "lecteur":
+        return f"{device.name} (badge)"
     return device.name
 EMPTY_CREDENTIAL_REASON = "Aucun identifiant lisible dans le scan."
 
@@ -327,10 +334,11 @@ def device_webhook(request, token):
     # Trace integrale : indispensable pour identifier ce que le materiel
     # transmet reellement lors des premiers essais sur site.
     logger.info(
-        "Evenement lecteur '%s' | content-type=%s | identifiant=%r | brut=%s",
+        "Evenement lecteur '%s' | content-type=%s | identifiant=%r | mode=%r | brut=%s",
         device.name,
         request.META.get("CONTENT_TYPE", ""),
         credential,
+        parsed["verify_mode"],
         parsed["raw"],
     )
 
@@ -346,15 +354,21 @@ def device_webhook(request, token):
     if member is None:
         return JsonResponse({"access": False, "reason": UNKNOWN_CREDENTIAL_REASON})
 
+    # Seul un visage autorise un second passage le meme jour : un badge ou un
+    # QR code se pretent, et le lecteur ne saurait pas dire que la personne
+    # devant lui n'est pas la bonne.
+    par_le_visage = nature == "lecteur" and hikvision.est_un_visage(parsed["verify_mode"])
+
     access_granted, reason, log = _record_access(
         gym=device.gym,
         member=member,
         user=None,
-        method=_libelle_methode(device, nature),
+        method=_libelle_methode(device, nature, par_le_visage),
         # Un visage n'a pas de QR code : verifier sa peremption refuserait
         # tous les passages faits en reconnaissance faciale.
         require_valid_qr=(nature == "qr"),
         device=device,
+        allow_return=par_le_visage,
     )
 
     # Le lecteur a lu le QR, l'application a tranche : on lui rend la main sur
