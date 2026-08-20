@@ -1,6 +1,6 @@
 #access/urls.py
 from django.urls import path
-from . import device_views, views
+from . import device_views, enrollment_views, views
 app_name = 'access'
 urlpatterns = [
         path("access/<uuid:qr_code>/", views.member_access, name="member_access"),
@@ -16,4 +16,10 @@ urlpatterns = [
         path("devices/<int:device_id>/open/", device_views.device_open_door, name="device_open_door"),
         path("devices/<int:device_id>/delete/", device_views.device_delete, name="device_delete"),
         path("devices/webhook/<uuid:token>/", device_views.device_webhook, name="device_webhook"),
+
+        # Enrolement du visage, capture faite par le lecteur lui-meme.
+        path("membres/<int:member_id>/visage/", enrollment_views.face_enrollment, name="face_enrollment"),
+        path("membres/<int:member_id>/visage/capturer/", enrollment_views.face_capture, name="face_capture"),
+        path("membres/<int:member_id>/visage/valider/", enrollment_views.face_confirm, name="face_confirm"),
+        path("membres/<int:member_id>/visage/retirer/", enrollment_views.face_remove, name="face_remove"),
 ]

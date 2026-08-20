@@ -801,9 +801,16 @@ body.members-screen .modal.show .modal-dialog {
 
                         <div class="col-md-3 text-end">
                             <div class="badge-actif mb-3" id="viewMemberStatus">-</div>
-                            <button class="btn btn-sm btn-light" onclick="downloadQRCode()">
-                                <span class="material-icons" style="font-size:20px;">qr_code</span>
-                            </button>
+                            <div class="d-flex gap-2 justify-content-end">
+                                <button class="btn btn-sm btn-light" onclick="downloadQRCode()"
+                                        title="Telecharger le QR code">
+                                    <span class="material-icons" style="font-size:20px;">qr_code</span>
+                                </button>
+                                <a id="viewMemberFaceLink" class="btn btn-sm btn-light" href="#"
+                                   title="Enroler le visage sur le lecteur">
+                                    <span class="material-icons" style="font-size:20px;">face</span>
+                                </a>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1268,6 +1275,10 @@ body.members-screen .modal.show .modal-dialog {
                 // === INFORMATIONS DE BASE ===
                 // === ID DU MEMBRE (IMPORTANT POUR LA SUSPENSION) ===
                 document.getElementById("viewMemberId").innerText = data.id || "-";
+                const lienVisage = document.getElementById("viewMemberFaceLink");
+                if (lienVisage && data.id) {
+                    lienVisage.href = "/access/membres/" + data.id + "/visage/";
+                }
                 document.getElementById("viewMemberName").innerText =
                     `${data.first_name || ''} ${data.last_name || ''}`.trim() || "-";
                 document.getElementById("viewMemberPhone").innerText = data.phone || "-";

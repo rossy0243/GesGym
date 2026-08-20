@@ -160,6 +160,13 @@ def record_subscription_payment(
             source_id=subscription.id,
         )
 
+    # Le lecteur porte ses propres dates de validite : il doit apprendre la
+    # nouvelle echeance tout de suite. propager() ne leve jamais, un lecteur
+    # debranche ne doit pas empecher d'encaisser.
+    from access import enrollment
+
+    enrollment.propager(member)
+
     return subscription, payment
 
 

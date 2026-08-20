@@ -109,6 +109,12 @@ def create_member_subscription(member, plan, start_date=None, auto_renew=False):
             is_active=True,
         )
 
+    # Meme raison qu'en caisse : le lecteur doit connaitre la nouvelle
+    # echeance sans attendre une resynchronisation.
+    from access import enrollment
+
+    enrollment.propager(member)
+
     return subscription
 
 

@@ -31,6 +31,10 @@ DISCOVERY_TIMEOUT = 4
 # Marques supportees pour l'instant.
 BRAND_HIKVISION = "hikvision"
 
+# Bornes d'un fichier JPEG, pour extraire l'image d'une reponse multipart.
+JPEG_DEBUT = bytes.fromhex("ffd8ff")
+JPEG_FIN = bytes.fromhex("ffd9")
+
 
 class HikvisionError(Exception):
     """Erreur de dialogue avec un lecteur."""
@@ -214,6 +218,22 @@ def scan_subnet(base, port=80, timeout=0.3, max_workers=128):
 # ---------------------------------------------------------------------------
 
 
+def _corps_erreur(exc):
+    """
+    Message d'erreur renvoye par le lecteur.
+
+    Hikvision explique le refus dans le corps de la reponse (statusString,
+    subStatusCode). Sans lui, un HTTP 400 ne dit rien de ce qui cloche.
+    """
+    try:
+        brut = exc.read().decode("utf-8", "replace")
+    except Exception:
+        return "(corps illisible)"
+
+    texte = " ".join(brut.split())
+    return texte[:400] if texte else "(corps vide)"
+
+
 class HikvisionClient:
     """Client ISAPI minimal : lecture d'infos, test de liaison, ouverture porte."""
 
@@ -272,7 +292,9 @@ class HikvisionClient:
             return response.read().decode("utf-8", "replace")
         except urllib.error.HTTPError as exc:
             if exc.code != 401:
-                raise HikvisionError(f"HTTP {exc.code} sur {path}") from exc
+                raise HikvisionError(
+                    f"HTTP {exc.code} sur {path} : {_corps_erreur(exc)}"
+                ) from exc
             # Certains firmwares n'acceptent que le Basic preemptif.
             try:
                 response = urllib.request.urlopen(
@@ -284,7 +306,9 @@ class HikvisionClient:
                     raise HikvisionAuthError(
                         "Identifiants refuses par le lecteur."
                     ) from retry_exc
-                raise HikvisionError(f"HTTP {retry_exc.code} sur {path}") from retry_exc
+                raise HikvisionError(
+                    f"HTTP {retry_exc.code} sur {path} : {_corps_erreur(retry_exc)}"
+                ) from retry_exc
             except urllib.error.URLError as retry_exc:
                 raise HikvisionUnreachable(str(retry_exc.reason)) from retry_exc
         except urllib.error.URLError as exc:
@@ -328,6 +352,233 @@ class HikvisionClient:
             f"/ISAPI/AccessControl/RemoteControl/door/{door_number}",
             method="PUT",
             body=body,
+        )
+
+    # --- Fiches utilisateur et visages -------------------------------------
+    #
+    # Le lecteur tient sa propre base : une fiche par personne, avec ses dates
+    # de validite. Il decide donc seul, meme serveur eteint. L'application
+    # reste la source de verite et lui pousse ce qu'elle sait.
+
+    FACE_LIB_TYPE = "blackFD"
+    FACE_LIB_ID = "1"
+
+    def _json(self, path, method="GET", payload=None):
+        """Appel ISAPI en JSON, avec reponse decodee."""
+        body = json.dumps(payload) if payload is not None else None
+        brut = self.request(
+            path, method=method, body=body, content_type="application/json"
+        )
+        try:
+            return json.loads(brut) if brut.strip() else {}
+        except json.JSONDecodeError as exc:
+            raise HikvisionError(f"Reponse illisible sur {path} : {brut[:200]}") from exc
+
+    def user_count(self):
+        """Nombre de fiches et de visages enregistres sur le lecteur."""
+        data = self._json("/ISAPI/AccessControl/UserInfo/Count?format=json")
+        compte = data.get("UserInfoCount", {})
+        return {
+            "users": compte.get("userNumber", 0),
+            "faces": compte.get("bindFaceUserNumber", 0),
+            "cards": compte.get("bindCardUserNumber", 0),
+        }
+
+    def list_users(self, page_size=30):
+        """Toutes les fiches presentes, page par page."""
+        fiches = []
+        position = 0
+        # searchID doit rester stable pendant toute la pagination.
+        search_id = str(uuid.uuid4())
+
+        while True:
+            data = self._json(
+                "/ISAPI/AccessControl/UserInfo/Search?format=json",
+                method="POST",
+                payload={
+                    "UserInfoSearchCond": {
+                        "searchID": search_id,
+                        "searchResultPosition": position,
+                        "maxResults": page_size,
+                    }
+                },
+            )
+            bloc = data.get("UserInfoSearch", {})
+            lot = bloc.get("UserInfo", []) or []
+            fiches.extend(lot)
+
+            position += len(lot)
+            if not lot or bloc.get("responseStatusStrg") == "OK" or position >= bloc.get("totalMatches", 0):
+                break
+
+        return fiches
+
+    def upsert_user(self, employee_no, name, begin_time, end_time, door_number=1):
+        """
+        Cree la fiche, ou la met a jour si elle existe deja.
+
+        ``begin_time`` et ``end_time`` sont des chaines ISO locales, sans
+        fuseau : le lecteur raisonne sur son horloge, pas sur UTC.
+        """
+        fiche = {
+            "UserInfo": {
+                "employeeNo": str(employee_no),
+                "name": name[:128],
+                "userType": "normal",
+                "Valid": {
+                    "enable": True,
+                    "beginTime": begin_time,
+                    "endTime": end_time,
+                    "timeType": "local",
+                },
+                "doorRight": str(door_number),
+                "RightPlan": [{"doorNo": door_number, "planTemplateNo": "1"}],
+            }
+        }
+
+        # Le lecteur refuse un POST sur une fiche existante : on tente la
+        # creation, puis on bascule en modification.
+        try:
+            return self._json(
+                "/ISAPI/AccessControl/UserInfo/Record?format=json",
+                method="POST",
+                payload=fiche,
+            )
+        except HikvisionError:
+            return self._json(
+                "/ISAPI/AccessControl/UserInfo/Modify?format=json",
+                method="PUT",
+                payload=fiche,
+            )
+
+    def delete_user(self, employee_no):
+        """Retire une fiche et le visage qui lui est rattache."""
+        return self._json(
+            "/ISAPI/AccessControl/UserInfo/Delete?format=json",
+            method="PUT",
+            payload={
+                "UserInfoDelCond": {
+                    "EmployeeNoList": [{"employeeNo": str(employee_no)}]
+                }
+            },
+        )
+
+    def set_face(self, employee_no, image_bytes, filename="visage.jpg"):
+        """
+        Rattache une photo de visage a une fiche existante.
+
+        L'envoi est un multipart : une partie JSON qui designe la fiche, une
+        partie binaire qui porte l'image. Le lecteur refuse l'image seule.
+        """
+        frontiere = "----smartclub" + uuid.uuid4().hex
+        entete = {
+            "faceLibType": self.FACE_LIB_TYPE,
+            "FDID": self.FACE_LIB_ID,
+            "FPID": str(employee_no),
+        }
+
+        crlf = b"\r\n"
+        morceaux = [
+            b"--" + frontiere.encode() + crlf,
+            b'Content-Disposition: form-data; name="FaceDataRecord"' + crlf,
+            b"Content-Type: application/json" + crlf + crlf,
+            json.dumps(entete).encode(),
+            crlf + b"--" + frontiere.encode() + crlf,
+            b'Content-Disposition: form-data; name="FaceImage"; filename="'
+            + filename.encode() + b'"' + crlf,
+            b"Content-Type: image/jpeg" + crlf + crlf,
+            image_bytes,
+            crlf + b"--" + frontiere.encode() + b"--" + crlf,
+        ]
+
+        brut = self.request(
+            "/ISAPI/Intelligent/FDLib/FDSetUp?format=json",
+            method="PUT",
+            body=b"".join(morceaux),
+            content_type="multipart/form-data; boundary=" + frontiere,
+        )
+        try:
+            return json.loads(brut) if brut.strip() else {}
+        except json.JSONDecodeError:
+            return {"raw": brut}
+
+    def delete_face(self, employee_no):
+        """Supprime le visage rattache a une fiche, sans toucher a la fiche."""
+        return self._json(
+            f"/ISAPI/Intelligent/FDLib/FDSearch/Delete?format=json"
+            f"&FDID={self.FACE_LIB_ID}&faceLibType={self.FACE_LIB_TYPE}",
+            method="PUT",
+            payload={"FPID": [{"value": str(employee_no)}]},
+        )
+
+    def request_raw(self, path, method="GET", body=None, content_type="application/xml"):
+        """
+        Comme ``request``, mais rend les octets bruts.
+
+        Indispensable quand le lecteur repond une image : decoder en texte
+        detruirait le JPEG.
+        """
+        url = self.base_url + path
+        data = body.encode("utf-8") if isinstance(body, str) else body
+
+        request = urllib.request.Request(url, data=data, method=method)
+        if data is not None:
+            request.add_header("Content-Type", content_type)
+
+        try:
+            return self._opener().open(request, timeout=self.timeout).read()
+        except urllib.error.HTTPError as exc:
+            if exc.code == 401:
+                raise HikvisionAuthError("Identifiants refuses par le lecteur.") from exc
+            raise HikvisionError(
+                f"HTTP {exc.code} sur {path} : {_corps_erreur(exc)}"
+            ) from exc
+        except urllib.error.URLError as exc:
+            raise HikvisionUnreachable(str(exc.reason)) from exc
+        except (socket.timeout, TimeoutError) as exc:
+            raise HikvisionUnreachable("Delai d'attente depasse.") from exc
+
+    def capture_face(self, infrared=False):
+        """
+        Demande au lecteur de photographier la personne devant lui.
+
+        La reponse est un multipart : un bloc XML portant l'avancement, puis
+        l'image. Le lecteur ne rend la main qu'une fois le visage cadre, ou
+        au bout de son propre delai s'il n'en trouve aucun.
+
+        Renvoie les octets JPEG.
+        """
+        corps = (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            "<CaptureFaceDataCond>"
+            f"<captureInfrared>{'true' if infrared else 'false'}</captureInfrared>"
+            "<dataType>binary</dataType>"
+            "</CaptureFaceDataCond>"
+        )
+        donnees = self.request_raw(
+            "/ISAPI/AccessControl/CaptureFaceData", method="POST", body=corps
+        )
+
+        debut = donnees.find(JPEG_DEBUT)
+        fin = donnees.rfind(JPEG_FIN)
+        if debut == -1 or fin == -1:
+            # Pas d'image : le lecteur explique pourquoi dans la partie texte.
+            texte = " ".join(donnees.decode("utf-8", "replace").split())
+            raise HikvisionError(
+                "Le lecteur n'a renvoye aucune image. "
+                f"Reponse : {texte[:300] or '(vide)'}"
+            )
+
+        return donnees[debut : fin + len(JPEG_FIN)]
+
+    def cancel_capture(self):
+        """Interrompt une capture en cours, si l'operateur renonce."""
+        corps = (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            "<CaptureFaceDataCond><cancelFlag>true</cancelFlag></CaptureFaceDataCond>"
+        )
+        return self.request(
+            "/ISAPI/AccessControl/CaptureFaceData", method="POST", body=corps
         )
 
     def set_event_notification(self, url, protocol="HTTP", host_index=1):

@@ -1,0 +1,230 @@
+"""
+Inscription des membres sur les lecteurs a reconnaissance faciale.
+
+Le lecteur tient sa propre base : une fiche par membre, avec ses dates de
+validite et son visage. Il decide donc seul, instantanement, et continue de
+fonctionner serveur eteint. L'application reste la source de verite et lui
+pousse ce qu'elle sait.
+
+Trois contraintes viennent du materiel, verifiees sur un DS-K1T342MFWX-E1 :
+
+* ``employeeNo`` doit etre **numerique** : un identifiant texte est refuse.
+  On utilise donc l'identifiant de la fiche membre, pas son code affiche.
+* la bibliotheque de visages plafonne a 1500 personnes ;
+* le lecteur refuse une photo ou il ne distingue aucun visage.
+"""
+
+import io
+import logging
+
+from django.utils import timezone
+
+from . import hikvision
+from .models import AccessDevice
+
+logger = logging.getLogger(__name__)
+
+
+# Le lecteur raisonne sur son horloge locale, sans fuseau.
+FORMAT_LECTEUR = "%Y-%m-%dT%H:%M:%S"
+
+# Bornes acceptees par le materiel pour une periode de validite.
+DEBUT_PAR_DEFAUT = "2000-01-01T00:00:00"
+FIN_PAR_DEFAUT = "2037-12-31T23:59:59"
+
+# Une photo trop lourde est refusee, et une photo minuscule ne se modelise
+# pas. Ces bornes conviennent au capteur du terminal.
+LARGEUR_MAX = 640
+QUALITE_JPEG = 88
+
+
+class EnrollmentError(Exception):
+    """Echec d'inscription, avec un message destine a l'utilisateur."""
+
+
+# Decalage des identifiants applicatifs. Le materiel impose un employeeNo
+# numerique, et les fiches saisies a la main sur le terminal occupent les
+# petits nombres : badges du personnel, essais, visiteurs. Sans ce decalage,
+# la premiere inscription d'un membre ecraserait la fiche numero 1 ou 2 avec
+# son nom, ses dates et son visage.
+PLAGE_APPLICATION = 1_000_000
+
+
+def employee_no(member):
+    """
+    Identifiant du membre sur le lecteur.
+
+    Numerique, impose par le materiel, et decale pour ne jamais entrer en
+    collision avec une fiche creee directement sur le terminal.
+    """
+    return str(PLAGE_APPLICATION + member.id)
+
+
+def member_id_depuis(employee_no_lu):
+    """
+    Retrouve le membre derriere un employeeNo remonte par le lecteur.
+
+    Renvoie None pour une fiche qui n'a pas ete posee par l'application :
+    un badge de personnel ne doit pas etre pris pour un membre.
+    """
+    try:
+        valeur = int(str(employee_no_lu).strip())
+    except (TypeError, ValueError):
+        return None
+
+    if valeur <= PLAGE_APPLICATION:
+        return None
+    return valeur - PLAGE_APPLICATION
+
+
+def _periode_validite(member):
+    """
+    Fenetre pendant laquelle le lecteur laissera entrer ce membre.
+
+    Elle suit l'abonnement en cours. Sans abonnement, la fiche est creee mais
+    fermee : le membre existe sur le lecteur, il n'entre pas.
+    """
+    subscription = member.active_subscription
+    if subscription is None:
+        return None, None
+
+    debut = subscription.start_date.strftime("%Y-%m-%dT00:00:00")
+    fin = subscription.end_date.strftime("%Y-%m-%dT23:59:59")
+    return debut, fin
+
+
+def preparer_photo(image_bytes):
+    """
+    Met une image au format attendu par le lecteur.
+
+    Convertit en JPEG, retire la transparence et borne la largeur : une image
+    trop lourde est rejetee par le materiel.
+    """
+    from PIL import Image, UnidentifiedImageError
+
+    try:
+        image = Image.open(io.BytesIO(image_bytes))
+    except UnidentifiedImageError as exc:
+        raise EnrollmentError("Ce fichier n'est pas une image exploitable.") from exc
+
+    image = image.convert("RGB")
+    if image.width > LARGEUR_MAX:
+        ratio = LARGEUR_MAX / image.width
+        image = image.resize(
+            (LARGEUR_MAX, max(1, round(image.height * ratio))), Image.LANCZOS
+        )
+
+    tampon = io.BytesIO()
+    image.save(tampon, format="JPEG", quality=QUALITE_JPEG, optimize=True)
+    return tampon.getvalue()
+
+
+def capturer_visage(device):
+    """
+    Photographie la personne presente devant le lecteur.
+
+    L'image vient du capteur qui servira ensuite a la reconnaissance : c'est
+    ce qui rend l'enrolement fiable, la ou une photo de telephone echoue
+    souvent au cadrage ou a l'eclairage.
+    """
+    client = hikvision.HikvisionClient.from_device(device, timeout=25)
+    try:
+        return client.capture_face()
+    except hikvision.HikvisionUnreachable as exc:
+        raise EnrollmentError(
+            f"Lecteur injoignable ({device.host}). Verifiez qu'il est allume "
+            "et sur le meme reseau."
+        ) from exc
+    except hikvision.HikvisionAuthError as exc:
+        raise EnrollmentError(
+            "Le lecteur refuse les identifiants enregistres."
+        ) from exc
+    except hikvision.HikvisionError as exc:
+        raise EnrollmentError(
+            "Aucun visage capture. Demandez a la personne de se placer face au "
+            f"lecteur, a hauteur d'ecran, puis recommencez. ({exc})"
+        ) from exc
+
+
+def inscrire_membre(device, member, image_bytes=None):
+    """
+    Cree ou met a jour la fiche du membre sur le lecteur, avec son visage.
+
+    ``image_bytes`` est facultatif : sans lui, seules la fiche et ses dates
+    sont mises a jour, le visage deja enregistre est conserve.
+    """
+    client = hikvision.HikvisionClient.from_device(device, timeout=25)
+    debut, fin = _periode_validite(member)
+    sans_abonnement = debut is None
+
+    nom = f"{member.first_name} {member.last_name}".strip() or f"Membre {member.id}"
+    numero = employee_no(member)
+
+    try:
+        client.upsert_user(
+            numero,
+            nom,
+            debut or DEBUT_PAR_DEFAUT,
+            # Sans abonnement, la fiche existe mais n'ouvre rien : on la ferme
+            # a hier plutot que de la supprimer, pour garder le visage.
+            fin or timezone.localdate().strftime("%Y-%m-%dT00:00:00"),
+            door_number=device.door_number,
+        )
+    except hikvision.HikvisionUnreachable as exc:
+        raise EnrollmentError(f"Lecteur injoignable ({device.host}).") from exc
+    except hikvision.HikvisionError as exc:
+        raise EnrollmentError(f"Le lecteur a refuse la fiche : {exc}") from exc
+
+    if image_bytes:
+        try:
+            client.set_face(numero, preparer_photo(image_bytes))
+        except hikvision.HikvisionError as exc:
+            # La fiche est posee ; seul le visage manque. On le dit sans
+            # laisser croire que rien n'a marche.
+            raise EnrollmentError(
+                "La fiche est enregistree mais le visage a ete refuse : le "
+                f"lecteur n'y distingue pas de visage exploitable. ({exc})"
+            ) from exc
+
+    device.last_seen_at = timezone.now()
+    device.last_error = ""
+    device.save(update_fields=["last_seen_at", "last_error", "updated_at"])
+
+    return {"employee_no": numero, "sans_abonnement": sans_abonnement}
+
+
+def retirer_membre(device, member):
+    """Supprime la fiche et le visage du membre sur le lecteur."""
+    client = hikvision.HikvisionClient.from_device(device, timeout=25)
+    try:
+        client.delete_user(employee_no(member))
+    except hikvision.HikvisionUnreachable as exc:
+        raise EnrollmentError(f"Lecteur injoignable ({device.host}).") from exc
+    except hikvision.HikvisionError as exc:
+        raise EnrollmentError(f"Le lecteur a refuse le retrait : {exc}") from exc
+
+
+def lecteurs_de(gym):
+    """Lecteurs actifs de la salle, ceux qu'il faut tenir a jour."""
+    return list(AccessDevice.objects.filter(gym=gym, is_active=True))
+
+
+def propager(member, image_bytes=None):
+    """
+    Reporte l'etat d'un membre sur tous les lecteurs de sa salle.
+
+    Ne leve jamais : une salle sans lecteur, ou un lecteur debranche, ne doit
+    pas empecher d'encaisser un abonnement. Renvoie le detail par lecteur.
+    """
+    resultats = []
+    for device in lecteurs_de(member.gym):
+        try:
+            inscrire_membre(device, member, image_bytes)
+            resultats.append({"device": device.name, "ok": True, "error": ""})
+        except EnrollmentError as exc:
+            logger.warning(
+                "Synchronisation du membre %s vers %s impossible : %s",
+                member.id, device.name, exc,
+            )
+            resultats.append({"device": device.name, "ok": False, "error": str(exc)})
+    return resultats

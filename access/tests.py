@@ -8,11 +8,21 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from io import BytesIO
+
+from PIL import Image
+
 from compte.models import User, UserGymRole
 from members.models import Member
-from organizations.models import Gym, GymModule, Module, Organization
+from organizations.models import (
+    Gym,
+    GymModule,
+    Module,
+    Organization,
+    SensitiveActivityLog,
+)
 from subscriptions.models import MemberSubscription, SubscriptionPlan
-from . import hikvision
+from . import enrollment, hikvision
 from .device_views import UNKNOWN_CREDENTIAL_REASON
 from .hikvision import parse_event_payload
 from .models import AccessDevice, AccessLog
@@ -936,3 +946,347 @@ class AccessRefusalReasonTests(TestCase):
 
         self.assertTrue(response.json()["access"])
         self.assertEqual(response.json()["reason"], "")
+
+
+class FaceEnrollmentServiceTests(TestCase):
+    """Traduction d'un membre en fiche lecteur."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Visage", slug="org-visage"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Visage",
+            slug="gym-visage",
+            subdomain="gym-visage",
+        )
+        self.device = AccessDevice.objects.create(
+            gym=self.gym,
+            name="Terminal facial",
+            host="10.0.0.9",
+            password="secret",
+        )
+        self.member = Member.objects.create(
+            gym=self.gym,
+            first_name="Alice",
+            last_name="Nzuzi",
+            phone="+243850000001",
+        )
+
+    # --- Identifiants ---------------------------------------------------------
+
+    def test_the_reader_id_is_shifted_out_of_the_manual_range(self):
+        # Le materiel impose un employeeNo numerique, et les fiches saisies a
+        # la main sur le terminal occupent les petits nombres. Sans decalage,
+        # inscrire un membre ecraserait le badge d'un employe.
+        self.assertEqual(
+            enrollment.employee_no(self.member),
+            str(enrollment.PLAGE_APPLICATION + self.member.id),
+        )
+
+    def test_a_manual_record_is_never_taken_for_a_member(self):
+        self.assertIsNone(enrollment.member_id_depuis("2"))
+        self.assertIsNone(enrollment.member_id_depuis("badge-personnel"))
+        self.assertIsNone(enrollment.member_id_depuis(None))
+
+    def test_an_application_record_maps_back_to_its_member(self):
+        numero = enrollment.employee_no(self.member)
+
+        self.assertEqual(enrollment.member_id_depuis(numero), self.member.id)
+
+    # --- Photo ------------------------------------------------------------------
+
+    def test_a_photo_is_converted_to_jpeg_and_bounded(self):
+        tampon = BytesIO()
+        Image.new("RGBA", (1600, 900), (12, 34, 56, 255)).save(tampon, format="PNG")
+
+        prete = enrollment.preparer_photo(tampon.getvalue())
+        relue = Image.open(BytesIO(prete))
+
+        self.assertEqual(relue.format, "JPEG")
+        self.assertEqual(relue.mode, "RGB")
+        self.assertLessEqual(relue.width, enrollment.LARGEUR_MAX)
+
+    def test_a_file_that_is_not_an_image_is_refused_clearly(self):
+        with self.assertRaises(enrollment.EnrollmentError):
+            enrollment.preparer_photo(b"ceci n'est pas une image")
+
+    # --- Periode de validite -----------------------------------------------------
+
+    def test_the_reader_receives_the_subscription_window(self):
+        plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Mensuel", price=30, duration_days=30
+        )
+        today = timezone.localdate()
+        MemberSubscription.objects.create(
+            gym=self.gym,
+            member=self.member,
+            plan=plan,
+            start_date=today,
+            end_date=today + timedelta(days=30),
+            is_active=True,
+        )
+
+        with patch.object(hikvision.HikvisionClient, "upsert_user") as pose:
+            enrollment.inscrire_membre(self.device, self.member)
+
+        _, args, _ = pose.mock_calls[0]
+        self.assertEqual(args[2], today.strftime("%Y-%m-%dT00:00:00"))
+        self.assertEqual(
+            args[3], (today + timedelta(days=30)).strftime("%Y-%m-%dT23:59:59")
+        )
+
+    def test_a_member_without_subscription_is_kept_but_closed(self):
+        # Le visage reste sur le lecteur : au prochain encaissement, il suffit
+        # de rouvrir les dates sans refaire passer le membre devant le terminal.
+        with patch.object(hikvision.HikvisionClient, "upsert_user") as pose:
+            resultat = enrollment.inscrire_membre(self.device, self.member)
+
+        self.assertTrue(resultat["sans_abonnement"])
+        _, args, _ = pose.mock_calls[0]
+        fin = args[3]
+        self.assertEqual(fin, timezone.localdate().strftime("%Y-%m-%dT00:00:00"))
+
+    # --- Robustesse ---------------------------------------------------------------
+
+    def test_an_unreachable_reader_never_blocks_the_business(self):
+        # propager() est appelee lors d'un encaissement : un lecteur debranche
+        # ne doit pas empecher de prendre l'argent.
+        with patch.object(
+            hikvision.HikvisionClient,
+            "upsert_user",
+            side_effect=hikvision.HikvisionUnreachable("cable arrache"),
+        ):
+            resultats = enrollment.propager(self.member)
+
+        self.assertEqual(len(resultats), 1)
+        self.assertFalse(resultats[0]["ok"])
+        self.assertIn("injoignable", resultats[0]["error"])
+
+    def test_a_gym_without_reader_propagates_nothing(self):
+        self.device.delete()
+
+        self.assertEqual(enrollment.propager(self.member), [])
+
+    def test_a_rejected_face_says_the_record_still_exists(self):
+        # Le lecteur refuse une image ou il ne distingue aucun visage. La fiche
+        # est deja posee a ce moment-la : le message ne doit pas laisser croire
+        # que rien n'a marche.
+        tampon = BytesIO()
+        Image.new("RGB", (352, 432), (40, 40, 40)).save(tampon, format="JPEG")
+
+        with patch.object(hikvision.HikvisionClient, "upsert_user"), patch.object(
+            hikvision.HikvisionClient,
+            "set_face",
+            side_effect=hikvision.HikvisionError("SubpicAnalysisModelingError"),
+        ):
+            with self.assertRaises(enrollment.EnrollmentError) as capture:
+                enrollment.inscrire_membre(self.device, self.member, tampon.getvalue())
+
+        self.assertIn("fiche est enregistree", str(capture.exception))
+
+    def test_a_file_that_is_not_an_image_is_caught_before_the_reader(self):
+        with patch.object(hikvision.HikvisionClient, "upsert_user"), patch.object(
+            hikvision.HikvisionClient, "set_face"
+        ) as envoi:
+            with self.assertRaises(enrollment.EnrollmentError):
+                enrollment.inscrire_membre(self.device, self.member, b"pas une image")
+
+        envoi.assert_not_called()
+
+
+class FaceEnrollmentScreenTests(TestCase):
+    """Le parcours d'enrolement, vu de l'ecran."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Ecran", slug="org-ecran"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Ecran",
+            slug="gym-ecran",
+            subdomain="gym-ecran",
+        )
+        module, _ = Module.objects.get_or_create(
+            code="ACCESS", defaults={"name": "Access"}
+        )
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=module, defaults={"is_active": True}
+        )
+        self.device = AccessDevice.objects.create(
+            gym=self.gym, name="Terminal", host="10.0.0.9", password="secret"
+        )
+        self.member = Member.objects.create(
+            gym=self.gym,
+            first_name="Alice",
+            last_name="Nzuzi",
+            phone="+243850000001",
+        )
+        self.manager = User.objects.create_user(
+            username="gerant-visage", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.manager, gym=self.gym, role="manager", is_active=True
+        )
+        self._connecter(self.manager)
+
+    def _connecter(self, utilisateur):
+        self.client.force_login(utilisateur)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _image(self):
+        tampon = BytesIO()
+        Image.new("RGB", (352, 432), (90, 90, 90)).save(tampon, format="JPEG")
+        return tampon.getvalue()
+
+    # --- L'ecran ------------------------------------------------------------------
+
+    def test_the_screen_spells_out_the_three_steps(self):
+        response = self.client.get(
+            reverse("access:face_enrollment", args=[self.member.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Placez le membre devant le lecteur")
+        self.assertContains(response, "Lancez la capture")
+        self.assertContains(response, "Vérifiez puis validez")
+
+    def test_the_screen_says_plainly_when_no_reader_exists(self):
+        self.device.delete()
+
+        response = self.client.get(
+            reverse("access:face_enrollment", args=[self.member.id])
+        )
+
+        self.assertContains(response, "Aucun lecteur actif dans cette salle")
+
+    def test_a_member_of_another_gym_is_out_of_reach(self):
+        autre = Gym.objects.create(
+            organization=self.organization,
+            name="Autre",
+            slug="autre-ecran",
+            subdomain="autre-ecran",
+        )
+        etranger = Member.objects.create(
+            gym=autre, first_name="Etranger", last_name="X", phone="+243850000009"
+        )
+
+        response = self.client.get(
+            reverse("access:face_enrollment", args=[etranger.id])
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_a_receptionist_cannot_enrol_faces(self):
+        reception = User.objects.create_user(
+            username="reception-visage", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=reception, gym=self.gym, role="reception", is_active=True
+        )
+        self._connecter(reception)
+
+        response = self.client.get(
+            reverse("access:face_enrollment", args=[self.member.id])
+        )
+
+        self.assertIn(response.status_code, (302, 403))
+
+    # --- Capture --------------------------------------------------------------------
+
+    def test_the_capture_waits_for_validation_before_touching_the_file(self):
+        with patch.object(
+            hikvision.HikvisionClient, "capture_face", return_value=self._image()
+        ):
+            response = self.client.post(
+                reverse("access:face_capture", args=[self.member.id]),
+                {"device_id": self.device.id},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["ok"])
+        self.member.refresh_from_db()
+        # Rien n'est enregistre tant que l'operateur n'a pas vu l'image.
+        self.assertFalse(self.member.photo)
+
+    def test_a_failed_capture_explains_what_to_do(self):
+        with patch.object(
+            hikvision.HikvisionClient,
+            "capture_face",
+            side_effect=hikvision.HikvisionError("aucune image"),
+        ):
+            response = self.client.post(
+                reverse("access:face_capture", args=[self.member.id]),
+                {"device_id": self.device.id},
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("se placer face au", response.json()["error"].lower())
+
+    # --- Validation ------------------------------------------------------------------
+
+    def test_validating_stores_the_photo_and_enrols_the_member(self):
+        with patch.object(
+            hikvision.HikvisionClient, "capture_face", return_value=self._image()
+        ):
+            self.client.post(
+                reverse("access:face_capture", args=[self.member.id]),
+                {"device_id": self.device.id},
+            )
+
+        with patch.object(hikvision.HikvisionClient, "upsert_user"), patch.object(
+            hikvision.HikvisionClient, "set_face"
+        ) as pose_visage:
+            response = self.client.post(
+                reverse("access:face_confirm", args=[self.member.id]), follow=True
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.member.refresh_from_db()
+        self.assertTrue(self.member.photo)
+        pose_visage.assert_called_once()
+        self.assertEqual(
+            pose_visage.mock_calls[0].args[0], enrollment.employee_no(self.member)
+        )
+
+    def test_validating_without_a_capture_is_refused(self):
+        response = self.client.post(
+            reverse("access:face_confirm", args=[self.member.id]), follow=True
+        )
+
+        self.assertContains(response, "Aucune capture en attente")
+        self.member.refresh_from_db()
+        self.assertFalse(self.member.photo)
+
+    def test_the_enrolment_is_traced_in_the_sensitive_log(self):
+        with patch.object(
+            hikvision.HikvisionClient, "capture_face", return_value=self._image()
+        ):
+            self.client.post(
+                reverse("access:face_capture", args=[self.member.id]),
+                {"device_id": self.device.id},
+            )
+        with patch.object(hikvision.HikvisionClient, "upsert_user"), patch.object(
+            hikvision.HikvisionClient, "set_face"
+        ):
+            self.client.post(
+                reverse("access:face_confirm", args=[self.member.id]), follow=True
+            )
+
+        trace = SensitiveActivityLog.objects.get(action="access.face_enrolled")
+        self.assertEqual(trace.actor, self.manager)
+        self.assertEqual(trace.metadata["member_id"], self.member.id)
+
+    # --- Retrait ----------------------------------------------------------------------
+
+    def test_removing_takes_the_member_off_every_reader(self):
+        with patch.object(hikvision.HikvisionClient, "delete_user") as retrait:
+            self.client.post(
+                reverse("access:face_remove", args=[self.member.id]), follow=True
+            )
+
+        retrait.assert_called_once_with(enrollment.employee_no(self.member))

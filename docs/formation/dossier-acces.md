@@ -23,6 +23,10 @@ de ce que le logiciel fait reellement, pas de ce qu'on croit qu'il fait.
 | `devices/<int:device_id>/open/` | `device_views.device_open_door` | `device_open_door` |
 | `devices/<int:device_id>/delete/` | `device_views.device_delete` | `device_delete` |
 | `devices/webhook/<uuid:token>/` | `device_views.device_webhook` | `device_webhook` |
+| `membres/<int:member_id>/visage/` | `enrollment_views.face_enrollment` | `face_enrollment` |
+| `membres/<int:member_id>/visage/capturer/` | `enrollment_views.face_capture` | `face_capture` |
+| `membres/<int:member_id>/visage/valider/` | `enrollment_views.face_confirm` | `face_confirm` |
+| `membres/<int:member_id>/visage/retirer/` | `enrollment_views.face_remove` | `face_remove` |
 
 ## Donnees manipulees
 
@@ -93,6 +97,10 @@ formation : « la reception peut pointer mais pas consulter les salaires ».
 | `device_open_door` | `login_required`<br>`role_required(ACCESS_DEVICE_ROLES)`<br>`require_POST`<br>`module_required('ACCESS')` |
 | `device_delete` | `login_required`<br>`role_required(ACCESS_DEVICE_ROLES)`<br>`require_POST`<br>`module_required('ACCESS')` |
 | `device_webhook` | `csrf_exempt` |
+| `face_enrollment` | `login_required`<br>`module_required('ACCESS')`<br>`role_required(ACCESS_DEVICE_ROLES)` |
+| `face_capture` | `login_required`<br>`module_required('ACCESS')`<br>`role_required(ACCESS_DEVICE_ROLES)`<br>`require_POST` |
+| `face_confirm` | `login_required`<br>`module_required('ACCESS')`<br>`role_required(ACCESS_DEVICE_ROLES)`<br>`require_POST` |
+| `face_remove` | `login_required`<br>`module_required('ACCESS')`<br>`role_required(ACCESS_DEVICE_ROLES)`<br>`require_POST` |
 | `acces_dashboard` | `login_required`<br>`role_required(ACCESS_ROLES)`<br>`module_required('ACCESS')` |
 | `realtime_access` | `login_required`<br>`role_required(ACCESS_ROLES)`<br>`module_required('ACCESS')` |
 | `manual_access_entry` | `login_required`<br>`role_required(ACCESS_ROLES)`<br>`require_POST`<br>`module_required('ACCESS')` |
@@ -103,14 +111,34 @@ formation : « la reception peut pointer mais pas consulter les salaires ».
 Refus opposes par le logiciel. Chacun merite une explication dans la
 formation : pourquoi la regle existe, et que faire quand on la rencontre.
 
+- Aucun lecteur actif a synchroniser.
+- Aucun lecteur actif enregistre.
 - Aucun lecteur enregistre dans l'application. Ajoute-le d'abord depuis Controle d'acces > Lecteurs.
+- Aucun lecteur numero {valeur}.
 - Le membre n'appartient pas a ce gym.
+- Lecteur injoignable. Si Proton VPN tourne, quittez-le : son filtrage bloque le reseau local.
 - Lecteur {valeur} injoignable : {valeur} Verifie qu'il est alimente, cable, et qu'aucun VPN ne bloque le reseau local.
+- Mot de passe du lecteur incorrect : rien d'autre ne marchera.
+- Plusieurs lecteurs actifs, precisez --lecteur : {valeur}
 
 ## Ce que l'utilisateur lit a l'ecran
 
 Messages affiches apres une action. Ils donnent le vocabulaire exact a
 employer dans la formation : l'apprenant doit reconnaitre ce qu'il verra.
+
+### Confirmations
+
+- Visage enrole. {valeur} {valeur} entre par reconnaissance faciale jusqu'au {valeur}.
+- {valeur} {valeur} ne peut plus entrer par reconnaissance faciale.
+
+### Avertissements
+
+- Visage enrole pour {valeur} {valeur}. Aucun abonnement en cours : le lecteur le reconnaitra mais n'ouvrira pas tant qu'un abonnement n'est pas encaisse.
+
+### Refus et erreurs
+
+- Aucune capture en attente. Relancez la capture.
+- Retrait incomplet.
 
 ## Traces laissees dans le journal sensible
 
@@ -120,10 +148,13 @@ et rassurer sur ce qui ne l'est pas.
 - `access.device_deleted`
 - `access.device_registered`
 - `access.door_opened_remotely`
+- `access.face_enrolled`
+- `access.face_removed`
 
 ## Ecrans concernes
 
 - `access\templates\access\acces.html`
+- `access\templates\access\face_enrollment.html`
 
 ## Comportements garantis par les tests
 
@@ -200,6 +231,37 @@ meilleure source pour les cas limites a montrer en formation.
 - the reason is stored in the access log
 - a suspended member keeps its own reason
 - a valid member is still granted
+
+### FaceEnrollmentServiceTests
+
+> Traduction d'un membre en fiche lecteur.
+
+- the reader id is shifted out of the manual range
+- a manual record is never taken for a member
+- an application record maps back to its member
+- a photo is converted to jpeg and bounded
+- a file that is not an image is refused clearly
+- the reader receives the subscription window
+- a member without subscription is kept but closed
+- an unreachable reader never blocks the business
+- a gym without reader propagates nothing
+- a rejected face says the record still exists
+- a file that is not an image is caught before the reader
+
+### FaceEnrollmentScreenTests
+
+> Le parcours d'enrolement, vu de l'ecran.
+
+- the screen spells out the three steps
+- the screen says plainly when no reader exists
+- a member of another gym is out of reach
+- a receptionist cannot enrol faces
+- the capture waits for validation before touching the file
+- a failed capture explains what to do
+- validating stores the photo and enrols the member
+- validating without a capture is refused
+- the enrolment is traced in the sensitive log
+- removing takes the member off every reader
 
 ## A completer par un humain
 

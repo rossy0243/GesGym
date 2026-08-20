@@ -2299,6 +2299,13 @@ def suspend_member(request, member_id):
     member.status = "suspended"
     member.save()
 
+    # Le lecteur decide seul a la porte : sans cette mise a jour, il
+    # appliquerait encore l'etat precedent jusqu'a la prochaine
+    # resynchronisation.
+    from access import enrollment
+
+    enrollment.propager(member)
+
     # Mettre en pause l'abonnement actif
     active_sub = member.latest_active_subscription
     if active_sub is None:
@@ -2336,6 +2343,13 @@ def reactivate_member(request, member_id):
     # Réactiver le membre
     member.status = "active"
     member.save()
+
+    # Le lecteur decide seul a la porte : sans cette mise a jour, il
+    # appliquerait encore l'etat precedent jusqu'a la prochaine
+    # resynchronisation.
+    from access import enrollment
+
+    enrollment.propager(member)
 
     # Reprendre l'abonnement en pause
     active_sub = member.latest_active_subscription

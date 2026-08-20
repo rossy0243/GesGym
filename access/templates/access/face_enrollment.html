@@ -1,0 +1,271 @@
+{% extends 'base.html' %}
+
+{% block page_titre %}Enrôler un visage{% endblock %}
+
+{% block content %}
+
+<div class="page-header mb-4">
+    <div class="page-header-left d-flex align-items-center">
+        <div class="page-header-title d-flex align-items-center gap-2">
+            <span class="material-icons text-primary" style="font-size:28px;">face</span>
+            <div>
+                <h5 class="mb-0">Enrôler le visage</h5>
+                <small class="text-muted">{{ member.first_name }} {{ member.last_name }} — {{ gym.name }}</small>
+            </div>
+        </div>
+    </div>
+    <div class="page-header-right ms-auto">
+        <a href="{% url 'members:member_list' %}" class="btn btn-light d-flex align-items-center gap-2">
+            <span class="material-icons" style="font-size:18px;">arrow_back</span>
+            Retour aux membres
+        </a>
+    </div>
+</div>
+
+<style>
+.etape-carte {
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+}
+.etape-numero {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: #0B0B0B;
+    color: #C9A227;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+.consigne-liste li { margin-bottom: .4rem; }
+.apercu-visage {
+    max-width: 260px;
+    border-radius: 16px;
+    border: 3px solid #16a34a;
+}
+</style>
+
+{% if not devices %}
+<div class="alert alert-warning d-flex align-items-start gap-3">
+    <span class="material-icons">warning</span>
+    <div>
+        <strong>Aucun lecteur actif dans cette salle.</strong>
+        <p class="mb-0">
+            L'enrôlement du visage se fait par le terminal lui-même.
+            Enregistrez d'abord un lecteur, puis revenez sur cette page.
+        </p>
+    </div>
+</div>
+{% else %}
+
+<div class="row g-4">
+    <div class="col-lg-7">
+
+        <div class="etape-carte p-4 mb-3">
+            <div class="d-flex gap-3">
+                <div class="etape-numero">1</div>
+                <div class="flex-grow-1">
+                    <h6 class="fw-bold mb-2">Placez le membre devant le lecteur</h6>
+                    <p class="text-muted mb-2">Lisez-lui ces consignes :</p>
+                    <ul class="consigne-liste text-muted mb-3">
+                        <li>se tenir face au terminal, à hauteur d'écran ;</li>
+                        <li>à environ 50 cm, sans bouger ;</li>
+                        <li>retirer casquette, capuche et lunettes de soleil ;</li>
+                        <li>garder un visage neutre, yeux ouverts.</li>
+                    </ul>
+
+                    {% if devices|length > 1 %}
+                    <label class="form-label small fw-semibold" for="choixLecteur">
+                        Lecteur devant lequel il se trouve
+                    </label>
+                    <select id="choixLecteur" class="form-select" style="max-width:340px;">
+                        {% for d in devices %}
+                        <option value="{{ d.id }}">{{ d.name }} ({{ d.host }})</option>
+                        {% endfor %}
+                    </select>
+                    {% else %}
+                    <input type="hidden" id="choixLecteur" value="{{ devices.0.id }}">
+                    <p class="small text-muted mb-0">
+                        Lecteur : <strong>{{ devices.0.name }}</strong> ({{ devices.0.host }})
+                    </p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="etape-carte p-4 mb-3">
+            <div class="d-flex gap-3">
+                <div class="etape-numero">2</div>
+                <div class="flex-grow-1">
+                    <h6 class="fw-bold mb-2">Lancez la capture</h6>
+                    <p class="text-muted">
+                        Le lecteur photographie la personne présente devant lui.
+                        Comptez environ trois secondes.
+                    </p>
+                    <button type="button" id="btnCapture" class="btn btn-primary d-flex align-items-center gap-2">
+                        <span class="material-icons" style="font-size:18px;">photo_camera</span>
+                        Lancer la capture
+                    </button>
+                    <div id="etatCapture" class="mt-3"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="etape-carte p-4">
+            <div class="d-flex gap-3">
+                <div class="etape-numero">3</div>
+                <div class="flex-grow-1">
+                    <h6 class="fw-bold mb-2">Vérifiez puis validez</h6>
+                    <p class="text-muted">
+                        Regardez ce que le lecteur a vu. Si le cadrage ou la netteté
+                        ne conviennent pas, recommencez la capture : une mauvaise
+                        photo donne des refus à la porte pendant des mois.
+                    </p>
+
+                    <div id="zoneApercu" class="{% if not apercu_base64 %}d-none{% endif %}">
+                        <img id="imageApercu" class="apercu-visage mb-3"
+                             src="{% if apercu_base64 %}data:image/jpeg;base64,{{ apercu_base64 }}{% endif %}"
+                             alt="Visage capturé par le lecteur">
+
+                        <form method="post" action="{% url 'access:face_confirm' member.id %}">
+                            {% csrf_token %}
+                            <div class="d-flex gap-2 flex-wrap">
+                                <button type="submit" class="btn btn-success d-flex align-items-center gap-2">
+                                    <span class="material-icons" style="font-size:18px;">check</span>
+                                    Valider et enrôler
+                                </button>
+                                <button type="button" id="btnRecommencer" class="btn btn-outline-secondary">
+                                    Recommencer la capture
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <p id="messageAttente" class="text-muted mb-0 {% if apercu_base64 %}d-none{% endif %}">
+                        Aucune capture en attente.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-5">
+        <div class="etape-carte p-4 mb-3">
+            <h6 class="fw-bold mb-3">Ce membre</h6>
+            <div class="d-flex align-items-center gap-3 mb-3">
+                {% if member.photo %}
+                <img src="{{ member.photo.url }}" alt="" class="rounded-circle"
+                     width="56" height="56" style="object-fit:cover;">
+                {% else %}
+                <span class="material-icons text-secondary" style="font-size:56px;">account_circle</span>
+                {% endif %}
+                <div>
+                    <strong>{{ member.first_name }} {{ member.last_name }}</strong>
+                    <small class="d-block text-muted">Fiche n° {{ member.id }}</small>
+                </div>
+            </div>
+
+            <div class="small">
+                <div class="d-flex justify-content-between py-2 border-bottom">
+                    <span class="text-muted">Abonnement</span>
+                    <span>
+                        {% if subscription %}
+                        jusqu'au {{ subscription.end_date|date:"d/m/Y" }}
+                        {% else %}
+                        <span class="text-danger">aucun en cours</span>
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="d-flex justify-content-between py-2">
+                    <span class="text-muted">Identifiant sur le lecteur</span>
+                    <span><code>{{ employee_no }}</code></span>
+                </div>
+            </div>
+
+            {% if not subscription %}
+            <div class="alert alert-warning small mt-3 mb-0">
+                Sans abonnement en cours, le visage sera bien enregistré et le
+                membre reconnu, mais <strong>la porte ne s'ouvrira pas</strong>.
+                Elle s'ouvrira dès le prochain encaissement, sans avoir à
+                refaire passer le membre devant le lecteur.
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="etape-carte p-4">
+            <h6 class="fw-bold mb-2">Retirer du lecteur</h6>
+            <p class="small text-muted">
+                Supprime la fiche et le visage de tous les lecteurs de la salle.
+                Le membre devra repasser une capture pour être réinscrit.
+            </p>
+            <form method="post" action="{% url 'access:face_remove' member.id %}"
+                  onsubmit="return confirm('Retirer ce membre des lecteurs ? Il faudra recapturer son visage pour le réinscrire.');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline-danger btn-sm">
+                    Retirer des lecteurs
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    const btn = document.getElementById("btnCapture");
+    const etat = document.getElementById("etatCapture");
+    const zone = document.getElementById("zoneApercu");
+    const image = document.getElementById("imageApercu");
+    const attente = document.getElementById("messageAttente");
+    const recommencer = document.getElementById("btnRecommencer");
+
+    function jeton() {
+        const champ = document.querySelector("[name=csrfmiddlewaretoken]");
+        return champ ? champ.value : "";
+    }
+
+    function capturer() {
+        const lecteur = document.getElementById("choixLecteur").value;
+        btn.disabled = true;
+        etat.innerHTML = '<span class="text-muted">Capture en cours. Le membre doit rester immobile face au lecteur...</span>';
+
+        const corps = new FormData();
+        corps.append("device_id", lecteur);
+        corps.append("csrfmiddlewaretoken", jeton());
+
+        fetch("{% url 'access:face_capture' member.id %}", {
+            method: "POST",
+            body: corps,
+            credentials: "same-origin"
+        })
+        .then(function (r) { return r.json().then(function (d) { return {ok: r.ok, data: d}; }); })
+        .then(function (res) {
+            btn.disabled = false;
+            if (!res.data.ok) {
+                etat.innerHTML = '<div class="alert alert-danger mb-0">' + res.data.error + '</div>';
+                return;
+            }
+            etat.innerHTML = '<div class="alert alert-success mb-0">Image reçue du lecteur. Vérifiez-la à l\'étape 3.</div>';
+            image.src = "data:image/jpeg;base64," + res.data.image;
+            zone.classList.remove("d-none");
+            attente.classList.add("d-none");
+            zone.scrollIntoView({behavior: "smooth", block: "center"});
+        })
+        .catch(function () {
+            btn.disabled = false;
+            etat.innerHTML = '<div class="alert alert-danger mb-0">Le serveur n\'a pas répondu. Réessayez.</div>';
+        });
+    }
+
+    btn.addEventListener("click", capturer);
+    if (recommencer) {
+        recommencer.addEventListener("click", capturer);
+    }
+})();
+</script>
+
+{% endif %}
+{% endblock %}
