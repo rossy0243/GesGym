@@ -18,7 +18,7 @@ ACCESS_ROLES = frozenset({"owner", "manager", "reception"})
 ACCESS_DEVICE_ROLES = frozenset({"owner", "manager"})
 REPORT_ROLES = frozenset({"owner", "manager"})
 COACHING_ROLES = frozenset({"owner", "manager"})
-NOTIFICATION_ROLES = frozenset({"owner", "manager"})
+NOTIFICATION_ROLES = frozenset({"owner", "manager", "commercial"})
 MACHINE_ROLES = frozenset({"owner", "manager"})
 RH_EMPLOYEE_ROLES = frozenset({"owner", "manager"})
 RH_ATTENDANCE_ROLES = frozenset({"owner", "manager", "reception"})
@@ -27,6 +27,28 @@ PRODUCT_ROLES = frozenset({"owner", "manager"})
 SETTINGS_ROLES = frozenset({"owner", "manager"})
 SETTINGS_ORGANIZATION_ROLES = frozenset({"owner"})
 COACH_PORTAL_ROLES = frozenset({"coach"})
+
+# Le commercial demarche et convertit les prospects. Il tient les messages aux
+# membres, les preinscriptions, les coordonnees de la salle et la vitrine
+# publique. Il ne touche ni a l'argent, ni aux fiches membres, ni au personnel.
+PRE_REGISTRATION_ROLES = frozenset({"owner", "manager", "reception", "commercial"})
+
+# Regenerer le lien public coupe toutes les demandes en cours : plus sensible
+# que consulter la liste.
+PRE_REGISTRATION_LINK_ROLES = frozenset({"owner", "manager", "commercial"})
+
+# Coordonnees de la salle affichees au membre. Distinctes du reglage de
+# maintenance, qui reste au proprietaire et au gerant.
+SETTINGS_GYM_CONTACT_ROLES = frozenset({"owner", "manager", "commercial"})
+
+# Vitrine publique : pied de page, accroches, photos, questions frequentes.
+# Separee de l'identite de l'organisation, que seul le proprietaire renomme.
+SETTINGS_LANDING_ROLES = frozenset({"owner", "commercial"})
+
+# Encarts financiers du tableau de bord. Ces trois roles etaient jusqu'ici
+# ecrits en dur dans core/views.py, hors de cette matrice : un nouveau role en
+# aurait ete exclu sans que rien ne le signale.
+DASHBOARD_SALES_ROLES = frozenset({"owner", "manager", "cashier"})
 
 
 def current_role(request):
@@ -58,6 +80,10 @@ def permission_flags(request):
         "can_member_delete": has_role(request, MEMBER_DELETE_ROLES),
         "can_subscriptions": has_role(request, SUBSCRIPTION_ROLES),
         "can_pos_cashier": has_role(request, POS_CASHIER_ROLES),
+        "can_pre_registrations": has_role(request, PRE_REGISTRATION_ROLES),
+        "can_pre_registration_link": has_role(request, PRE_REGISTRATION_LINK_ROLES),
+        "can_settings_landing": has_role(request, SETTINGS_LANDING_ROLES),
+        "can_settings_gym_contact": has_role(request, SETTINGS_GYM_CONTACT_ROLES),
         "can_pos_history": has_role(request, POS_HISTORY_ROLES),
         "can_access": has_role(request, ACCESS_ROLES),
         "can_reports": has_role(request, REPORT_ROLES),

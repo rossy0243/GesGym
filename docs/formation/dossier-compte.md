@@ -58,7 +58,7 @@ de ce que le logiciel fait reellement, pas de ce qu'on croit qu'il fait.
 Valeurs possibles `ROLE_CHOICES` :
 
 ```python
-(('owner', 'Owner'), ('manager', 'Manager'), ('coach', 'Coach'), ('reception', 'Receptionist'), ('cashier', 'Cashier'))
+(('owner', 'Owner'), ('manager', 'Manager'), ('coach', 'Coach'), ('reception', 'Receptionist'), ('cashier', 'Cashier'), ('commercial', 'Commercial'))
 ```
 
 ## Qui a le droit de faire quoi

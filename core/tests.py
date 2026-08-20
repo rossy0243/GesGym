@@ -20,6 +20,21 @@ from coaching.kpis import build_coaching_kpis
 from coaching.models import Coach, CoachingFeedback, CoachingFollowUp, GroupCoachingProgram
 from compte.models import User
 from compte.models import UserGymRole
+from core.forms import INTERNAL_ROLE_CHOICES
+from members.models import MemberPreRegistration
+from organizations.models import LandingFaq
+from smartclub.access_control import (
+    DASHBOARD_ROLES,
+    DASHBOARD_SALES_ROLES,
+    MACHINE_ROLES,
+    MEMBER_DELETE_ROLES,
+    MEMBER_ROLES,
+    POS_CASHIER_ROLES,
+    POS_HISTORY_ROLES,
+    REPORT_ROLES,
+    RH_PAYROLL_ROLES,
+    SETTINGS_ORGANIZATION_ROLES,
+)
 from coaching.forms import CoachForm
 from coaching.models import CoachSpecialty
 from compte.forms import CreateUserForm
@@ -3023,3 +3038,218 @@ class TemplateCommentSyntaxTests(SimpleTestCase):
             "Ces gabarits afficheraient leurs commentaires : "
             "utilisez {% comment %}...{% endcomment %}.",
         )
+
+
+class CommercialRoleTests(TestCase):
+    """
+    Le commercial demarche et convertit les prospects.
+
+    Il tient les messages aux membres, les preinscriptions, les coordonnees de
+    la salle et la vitrine publique. Il ne touche ni a l'argent, ni aux fiches
+    membres, ni au personnel, ni a l'identite de l'organisation.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Commercial", slug="org-commercial"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Commercial",
+            slug="gym-commercial",
+            subdomain="gym-commercial",
+        )
+        for code in ("MEMBERS", "POS", "REPORTS", "MACHINES", "NOTIFICATIONS"):
+            module, _ = Module.objects.get_or_create(code=code, defaults={"name": code})
+            GymModule.objects.get_or_create(
+                gym=self.gym, module=module, defaults={"is_active": True}
+            )
+
+        self.commercial = User.objects.create_user(
+            username="commercial-perimetre", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.commercial, gym=self.gym, role="commercial", is_active=True
+        )
+        self.client.force_login(self.commercial)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _refuse(self, url):
+        reponse = self.client.get(url)
+        self.assertIn(
+            reponse.status_code, (302, 403, 404), f"{url} devrait etre refuse"
+        )
+
+    # --- Ce qu'il peut faire ---------------------------------------------------
+
+    def test_he_reaches_the_pre_registrations(self):
+        reponse = self.client.get(reverse("members:pre_registration_list"))
+
+        self.assertEqual(reponse.status_code, 200)
+
+    def test_he_confirms_a_pre_registration(self):
+        demande = MemberPreRegistration.objects.create(
+            gym=self.gym,
+            first_name="Prospect",
+            last_name="Converti",
+            phone="+243890000001",
+            email="prospect.converti@example.com",
+        )
+
+        self.client.post(
+            reverse("members:confirm_pre_registration", args=[demande.id]), follow=True
+        )
+
+        demande.refresh_from_db()
+        self.assertEqual(demande.status, MemberPreRegistration.STATUS_CONFIRMED)
+        self.assertEqual(demande.confirmed_by, self.commercial)
+
+    def test_he_regenerates_the_public_link(self):
+        reponse = self.client.post(
+            reverse("members:regenerate_pre_registration_link"), follow=True
+        )
+
+        self.assertEqual(reponse.status_code, 200)
+
+    def test_he_reaches_the_member_messages(self):
+        reponse = self.client.get(reverse("notifications:dashboard"))
+
+        self.assertEqual(reponse.status_code, 200)
+
+    def test_he_reaches_the_settings_page(self):
+        reponse = self.client.get(reverse("core:settings"))
+
+        self.assertEqual(reponse.status_code, 200)
+
+    def test_he_edits_the_gym_contact_details(self):
+        self.client.post(
+            reverse("core:settings"),
+            {
+                "action": "gym_contact",
+                "address": "12 avenue du Commerce",
+                "phone": "+243890000009",
+                "email": "",
+                "opening_hours": "",
+            },
+            follow=True,
+        )
+
+        self.gym.refresh_from_db()
+        self.assertEqual(self.gym.address, "12 avenue du Commerce")
+
+    def test_he_edits_the_public_landing(self):
+        self._poster_organisation(landing_kicker="Notre nouvelle accroche")
+
+        self.organization.refresh_from_db()
+        self.assertEqual(self.organization.landing_kicker, "Notre nouvelle accroche")
+
+    def test_he_manages_the_landing_faq(self):
+        self.client.post(
+            reverse("core:settings"),
+            {"action": "faq_create", "question": "Un parking ?", "answer": "Oui."},
+            follow=True,
+        )
+
+        self.assertTrue(
+            LandingFaq.objects.filter(organization=self.organization).exists()
+        )
+
+    # --- Ce qu'il ne peut pas faire ---------------------------------------------
+
+    def test_he_cannot_rename_the_organization(self):
+        # Renommer engage toute la marque : cela reste au proprietaire, meme
+        # si le commercial retouche la vitrine sur le meme ecran.
+        avant = self.organization.name
+
+        self._poster_organisation(name="Nom detourne")
+
+        self.organization.refresh_from_db()
+        self.assertEqual(self.organization.name, avant)
+
+    def test_he_cannot_reach_the_member_list(self):
+        self._refuse(reverse("members:member_list"))
+
+    def test_he_cannot_reach_the_cash_register(self):
+        self._refuse(reverse("pos:cashier_dashboard"))
+
+    def test_he_cannot_reach_the_reports(self):
+        self._refuse(reverse("core:rapport"))
+
+    def test_he_cannot_reach_the_machines(self):
+        self._refuse(reverse("machines:list"))
+
+    def test_he_cannot_change_the_maintenance_alert(self):
+        avant = self.gym.maintenance_alert_lead_days
+
+        self.client.post(
+            reverse("core:settings"),
+            {"action": "maintenance", "maintenance_alert_lead_days": "99"},
+        )
+
+        self.gym.refresh_from_db()
+        self.assertEqual(self.gym.maintenance_alert_lead_days, avant)
+
+    def test_he_cannot_create_an_employee(self):
+        avant = UserGymRole.objects.count()
+
+        self.client.post(
+            reverse("core:settings"),
+            {
+                "action": "employee_create",
+                "first_name": "Nouvel",
+                "last_name": "Employe",
+                "role": "cashier",
+                "gym": self.gym.id,
+            },
+        )
+
+        self.assertEqual(UserGymRole.objects.count(), avant)
+
+    # --- Outil -------------------------------------------------------------------
+
+    def _poster_organisation(self, **overrides):
+        payload = {
+            "action": "organization",
+            "address": "", "phone": "", "email": "", "city": "",
+            "whatsapp_number": "", "opening_hours": "", "footer_services": "",
+            "facebook_url": "", "instagram_url": "", "tiktok_url": "",
+            "landing_kicker": "", "landing_title": "", "landing_intro": "",
+            "seo_description": "", "seo_keywords": "",
+        }
+        payload.update(overrides)
+        return self.client.post(reverse("core:settings"), payload, follow=True)
+
+
+class CommercialRoleWiringTests(TestCase):
+    """Le role est declare partout ou il doit l'etre."""
+
+    def test_the_role_is_offered_when_creating_an_employee(self):
+        valeurs = [valeur for valeur, _ in INTERNAL_ROLE_CHOICES]
+
+        self.assertIn("commercial", valeurs)
+        # Le proprietaire ne se cree pas depuis ce formulaire.
+        self.assertNotIn("owner", valeurs)
+
+    def test_an_unknown_role_gets_no_permission_at_all(self):
+        # C'est ce qui rend l'ajout d'un role sans danger : l'echec est ferme.
+        ensembles = [
+            DASHBOARD_ROLES, MEMBER_ROLES, POS_CASHIER_ROLES, REPORT_ROLES,
+            MACHINE_ROLES, SETTINGS_ORGANIZATION_ROLES,
+        ]
+        for ensemble in ensembles:
+            self.assertNotIn("role_inexistant", ensemble)
+
+    def test_the_commercial_is_absent_from_the_sensitive_sets(self):
+        for ensemble in (
+            POS_CASHIER_ROLES, POS_HISTORY_ROLES, REPORT_ROLES,
+            MEMBER_ROLES, MEMBER_DELETE_ROLES, RH_PAYROLL_ROLES,
+            SETTINGS_ORGANIZATION_ROLES,
+        ):
+            self.assertNotIn("commercial", ensemble)
+
+    def test_the_dashboard_sales_set_keeps_its_former_members(self):
+        # Cet ensemble remplace trois listes ecrites en dur : le comportement
+        # existant doit etre strictement conserve.
+        self.assertEqual(DASHBOARD_SALES_ROLES, {"owner", "manager", "cashier"})

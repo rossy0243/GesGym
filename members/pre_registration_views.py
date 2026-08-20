@@ -14,7 +14,11 @@ from core.creation_emails import (
     send_member_creation_email,
     send_pre_registration_received_email,
 )
-from smartclub.access_control import MEMBER_ADMIN_ROLES, MEMBER_ROLES, has_role
+from smartclub.access_control import (
+    PRE_REGISTRATION_LINK_ROLES,
+    PRE_REGISTRATION_ROLES,
+    has_role,
+)
 from smartclub.public_links import build_public_url, is_local_url
 from .forms import MemberPreRegistrationForm
 from .models import MemberPreRegistration, MemberPreRegistrationLink
@@ -25,12 +29,18 @@ def _cleanup_expired_pre_registrations():
 
 
 def _member_management_allowed(request):
-    return has_role(request, MEMBER_ROLES) and request.gym
+    """
+    Qui traite les demandes de preinscription.
+
+    Ensemble distinct des fiches membres : le commercial convertit les
+    prospects sans avoir acces a la liste des membres ni a leurs coordonnees.
+    """
+    return has_role(request, PRE_REGISTRATION_ROLES) and request.gym
 
 
 def _link_management_allowed(request):
     """Revoquer un lien est plus sensible que consulter les demandes."""
-    return has_role(request, MEMBER_ADMIN_ROLES) and request.gym
+    return has_role(request, PRE_REGISTRATION_LINK_ROLES) and request.gym
 
 
 def _get_pre_registration_public_url(request, link):

@@ -80,6 +80,7 @@ class UserGymRole(models.Model):
         ("coach", "Coach"),
         ("reception", "Receptionist"),
         ("cashier", "Cashier"),
+        ("commercial", "Commercial"),
     )
 
     user = models.ForeignKey(

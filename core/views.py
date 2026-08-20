@@ -47,6 +47,9 @@ from .accounting_reports import (
     get_report_section,
 )
 from smartclub.access_control import (
+    DASHBOARD_SALES_ROLES,
+    SETTINGS_GYM_CONTACT_ROLES,
+    SETTINGS_LANDING_ROLES,
     DASHBOARD_ROLES,
     REPORT_ROLES,
     SETTINGS_ORGANIZATION_ROLES,
@@ -583,9 +586,19 @@ def switch_gym(request, gym_id):
 
 
 def _settings_allowed(request):
+    """
+    Qui peut ouvrir la page des parametres.
+
+    Chaque onglet pose ensuite sa propre garde : entrer ici ne donne acces a
+    rien en particulier.
+    """
     return bool(
         request.user.is_authenticated
-        and has_role(request, SETTINGS_ROLES)
+        and (
+            has_role(request, SETTINGS_ROLES)
+            or has_role(request, SETTINGS_GYM_CONTACT_ROLES)
+            or has_role(request, SETTINGS_LANDING_ROLES)
+        )
         and getattr(request, "organization", None)
     )
 
@@ -717,6 +730,8 @@ def settings_dashboard(request):
         return redirect("core:select_gym")
 
     can_manage_organization = has_role(request, SETTINGS_ORGANIZATION_ROLES)
+    can_manage_landing = has_role(request, SETTINGS_LANDING_ROLES)
+    can_manage_gym_contact = has_role(request, SETTINGS_GYM_CONTACT_ROLES)
     active_tab = request.GET.get("tab", "organization" if can_manage_organization else "employees")
     if active_tab == "organization" and not can_manage_organization:
         active_tab = "employees"
@@ -731,7 +746,10 @@ def settings_dashboard(request):
     )
     allowed_employee_roles = _employee_role_values_for_request(request)
     locked_employee_gym = None if can_manage_organization else gym
-    organization_form = OrganizationSettingsForm(instance=organization)
+    organization_form = OrganizationSettingsForm(
+        instance=organization,
+        peut_changer_identite=can_manage_organization,
+    )
     maintenance_form = GymMaintenanceSettingsForm(instance=gym)
     gym_contact_form = GymContactForm(instance=gym)
     employee_form = InternalEmployeeForm(
@@ -775,14 +793,34 @@ def settings_dashboard(request):
     if request.method == "POST":
         action = request.POST.get("action", "")
 
+        # Le personnel et les specialites restent au proprietaire et au gerant.
+        # La page des parametres est ouverte plus largement depuis l'arrivee du
+        # commercial : sans ce garde-fou, il pourrait creer des comptes.
+        if action.startswith(("employee_", "specialty_")) and not has_role(
+            request, SETTINGS_ROLES
+        ):
+            return _refuse_settings_action(
+                request, action,
+                "Vous ne pouvez pas gerer le personnel.",
+                target=organization.name,
+            )
+
         if action == "organization":
-            if not can_manage_organization:
+            # L'identite de l'organisation (nom, logo) reste au proprietaire.
+            # La vitrine publique est ouverte au commercial : le formulaire
+            # ecarte lui-meme les champs qu'il n'a pas le droit de toucher.
+            if not (can_manage_organization or can_manage_landing):
                 return _refuse_settings_action(
-                    request, "organization", "Seul le proprietaire peut modifier l'organisation.",
+                    request, "organization", "Vous ne pouvez pas modifier l'organisation.",
                     target=organization.name,
                 )
             active_tab = "organization"
-            organization_form = OrganizationSettingsForm(request.POST, request.FILES, instance=organization)
+            organization_form = OrganizationSettingsForm(
+                request.POST,
+                request.FILES,
+                instance=organization,
+                peut_changer_identite=can_manage_organization,
+            )
             if organization_form.is_valid():
                 modifies = list(organization_form.changed_data)
                 organization_form.save()
@@ -797,9 +835,9 @@ def settings_dashboard(request):
                 return _settings_redirect("organization")
 
         elif action in {"faq_create", "faq_update", "faq_delete", "faq_toggle"}:
-            if not can_manage_organization:
+            if not can_manage_landing:
                 return _refuse_settings_action(
-                    request, action, "Seul le proprietaire modifie la page d'accueil.",
+                    request, action, "Vous ne pouvez pas modifier la page d'accueil.",
                     target=organization.name,
                 )
             reponse = _handle_landing_faq(request, organization, action)
@@ -808,6 +846,12 @@ def settings_dashboard(request):
             active_tab = "organization"
 
         elif action == "gym_contact":
+            if not can_manage_gym_contact:
+                return _refuse_settings_action(
+                    request, "gym_contact",
+                    "Vous ne pouvez pas modifier les coordonnees de la salle.",
+                    target=gym.name if gym else "",
+                )
             active_tab = "salle"
             gym_contact_form = GymContactForm(request.POST, instance=gym)
             if gym_contact_form.is_valid():
@@ -826,6 +870,13 @@ def settings_dashboard(request):
                 return _settings_redirect("salle")
 
         elif action == "maintenance":
+            # Le rythme d'entretien du parc ne regarde pas le commercial.
+            if not has_role(request, SETTINGS_ROLES):
+                return _refuse_settings_action(
+                    request, "maintenance",
+                    "Vous ne pouvez pas modifier l'alerte de maintenance.",
+                    target=gym.name if gym else "",
+                )
             active_tab = "salle"
             maintenance_form = GymMaintenanceSettingsForm(request.POST, instance=gym)
             if maintenance_form.is_valid():
@@ -1139,6 +1190,9 @@ def settings_dashboard(request):
         "organization_form": organization_form,
         "maintenance_form": maintenance_form,
         "gym_contact_form": gym_contact_form,
+        "can_manage_landing": can_manage_landing,
+        "can_manage_gym_contact": can_manage_gym_contact,
+        "can_manage_settings": has_role(request, SETTINGS_ROLES),
         # Les quatre champs image se rendent en boucle : les nommer un par un
         # dans le gabarit multipliait le meme bloc de balisage.
         "organization_images": [
@@ -1191,6 +1245,8 @@ def activity_log_export(request):
         return HttpResponseForbidden("Aucune organisation active")
 
     can_manage_organization = has_role(request, SETTINGS_ORGANIZATION_ROLES)
+    can_manage_landing = has_role(request, SETTINGS_LANDING_ROLES)
+    can_manage_gym_contact = has_role(request, SETTINGS_GYM_CONTACT_ROLES)
     filters = activity_log.parse_filters(request.GET)
     logs = activity_log.filtered_logs(
         organization,
@@ -1409,7 +1465,7 @@ def gym_dashboard(request, gym_id):
     revenue_rows = _build_revenue_rows(Payment.objects.none(), period_data)
     sales_labels = []
     sales_values = []
-    if user_role in ["owner", "manager", "cashier"]:
+    if user_role in DASHBOARD_SALES_ROLES:
         successful_incoming_payments = Payment.objects.filter(
             gym=gym,
             status="success",
@@ -1493,12 +1549,12 @@ def gym_dashboard(request, gym_id):
     )
 
     recent_payments = []
-    if user_role in ["owner", "manager", "cashier"]:
+    if user_role in DASHBOARD_SALES_ROLES:
         recent_payments = Payment.objects.filter(gym=gym).select_related("member").order_by("-created_at")[:5]
 
     pending_count = 0
     pending_total = 0
-    if user_role in ["owner", "manager", "cashier"]:
+    if user_role in DASHBOARD_SALES_ROLES:
         pending_payments = Payment.objects.filter(
             gym=gym,
             status="pending",

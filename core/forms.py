@@ -152,6 +152,18 @@ class OrganizationSettingsForm(forms.ModelForm):
             "landing_image_3": "Vignette de la section \"Nos espaces\".",
         }
 
+    # Champs d'identite : renommer l'organisation ou changer son logo engage
+    # toute la marque. Reserve au proprietaire, meme quand le commercial a le
+    # droit de retoucher la vitrine.
+    CHAMPS_IDENTITE = ("name", "logo")
+
+    def __init__(self, *args, peut_changer_identite=True, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.peut_changer_identite = peut_changer_identite
+        if not peut_changer_identite:
+            for nom in self.CHAMPS_IDENTITE:
+                self.fields.pop(nom, None)
+
     # Toute image televersee passe par le meme controle que le logo : un
     # fichier deguise en image reste un fichier execute par le serveur.
     def clean_logo(self):

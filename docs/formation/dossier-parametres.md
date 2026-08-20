@@ -265,6 +265,35 @@ meilleure source pour les cas limites a montrer en formation.
 
 - no template uses a multiline short comment
 
+### CommercialRoleTests
+
+> Le commercial demarche et convertit les prospects.
+
+- he reaches the pre registrations
+- he confirms a pre registration
+- he regenerates the public link
+- he reaches the member messages
+- he reaches the settings page
+- he edits the gym contact details
+- he edits the public landing
+- he manages the landing faq
+- he cannot rename the organization
+- he cannot reach the member list
+- he cannot reach the cash register
+- he cannot reach the reports
+- he cannot reach the machines
+- he cannot change the maintenance alert
+- he cannot create an employee
+
+### CommercialRoleWiringTests
+
+> Le role est declare partout ou il doit l'etre.
+
+- the role is offered when creating an employee
+- an unknown role gets no permission at all
+- the commercial is absent from the sensitive sets
+- the dashboard sales set keeps its former members
+
 ## A completer par un humain
 
 Le code ne dit pas tout. Avant de rediger, il faut trancher :
