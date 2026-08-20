@@ -1,0 +1,194 @@
+{% extends 'base.html' %}
+
+{% block page_titre %}Messages du lecteur{% endblock %}
+
+{% block content %}
+
+<div class="page-header mb-4">
+    <div class="page-header-left d-flex align-items-center">
+        <div class="page-header-title d-flex align-items-center gap-2">
+            <span class="material-icons text-primary" style="font-size:28px;">chat</span>
+            <div>
+                <h5 class="mb-0">Messages affichés par le lecteur</h5>
+                <small class="text-muted">{{ device.name }} — {{ device.host }}</small>
+            </div>
+        </div>
+    </div>
+    <div class="page-header-right ms-auto">
+        <a href="{% url 'access:device_list' %}" class="btn btn-light d-flex align-items-center gap-2">
+            <span class="material-icons" style="font-size:18px;">arrow_back</span>
+            Retour aux lecteurs
+        </a>
+    </div>
+</div>
+
+<style>
+.message-carte {
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    border-left-width: 5px;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+}
+.message-carte.succes  { border-left-color: #16a34a; }
+.message-carte.refus   { border-left-color: #dc2626; }
+.message-carte.inconnu { border-left-color: #d97706; }
+
+.pastille {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+.pastille.succes  { background: #16a34a; }
+.pastille.refus   { background: #dc2626; }
+.pastille.inconnu { background: #d97706; }
+
+.compteur { font-variant-numeric: tabular-nums; }
+.compteur.trop-long { color: #dc2626; font-weight: 700; }
+
+.ecran-lecteur {
+    background: #0B0B0B;
+    color: #f8fafc;
+    border-radius: 12px;
+    padding: 14px 16px;
+    font-family: monospace;
+    text-align: center;
+    letter-spacing: .04em;
+}
+</style>
+
+{% if erreur_lecture %}
+<div class="alert alert-warning d-flex align-items-start gap-3">
+    <span class="material-icons">warning</span>
+    <div>
+        <strong>Impossible de lire les messages actuels.</strong>
+        <p class="mb-0">{{ erreur_lecture }}</p>
+        <p class="mb-0 small">
+            Vous pouvez tout de même saisir des messages : ils seront envoyés
+            dès que le lecteur répondra.
+        </p>
+    </div>
+</div>
+{% endif %}
+
+<div class="row g-4">
+    <div class="col-lg-8">
+        <form method="post">
+            {% csrf_token %}
+
+            <div class="alert alert-light border d-flex align-items-start gap-3 mb-4">
+                <span class="material-icons text-muted">info</span>
+                <div class="small">
+                    Ces phrases s'affichent sur l'écran du terminal, en
+                    <strong>texte simple</strong> : ce matériel ne sait pas les colorer.
+                    Les couleurs ci-dessous servent à vous repérer, pas au membre.
+                    <br>
+                    <strong>{{ longueur_max }} caractères maximum</strong> par message —
+                    au-delà, l'écran ne peut pas l'afficher.
+                    <br>
+                    La <strong>voix</strong> du lecteur (« Merci », « Échec de
+                    l'authentification »…) n'est pas modifiable par cette voie et reste
+                    celle d'origine.
+                </div>
+            </div>
+
+            {% for ligne in lignes %}
+            <div class="message-carte {{ ligne.couleur }} p-4 mb-3">
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <span class="pastille {{ ligne.couleur }}"></span>
+                    <label class="fw-bold mb-0" for="champ-{{ ligne.cle }}">{{ ligne.libelle }}</label>
+                </div>
+                <p class="text-muted small mb-2">{{ ligne.aide }}</p>
+
+                <input type="text"
+                       id="champ-{{ ligne.cle }}"
+                       name="{{ ligne.cle }}"
+                       value="{{ ligne.valeur }}"
+                       maxlength="{{ longueur_max }}"
+                       class="form-control"
+                       data-compteur="compteur-{{ ligne.cle }}"
+                       data-apercu="apercu-{{ ligne.cle }}"
+                       placeholder="Ex : Bienvenue">
+                <small class="text-muted">
+                    <span class="compteur" id="compteur-{{ ligne.cle }}">0</span>/{{ longueur_max }} caractères
+                </small>
+            </div>
+            {% endfor %}
+
+            <div class="form-check mb-4">
+                <input type="checkbox" name="enabled" id="champActif" class="form-check-input"
+                       {% if actif %}checked{% endif %}>
+                <label class="form-check-label" for="champActif">
+                    <strong>Afficher ces messages sur le lecteur</strong>
+                    <small class="d-block text-muted">
+                        Décochée, cette case rend au lecteur ses messages d'origine.
+                        C'est le seul moyen de revenir en arrière : un message vide
+                        est refusé par le matériel.
+                    </small>
+                </label>
+            </div>
+
+            <button type="submit" class="btn btn-primary d-flex align-items-center gap-2">
+                <span class="material-icons" style="font-size:18px;">save</span>
+                Envoyer au lecteur
+            </button>
+        </form>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="message-carte p-4" style="border-left-width:1px;">
+            <h6 class="fw-bold mb-3">Aperçu de l'écran</h6>
+            <p class="small text-muted">
+                Ce que le membre verra, tel que le terminal l'affiche.
+            </p>
+
+            {% for ligne in lignes %}
+            <div class="mb-3">
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <span class="pastille {{ ligne.couleur }}"></span>
+                    <small class="text-muted">{{ ligne.libelle }}</small>
+                </div>
+                <div class="ecran-lecteur" id="apercu-{{ ligne.cle }}">
+                    {% if ligne.valeur %}{{ ligne.valeur }}{% else %}—{% endif %}
+                </div>
+            </div>
+            {% endfor %}
+
+            <div class="alert alert-light border small mb-0 mt-3">
+                État actuel :
+                {% if actif %}
+                <strong class="text-success">messages personnalisés affichés</strong>
+                {% else %}
+                <strong class="text-muted">messages d'origine du lecteur</strong>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    const limite = {{ longueur_max }};
+
+    document.querySelectorAll("[data-compteur]").forEach(function (champ) {
+        const compteur = document.getElementById(champ.dataset.compteur);
+        const apercu = document.getElementById(champ.dataset.apercu);
+
+        function rafraichir() {
+            const longueur = champ.value.length;
+            compteur.textContent = longueur;
+            compteur.classList.toggle("trop-long", longueur > limite);
+            if (apercu) {
+                apercu.textContent = champ.value || "—";
+            }
+        }
+
+        champ.addEventListener("input", rafraichir);
+        rafraichir();
+    });
+})();
+</script>
+
+{% endblock %}

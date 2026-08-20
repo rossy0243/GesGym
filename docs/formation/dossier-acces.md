@@ -27,6 +27,7 @@ de ce que le logiciel fait reellement, pas de ce qu'on croit qu'il fait.
 | `membres/<int:member_id>/visage/capturer/` | `enrollment_views.face_capture` | `face_capture` |
 | `membres/<int:member_id>/visage/valider/` | `enrollment_views.face_confirm` | `face_confirm` |
 | `membres/<int:member_id>/visage/retirer/` | `enrollment_views.face_remove` | `face_remove` |
+| `devices/<int:device_id>/messages/` | `enrollment_views.device_messages` | `device_messages` |
 
 ## Donnees manipulees
 
@@ -101,6 +102,7 @@ formation : « la reception peut pointer mais pas consulter les salaires ».
 | `face_capture` | `login_required`<br>`module_required('ACCESS')`<br>`role_required(ACCESS_DEVICE_ROLES)`<br>`require_POST` |
 | `face_confirm` | `login_required`<br>`module_required('ACCESS')`<br>`role_required(ACCESS_DEVICE_ROLES)`<br>`require_POST` |
 | `face_remove` | `login_required`<br>`module_required('ACCESS')`<br>`role_required(ACCESS_DEVICE_ROLES)`<br>`require_POST` |
+| `device_messages` | `login_required`<br>`module_required('ACCESS')`<br>`role_required(ACCESS_DEVICE_ROLES)` |
 | `acces_dashboard` | `login_required`<br>`role_required(ACCESS_ROLES)`<br>`module_required('ACCESS')` |
 | `realtime_access` | `login_required`<br>`role_required(ACCESS_ROLES)`<br>`module_required('ACCESS')` |
 | `manual_access_entry` | `login_required`<br>`role_required(ACCESS_ROLES)`<br>`require_POST`<br>`module_required('ACCESS')` |
@@ -128,6 +130,7 @@ employer dans la formation : l'apprenant doit reconnaitre ce qu'il verra.
 
 ### Confirmations
 
+- Messages enregistres sur {valeur}.
 - Visage enrole. {valeur} {valeur} entre par reconnaissance faciale jusqu'au {valeur}.
 - {valeur} {valeur} ne peut plus entrer par reconnaissance faciale.
 
@@ -140,12 +143,17 @@ employer dans la formation : l'apprenant doit reconnaitre ce qu'il verra.
 - Aucune capture en attente. Relancez la capture.
 - Retrait incomplet.
 
+### Informations
+
+- {valeur} affiche de nouveau ses messages d'origine.
+
 ## Traces laissees dans le journal sensible
 
 Actions consignees. Utile pour expliquer aux equipes ce qui est trace,
 et rassurer sur ce qui ne l'est pas.
 
 - `access.device_deleted`
+- `access.device_messages_updated`
 - `access.device_registered`
 - `access.door_opened_remotely`
 - `access.face_enrolled`
@@ -154,6 +162,7 @@ et rassurer sur ce qui ne l'est pas.
 ## Ecrans concernes
 
 - `access\templates\access\acces.html`
+- `access\templates\access\device_messages.html`
 - `access\templates\access\face_enrollment.html`
 
 ## Comportements garantis par les tests
@@ -285,6 +294,22 @@ meilleure source pour les cas limites a montrer en formation.
 - the reader receives address port and subscription
 - a path longer than the hardware limit is refused
 - an unreachable reader is reported plainly
+
+### DeviceScreenMessagesTests
+
+> Reglage des phrases affichees sur l'ecran du terminal.
+
+- the screen lists the three messages
+- the screen warns that the reader shows plain text
+- the screen says the voice is not configurable
+- an unreachable reader does not block the screen
+- the messages reach the reader
+- a message longer than the screen is refused before sending
+- unchecking gives the reader back its own messages
+- the change is traced in the sensitive log
+- a reader of another gym is out of reach
+- an empty message is sent as a dash
+- the three prompt types are always sent
 
 ## A completer par un humain
 

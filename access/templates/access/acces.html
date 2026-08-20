@@ -1433,6 +1433,11 @@ function loadDevices() {
                             <span class="material-icons me-1" style="font-size:16px;">lock_open</span>
                             Ouvrir
                         </button>
+                        <a class="btn btn-light btn-sm" href="/access/devices/${device.id}/messages/"
+                           title="Messages affiches sur l'ecran du lecteur">
+                            <span class="material-icons me-1" style="font-size:16px;">chat</span>
+                            Messages
+                        </a>
                         <button class="btn btn-light btn-sm text-danger" onclick="deleteDevice(${device.id})">
                             <span class="material-icons" style="font-size:16px;">delete</span>
                         </button>

@@ -22,4 +22,7 @@ urlpatterns = [
         path("membres/<int:member_id>/visage/capturer/", enrollment_views.face_capture, name="face_capture"),
         path("membres/<int:member_id>/visage/valider/", enrollment_views.face_confirm, name="face_confirm"),
         path("membres/<int:member_id>/visage/retirer/", enrollment_views.face_remove, name="face_remove"),
+
+        # Messages affiches sur l'ecran du lecteur.
+        path("devices/<int:device_id>/messages/", enrollment_views.device_messages, name="device_messages"),
 ]

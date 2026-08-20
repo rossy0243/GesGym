@@ -514,6 +514,56 @@ class HikvisionClient:
             payload={"FPID": [{"value": str(employee_no)}]},
         )
 
+    # --- Messages affiches sur l'ecran du lecteur ---------------------------
+    #
+    # Le terminal affiche trois phrases courtes selon l'issue de la lecture.
+    # Il ne sait pas les colorer : c'est du texte simple, seize caracteres au
+    # plus. La voix, elle, n'est pas modifiable par cette voie.
+
+    PROMPT_PATH = "/ISAPI/AccessControl/customPrompt?format=json"
+
+    PROMPT_TYPES = ("stranger", "authenticationSuccess", "authenticationFailed")
+
+    PROMPT_LONGUEUR_MAX = 16
+
+    def get_custom_prompt(self):
+        """Messages actuellement portes par le lecteur."""
+        data = self._json(self.PROMPT_PATH)
+        messages = {
+            entree.get("promptType"): entree.get("promptContent", "")
+            for entree in data.get("PromptList", [])
+        }
+        return {"enabled": bool(data.get("enabled")), "messages": messages}
+
+    def set_custom_prompt(self, enabled, messages):
+        """
+        Ecrit les trois messages et active ou desactive leur affichage.
+
+        Le lecteur refuse un message vide : le champ exige au moins un
+        caractere. Desactiver suffit a retrouver l'affichage d'origine, il
+        n'est donc pas necessaire de vider les textes.
+        """
+        liste = []
+        for type_message in self.PROMPT_TYPES:
+            contenu = (messages.get(type_message) or "").strip()
+            if len(contenu) > self.PROMPT_LONGUEUR_MAX:
+                raise HikvisionError(
+                    f"Message trop long pour l'ecran du lecteur : "
+                    f"{self.PROMPT_LONGUEUR_MAX} caracteres au maximum."
+                )
+            liste.append({
+                "promptType": type_message,
+                # Un tiret tient lieu de vide : le materiel refuse une chaine
+                # vide, et le contenu ne s'affiche pas quand c'est desactive.
+                "promptContent": contenu or "-",
+            })
+
+        return self._json(
+            self.PROMPT_PATH,
+            method="PUT",
+            payload={"enabled": bool(enabled), "PromptList": liste},
+        )
+
     def request_raw(self, path, method="GET", body=None, content_type="application/xml"):
         """
         Comme ``request``, mais rend les octets bruts.

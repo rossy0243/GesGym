@@ -1494,3 +1494,207 @@ class ReaderDeclarationTests(TestCase):
                 enrollment.declarer_application(self.device, 8000, adresse="10.0.0.1")
 
         self.assertIn("injoignable", str(capture.exception))
+
+
+class DeviceScreenMessagesTests(TestCase):
+    """Reglage des phrases affichees sur l'ecran du terminal."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Messages", slug="org-messages"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Messages",
+            slug="gym-messages",
+            subdomain="gym-messages",
+        )
+        module, _ = Module.objects.get_or_create(
+            code="ACCESS", defaults={"name": "Access"}
+        )
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=module, defaults={"is_active": True}
+        )
+        self.device = AccessDevice.objects.create(
+            gym=self.gym, name="Terminal", host="10.0.0.9", password="secret"
+        )
+        self.manager = User.objects.create_user(
+            username="gerant-messages", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.manager, gym=self.gym, role="manager", is_active=True
+        )
+        self.client.force_login(self.manager)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+        self.url = reverse("access:device_messages", args=[self.device.id])
+
+        self.etat_lu = {
+            "enabled": False,
+            "messages": {
+                "stranger": "",
+                "authenticationSuccess": "",
+                "authenticationFailed": "",
+            },
+        }
+
+    def _lecture(self):
+        return patch.object(
+            hikvision.HikvisionClient, "get_custom_prompt", return_value=self.etat_lu
+        )
+
+    # --- L'ecran ---------------------------------------------------------------
+
+    def test_the_screen_lists_the_three_messages(self):
+        with self._lecture():
+            response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Acces accorde")
+        self.assertContains(response, "Acces refuse")
+        self.assertContains(response, "Visage inconnu")
+
+    def test_the_screen_warns_that_the_reader_shows_plain_text(self):
+        # Sans cet avertissement, l'utilisateur croirait que le code couleur
+        # de cet ecran apparait aussi sur le terminal.
+        with self._lecture():
+            response = self.client.get(self.url)
+
+        self.assertContains(response, "ne sait pas les colorer")
+
+    def test_the_screen_says_the_voice_is_not_configurable(self):
+        with self._lecture():
+            response = self.client.get(self.url)
+
+        self.assertContains(response, "pas modifiable par cette voie")
+
+    def test_an_unreachable_reader_does_not_block_the_screen(self):
+        with patch.object(
+            hikvision.HikvisionClient,
+            "get_custom_prompt",
+            side_effect=hikvision.HikvisionUnreachable("cable arrache"),
+        ):
+            response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Impossible de lire les messages actuels")
+
+    # --- Ecriture ----------------------------------------------------------------
+
+    def test_the_messages_reach_the_reader(self):
+        with self._lecture(), patch.object(
+            hikvision.HikvisionClient, "set_custom_prompt"
+        ) as ecriture:
+            self.client.post(
+                self.url,
+                {
+                    "authenticationSuccess": "Bienvenue",
+                    "authenticationFailed": "Voyez accueil",
+                    "stranger": "Non reconnu",
+                    "enabled": "on",
+                },
+                follow=True,
+            )
+
+        ecriture.assert_called_once()
+        actif, envoyes = ecriture.mock_calls[0].args
+        self.assertTrue(actif)
+        self.assertEqual(envoyes["authenticationSuccess"], "Bienvenue")
+
+    def test_a_message_longer_than_the_screen_is_refused_before_sending(self):
+        with self._lecture(), patch.object(
+            hikvision.HikvisionClient, "set_custom_prompt"
+        ) as ecriture:
+            response = self.client.post(
+                self.url,
+                {
+                    "authenticationSuccess": "Bienvenue chez Royal Gym Kinshasa",
+                    "authenticationFailed": "x",
+                    "stranger": "y",
+                    "enabled": "on",
+                },
+                follow=True,
+            )
+
+        ecriture.assert_not_called()
+        self.assertContains(response, "depasse 16 caracteres")
+
+    def test_unchecking_gives_the_reader_back_its_own_messages(self):
+        with self._lecture(), patch.object(
+            hikvision.HikvisionClient, "set_custom_prompt"
+        ) as ecriture:
+            self.client.post(
+                self.url,
+                {
+                    "authenticationSuccess": "Bienvenue",
+                    "authenticationFailed": "Voyez accueil",
+                    "stranger": "Non reconnu",
+                },
+                follow=True,
+            )
+
+        actif, _ = ecriture.mock_calls[0].args
+        self.assertFalse(actif)
+
+    def test_the_change_is_traced_in_the_sensitive_log(self):
+        with self._lecture(), patch.object(
+            hikvision.HikvisionClient, "set_custom_prompt"
+        ):
+            self.client.post(
+                self.url,
+                {
+                    "authenticationSuccess": "Bienvenue",
+                    "authenticationFailed": "Voyez accueil",
+                    "stranger": "Non reconnu",
+                    "enabled": "on",
+                },
+                follow=True,
+            )
+
+        trace = SensitiveActivityLog.objects.get(
+            action="access.device_messages_updated"
+        )
+        self.assertEqual(trace.actor, self.manager)
+        self.assertTrue(trace.metadata["actif"])
+
+    def test_a_reader_of_another_gym_is_out_of_reach(self):
+        autre = Gym.objects.create(
+            organization=self.organization,
+            name="Autre",
+            slug="autre-messages",
+            subdomain="autre-messages",
+        )
+        etranger = AccessDevice.objects.create(
+            gym=autre, name="Ailleurs", host="10.0.0.8", password="secret"
+        )
+
+        response = self.client.get(
+            reverse("access:device_messages", args=[etranger.id])
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    # --- Contrat avec le materiel --------------------------------------------------
+
+    def test_an_empty_message_is_sent_as_a_dash(self):
+        # Le materiel refuse une chaine vide : il exige au moins un caractere.
+        client = hikvision.HikvisionClient("10.0.0.9", "admin", "x")
+
+        with patch.object(client, "_json") as appel:
+            client.set_custom_prompt(False, {"stranger": "", "authenticationSuccess": "",
+                                             "authenticationFailed": ""})
+
+        envoye = appel.mock_calls[0].kwargs["payload"]
+        for entree in envoye["PromptList"]:
+            self.assertEqual(entree["promptContent"], "-")
+
+    def test_the_three_prompt_types_are_always_sent(self):
+        client = hikvision.HikvisionClient("10.0.0.9", "admin", "x")
+
+        with patch.object(client, "_json") as appel:
+            client.set_custom_prompt(True, {"authenticationSuccess": "Bienvenue"})
+
+        envoye = appel.mock_calls[0].kwargs["payload"]
+        types = {e["promptType"] for e in envoye["PromptList"]}
+        self.assertEqual(types, set(hikvision.HikvisionClient.PROMPT_TYPES))

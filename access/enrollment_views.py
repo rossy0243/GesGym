@@ -213,3 +213,79 @@ def face_remove(request, member_id):
         )
 
     return redirect("access:face_enrollment", member_id=member.id)
+
+
+@login_required
+@module_required("ACCESS")
+@role_required(ACCESS_DEVICE_ROLES)
+def device_messages(request, device_id):
+    """
+    Reglage des messages affiches sur l'ecran du lecteur.
+
+    Le code couleur de cet ecran sert a l'operateur : il distingue d'un coup
+    d'oeil l'accueil, le refus et l'inconnu. L'ecran du lecteur, lui, affiche
+    du texte simple, sans couleur.
+    """
+    device = get_object_or_404(AccessDevice, id=device_id, gym=request.gym)
+
+    etat = None
+    erreur_lecture = ""
+    try:
+        etat = enrollment.lire_messages(device)
+    except enrollment.EnrollmentError as exc:
+        erreur_lecture = str(exc)
+
+    if request.method == "POST":
+        saisis = {
+            cle: request.POST.get(cle, "") for cle, _l, _a, _c in enrollment.MESSAGES_LECTEUR
+        }
+        actif = bool(request.POST.get("enabled"))
+
+        try:
+            enrollment.ecrire_messages(device, actif, saisis)
+        except enrollment.EnrollmentError as exc:
+            messages.error(request, str(exc))
+        else:
+            log_sensitive_action(
+                request,
+                "access.device_messages_updated",
+                "AccessDevice",
+                device.name,
+                metadata={"actif": actif, "messages": saisis},
+                gym=request.gym,
+            )
+            if actif:
+                messages.success(
+                    request, f"Messages enregistres sur {device.name}."
+                )
+            else:
+                messages.info(
+                    request,
+                    f"{device.name} affiche de nouveau ses messages d'origine.",
+                )
+            return redirect("access:device_messages", device_id=device.id)
+
+        etat = {"enabled": actif, "messages": saisis}
+
+    lignes = []
+    for cle, libelle, aide, couleur in enrollment.MESSAGES_LECTEUR:
+        lignes.append({
+            "cle": cle,
+            "libelle": libelle,
+            "aide": aide,
+            "couleur": couleur,
+            "valeur": (etat or {}).get("messages", {}).get(cle, "") if etat else "",
+        })
+
+    return render(
+        request,
+        "access/device_messages.html",
+        {
+            "gym": request.gym,
+            "device": device,
+            "lignes": lignes,
+            "actif": (etat or {}).get("enabled", False),
+            "erreur_lecture": erreur_lecture,
+            "longueur_max": enrollment.LONGUEUR_MESSAGE_MAX,
+        },
+    )

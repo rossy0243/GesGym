@@ -296,3 +296,77 @@ def declarer_application(device, port_serveur, adresse=None):
     device.save(update_fields=["last_seen_at", "last_error", "updated_at"])
 
     return url
+
+
+# ---------------------------------------------------------------------------
+# Messages affiches sur l'ecran du lecteur
+# ---------------------------------------------------------------------------
+#
+# Le terminal affiche une phrase courte selon l'issue de la lecture. Elle est
+# reglable, contrairement a la voix : le materiel annonce des sons
+# personnalisables mais n'expose aucun point d'entree pour les televerser.
+#
+# L'ecran du lecteur affiche du texte simple, sans couleur. Le code couleur de
+# l'ecran de reglage sert a l'operateur, pas au membre.
+
+MESSAGES_LECTEUR = (
+    (
+        "authenticationSuccess",
+        "Acces accorde",
+        "Ce que lit le membre reconnu, dont l'abonnement est valide.",
+        "succes",
+    ),
+    (
+        "authenticationFailed",
+        "Acces refuse",
+        "Membre reconnu, mais abonnement expire, suspendu ou hors plage horaire.",
+        "refus",
+    ),
+    (
+        "stranger",
+        "Visage inconnu",
+        "Personne non enrolee sur ce lecteur : visiteur, prospect, passant.",
+        "inconnu",
+    ),
+)
+
+LONGUEUR_MESSAGE_MAX = 16
+
+
+def lire_messages(device):
+    """Messages actuellement portes par le lecteur."""
+    client = hikvision.HikvisionClient.from_device(device, timeout=20)
+    try:
+        return client.get_custom_prompt()
+    except hikvision.HikvisionUnreachable as exc:
+        raise EnrollmentError(f"Lecteur injoignable ({device.host}).") from exc
+    except hikvision.HikvisionError as exc:
+        raise EnrollmentError(f"Le lecteur n'a pas repondu : {exc}") from exc
+
+
+def ecrire_messages(device, enabled, messages):
+    """
+    Ecrit les messages sur le lecteur.
+
+    Un texte vide n'efface pas : le materiel exige au moins un caractere. Pour
+    revenir aux messages d'origine, il faut decocher l'affichage.
+    """
+    for cle, libelle, _aide, _couleur in MESSAGES_LECTEUR:
+        contenu = (messages.get(cle) or "").strip()
+        if len(contenu) > LONGUEUR_MESSAGE_MAX:
+            raise EnrollmentError(
+                f"« {libelle} » depasse {LONGUEUR_MESSAGE_MAX} caracteres "
+                f"({len(contenu)}). L'ecran du lecteur ne peut pas l'afficher."
+            )
+
+    client = hikvision.HikvisionClient.from_device(device, timeout=20)
+    try:
+        client.set_custom_prompt(enabled, messages)
+    except hikvision.HikvisionUnreachable as exc:
+        raise EnrollmentError(f"Lecteur injoignable ({device.host}).") from exc
+    except hikvision.HikvisionError as exc:
+        raise EnrollmentError(f"Le lecteur a refuse les messages : {exc}") from exc
+
+    device.last_seen_at = timezone.now()
+    device.last_error = ""
+    device.save(update_fields=["last_seen_at", "last_error", "updated_at"])
