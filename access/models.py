@@ -128,6 +128,18 @@ class AccessLog(models.Model):
         related_name="access_logs",
     )
 
+    # Un membre peut repasser devant le lecteur le meme jour : il est ressorti
+    # a sa voiture, il a oublie quelque chose. Le lecteur decide seul et lui
+    # ouvre : refuser dans l'application affichait un feu vert sur le terminal
+    # pendant que le journal enregistrait un refus. On accorde donc, en
+    # marquant le passage pour ne pas le compter deux fois dans la
+    # frequentation.
+    is_return = models.BooleanField(
+        default=False,
+        verbose_name="Retour dans la salle",
+        help_text="Passage suivant une entree deja accordee le meme jour.",
+    )
+
     denial_reason = models.CharField(
         max_length=255,
         blank=True,

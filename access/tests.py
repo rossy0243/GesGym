@@ -26,7 +26,7 @@ from . import enrollment, hikvision
 from .device_views import UNKNOWN_CREDENTIAL_REASON
 from .hikvision import parse_event_payload
 from .models import AccessDevice, AccessLog
-from .views import DOUBLE_SCAN_REASON, EXPIRED_QR_REASON, NO_SUBSCRIPTION_REASON
+from .views import EXPIRED_QR_REASON, NO_SUBSCRIPTION_REASON, RETURN_LABEL
 
 
 class AccessControlTests(TestCase):
@@ -128,7 +128,14 @@ class AccessControlTests(TestCase):
         self.assertEqual(log.scanned_by, self.user)
         self.assertEqual(log.device_used, "Manuel")
 
-    def test_manual_access_denies_second_entry_same_day(self):
+    def test_manual_access_accepts_a_return_the_same_day(self):
+        """
+        Un membre deja entre aujourd'hui repasse : il est ressorti puis revenu.
+
+        Refuser affichait un feu vert sur le lecteur, qui decide seul et ouvre,
+        pendant que le journal enregistrait un refus. Le passage est donc
+        accorde, marque comme retour, et ne compte pas une visite de plus.
+        """
         first_response = self.client.post(
             reverse("access:manual_access_entry", args=[self.member_a.id])
         )
@@ -141,20 +148,22 @@ class AccessControlTests(TestCase):
         self.assertTrue(first_response.json()["access"])
 
         payload = second_response.json()
-        self.assertFalse(payload["access"])
-        self.assertEqual(payload["reason"], DOUBLE_SCAN_REASON)
-        self.assertEqual(payload["log"]["status"], "denied")
-        self.assertEqual(payload["log"]["reason"], DOUBLE_SCAN_REASON)
+        self.assertTrue(payload["access"])
+        self.assertEqual(payload["reason"], RETURN_LABEL)
+        self.assertEqual(payload["log"]["status"], "return")
+        self.assertTrue(payload["log"]["is_return"])
         self.assertEqual(payload["stats"]["entries"], 1)
-        self.assertEqual(payload["stats"]["denied"], 1)
+        self.assertEqual(payload["stats"]["returns"], 1)
+        self.assertEqual(payload["stats"]["denied"], 0)
 
         logs = AccessLog.objects.filter(member=self.member_a).order_by("id")
         self.assertEqual(logs.count(), 2)
         self.assertTrue(logs[0].access_granted)
-        self.assertFalse(logs[1].access_granted)
-        self.assertEqual(logs[1].denial_reason, DOUBLE_SCAN_REASON)
+        self.assertFalse(logs[0].is_return)
+        self.assertTrue(logs[1].access_granted)
+        self.assertTrue(logs[1].is_return)
 
-    def test_qr_access_denies_second_scan_same_day(self):
+    def test_qr_access_accepts_a_return_the_same_day(self):
         first_response = self.client.post(
             reverse("access:member_access", args=[self.member_a.qr_code])
         )
@@ -167,11 +176,14 @@ class AccessControlTests(TestCase):
         self.assertTrue(first_response.json()["access"])
 
         payload = second_response.json()
-        self.assertFalse(payload["access"])
-        self.assertEqual(payload["reason"], DOUBLE_SCAN_REASON)
+        self.assertTrue(payload["access"])
+        self.assertEqual(payload["reason"], RETURN_LABEL)
         self.assertEqual(payload["log"]["method"], "QR Scanner")
+        # La frequentation compte une visite par membre et par jour : un
+        # retour ne doit pas la gonfler.
         self.assertEqual(payload["stats"]["entries"], 1)
-        self.assertEqual(payload["stats"]["denied"], 1)
+        self.assertEqual(payload["stats"]["returns"], 1)
+        self.assertEqual(payload["stats"]["denied"], 0)
 
     def test_qr_access_denies_expired_qr_code(self):
         self.member_a.qr_code_expires_at = timezone.now() - timedelta(minutes=1)
@@ -563,13 +575,13 @@ class AccessDeviceWebhookTests(TestCase):
         self.assertFalse(payload["access"])
         self.assertEqual(payload["reason"], EXPIRED_QR_REASON)
 
-    def test_second_scan_same_day_is_refused(self):
+    def test_a_return_the_same_day_is_accepted(self):
         self._post_scan(self.member.qr_code)
         response = self._post_scan(self.member.qr_code)
 
         payload = response.json()
-        self.assertFalse(payload["access"])
-        self.assertEqual(payload["reason"], DOUBLE_SCAN_REASON)
+        self.assertTrue(payload["access"])
+        self.assertEqual(payload["reason"], RETURN_LABEL)
 
     def test_unknown_token_returns_404(self):
         response = self._post_scan(
@@ -712,17 +724,24 @@ class DashboardDoorOpeningTests(TestCase):
         open_door.assert_not_called()
         self.assertFalse(response.json()["access"])
 
-    def test_second_scan_same_day_leaves_the_door_closed(self):
+    def test_a_return_the_same_day_opens_the_door(self):
+        """
+        La porte s'ouvre au retour, et c'est voulu.
+
+        Le lecteur a reconnaissance faciale decide seul : il ouvrait deja,
+        quoi que reponde l'application. Garder la porte fermee ici ne fermait
+        rien et contredisait le terminal.
+        """
         with patch("access.hikvision.HikvisionClient.open_door"):
             self._scan(self.member.qr_code)
 
         with patch("access.hikvision.HikvisionClient.open_door") as open_door:
             response = self._scan(self.member.qr_code)
 
-        open_door.assert_not_called()
+        open_door.assert_called_once()
         payload = response.json()
-        self.assertFalse(payload["access"])
-        self.assertEqual(payload["reason"], DOUBLE_SCAN_REASON)
+        self.assertTrue(payload["access"])
+        self.assertEqual(payload["reason"], RETURN_LABEL)
 
     def test_gym_without_device_still_grants_access(self):
         AccessDevice.objects.filter(pk=self.device.pk).delete()
@@ -764,17 +783,17 @@ class DashboardDoorOpeningTests(TestCase):
         open_door.assert_not_called()
         self.assertFalse(response.json()["access"])
 
-    def test_manual_entry_second_time_same_day_leaves_the_door_closed(self):
+    def test_manual_entry_return_the_same_day_opens_the_door(self):
         with patch("access.hikvision.HikvisionClient.open_door"):
             self._manual_entry(self.member)
 
         with patch("access.hikvision.HikvisionClient.open_door") as open_door:
             response = self._manual_entry(self.member)
 
-        open_door.assert_not_called()
+        open_door.assert_called_once()
         payload = response.json()
-        self.assertFalse(payload["access"])
-        self.assertEqual(payload["reason"], DOUBLE_SCAN_REASON)
+        self.assertTrue(payload["access"])
+        self.assertEqual(payload["reason"], RETURN_LABEL)
 
     def test_manual_entry_survives_a_door_failure(self):
         with patch(
@@ -1698,3 +1717,183 @@ class DeviceScreenMessagesTests(TestCase):
         envoye = appel.mock_calls[0].kwargs["payload"]
         types = {e["promptType"] for e in envoye["PromptList"]}
         self.assertEqual(types, set(hikvision.HikvisionClient.PROMPT_TYPES))
+
+
+class ReturnPassageTests(TestCase):
+    """Un membre deja entre aujourd'hui repasse devant le lecteur."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Retour", slug="org-retour"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Retour",
+            slug="gym-retour",
+            subdomain="gym-retour",
+        )
+        module, _ = Module.objects.get_or_create(
+            code="ACCESS", defaults={"name": "Access"}
+        )
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=module, defaults={"is_active": True}
+        )
+        self.device = AccessDevice.objects.create(
+            gym=self.gym, name="Terminal", host="10.0.0.9", password="secret"
+        )
+        self.member = Member.objects.create(
+            gym=self.gym,
+            first_name="Alice",
+            last_name="Nzuzi",
+            phone="+243870000001",
+        )
+        plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Mensuel", price=30, duration_days=30
+        )
+        today = timezone.localdate()
+        MemberSubscription.objects.create(
+            gym=self.gym,
+            member=self.member,
+            plan=plan,
+            start_date=today - timedelta(days=1),
+            end_date=today + timedelta(days=29),
+            is_active=True,
+        )
+        self.url = reverse("access:device_webhook", args=[self.device.webhook_token])
+
+        patcher = patch("access.hikvision.HikvisionClient.open_door")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _passage(self):
+        charge = {
+            "AccessControllerEvent": {
+                "employeeNoString": enrollment.employee_no(self.member),
+                "currentVerifyMode": "face",
+            }
+        }
+        return self.client.post(
+            self.url, data=json.dumps(charge), content_type="application/json"
+        )
+
+    # --- Ce que voit le membre a la porte ------------------------------------
+
+    def test_the_first_passage_is_a_plain_entry(self):
+        reponse = self._passage()
+
+        self.assertTrue(reponse.json()["access"])
+        log = AccessLog.objects.get(member=self.member)
+        self.assertFalse(log.is_return)
+
+    def test_a_second_passage_is_granted_not_refused(self):
+        # L'application doit dire la meme chose que le lecteur, qui decide
+        # seul et ouvre : sinon le membre voit un feu vert sur le terminal
+        # pendant que le journal enregistre un refus.
+        self._passage()
+        reponse = self._passage()
+
+        self.assertTrue(reponse.json()["access"])
+
+    def test_a_second_passage_is_marked_as_a_return(self):
+        self._passage()
+        self._passage()
+
+        logs = AccessLog.objects.filter(member=self.member).order_by("id")
+        self.assertEqual(logs.count(), 2)
+        self.assertFalse(logs[0].is_return)
+        self.assertTrue(logs[1].is_return)
+        self.assertEqual(logs[1].denial_reason, RETURN_LABEL)
+
+    def test_a_third_passage_is_also_a_return(self):
+        self._passage()
+        self._passage()
+        self._passage()
+
+        retours = AccessLog.objects.filter(member=self.member, is_return=True)
+        self.assertEqual(retours.count(), 2)
+
+    # --- Ce que comptent les statistiques ------------------------------------
+
+    def test_returns_never_inflate_the_daily_attendance(self):
+        self._passage()
+        self._passage()
+        self._passage()
+
+        stats = self.client.post(
+            self.url,
+            data=json.dumps({"AccessControllerEvent": {"employeeNoString": "0"}}),
+            content_type="application/json",
+        )
+        # Le comptage se lit sur un passage reel : on le relit directement.
+        from access.views import _today_stats
+
+        compte = _today_stats(self.gym)
+        self.assertEqual(compte["entries"], 1)
+        self.assertEqual(compte["returns"], 2)
+        self.assertEqual(compte["denied"], 0)
+
+    def test_two_different_members_count_two_visits(self):
+        autre = Member.objects.create(
+            gym=self.gym,
+            first_name="Bruno",
+            last_name="Kalala",
+            phone="+243870000002",
+        )
+        plan = SubscriptionPlan.objects.get(gym=self.gym)
+        today = timezone.localdate()
+        MemberSubscription.objects.create(
+            gym=self.gym,
+            member=autre,
+            plan=plan,
+            start_date=today - timedelta(days=1),
+            end_date=today + timedelta(days=29),
+            is_active=True,
+        )
+
+        self._passage()
+        self.client.post(
+            self.url,
+            data=json.dumps(
+                {"AccessControllerEvent": {"employeeNoString": enrollment.employee_no(autre)}}
+            ),
+            content_type="application/json",
+        )
+
+        from access.views import _today_stats
+
+        self.assertEqual(_today_stats(self.gym)["entries"], 2)
+
+    # --- Un vrai refus reste un refus ------------------------------------------
+
+    def test_a_suspended_member_is_still_refused_on_a_return(self):
+        self._passage()
+        self.member.status = "suspended"
+        self.member.save(update_fields=["status"])
+
+        reponse = self._passage()
+
+        self.assertFalse(reponse.json()["access"])
+        dernier = AccessLog.objects.filter(member=self.member).order_by("-id").first()
+        self.assertFalse(dernier.access_granted)
+        self.assertFalse(dernier.is_return)
+
+    def test_a_member_without_subscription_is_refused_not_marked_a_return(self):
+        MemberSubscription.objects.filter(member=self.member).update(is_active=False)
+
+        reponse = self._passage()
+
+        self.assertFalse(reponse.json()["access"])
+        log = AccessLog.objects.get(member=self.member)
+        self.assertFalse(log.is_return)
+
+    # --- Ce que lit l'equipe ----------------------------------------------------
+
+    def test_the_journal_distinguishes_a_return_from_an_entry(self):
+        self._passage()
+        self._passage()
+
+        from access.views import _serialize_log
+
+        logs = AccessLog.objects.filter(member=self.member).order_by("id")
+        self.assertEqual(_serialize_log(logs[0])["status"], "success")
+        self.assertEqual(_serialize_log(logs[1])["status"], "return")

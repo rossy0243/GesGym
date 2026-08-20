@@ -426,6 +426,7 @@
                 <select class="form-select form-select-sm" style="width:auto;" id="filterHistoriqueStatut" onchange="renderHistorique()">
                     <option value="">Tous les statuts</option>
                     <option value="success">Autorisé</option>
+                    <option value="return">Retour</option>
                     <option value="denied">Refusé</option>
                 </select>
 
@@ -925,7 +926,8 @@ function loadRealtimeAccess() {
             container.innerHTML = "";
 
             data.forEach(log => {
-                let color = log.status === "success" ? "success" : "danger";
+                let color = log.status === "denied" ? "danger"
+                          : log.status === "return" ? "info" : "success";
 
                 container.innerHTML += `
                     <div class="timeline-access-item d-flex justify-content-between border-bottom py-3">
@@ -1156,9 +1158,16 @@ function ensureAgentFilterOption(log) {
 }
 
 function buildHistoryRow(log) {
-    const statusBadge = log.status === "success"
-        ? `<span class="badge bg-success px-3 py-2">Autorise</span>`
-        : `<span class="badge bg-danger px-3 py-2">Refuse</span>${log.reason ? `<small class="d-block text-muted mt-1">${escapeHtml(log.reason)}</small>` : ""}`;
+    let statusBadge;
+    if (log.status === "denied") {
+        statusBadge = `<span class="badge bg-danger px-3 py-2">Refuse</span>${log.reason ? `<small class="d-block text-muted mt-1">${escapeHtml(log.reason)}</small>` : ""}`;
+    } else if (log.status === "return") {
+        // Le membre etait deja entre aujourd'hui : le passage est accorde,
+        // mais il ne compte pas comme une visite supplementaire.
+        statusBadge = `<span class="badge bg-info text-dark px-3 py-2">Retour</span><small class="d-block text-muted mt-1">Deja entre aujourd'hui</small>`;
+    } else {
+        statusBadge = `<span class="badge bg-success px-3 py-2">Autorise</span>`;
+    }
 
     return `
         <tr data-history-row

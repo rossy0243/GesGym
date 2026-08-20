@@ -81,6 +81,7 @@ Valeurs possibles `BRAND_CHOICES` :
 | `access_granted` | BooleanField |
 | `device_used` | CharField |
 | `device` | ForeignKey |
+| `is_return` | BooleanField |
 | `denial_reason` | CharField |
 | `scanned_by` | ForeignKey |
 
@@ -173,8 +174,8 @@ meilleure source pour les cas limites a montrer en formation.
 ### AccessControlTests
 - access log rejects cross gym member
 - manual access creates scoped log for current gym
-- manual access denies second entry same day
-- qr access denies second scan same day
+- manual access accepts a return the same day — _Un membre deja entre aujourd'hui repasse : il est ressorti puis revenu._
+- qr access accepts a return the same day
 - qr access denies expired qr code
 - manual access still allows member when qr is expired
 - qr access allows multiple different members in sequence
@@ -206,7 +207,7 @@ meilleure source pour les cas limites a montrer en formation.
 - unknown credential is refused without log
 - member from another gym is not resolved
 - expired qr code is refused
-- second scan same day is refused
+- a return the same day is accepted
 - unknown token returns 404
 - inactive device is rejected
 - get is not allowed
@@ -221,11 +222,11 @@ meilleure source pour les cas limites a montrer en formation.
 
 - valid qr opens the door
 - expired qr leaves the door closed
-- second scan same day leaves the door closed
+- a return the same day opens the door — _La porte s'ouvre au retour, et c'est voulu._
 - gym without device still grants access
 - manual entry opens the door
 - manual entry without subscription leaves the door closed
-- manual entry second time same day leaves the door closed
+- manual entry return the same day opens the door
 - manual entry survives a door failure
 
 ### AccessRefusalReasonTests
@@ -310,6 +311,20 @@ meilleure source pour les cas limites a montrer en formation.
 - a reader of another gym is out of reach
 - an empty message is sent as a dash
 - the three prompt types are always sent
+
+### ReturnPassageTests
+
+> Un membre deja entre aujourd'hui repasse devant le lecteur.
+
+- the first passage is a plain entry
+- a second passage is granted not refused
+- a second passage is marked as a return
+- a third passage is also a return
+- returns never inflate the daily attendance
+- two different members count two visits
+- a suspended member is still refused on a return
+- a member without subscription is refused not marked a return
+- the journal distinguishes a return from an entry
 
 ## A completer par un humain
 

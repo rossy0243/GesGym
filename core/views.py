@@ -1373,16 +1373,19 @@ def gym_dashboard(request, gym_id):
         gym=gym,
         check_in_time__date__range=(period_data["previous_start"], period_data["previous_end"]),
     )
-    visits_period = access_period_qs.filter(access_granted=True).count()
-    visits_previous = access_previous_qs.filter(access_granted=True).count()
+    # Un retour n'est pas une nouvelle visite : sans cette exclusion, un
+    # membre ressorti puis revenu compterait double.
+    visits_period = access_period_qs.filter(access_granted=True, is_return=False).count()
+    visits_previous = access_previous_qs.filter(access_granted=True, is_return=False).count()
     unique_visitors_period = access_period_qs.filter(
-        access_granted=True
+        access_granted=True, is_return=False
     ).values("member_id").distinct().count()
     denied_period = access_period_qs.filter(access_granted=False).count()
     today_checkins = AccessLog.objects.filter(
         gym=gym,
         check_in_time__date=today,
         access_granted=True,
+        is_return=False,
     ).count()
     denied_today = AccessLog.objects.filter(
         gym=gym,
@@ -1756,7 +1759,8 @@ def _legacy_reports_dashboard(request):
     daily_visits = AccessLog.objects.filter(
         member__gym=gym,
         check_in_time__date=today,
-        access_granted=True
+        access_granted=True,
+        is_return=False,
     ).count()
 
     denied_access = AccessLog.objects.filter(
@@ -1816,7 +1820,8 @@ def _legacy_reports_dashboard(request):
         member__gym=gym,
         check_in_time__year=current_year,
         check_in_time__month=current_month,
-        access_granted=True
+        access_granted=True,
+        is_return=False,
     ).count()
     
     plans_stats = MemberSubscription.objects.filter(
@@ -1920,6 +1925,7 @@ def reports_dashboard(request):
         gym=gym,
         check_in_time__date__range=(period_data["start_date"], period_data["end_date"]),
         access_granted=True,
+        is_return=False,
     ).count()
     denied_access = AccessLog.objects.filter(
         gym=gym,

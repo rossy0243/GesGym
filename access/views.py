@@ -13,7 +13,10 @@ from . import door
 from .models import AccessLog
 
 
-DOUBLE_SCAN_REASON = "Ce membre est d\u00e9j\u00e0 dans la salle."
+# Ancien refus, devenu une simple mention. Le lecteur decide seul et
+# ouvre : refuser ici affichait un feu vert sur le terminal pendant que
+# le journal enregistrait un refus.
+RETURN_LABEL = "Retour dans la salle"
 EXPIRED_QR_REASON = "QR code expire. Ouvrez l'espace membre pour obtenir le nouveau QR code."
 
 
@@ -102,7 +105,10 @@ def _today_stats(gym):
     )
 
     return {
-        "entries": logs_today.filter(access_granted=True).count(),
+        # Un retour n'est pas une nouvelle visite : sans cette exclusion, un
+        # membre qui ressort et revient compterait double.
+        "entries": logs_today.filter(access_granted=True, is_return=False).count(),
+        "returns": logs_today.filter(is_return=True).count(),
         "denied": logs_today.filter(access_granted=False).count(),
     }
 
@@ -115,14 +121,18 @@ def _record_access(gym, member, user, method, require_valid_qr=False, device=Non
             require_valid_qr=require_valid_qr,
         )
 
-        if access_granted and _member_already_checked_in_today(gym, member):
-            access_granted = False
-            reason = DOUBLE_SCAN_REASON
+        # Un membre deja entre aujourd'hui n'est pas refoule : il est ressorti
+        # puis revenu. On le laisse passer et on marque le passage, pour que la
+        # frequentation continue de compter une visite par membre et par jour.
+        est_un_retour = access_granted and _member_already_checked_in_today(gym, member)
+        if est_un_retour:
+            reason = RETURN_LABEL
 
         log = AccessLog.objects.create(
             gym=gym,
             member=member,
             access_granted=access_granted,
+            is_return=est_un_retour,
             denial_reason=reason,
             device_used=method,
             scanned_by=user,
@@ -143,7 +153,14 @@ def _serialize_log(log):
         "time": checked_at.strftime("%H:%M"),
         "date": checked_at.strftime("%d/%m/%Y"),
         "date_iso": checked_at.strftime("%Y-%m-%d"),
-        "status": "success" if log.access_granted else "denied",
+        # Un retour se distingue d'une premiere entree : l'equipe doit voir
+        # qu'il ne s'agit pas d'une visite supplementaire.
+        "status": (
+            "return" if log.is_return
+            else "success" if log.access_granted
+            else "denied"
+        ),
+        "is_return": log.is_return,
         "reason": log.denial_reason or "",
         "method": log.device_used or "-",
         "agent": log.scanned_by.get_full_name() or log.scanned_by.username if log.scanned_by else "-",
