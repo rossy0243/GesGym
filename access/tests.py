@@ -1290,3 +1290,207 @@ class FaceEnrollmentScreenTests(TestCase):
             )
 
         retrait.assert_called_once_with(enrollment.employee_no(self.member))
+
+
+class FaceEventWebhookTests(TestCase):
+    """Un visage reconnu doit apparaitre au journal d'acces."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Remontee", slug="org-remontee"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Remontee",
+            slug="gym-remontee",
+            subdomain="gym-remontee",
+        )
+        self.device = AccessDevice.objects.create(
+            gym=self.gym, name="Terminal", host="10.0.0.9", password="secret"
+        )
+        self.member = Member.objects.create(
+            gym=self.gym,
+            first_name="Alice",
+            last_name="Nzuzi",
+            phone="+243860000001",
+        )
+        plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Mensuel", price=30, duration_days=30
+        )
+        today = timezone.localdate()
+        MemberSubscription.objects.create(
+            gym=self.gym,
+            member=self.member,
+            plan=plan,
+            start_date=today - timedelta(days=1),
+            end_date=today + timedelta(days=29),
+            is_active=True,
+        )
+        self.url = reverse("access:device_webhook", args=[self.device.webhook_token])
+
+        # Un acces accorde declenche l'ouverture du relais : sans ce garde-fou,
+        # chaque test attendrait l'expiration d'une connexion vers une adresse
+        # fictive.
+        patcher = patch("access.hikvision.HikvisionClient.open_door")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _pousser(self, employee_no):
+        """Imite ce que le lecteur envoie apres une reconnaissance."""
+        charge = {
+            "AccessControllerEvent": {
+                "majorEventType": 5,
+                "subEventType": 75,
+                "employeeNoString": str(employee_no),
+                "currentVerifyMode": "face",
+            }
+        }
+        return self.client.post(
+            self.url, data=json.dumps(charge), content_type="application/json"
+        )
+
+    # --- Le cas normal --------------------------------------------------------
+
+    def test_a_recognised_face_is_written_to_the_access_log(self):
+        response = self._pousser(enrollment.employee_no(self.member))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["access"])
+        log = AccessLog.objects.get(gym=self.gym, member=self.member)
+        self.assertTrue(log.access_granted)
+
+    def test_the_log_says_the_passage_came_from_a_face(self):
+        # L'equipe doit distinguer un passage au visage d'un scan de QR code.
+        self._pousser(enrollment.employee_no(self.member))
+
+        log = AccessLog.objects.get(gym=self.gym, member=self.member)
+        self.assertIn("visage", log.device_used)
+
+    def test_a_face_is_not_refused_for_an_expired_qr_code(self):
+        # Le QR code d'un membre peut etre perime sans que cela concerne son
+        # visage : exiger sa fraicheur refuserait tous les passages faciaux.
+        self.member.qr_code_expires_at = timezone.now() - timedelta(days=1)
+        self.member.save(update_fields=["qr_code_expires_at"])
+
+        response = self._pousser(enrollment.employee_no(self.member))
+
+        self.assertTrue(response.json()["access"])
+
+    # --- Ce qui ne doit pas passer ----------------------------------------------
+
+    def test_a_manual_record_is_not_taken_for_a_member(self):
+        # Le badge d'un employe, cree a la main sur le terminal, porte un
+        # petit numero. Il ne doit jamais etre confondu avec un membre.
+        response = self._pousser("2")
+
+        self.assertFalse(response.json()["access"])
+        self.assertFalse(AccessLog.objects.exists())
+
+    def test_an_unknown_member_is_refused(self):
+        response = self._pousser(enrollment.PLAGE_APPLICATION + 999999)
+
+        self.assertFalse(response.json()["access"])
+        self.assertFalse(AccessLog.objects.exists())
+
+    def test_a_member_of_another_gym_is_refused(self):
+        autre = Gym.objects.create(
+            organization=self.organization,
+            name="Autre salle",
+            slug="autre-remontee",
+            subdomain="autre-remontee",
+        )
+        etranger = Member.objects.create(
+            gym=autre, first_name="Etranger", last_name="X", phone="+243860000009"
+        )
+
+        response = self._pousser(enrollment.employee_no(etranger))
+
+        self.assertFalse(response.json()["access"])
+
+    def test_a_suspended_member_is_refused_and_the_refusal_is_logged(self):
+        self.member.status = "suspended"
+        self.member.save(update_fields=["status"])
+
+        response = self._pousser(enrollment.employee_no(self.member))
+
+        self.assertFalse(response.json()["access"])
+        log = AccessLog.objects.get(gym=self.gym, member=self.member)
+        self.assertFalse(log.access_granted)
+        self.assertTrue(log.denial_reason)
+
+    # --- Le QR code continue de fonctionner --------------------------------------
+
+    def test_a_qr_code_event_still_resolves_the_member(self):
+        charge = {
+            "AccessControllerEvent": {
+                "QRCodeInfo": str(self.member.qr_code),
+            }
+        }
+        response = self.client.post(
+            self.url, data=json.dumps(charge), content_type="application/json"
+        )
+
+        self.assertTrue(response.json()["access"])
+        log = AccessLog.objects.get(gym=self.gym, member=self.member)
+        self.assertNotIn("visage", log.device_used)
+
+
+class ReaderDeclarationTests(TestCase):
+    """L'application doit s'annoncer au lecteur pour recevoir ses evenements."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Annonce", slug="org-annonce"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Annonce",
+            slug="gym-annonce",
+            subdomain="gym-annonce",
+        )
+        self.device = AccessDevice.objects.create(
+            gym=self.gym, name="Terminal", host="10.0.0.9", password="secret"
+        )
+
+    def test_the_declared_url_carries_the_device_token(self):
+        url = enrollment.url_de_notification(self.device, 8000, adresse="10.0.0.1")
+
+        self.assertIn(str(self.device.webhook_token), url)
+        self.assertTrue(url.startswith("http://10.0.0.1:8000/"))
+
+    def test_the_declared_url_never_points_at_the_loopback(self):
+        # Le lecteur joindrait alors sa propre boucle locale, pas le serveur.
+        url = enrollment.url_de_notification(self.device, 8000, adresse="10.0.0.1")
+
+        self.assertNotIn("127.0.0.1", url)
+        self.assertNotIn("localhost", url)
+
+    def test_the_reader_receives_address_port_and_subscription(self):
+        with patch.object(hikvision.HikvisionClient, "request") as appel:
+            enrollment.declarer_application(self.device, 8000, adresse="10.0.0.1")
+
+        corps = appel.mock_calls[0].kwargs["body"]
+        self.assertIn("<ipAddress>10.0.0.1</ipAddress>", corps)
+        self.assertIn("<portNo>8000</portNo>", corps)
+        # Sans abonnement aux evenements, le lecteur connait l'adresse mais
+        # n'envoie rien.
+        self.assertIn("<SubscribeEvent>", corps)
+        # Le materiel refuse "json" en minuscules.
+        self.assertIn("<parameterFormatType>JSON</parameterFormatType>", corps)
+
+    def test_a_path_longer_than_the_hardware_limit_is_refused(self):
+        client = hikvision.HikvisionClient("10.0.0.9", "admin", "x")
+
+        with self.assertRaises(hikvision.HikvisionError):
+            client.set_event_notification("http://10.0.0.1:8000/" + "a" * 200)
+
+    def test_an_unreachable_reader_is_reported_plainly(self):
+        with patch.object(
+            hikvision.HikvisionClient,
+            "set_event_notification",
+            side_effect=hikvision.HikvisionUnreachable("cable arrache"),
+        ):
+            with self.assertRaises(enrollment.EnrollmentError) as capture:
+                enrollment.declarer_application(self.device, 8000, adresse="10.0.0.1")
+
+        self.assertIn("injoignable", str(capture.exception))

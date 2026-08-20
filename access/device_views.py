@@ -22,14 +22,21 @@ from members.models import Member
 from smartclub.access_control import ACCESS_DEVICE_ROLES
 from smartclub.decorators import module_required, role_required
 
-from . import door, hikvision
+from . import door, enrollment, hikvision
 from .models import AccessDevice
 from .views import _record_access, _today_stats
 
 
 logger = logging.getLogger("access")
 
-UNKNOWN_CREDENTIAL_REASON = "QR code inconnu pour cette salle."
+UNKNOWN_CREDENTIAL_REASON = "Identifiant inconnu pour cette salle."
+
+
+def _libelle_methode(device, nature):
+    """Ce que lira l'equipe dans le journal d'acces."""
+    if nature == "lecteur":
+        return f"{device.name} (visage)"
+    return device.name
 EMPTY_CREDENTIAL_REASON = "Aucun identifiant lisible dans le scan."
 
 
@@ -335,7 +342,7 @@ def device_webhook(request, token):
         # Evenements de service (etat porte, sabotage...) : rien a journaliser.
         return JsonResponse({"access": False, "reason": EMPTY_CREDENTIAL_REASON})
 
-    member = _resolve_member(device.gym, credential)
+    member, nature = _resolve_member(device.gym, credential)
     if member is None:
         return JsonResponse({"access": False, "reason": UNKNOWN_CREDENTIAL_REASON})
 
@@ -343,8 +350,10 @@ def device_webhook(request, token):
         gym=device.gym,
         member=member,
         user=None,
-        method=device.name,
-        require_valid_qr=True,
+        method=_libelle_methode(device, nature),
+        # Un visage n'a pas de QR code : verifier sa peremption refuserait
+        # tous les passages faits en reconnaissance faciale.
+        require_valid_qr=(nature == "qr"),
         device=device,
     )
 
@@ -365,15 +374,37 @@ def device_webhook(request, token):
 
 
 def _resolve_member(gym, credential):
-    """Retrouve le membre a partir du contenu scanne (UUID du QR code)."""
+    """
+    Retrouve le membre derriere l'identifiant remonte par le lecteur.
+
+    Deux formes coexistent selon le mode de presentation :
+
+    * un QR code, dont le contenu est l'UUID de la fiche membre ;
+    * un ``employeeNo``, remonte apres une reconnaissance faciale ou un badge.
+      C'est le numero que l'application a pose sur le lecteur.
+
+    Renvoie aussi la nature reconnue : un visage n'a pas de QR code a valider,
+    exiger sa fraicheur refuserait tous les passages.
+    """
     import uuid as uuid_module
 
-    try:
-        qr_code = uuid_module.UUID(credential.strip())
-    except (ValueError, AttributeError):
-        return None
+    brut = (credential or "").strip()
+    if not brut:
+        return None, ""
 
-    return Member.objects.filter(gym=gym, qr_code=qr_code).first()
+    try:
+        qr_code = uuid_module.UUID(brut)
+    except (ValueError, AttributeError):
+        pass
+    else:
+        return Member.objects.filter(gym=gym, qr_code=qr_code).first(), "qr"
+
+    # Fiche posee par l'application : visage reconnu, badge ou empreinte.
+    member_id = enrollment.member_id_depuis(brut)
+    if member_id is None:
+        return None, "inconnu"
+
+    return Member.objects.filter(gym=gym, id=member_id).first(), "lecteur"
 
 
 def _request_payload(request):

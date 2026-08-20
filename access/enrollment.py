@@ -228,3 +228,71 @@ def propager(member, image_bytes=None):
             )
             resultats.append({"device": device.name, "ok": False, "error": str(exc)})
     return resultats
+
+
+# ---------------------------------------------------------------------------
+# Declaration de l'application au lecteur
+# ---------------------------------------------------------------------------
+#
+# Le lecteur decide seul a la porte, mais il doit prevenir l'application de
+# chaque passage, sinon rien n'apparait au journal d'acces. Pour cela il lui
+# faut une adresse joignable **depuis lui** : celle du serveur sur le reseau
+# local, jamais 127.0.0.1.
+
+
+def adresse_serveur_vue_du_lecteur(device):
+    """
+    Adresse IP par laquelle le lecteur peut joindre ce serveur.
+
+    On la deduit de la route reelle vers le lecteur plutot que de la deviner :
+    une machine a souvent plusieurs interfaces (Wi-Fi, Ethernet, VPN) et seule
+    celle qui porte la route vers le lecteur convient.
+    """
+    import socket
+
+    sonde = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # Aucun paquet n'est emis : connect() sur UDP choisit juste l'interface.
+        sonde.connect((device.host, device.port or 80))
+        return sonde.getsockname()[0]
+    except OSError as exc:
+        raise EnrollmentError(
+            f"Impossible de determiner par quelle adresse le lecteur "
+            f"({device.host}) verrait ce serveur : {exc}"
+        ) from exc
+    finally:
+        sonde.close()
+
+
+def url_de_notification(device, port_serveur, adresse=None):
+    """URL complete du webhook de ce lecteur, vue depuis le lecteur."""
+    from django.urls import reverse
+
+    hote = adresse or adresse_serveur_vue_du_lecteur(device)
+    chemin = reverse("access:device_webhook", args=[device.webhook_token])
+    return f"http://{hote}:{port_serveur}{chemin}"
+
+
+def declarer_application(device, port_serveur, adresse=None):
+    """
+    Apprend au lecteur ou pousser ses evenements.
+
+    Sans cette declaration, un visage reconnu ouvre bien la porte mais
+    n'apparait nulle part : ni journal d'acces, ni frequentation, ni
+    "dernier acces" sur la fiche du membre.
+    """
+    url = url_de_notification(device, port_serveur, adresse)
+    client = hikvision.HikvisionClient.from_device(device, timeout=25)
+
+    try:
+        client.set_event_notification(url)
+    except hikvision.HikvisionUnreachable as exc:
+        raise EnrollmentError(f"Lecteur injoignable ({device.host}).") from exc
+    except hikvision.HikvisionError as exc:
+        raise EnrollmentError(f"Le lecteur a refuse la declaration : {exc}") from exc
+
+    device.last_seen_at = timezone.now()
+    device.last_error = ""
+    device.save(update_fields=["last_seen_at", "last_error", "updated_at"])
+
+    return url

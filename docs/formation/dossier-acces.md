@@ -263,6 +263,29 @@ meilleure source pour les cas limites a montrer en formation.
 - the enrolment is traced in the sensitive log
 - removing takes the member off every reader
 
+### FaceEventWebhookTests
+
+> Un visage reconnu doit apparaitre au journal d'acces.
+
+- a recognised face is written to the access log
+- the log says the passage came from a face
+- a face is not refused for an expired qr code
+- a manual record is not taken for a member
+- an unknown member is refused
+- a member of another gym is refused
+- a suspended member is refused and the refusal is logged
+- a qr code event still resolves the member
+
+### ReaderDeclarationTests
+
+> L'application doit s'annoncer au lecteur pour recevoir ses evenements.
+
+- the declared url carries the device token
+- the declared url never points at the loopback
+- the reader receives address port and subscription
+- a path longer than the hardware limit is refused
+- an unreachable reader is reported plainly
+
 ## A completer par un humain
 
 Le code ne dit pas tout. Avant de rediger, il faut trancher :

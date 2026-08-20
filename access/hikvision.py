@@ -35,6 +35,9 @@ BRAND_HIKVISION = "hikvision"
 JPEG_DEBUT = bytes.fromhex("ffd8ff")
 JPEG_FIN = bytes.fromhex("ffd9")
 
+# Longueur maximale du chemin de notification acceptee par le materiel.
+URL_LONGUEUR_MAX = 128
+
 
 class HikvisionError(Exception):
     """Erreur de dialogue avec un lecteur."""
@@ -581,37 +584,73 @@ class HikvisionClient:
             "/ISAPI/AccessControl/CaptureFaceData", method="POST", body=corps
         )
 
-    def set_event_notification(self, url, protocol="HTTP", host_index=1):
+    def set_event_notification(self, url, host_index=1, heartbeat=30):
         """
-        Declare l'URL de notification vers laquelle le lecteur pousse ses evenements.
+        Declare ou l'application ecoute, et abonne le lecteur a ses evenements.
 
-        ``url`` doit etre joignable depuis le lecteur (adresse LAN du serveur).
+        Deux choses distinctes, et il faut les deux : sans l'adresse le lecteur
+        ne sait pas ou pousser, sans l'abonnement il connait l'adresse mais
+        n'envoie rien.
+
+        ``url`` doit etre joignable **depuis le lecteur**, donc l'adresse du
+        serveur sur le reseau local, jamais 127.0.0.1.
         """
         parsed = urlparse(url)
+        chemin = parsed.path or "/"
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        protocole = "HTTPS" if parsed.scheme == "https" else "HTTP"
+
+        if len(chemin) > URL_LONGUEUR_MAX:
+            raise HikvisionError(
+                f"Chemin de notification trop long pour le lecteur "
+                f"({len(chemin)} caracteres, maximum {URL_LONGUEUR_MAX})."
+            )
 
         body = (
             '<?xml version="1.0" encoding="UTF-8"?>'
             '<HttpHostNotification version="2.0">'
             f"<id>{host_index}</id>"
-            "<url>{path}</url>"
-            "<protocolType>{protocol}</protocolType>"
-            "<parameterFormatType>json</parameterFormatType>"
+            f"<url>{chemin}</url>"
+            f"<protocolType>{protocole}</protocolType>"
+            # Le lecteur annonce "XML,JSON" : la casse compte, "json" est refuse.
+            "<parameterFormatType>JSON</parameterFormatType>"
             "<addressingFormatType>ipaddress</addressingFormatType>"
-            "<ipAddress>{ip}</ipAddress>"
-            "<portNo>{port}</portNo>"
+            f"<ipAddress>{parsed.hostname or ''}</ipAddress>"
+            f"<portNo>{port}</portNo>"
             "<httpAuthenticationMethod>none</httpAuthenticationMethod>"
+            "<SubscribeEvent>"
+            f"<heartbeat>{heartbeat}</heartbeat>"
+            # "all" plutot que "list" : le mode liste exige d'enumerer chaque
+            # sous-code d'evenement, et le lecteur refuse un <Event> qui ne
+            # porte que son type. On s'abonne a tout et on filtre a l'arrivee.
+            "<eventMode>all</eventMode>"
+            "</SubscribeEvent>"
             "</HttpHostNotification>"
-        ).format(
-            path=parsed.path or "/",
-            protocol=protocol,
-            ip=parsed.hostname or "",
-            port=parsed.port or (443 if parsed.scheme == "https" else 80),
         )
         return self.request(
             f"/ISAPI/Event/notification/httpHosts/{host_index}",
             method="PUT",
             body=body,
         )
+
+    def get_event_notification(self, host_index=1):
+        """Adresse actuellement declaree, pour verifier ce que porte le lecteur."""
+        brut = self.request(f"/ISAPI/Event/notification/httpHosts/{host_index}")
+
+        def valeur(balise):
+            debut = brut.find(f"<{balise}>")
+            if debut == -1:
+                return ""
+            debut += len(balise) + 2
+            return brut[debut : brut.find(f"</{balise}>", debut)].strip()
+
+        return {
+            "url": valeur("url"),
+            "ip": valeur("ipAddress"),
+            "port": valeur("portNo"),
+            "protocole": valeur("protocolType"),
+            "format": valeur("parameterFormatType"),
+        }
 
 
 # ---------------------------------------------------------------------------
