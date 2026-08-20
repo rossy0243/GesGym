@@ -50,6 +50,16 @@ SETTINGS_LANDING_ROLES = frozenset({"owner", "commercial"})
 # aurait ete exclu sans que rien ne le signale.
 DASHBOARD_SALES_ROLES = frozenset({"owner", "manager", "cashier"})
 
+# Quels comptes chacun peut creer, modifier et voir dans la liste du personnel.
+# Regle de fond : on ne delegue pas un droit qu'on n'a pas soi-meme.
+#
+# Le commercial retouche la vitrine publique, qui vaut pour toute
+# l'organisation. Un gerant n'y a pas acces : lui laisser creer un commercial
+# reviendrait a lui offrir ce droit par personne interposee. La creation d'un
+# commercial reste donc au proprietaire.
+EMPLOYEE_ROLES_BY_OWNER = ("manager", "commercial", "coach", "reception", "cashier")
+EMPLOYEE_ROLES_BY_MANAGER = ("coach", "reception", "cashier")
+
 
 def current_role(request):
     """Retourne le role courant deja resolu par le middleware multi-tenant."""

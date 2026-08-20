@@ -289,7 +289,10 @@ meilleure source pour les cas limites a montrer en formation.
 
 > Le role est declare partout ou il doit l'etre.
 
-- the role is offered when creating an employee
+- the role is declared among the internal roles
+- the owner is actually offered the role in the form — _Verifie la liste **effective** du formulaire, pas la liste declaree._
+- a manager cannot create a commercial — _On ne delegue pas un droit qu'on n'a pas._
+- every internal role can be created by someone
 - an unknown role gets no permission at all
 - the commercial is absent from the sensitive sets
 - the dashboard sales set keeps its former members

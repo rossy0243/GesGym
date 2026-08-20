@@ -20,11 +20,13 @@ from coaching.kpis import build_coaching_kpis
 from coaching.models import Coach, CoachingFeedback, CoachingFollowUp, GroupCoachingProgram
 from compte.models import User
 from compte.models import UserGymRole
-from core.forms import INTERNAL_ROLE_CHOICES
+from core.forms import INTERNAL_ROLE_CHOICES, InternalEmployeeForm
 from members.models import MemberPreRegistration
 from organizations.models import LandingFaq
 from smartclub.access_control import (
     DASHBOARD_ROLES,
+    EMPLOYEE_ROLES_BY_MANAGER,
+    EMPLOYEE_ROLES_BY_OWNER,
     DASHBOARD_SALES_ROLES,
     MACHINE_ROLES,
     MEMBER_DELETE_ROLES,
@@ -3225,12 +3227,70 @@ class CommercialRoleTests(TestCase):
 class CommercialRoleWiringTests(TestCase):
     """Le role est declare partout ou il doit l'etre."""
 
-    def test_the_role_is_offered_when_creating_an_employee(self):
+    def test_the_role_is_declared_among_the_internal_roles(self):
         valeurs = [valeur for valeur, _ in INTERNAL_ROLE_CHOICES]
 
         self.assertIn("commercial", valeurs)
         # Le proprietaire ne se cree pas depuis ce formulaire.
         self.assertNotIn("owner", valeurs)
+
+    def test_the_owner_is_actually_offered_the_role_in_the_form(self):
+        """
+        Verifie la liste **effective** du formulaire, pas la liste declaree.
+
+        Un second filtre restreint les roles selon qui ouvre la page : le
+        premier test seul laissait passer un role declare mais jamais propose.
+        """
+        organization = Organization.objects.create(
+            name="Org Offre", slug="org-offre"
+        )
+        gym = Gym.objects.create(
+            organization=organization,
+            name="Gym Offre",
+            slug="gym-offre",
+            subdomain="gym-offre",
+        )
+        owner = User.objects.create_user(
+            username="proprio-offre",
+            password="pass12345",
+            owned_organization=organization,
+        )
+        self.client.force_login(owner)
+        session = self.client.session
+        session["current_gym_id"] = gym.id
+        session.save()
+
+        formulaire = InternalEmployeeForm(
+            organization=organization,
+            gyms=Gym.objects.filter(id=gym.id),
+            allowed_roles=list(EMPLOYEE_ROLES_BY_OWNER),
+        )
+        proposes = [valeur for valeur, _ in formulaire.fields["role"].choices]
+
+        self.assertIn("commercial", proposes)
+
+    def test_a_manager_cannot_create_a_commercial(self):
+        """
+        On ne delegue pas un droit qu'on n'a pas.
+
+        Le commercial retouche la vitrine, qui vaut pour toute l'organisation.
+        Un gerant n'y a pas acces : lui laisser creer un commercial reviendrait
+        a lui offrir ce droit par personne interposee.
+        """
+        self.assertNotIn("commercial", EMPLOYEE_ROLES_BY_MANAGER)
+        self.assertIn("commercial", EMPLOYEE_ROLES_BY_OWNER)
+
+    def test_every_internal_role_can_be_created_by_someone(self):
+        # Garde-fou pour le prochain role ajoute : declare mais absent des deux
+        # listes, il serait invisible et intouchable.
+        declares = {valeur for valeur, _ in INTERNAL_ROLE_CHOICES}
+        creables = set(EMPLOYEE_ROLES_BY_OWNER) | set(EMPLOYEE_ROLES_BY_MANAGER)
+
+        self.assertEqual(
+            declares - creables,
+            set(),
+            "Ces roles sont declares mais personne ne peut les creer.",
+        )
 
     def test_an_unknown_role_gets_no_permission_at_all(self):
         # C'est ce qui rend l'ajout d'un role sans danger : l'echec est ferme.

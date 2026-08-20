@@ -47,6 +47,8 @@ from .accounting_reports import (
     get_report_section,
 )
 from smartclub.access_control import (
+    EMPLOYEE_ROLES_BY_MANAGER,
+    EMPLOYEE_ROLES_BY_OWNER,
     DASHBOARD_SALES_ROLES,
     SETTINGS_GYM_CONTACT_ROLES,
     SETTINGS_LANDING_ROLES,
@@ -608,9 +610,16 @@ def _scoped_identity_change_blocked(user, role):
 
 
 def _employee_role_values_for_request(request):
+    """
+    Comptes que l'utilisateur courant peut creer, modifier et voir.
+
+    Cette liste ne sert pas qu'a la liste deroulante : elle filtre aussi la
+    liste du personnel et garde les actions de modification. Un role absent
+    d'ici est invisible et intouchable, pas seulement impossible a creer.
+    """
     if current_role(request) == "owner":
-        return ["manager", "coach", "reception", "cashier"]
-    return ["coach", "reception", "cashier"]
+        return list(EMPLOYEE_ROLES_BY_OWNER)
+    return list(EMPLOYEE_ROLES_BY_MANAGER)
 
 
 def _refuse_settings_action(request, action, reason, target="", **metadata):
