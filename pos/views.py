@@ -36,6 +36,11 @@ def _to_decimal(value, field_label):
         raise ValidationError(f"{field_label} invalide.") from exc
 
 
+# Nombre de clients renvoyes par la recherche du caissier. Assez pour
+# choisir sans faire defiler, assez peu pour rester lisible au comptoir.
+MEMBER_SEARCH_LIMIT = 12
+
+
 def _validation_message(exc):
     return exc.messages[0] if getattr(exc, "messages", None) else str(exc)
 
@@ -44,12 +49,30 @@ def _validation_message(exc):
 @role_required(POS_CASHIER_ROLES)
 @module_required("POS")
 def search_members(request):
-    query = request.GET.get("q", "")
-    members = Member.objects.filter(gym=request.gym, is_active=True).filter(
-        Q(first_name__icontains=query)
-        | Q(last_name__icontains=query)
-        | Q(phone__icontains=query)
-    )[:10]
+    """
+    Clients correspondant a la saisie du caissier.
+
+    La liste complete n'est plus rendue dans la page : une salle qui grandit
+    ferait grossir la caisse a chaque chargement. On interroge ici a la
+    frappe, et on ne renvoie qu'une poignee de resultats.
+
+    ``total`` permet a l'ecran de dire qu'il en existe d'autres, plutot que de
+    laisser croire que la recherche a tout trouve.
+    """
+    query = (request.GET.get("q") or "").strip()
+
+    resultats = Member.objects.filter(gym=request.gym, is_active=True)
+    if query:
+        resultats = resultats.filter(
+            Q(first_name__icontains=query)
+            | Q(last_name__icontains=query)
+            | Q(phone__icontains=query)
+        )
+
+    total = resultats.count()
+    # Un nom trop court ramenerait la moitie du fichier : on borne, et on
+    # ordonne pour que deux recherches identiques donnent le meme ordre.
+    members = resultats.order_by("first_name", "last_name", "id")[:MEMBER_SEARCH_LIMIT]
 
     data = [
         {
@@ -62,7 +85,11 @@ def search_members(request):
         for member in members
     ]
 
-    return JsonResponse({"members": data})
+    return JsonResponse({
+        "members": data,
+        "total": total,
+        "tronque": total > len(data),
+    })
 
 
 @login_required
@@ -208,7 +235,9 @@ def cashier_dashboard(request):
 
         return redirect("pos:cashier_dashboard")
 
-    members = Member.objects.filter(gym=gym, is_active=True)
+    # Les clients ne sont plus rendus dans la page : le champ de recherche du
+    # nouveau paiement interroge search_members a la frappe. Les charger ici
+    # ferait grossir la caisse a chaque ouverture sans que rien ne s'en serve.
     plans = SubscriptionPlan.objects.filter(gym=gym, is_active=True)
     products = Product.objects.filter(gym=gym, is_active=True, quantity__gt=0).order_by("name")
     latest_exchange_rate = ExchangeRate.objects.filter(gym=gym).order_by("-date", "-created_at").first()
@@ -236,7 +265,6 @@ def cashier_dashboard(request):
         request,
         "pos/cashier.html",
         {
-            "members": members,
             "plans": plans,
             "products": products,
             "payments": payments,

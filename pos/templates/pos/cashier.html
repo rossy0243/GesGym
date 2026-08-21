@@ -107,6 +107,72 @@
     color: #b91c1c;
 }
 
+/* Recherche de client dans le nouveau paiement. La liste des resultats
+   flotte au-dessus du formulaire : elle ne doit pas repousser les champs
+   suivants a chaque frappe. */
+.recherche-client {
+    position: relative;
+}
+
+.recherche-client .resultats-client {
+    position: absolute;
+    z-index: 20;
+    left: 0;
+    right: 0;
+    max-height: 300px;
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 12px;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+    margin-top: 4px;
+}
+
+.recherche-client .resultat {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.recherche-client .resultat:last-child {
+    border-bottom: none;
+}
+
+/* Survol et navigation au clavier partagent le meme aspect : l'operateur ne
+   doit pas avoir a deviner quelle ligne sera retenue. */
+.recherche-client .resultat:hover,
+.recherche-client .resultat.actif {
+    background: #F7EFD9;
+}
+
+.recherche-client .resultat img,
+.recherche-client .client-choisi img {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.recherche-client .client-choisi {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 12px;
+    background: #fbfbf8;
+}
+
+.recherche-client .vide {
+    padding: 14px 12px;
+    color: #64748b;
+    font-size: .92rem;
+}
+
 .cashier-stat-card {
     border: 1px solid rgba(148, 163, 184, 0.15);
     border-radius: 16px;
@@ -542,13 +608,44 @@
                     </div>
 
                     <div class="mb-3" data-sale-section="subscription">
-                        <label class="form-label">Client</label>
-                        <select name="member" id="memberSelect" class="form-select" required>
-                            <option value="">-- Sélectionner un client --</option>
-                            {% for m in members %}
-                                <option value="{{ m.id }}">{{ m.first_name }} {{ m.last_name }} ({{ m.phone }})</option>
-                            {% endfor %}
-                        </select>
+                        <label class="form-label" for="memberSearchInput">Client</label>
+
+                        {% comment %}
+                        La liste complete n'est plus rendue ici : une salle qui
+                        grandit alourdissait la caisse a chaque chargement, et
+                        faire defiler des centaines de noms au comptoir n'est
+                        pas tenable. On interroge le serveur a la frappe.
+
+                        #memberSelect reste le porteur de la valeur envoyee, et
+                        garde son identifiant : le code qui active ou desactive
+                        la section selon le type de vente continue de fonctionner.
+                        {% endcomment %}
+                        <div class="recherche-client" id="memberPicker">
+                            <input type="text"
+                                   id="memberSearchInput"
+                                   class="form-control"
+                                   placeholder="Tapez un nom ou un numero de telephone"
+                                   autocomplete="off"
+                                   role="combobox"
+                                   aria-expanded="false"
+                                   aria-autocomplete="list"
+                                   aria-controls="memberResults">
+                            <input type="hidden" name="member" id="memberSelect">
+
+                            <div class="client-choisi d-none" id="memberChosen">
+                                <img id="memberChosenPhoto" src="" alt="">
+                                <div class="flex-grow-1">
+                                    <strong id="memberChosenName"></strong>
+                                    <small class="d-block text-muted" id="memberChosenPhone"></small>
+                                </div>
+                                <span id="memberChosenStatus"></span>
+                                <button type="button" class="btn-close ms-2" id="memberClear"
+                                        aria-label="Changer de client"></button>
+                            </div>
+
+                            <div class="resultats-client d-none" id="memberResults" role="listbox"></div>
+                            <small class="text-muted d-none" id="memberHint"></small>
+                        </div>
                     </div>
 
                     <div class="mb-3" data-sale-section="subscription">
@@ -771,6 +868,7 @@
 
 {% block extra_js %}
 <script>window.STATIC_AVATAR_URL = "{% static 'avatar/1.png' %}";</script>
+<script>const RECHERCHE_CLIENTS_URL = "{% url 'pos:search_members' %}";</script>
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
@@ -977,4 +1075,213 @@ document.addEventListener("DOMContentLoaded", function () {
 });
 </script>
 {% endif %}
+<script>
+
+/* ---------------------------------------------------------------------------
+   Recherche de client dans le nouveau paiement.
+
+   La liste n'est plus rendue dans la page : on interroge le serveur pendant la
+   frappe. Trois soins particuliers :
+
+   * la saisie est temporisee, sinon chaque lettre declenche une requete ;
+   * les reponses arrivant dans le desordre, on ignore celles qui ne
+     correspondent plus a la saisie courante : sans cela une reponse lente
+     ecraserait des resultats plus recents ;
+   * modifier la recherche efface le client retenu. Laisser un identifiant d'un
+     cote et un autre nom affiche de l'autre encaisserait pour la mauvaise
+     personne.
+   --------------------------------------------------------------------------- */
+(function () {
+    const champ = document.getElementById('memberSearchInput');
+    const porteur = document.getElementById('memberSelect');
+    const liste = document.getElementById('memberResults');
+    const choisi = document.getElementById('memberChosen');
+    const indication = document.getElementById('memberHint');
+    const bouton = document.getElementById('memberClear');
+
+    if (!champ || !porteur || !liste) {
+        return;
+    }
+
+    const LIBELLES = {
+        active: ['Actif', 'bg-success'],
+        expired: ['Expire', 'bg-danger'],
+        suspended: ['Suspendu', 'bg-warning text-dark']
+    };
+
+    const INVITE = 'Tapez un nom ou un numero de telephone';
+
+    let minuteur = null;
+    let requeteEnCours = 0;
+    let resultats = [];
+    let actif = -1;
+
+    function echapper(texte) {
+        const noeud = document.createElement('div');
+        noeud.textContent = texte == null ? '' : String(texte);
+        return noeud.innerHTML;
+    }
+
+    function badge(statut) {
+        const paire = LIBELLES[statut] || [statut || '-', 'bg-secondary'];
+        return '<span class="badge ' + paire[1] + '">' + echapper(paire[0]) + '</span>';
+    }
+
+    function fermer() {
+        liste.classList.add('d-none');
+        liste.innerHTML = '';
+        champ.setAttribute('aria-expanded', 'false');
+        resultats = [];
+        actif = -1;
+    }
+
+    function oublierLeClient() {
+        porteur.value = '';
+        choisi.classList.add('d-none');
+    }
+
+    function retenir(membre) {
+        porteur.value = membre.id;
+        document.getElementById('memberChosenPhoto').src = membre.photo || window.STATIC_AVATAR_URL || '';
+        document.getElementById('memberChosenName').textContent = membre.name;
+        document.getElementById('memberChosenPhone').textContent = membre.phone || '';
+        document.getElementById('memberChosenStatus').innerHTML = badge(membre.status);
+        choisi.classList.remove('d-none');
+        champ.value = '';
+        champ.placeholder = 'Changer de client';
+        indication.classList.add('d-none');
+        fermer();
+    }
+
+    function surligner(index) {
+        actif = index;
+        liste.querySelectorAll('.resultat').forEach(function (ligne, i) {
+            ligne.classList.toggle('actif', i === index);
+            if (i === index) {
+                ligne.scrollIntoView({ block: 'nearest' });
+            }
+        });
+    }
+
+    function afficher(donnees) {
+        resultats = donnees.members || [];
+        actif = -1;
+
+        if (!resultats.length) {
+            liste.innerHTML = '<div class="vide">Aucun client ne correspond a cette recherche.</div>';
+        } else {
+            liste.innerHTML = resultats.map(function (m, i) {
+                return '<div class="resultat" role="option" data-index="' + i + '">' +
+                    '<img src="' + echapper(m.photo || window.STATIC_AVATAR_URL || '') + '" alt="">' +
+                    '<div class="flex-grow-1">' +
+                        '<strong>' + echapper(m.name) + '</strong>' +
+                        '<small class="d-block text-muted">' + echapper(m.phone) + '</small>' +
+                    '</div>' + badge(m.status) +
+                '</div>';
+            }).join('');
+        }
+
+        liste.classList.remove('d-none');
+        champ.setAttribute('aria-expanded', 'true');
+
+        if (donnees.tronque) {
+            indication.textContent = 'Les ' + resultats.length + ' premiers sur ' +
+                donnees.total + '. Precisez la recherche pour affiner.';
+            indication.classList.remove('d-none');
+        } else {
+            indication.classList.add('d-none');
+        }
+    }
+
+    function chercher(texte) {
+        const jeton = ++requeteEnCours;
+
+        fetch(RECHERCHE_CLIENTS_URL + '?q=' + encodeURIComponent(texte), {
+            credentials: 'same-origin'
+        })
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+        .then(function (donnees) {
+            if (jeton !== requeteEnCours) {
+                return;
+            }
+            afficher(donnees);
+        })
+        .catch(function () {
+            if (jeton !== requeteEnCours) {
+                return;
+            }
+            liste.innerHTML = '<div class="vide">Recherche indisponible. Reessayez.</div>';
+            liste.classList.remove('d-none');
+        });
+    }
+
+    champ.addEventListener('input', function () {
+        oublierLeClient();
+
+        const texte = champ.value.trim();
+        clearTimeout(minuteur);
+
+        if (texte.length < 2) {
+            fermer();
+            indication.classList.add('d-none');
+            return;
+        }
+
+        minuteur = setTimeout(function () { chercher(texte); }, 250);
+    });
+
+    champ.addEventListener('keydown', function (evenement) {
+        if (liste.classList.contains('d-none') || !resultats.length) {
+            return;
+        }
+        if (evenement.key === 'ArrowDown') {
+            evenement.preventDefault();
+            surligner((actif + 1) % resultats.length);
+        } else if (evenement.key === 'ArrowUp') {
+            evenement.preventDefault();
+            surligner(actif <= 0 ? resultats.length - 1 : actif - 1);
+        } else if (evenement.key === 'Enter') {
+            evenement.preventDefault();
+            if (actif >= 0) {
+                retenir(resultats[actif]);
+            }
+        } else if (evenement.key === 'Escape') {
+            fermer();
+        }
+    });
+
+    liste.addEventListener('click', function (evenement) {
+        const ligne = evenement.target.closest('.resultat');
+        if (ligne) {
+            retenir(resultats[Number(ligne.dataset.index)]);
+        }
+    });
+
+    if (bouton) {
+        bouton.addEventListener('click', function () {
+            oublierLeClient();
+            champ.placeholder = INVITE;
+            champ.focus();
+        });
+    }
+
+    document.addEventListener('click', function (evenement) {
+        if (!evenement.target.closest('#memberPicker')) {
+            fermer();
+        }
+    });
+
+    const modalPaiement = document.getElementById('paymentModal');
+    if (modalPaiement) {
+        modalPaiement.addEventListener('show.bs.modal', function () {
+            champ.value = '';
+            champ.placeholder = INVITE;
+            oublierLeClient();
+            fermer();
+            indication.classList.add('d-none');
+        });
+    }
+})();
+</script>
+
 {% endblock %}

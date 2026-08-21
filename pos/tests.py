@@ -1,9 +1,10 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.test import Client, TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from compte.models import User, UserGymRole
 from members.models import Member
@@ -11,6 +12,7 @@ from organizations.models import Gym, GymModule, Module, Organization, Sensitive
 from products.models import Product, StockMovement
 from subscriptions.models import MemberSubscription, SubscriptionPlan
 from .models import CashRegister, ExchangeRate, Payment
+from .views import MEMBER_SEARCH_LIMIT
 from .services import record_product_sale, record_subscription_payment
 
 
@@ -893,3 +895,205 @@ class ExpenseCurrencyTests(TestCase):
         self.assertEqual(trace.metadata["devise"], "USD")
         self.assertEqual(trace.metadata["montant_saisi"], "10.00")
         self.assertEqual(trace.metadata["amount_cdf"], "28000.00")
+
+
+class CashierMemberSearchTests(TestCase):
+    """
+    Le caissier cherche son client au lieu de faire defiler la liste.
+
+    La liste complete n'est plus rendue dans la page : une salle qui grandit
+    faisait grossir la caisse a chaque ouverture.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Recherche", slug="org-recherche"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Recherche",
+            slug="gym-recherche",
+            subdomain="gym-recherche",
+        )
+        self.autre_gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Voisin",
+            slug="gym-voisin-recherche",
+            subdomain="gym-voisin-recherche",
+        )
+        module, _ = Module.objects.get_or_create(code="POS", defaults={"name": "POS"})
+        for salle in (self.gym, self.autre_gym):
+            GymModule.objects.get_or_create(
+                gym=salle, module=module, defaults={"is_active": True}
+            )
+
+        self.caissier = User.objects.create_user(
+            username="caissier-recherche", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.caissier, gym=self.gym, role="cashier", is_active=True
+        )
+        self.client.force_login(self.caissier)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+        self.bruno = Member.objects.create(
+            gym=self.gym, first_name="Bruno", last_name="Kalala",
+            phone="+243840000001",
+        )
+        self.sarah = Member.objects.create(
+            gym=self.gym, first_name="Sarah", last_name="Nkosi",
+            phone="+243850000002",
+        )
+        self.url = reverse("pos:search_members")
+
+    def _chercher(self, q):
+        return self.client.get(self.url, {"q": q}).json()
+
+    # --- Ce que la recherche trouve --------------------------------------------
+
+    def test_a_member_is_found_by_last_name(self):
+        noms = [m["name"] for m in self._chercher("kalala")["members"]]
+
+        self.assertIn("Bruno Kalala", noms)
+        self.assertNotIn("Sarah Nkosi", noms)
+
+    def test_a_member_is_found_by_first_name(self):
+        noms = [m["name"] for m in self._chercher("sarah")["members"]]
+
+        self.assertEqual(noms, ["Sarah Nkosi"])
+
+    def test_a_member_is_found_by_phone_fragment(self):
+        # Au comptoir, le client donne souvent son numero plutot que son nom.
+        noms = [m["name"] for m in self._chercher("840000001")["members"]]
+
+        self.assertEqual(noms, ["Bruno Kalala"])
+
+    def test_the_search_ignores_the_case(self):
+        self.assertTrue(self._chercher("KALALA")["members"])
+
+    def test_a_search_matching_nothing_returns_an_empty_list(self):
+        reponse = self._chercher("zzzzzz")
+
+        self.assertEqual(reponse["members"], [])
+        self.assertEqual(reponse["total"], 0)
+
+    # --- Ce que la recherche ne doit jamais renvoyer ------------------------------
+
+    def test_a_member_of_another_gym_is_never_returned(self):
+        Member.objects.create(
+            gym=self.autre_gym, first_name="Bruno", last_name="Kalala",
+            phone="+243860000003",
+        )
+
+        resultats = self._chercher("kalala")["members"]
+
+        self.assertEqual(len(resultats), 1)
+        self.assertEqual(resultats[0]["id"], self.bruno.id)
+
+    def test_an_inactive_member_is_never_returned(self):
+        self.bruno.is_active = False
+        self.bruno.save(update_fields=["is_active"])
+
+        self.assertEqual(self._chercher("kalala")["members"], [])
+
+    # --- Ce que chaque ligne porte -------------------------------------------------
+
+    def test_each_result_carries_what_the_counter_needs(self):
+        resultat = self._chercher("kalala")["members"][0]
+
+        self.assertEqual(resultat["id"], self.bruno.id)
+        self.assertEqual(resultat["name"], "Bruno Kalala")
+        self.assertEqual(resultat["phone"], "+243840000001")
+        # Le statut evite d'encaisser pour quelqu'un qui vient de resilier.
+        self.assertIn(resultat["status"], ("active", "expired", "suspended"))
+        self.assertTrue(resultat["photo"])
+
+    def test_the_status_follows_the_subscription(self):
+        plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Mensuel", price=30, duration_days=30
+        )
+        today = timezone.localdate()
+        MemberSubscription.objects.create(
+            gym=self.gym, member=self.bruno, plan=plan,
+            start_date=today - timedelta(days=1),
+            end_date=today + timedelta(days=29),
+            is_active=True,
+        )
+
+        resultat = self._chercher("kalala")["members"][0]
+
+        self.assertEqual(resultat["status"], "active")
+
+    # --- Bornage --------------------------------------------------------------------
+
+    def test_the_results_are_capped_and_the_page_says_so(self):
+        # Sans bornage, une recherche trop courte deverserait tout le fichier.
+        for i in range(MEMBER_SEARCH_LIMIT + 5):
+            Member.objects.create(
+                gym=self.gym, first_name="Homonyme", last_name=f"Numero{i}",
+                phone=f"+24387000{i:04d}",
+            )
+
+        reponse = self._chercher("homonyme")
+
+        self.assertEqual(len(reponse["members"]), MEMBER_SEARCH_LIMIT)
+        self.assertEqual(reponse["total"], MEMBER_SEARCH_LIMIT + 5)
+        self.assertTrue(reponse["tronque"])
+
+    def test_a_complete_result_is_not_flagged_as_truncated(self):
+        reponse = self._chercher("kalala")
+
+        self.assertFalse(reponse["tronque"])
+
+    def test_the_order_is_stable_between_two_identical_searches(self):
+        # Sans ordre explicite, deux appels peuvent rendre les memes lignes
+        # dans un ordre different et la selection au clavier devient hasardeuse.
+        for i in range(6):
+            Member.objects.create(
+                gym=self.gym, first_name="Homonyme", last_name=f"Numero{i}",
+                phone=f"+24388000{i:04d}",
+            )
+
+        premier = [m["id"] for m in self._chercher("homonyme")["members"]]
+        second = [m["id"] for m in self._chercher("homonyme")["members"]]
+
+        self.assertEqual(premier, second)
+
+    # --- Acces -----------------------------------------------------------------------
+
+    def test_a_coach_cannot_search_the_clients(self):
+        coach = User.objects.create_user(username="coach-recherche", password="pass12345")
+        UserGymRole.objects.create(
+            user=coach, gym=self.gym, role="coach", is_active=True
+        )
+        self.client.force_login(coach)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+        reponse = self.client.get(self.url, {"q": "kalala"})
+
+        self.assertIn(reponse.status_code, (302, 403))
+
+    # --- La page de caisse -------------------------------------------------------------
+
+    def test_the_cashier_page_no_longer_renders_the_whole_list(self):
+        html = self.client.get(reverse("pos:cashier_dashboard")).content.decode(
+            "utf-8", "replace"
+        )
+
+        self.assertIn("memberSearchInput", html)
+        # Aucune option de client pre-rendue : c'est tout l'interet du changement.
+        self.assertNotIn("Bruno Kalala", html)
+        self.assertNotIn("Sarah Nkosi", html)
+
+    def test_the_hidden_field_still_carries_the_submitted_member(self):
+        # Le formulaire envoie toujours "member" : le champ de recherche n'est
+        # qu'une facade, la valeur postee n'a pas change de nom.
+        html = self.client.get(reverse("pos:cashier_dashboard")).content.decode(
+            "utf-8", "replace"
+        )
+
+        self.assertIn('name="member" id="memberSelect"', html)

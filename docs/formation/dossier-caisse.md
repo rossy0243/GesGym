@@ -242,6 +242,26 @@ meilleure source pour les cas limites a montrer en formation.
 - an unknown currency is refused
 - the sensitive log keeps both amounts
 
+### CashierMemberSearchTests
+
+> Le caissier cherche son client au lieu de faire defiler la liste.
+
+- a member is found by last name
+- a member is found by first name
+- a member is found by phone fragment
+- the search ignores the case
+- a search matching nothing returns an empty list
+- a member of another gym is never returned
+- an inactive member is never returned
+- each result carries what the counter needs
+- the status follows the subscription
+- the results are capped and the page says so
+- a complete result is not flagged as truncated
+- the order is stable between two identical searches
+- a coach cannot search the clients
+- the cashier page no longer renders the whole list
+- the hidden field still carries the submitted member
+
 ## A completer par un humain
 
 Le code ne dit pas tout. Avant de rediger, il faut trancher :
