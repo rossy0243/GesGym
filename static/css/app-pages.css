@@ -1438,9 +1438,8 @@ html.app-skin-dark .sub-tabs .btn.active {
     --bs-backdrop-opacity: 0.22;
 }
 
-.modal-backdrop.show {
-    opacity: var(--bs-backdrop-opacity) !important;
-}
+/* L'opacite de ce voile est portee par sa couleur de fond, plus bas : la
+   poser ici annulerait le flou. Voir le bloc "Flou derriere les modals". */
 
 .modal {
     z-index: 1050;
@@ -1952,7 +1951,25 @@ body.modal-open .page-header {
     filter: none;
 }
 
+/* nav-common.css applique zoom: 0.8 a <html> au-dela de 1024 px. Les unites
+   vw et vh se resolvent alors dans ce contexte reduit : le voile, declare en
+   100vw sur 100vh par Bootstrap, ne couvrait que quatre cinquiemes de l'ecran.
+   C'est ce qui donnait un flou s'arretant en chemin, quel que soit le modal.
+   inset s'ancre sur les bords du bloc conteneur au lieu de mesurer : il couvre
+   l'ecran entier malgre le zoom. */
+.modal-backdrop {
+    inset: 0;
+    width: auto;
+    height: auto;
+}
+
+/* L'opacite compositerait l'element entier, resultat du backdrop-filter
+   compris : a 0,22 le flou serait rendu a 22 % de son intensite, donc
+   invisible. La transparence passe par la couleur de fond, et l'element reste
+   opaque. C'est ce que fait deja le mode sombre, qui lui floutait bien. */
 .modal-backdrop.show {
+    opacity: 1 !important;
+    background-color: rgba(11, 11, 11, 0.22);
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
 }
@@ -1960,7 +1977,7 @@ body.modal-open .page-header {
 /* Navigateur sans backdrop-filter : on assombrit un peu plus, faute de
    pouvoir flouter. Le contenu du modal reste lisible dans les deux cas. */
 @supports not ((backdrop-filter: blur(4px)) or (-webkit-backdrop-filter: blur(4px))) {
-    .modal-backdrop {
-        --bs-backdrop-opacity: 0.45;
+    .modal-backdrop.show {
+        background-color: rgba(11, 11, 11, 0.45);
     }
 }
