@@ -2027,14 +2027,145 @@ class ReturnOnlyByFaceTests(TestCase):
 
     # --- La lecture du mode ------------------------------------------------------
 
-    def test_only_the_face_alone_counts_as_a_face(self):
-        self.assertTrue(hikvision.est_un_visage("face"))
-        self.assertTrue(hikvision.est_un_visage("  FACE  "))
-        for autre in ("card", "fp", "cardOrFace", "faceAndCard", "", None):
-            self.assertFalse(hikvision.est_un_visage(autre), autre)
+    def test_a_real_event_from_the_hardware_is_recognised_as_a_face(self):
+        """
+        Evenement releve sur un DS-K1T342MFWX-E1 en V4.48.40.
 
-    def test_the_mode_is_read_wherever_the_firmware_puts_it(self):
-        for cle in ("currentVerifyMode", "verifyMode", "CurrentVerifyMode"):
-            charge = json.dumps({"AccessControllerEvent": {cle: "face", "employeeNoString": "1"}})
-            lu = hikvision.parse_event_payload(charge, "application/json")
-            self.assertEqual(lu["verify_mode"], "face", cle)
+        Il porte currentVerifyMode = "faceOrFpOrCardOrPw", qui decrit ce que la
+        fiche **autorise** et non ce qui a **servi**. S'y fier faisait passer
+        tous les visages pour des badges.
+        """
+        evenement = {
+            "major": 5,
+            "minor": 8,
+            "employeeNoString": "1000107",
+            "currentVerifyMode": "faceOrFpOrCardOrPw",
+            "FaceRect": {"height": 0.413, "width": 0.233, "x": 0.31, "y": 0.538},
+        }
+
+        self.assertTrue(hikvision.est_un_visage(evenement))
+
+    def test_the_face_rectangle_alone_proves_a_face(self):
+        # Fait physique : la camera a localise un visage dans l'image.
+        self.assertTrue(hikvision.est_un_visage({"FaceRect": {"x": 0.1}}))
+
+    def test_the_documented_face_event_code_counts(self):
+        self.assertTrue(hikvision.est_un_visage({"minor": 75}))
+
+    def test_a_permissive_mode_alone_never_proves_a_face(self):
+        # Ni visage detecte, ni code d'evenement : le badge a pu suffire.
+        self.assertFalse(
+            hikvision.est_un_visage({"currentVerifyMode": "faceOrFpOrCardOrPw"})
+        )
+        self.assertFalse(hikvision.est_un_visage({"currentVerifyMode": "cardOrFace"}))
+
+    def test_an_explicit_face_mode_still_counts(self):
+        self.assertTrue(hikvision.est_un_visage({"currentVerifyMode": "face"}))
+
+    def test_an_empty_or_absurd_event_is_never_a_face(self):
+        for valeur in ({}, {"minor": 1}, {"currentVerifyMode": "card"}, None, "face"):
+            self.assertFalse(hikvision.est_un_visage(valeur), repr(valeur))
+
+
+class DeviceAnnounceButtonTests(TestCase):
+    """Declarer l'application au lecteur depuis l'ecran des lecteurs."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Annonce Bouton", slug="org-annonce-bouton"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Annonce Bouton",
+            slug="gym-annonce-bouton",
+            subdomain="gym-annonce-bouton",
+        )
+        module, _ = Module.objects.get_or_create(
+            code="ACCESS", defaults={"name": "Access"}
+        )
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=module, defaults={"is_active": True}
+        )
+        self.device = AccessDevice.objects.create(
+            gym=self.gym, name="Terminal", host="10.0.0.9", password="secret"
+        )
+        self.manager = User.objects.create_user(
+            username="gerant-annonce", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.manager, gym=self.gym, role="manager", is_active=True
+        )
+        self.client.force_login(self.manager)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+        self.url = reverse("access:device_announce", args=[self.device.id])
+
+    def test_the_button_declares_the_application_to_the_reader(self):
+        with patch.object(hikvision.HikvisionClient, "set_event_notification") as pose:
+            reponse = self.client.post(self.url)
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertTrue(reponse.json()["ok"])
+        pose.assert_called_once()
+
+    def test_the_declared_address_is_never_the_loopback(self):
+        # Le lecteur joindrait sa propre boucle locale, pas le serveur.
+        with patch.object(hikvision.HikvisionClient, "set_event_notification"):
+            reponse = self.client.post(self.url)
+
+        url = reponse.json()["url"]
+        self.assertNotIn("127.0.0.1", url)
+        self.assertNotIn("localhost", url)
+        self.assertIn(str(self.device.webhook_token), url)
+
+    def test_an_unreachable_reader_is_reported_without_crashing(self):
+        with patch.object(
+            hikvision.HikvisionClient,
+            "set_event_notification",
+            side_effect=hikvision.HikvisionUnreachable("cable arrache"),
+        ):
+            reponse = self.client.post(self.url)
+
+        self.assertEqual(reponse.status_code, 400)
+        self.assertIn("injoignable", reponse.json()["error"])
+
+    def test_the_declaration_is_traced_in_the_sensitive_log(self):
+        with patch.object(hikvision.HikvisionClient, "set_event_notification"):
+            self.client.post(self.url)
+
+        trace = SensitiveActivityLog.objects.get(action="access.device_announced")
+        self.assertEqual(trace.actor, self.manager)
+
+    def test_a_reader_of_another_gym_is_out_of_reach(self):
+        autre = Gym.objects.create(
+            organization=self.organization,
+            name="Autre",
+            slug="autre-annonce",
+            subdomain="autre-annonce",
+        )
+        etranger = AccessDevice.objects.create(
+            gym=autre, name="Ailleurs", host="10.0.0.8", password="secret"
+        )
+
+        reponse = self.client.post(
+            reverse("access:device_announce", args=[etranger.id])
+        )
+
+        self.assertEqual(reponse.status_code, 404)
+
+    def test_a_receptionist_cannot_declare_the_application(self):
+        reception = User.objects.create_user(
+            username="reception-annonce", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=reception, gym=self.gym, role="reception", is_active=True
+        )
+        self.client.force_login(reception)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+        reponse = self.client.post(self.url)
+
+        self.assertIn(reponse.status_code, (302, 403))

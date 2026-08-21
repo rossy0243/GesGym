@@ -746,23 +746,44 @@ def _mode_de_verification(event, payload):
     return ""
 
 
-def est_un_visage(verify_mode):
-    """
-    Vrai si le lecteur affirme avoir reconnu un visage seul.
+# Codes d'evenement que le materiel emploie pour une authentification par le
+# visage. 75 (0x4B) est le code documente ; 8 apparait sur ce firmware pour le
+# meme geste, releve sur un DS-K1T342MFWX-E1 en V4.48.40.
+MINORS_VISAGE = frozenset({8, 75})
 
-    Prudence deliberee : une valeur absente ou ambigue renvoie faux. Mieux
-    vaut refuser a tort un repassage que laisser entrer deux personnes avec
-    un badge prete.
+
+def est_un_visage(evenement):
     """
-    mode = (verify_mode or "").strip().lower()
-    if not mode:
+    Vrai si le lecteur a bien reconnu un visage pour ce passage.
+
+    Trois signaux, du plus sur au moins sur :
+
+    * ``FaceRect`` : les coordonnees du visage detecte dans l'image. C'est un
+      fait physique, present uniquement quand la camera a cadre un visage ;
+    * le code d'evenement, quand le firmware le renseigne ;
+    * le mode de verification, seulement s'il vaut exactement "face".
+
+    Attention a ce dernier : ``currentVerifyMode`` decrit ce que la fiche
+    **autorise**, pas ce qui a **servi**. Sur ce materiel il vaut
+    "faceOrFpOrCardOrPw", ce qui ne prouve rien. S'y fier seul faisait passer
+    tous les visages pour des badges.
+    """
+    if not isinstance(evenement, dict):
         return False
 
-    # "faceAndCard", "cardOrFace"... : des l'instant qu'un autre facteur peut
-    # suffire, on ne peut pas garantir que c'est bien le visage qui a servi.
-    if mode == "face":
+    # Signal le plus fiable : la camera a localise un visage.
+    if evenement.get("FaceRect") or evenement.get("faceRect"):
         return True
-    return False
+
+    minor = evenement.get("minor")
+    try:
+        if int(minor) in MINORS_VISAGE:
+            return True
+    except (TypeError, ValueError):
+        pass
+
+    mode = str(evenement.get("currentVerifyMode") or "").strip().lower()
+    return mode == "face"
 
 
 def parse_event_payload(raw_body, content_type=""):

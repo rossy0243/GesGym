@@ -15,6 +15,7 @@ urlpatterns = [
         path("devices/<int:device_id>/test/", device_views.device_test, name="device_test"),
         path("devices/<int:device_id>/open/", device_views.device_open_door, name="device_open_door"),
         path("devices/<int:device_id>/delete/", device_views.device_delete, name="device_delete"),
+        path("devices/<int:device_id>/annoncer/", device_views.device_announce, name="device_announce"),
         path("devices/webhook/<uuid:token>/", device_views.device_webhook, name="device_webhook"),
 
         # Enrolement du visage, capture faite par le lecteur lui-meme.

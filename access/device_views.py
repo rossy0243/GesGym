@@ -357,7 +357,7 @@ def device_webhook(request, token):
     # Seul un visage autorise un second passage le meme jour : un badge ou un
     # QR code se pretent, et le lecteur ne saurait pas dire que la personne
     # devant lui n'est pas la bonne.
-    par_le_visage = nature == "lecteur" and hikvision.est_un_visage(parsed["verify_mode"])
+    par_le_visage = nature == "lecteur" and hikvision.est_un_visage(parsed["event"])
 
     access_granted, reason, log = _record_access(
         gym=device.gym,
@@ -440,3 +440,46 @@ def _first_error(exc):
     if messages:
         return messages[0]
     return str(exc)
+
+
+@login_required
+@module_required("ACCESS")
+@role_required(ACCESS_DEVICE_ROLES)
+@require_POST
+def device_announce(request, device_id):
+    """
+    Apprend au lecteur ou pousser ses evenements.
+
+    A ne pas confondre avec la detection reseau, qui cherche les lecteurs
+    presents. Ici le lecteur est deja connu : on lui donne l'adresse a
+    laquelle joindre l'application.
+
+    Sans cette declaration, un visage reconnu ouvre la porte mais n'apparait
+    ni au journal d'acces, ni dans la frequentation. A relancer a chaque
+    changement d'adresse du serveur.
+    """
+    device = get_object_or_404(AccessDevice, id=device_id, gym=request.gym)
+    port = request.get_port() or "8000"
+
+    try:
+        url = enrollment.declarer_application(device, port)
+    except enrollment.EnrollmentError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+
+    log_sensitive_action(
+        request,
+        "access.device_announced",
+        "AccessDevice",
+        device.name,
+        metadata={"url": url},
+        gym=request.gym,
+    )
+
+    return JsonResponse({
+        "ok": True,
+        "url": url,
+        "message": (
+            f"{device.name} sait maintenant joindre l'application. "
+            "Les passages remonteront au journal d'acces."
+        ),
+    })

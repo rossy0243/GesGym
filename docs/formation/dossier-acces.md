@@ -22,6 +22,7 @@ de ce que le logiciel fait reellement, pas de ce qu'on croit qu'il fait.
 | `devices/<int:device_id>/test/` | `device_views.device_test` | `device_test` |
 | `devices/<int:device_id>/open/` | `device_views.device_open_door` | `device_open_door` |
 | `devices/<int:device_id>/delete/` | `device_views.device_delete` | `device_delete` |
+| `devices/<int:device_id>/annoncer/` | `device_views.device_announce` | `device_announce` |
 | `devices/webhook/<uuid:token>/` | `device_views.device_webhook` | `device_webhook` |
 | `membres/<int:member_id>/visage/` | `enrollment_views.face_enrollment` | `face_enrollment` |
 | `membres/<int:member_id>/visage/capturer/` | `enrollment_views.face_capture` | `face_capture` |
@@ -99,6 +100,7 @@ formation : « la reception peut pointer mais pas consulter les salaires ».
 | `device_open_door` | `login_required`<br>`role_required(ACCESS_DEVICE_ROLES)`<br>`require_POST`<br>`module_required('ACCESS')` |
 | `device_delete` | `login_required`<br>`role_required(ACCESS_DEVICE_ROLES)`<br>`require_POST`<br>`module_required('ACCESS')` |
 | `device_webhook` | `csrf_exempt` |
+| `device_announce` | `login_required`<br>`module_required('ACCESS')`<br>`role_required(ACCESS_DEVICE_ROLES)`<br>`require_POST` |
 | `face_enrollment` | `login_required`<br>`module_required('ACCESS')`<br>`role_required(ACCESS_DEVICE_ROLES)` |
 | `face_capture` | `login_required`<br>`module_required('ACCESS')`<br>`role_required(ACCESS_DEVICE_ROLES)`<br>`require_POST` |
 | `face_confirm` | `login_required`<br>`module_required('ACCESS')`<br>`role_required(ACCESS_DEVICE_ROLES)`<br>`require_POST` |
@@ -153,6 +155,7 @@ employer dans la formation : l'apprenant doit reconnaitre ce qu'il verra.
 Actions consignees. Utile pour expliquer aux equipes ce qui est trace,
 et rassurer sur ce qui ne l'est pas.
 
+- `access.device_announced`
 - `access.device_deleted`
 - `access.device_messages_updated`
 - `access.device_registered`
@@ -337,8 +340,23 @@ meilleure source pour les cas limites a montrer en formation.
 - a missing mode never grants a return
 - the journal names the mode used
 - the refusal says why and what works
-- only the face alone counts as a face
-- the mode is read wherever the firmware puts it
+- a real event from the hardware is recognised as a face — _Evenement releve sur un DS-K1T342MFWX-E1 en V4.48.40._
+- the face rectangle alone proves a face
+- the documented face event code counts
+- a permissive mode alone never proves a face
+- an explicit face mode still counts
+- an empty or absurd event is never a face
+
+### DeviceAnnounceButtonTests
+
+> Declarer l'application au lecteur depuis l'ecran des lecteurs.
+
+- the button declares the application to the reader
+- the declared address is never the loopback
+- an unreachable reader is reported without crashing
+- the declaration is traced in the sensitive log
+- a reader of another gym is out of reach
+- a receptionist cannot declare the application
 
 ## A completer par un humain
 

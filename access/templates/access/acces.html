@@ -1442,6 +1442,11 @@ function loadDevices() {
                             <span class="material-icons me-1" style="font-size:16px;">lock_open</span>
                             Ouvrir
                         </button>
+                        <button class="btn btn-light btn-sm" onclick="announceDevice(${device.id})"
+                                title="Donner au lecteur l'adresse de l'application, pour qu'il remonte les passages">
+                            <span class="material-icons me-1" style="font-size:16px;">cell_tower</span>
+                            Declarer l'app
+                        </button>
                         <a class="btn btn-light btn-sm" href="/access/devices/${device.id}/messages/"
                            title="Messages affiches sur l'ecran du lecteur">
                             <span class="material-icons me-1" style="font-size:16px;">chat</span>
@@ -1472,6 +1477,19 @@ function testDevice(deviceId) {
         if (data.test && !data.test.ok) {
             alert("Test échoué :\n" + data.test.error);
         }
+    });
+}
+
+function announceDevice(deviceId) {
+    // A ne pas confondre avec la detection reseau : le lecteur est deja connu,
+    // on lui donne ici l'adresse a laquelle joindre l'application.
+    devicePost(`/access/devices/${deviceId}/annoncer/`).then(({ ok, data }) => {
+        if (ok) {
+            alert(data.message + "\n\n" + data.url);
+        } else {
+            alert("Declaration impossible :\n" + (data.error || ""));
+        }
+        loadDevices();
     });
 }
 
