@@ -5,10 +5,14 @@
 
 {% block content %}
 <style>
+/* La transparence passe par la couleur, jamais par opacity : opacity
+   compositerait l'element entier et le voile global s'appuie desormais
+   dessus. Ce noir etait opaque et ne devait sa translucidite qu'a
+   l'opacite : la page virait au noir plein des que celle-ci passait a 1. */
 body.subscription-plan-screen .modal-backdrop,
 body.subscription-plan-screen .modal-backdrop.show {
-    --bs-backdrop-opacity: 0.28;
-    background-color: #0B0B0B !important;
+    opacity: 1 !important;
+    background-color: rgba(11, 11, 11, 0.28) !important;
     backdrop-filter: none !important;
 }
 
