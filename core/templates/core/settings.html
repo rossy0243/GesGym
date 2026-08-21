@@ -486,6 +486,19 @@
                             <small class="text-muted">{{ organization_form.seo_keywords.help_text }}</small>
                             {{ organization_form.seo_keywords.errors }}
                         </div>
+                        <div class="col-md-12">
+                            <div class="form-check">
+                                {{ organization_form.show_public_prices }}
+                                <label class="form-check-label fw-semibold"
+                                       for="{{ organization_form.show_public_prices.id_for_label }}">
+                                    {{ organization_form.show_public_prices.label }}
+                                </label>
+                                <small class="d-block text-muted">
+                                    {{ organization_form.show_public_prices.help_text }}
+                                </small>
+                            </div>
+                            {{ organization_form.show_public_prices.errors }}
+                        </div>
                     </div>
 
                     <hr class="my-4">

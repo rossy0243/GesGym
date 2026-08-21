@@ -150,4 +150,121 @@ def landing_contact(request=None):
         "image_2_url": _image_url(getattr(organization, "landing_image_2", None)),
         "image_3_url": _image_url(getattr(organization, "landing_image_3", None)),
         "faq": _faq_entries(organization),
+        # Formules reellement proposees, et si leur prix est public.
+        "plans": landing_plans(organization),
+        "show_prices": bool(
+            organization is not None and organization.show_public_prices
+        ),
     }
+
+
+# ---------------------------------------------------------------------------
+# Formules affichees sur le site vitrine
+# ---------------------------------------------------------------------------
+#
+# Les cartes de la page etaient ecrites en dur : le site annoncait quatre
+# formules la ou la salle n'en proposait qu'une. On lit desormais celles que
+# l'application connait.
+
+# Contenu affiche tant qu'aucune formule n'est enregistree. Mieux vaut la page
+# livree qu'une section vide.
+FALLBACK_PLANS = (
+    {
+        "name": "Journalier",
+        "description": "Pour decouvrir la salle",
+        "duration_label": "1 jour",
+        "price": None,
+        "offers": ["Acces a la salle 1 jour", "Musculation & cardio", "Sans engagement"],
+        "featured": False,
+    },
+    {
+        "name": "Mensuel",
+        "description": "La formule la plus flexible",
+        "duration_label": "1 mois",
+        "price": None,
+        "offers": ["Acces illimite 1 mois", "Cours collectifs inclus", "Carte membre & QR code"],
+        "featured": False,
+    },
+    {
+        "name": "Trimestriel",
+        "description": "Le meilleur rapport engagement / prix",
+        "duration_label": "3 mois",
+        "price": None,
+        "offers": ["Tout le mensuel, inclus", "Suivi coaching renforce", "Tarif preferentiel"],
+        "featured": True,
+    },
+    {
+        "name": "Annuel",
+        "description": "Pour s'engager sur la duree",
+        "duration_label": "1 an",
+        "price": None,
+        "offers": ["Tout le trimestriel, inclus", "Meilleur tarif a l'annee", "Coaching personnalise"],
+        "featured": False,
+    },
+)
+
+
+def duree_lisible(jours):
+    """
+    Duree telle qu'un prospect la lit, plutot qu'un nombre de jours.
+
+    "30 jours" est exact mais froid ; "1 mois" est ce que la personne cherche.
+    On ne convertit que les durees rondes, pour ne jamais arrondir un tarif.
+    """
+    exactes = {1: "1 jour", 7: "1 semaine", 30: "1 mois", 90: "3 mois",
+               180: "6 mois", 365: "1 an"}
+    if jours in exactes:
+        return exactes[jours]
+    return f"{jours} jours"
+
+
+def landing_plans(organization):
+    """
+    Formules a montrer au public, une par nom.
+
+    Une organisation a souvent les memes formules dans chacune de ses salles :
+    les afficher toutes donnerait la meme carte repetee. On regroupe donc par
+    nom, en gardant la premiere rencontree.
+    """
+    if organization is None:
+        return [dict(p) for p in FALLBACK_PLANS]
+
+    from django.db.models import Count
+
+    from subscriptions.models import SubscriptionPlan
+
+    formules = (
+        SubscriptionPlan.objects.filter(
+            gym__organization=organization,
+            gym__is_active=True,
+            is_active=True,
+        )
+        .prefetch_related("offers")
+        # Le nombre de ventes n'est pas un champ du modele : il se compte ici,
+        # comme ailleurs dans l'application.
+        .annotate(ventes=Count("subscriptions", distinct=True))
+        .order_by("duration_days", "price", "id")
+    )
+
+    # La plus vendue porte la mention "Populaire". L'application le sait deja :
+    # inutile de designer une formule a la main dans le gabarit.
+    ventes = {formule.id: formule.ventes for formule in formules}
+    meilleure = None
+    if ventes and max(ventes.values()) > 0:
+        meilleure = max(ventes, key=ventes.get)
+
+    vues = {}
+    for formule in formules:
+        cle = formule.name.strip().lower()
+        if cle in vues:
+            continue
+        vues[cle] = {
+            "name": formule.name,
+            "description": (formule.description or "").strip(),
+            "duration_label": duree_lisible(formule.duration_days),
+            "price": formule.price,
+            "offers": [offre.name for offre in formule.active_offers],
+            "featured": formule.id == meilleure,
+        }
+
+    return list(vues.values()) or [dict(p) for p in FALLBACK_PLANS]

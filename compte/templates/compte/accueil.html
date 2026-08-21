@@ -509,57 +509,54 @@
         </h2>
         <p class="text-lg text-gray-600 leading-relaxed">
           De la séance découverte à l'engagement annuel, choisissez le rythme qui
-          vous convient. Tarifs communiqués sur demande.
+          vous convient.{% if not landing_contact.show_prices %} Tarifs communiqués sur demande.{% endif %}
         </p>
       </div>
 
       <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
-        <div class="plan-card soft-card p-7">
-          <h3 class="text-lg font-bold mb-1">Journalier</h3>
-          <p class="text-sm text-gray-500 mb-5">Pour découvrir la salle</p>
-          <ul class="space-y-2 text-sm plan-feature text-gray-600 mb-6">
-            <li><i class="fas fa-check text-[#C9A227] mr-2"></i>Accès à la salle 1 jour</li>
-            <li><i class="fas fa-check text-[#C9A227] mr-2"></i>Musculation &amp; cardio</li>
-            <li><i class="fas fa-check text-[#C9A227] mr-2"></i>Sans engagement</li>
-          </ul>
-          <a href="#contact-form" class="block text-center border-2 border-[#0B0B0B] text-[#0B0B0B] font-bold py-3 rounded-full hover:bg-[#0B0B0B] hover:text-white transition">Nous contacter</a>
-        </div>
+        {% comment %}
+        Les quatre cartes etaient ecrites en dur : le site annoncait quatre
+        formules la ou la salle n'en proposait qu'une. On affiche desormais
+        celles que l'application connait, regroupees par nom pour qu'une
+        organisation a plusieurs salles ne voie pas la meme carte repetee.
+        {% endcomment %}
+        {% for formule in landing_contact.plans %}
+        <div class="plan-card {% if formule.featured %}is-featured{% else %}soft-card{% endif %} p-7">
+          {% if formule.featured %}<span class="plan-badge">Populaire</span>{% endif %}
 
-        <div class="plan-card soft-card p-7">
-          <h3 class="text-lg font-bold mb-1">Mensuel</h3>
-          <p class="text-sm text-gray-500 mb-5">La formule la plus flexible</p>
-          <ul class="space-y-2 text-sm plan-feature text-gray-600 mb-6">
-            <li><i class="fas fa-check text-[#C9A227] mr-2"></i>Accès illimité 1 mois</li>
-            <li><i class="fas fa-check text-[#C9A227] mr-2"></i>Cours collectifs inclus</li>
-            <li><i class="fas fa-check text-[#C9A227] mr-2"></i>Carte membre &amp; QR code</li>
-          </ul>
-          <a href="#contact-form" class="block text-center border-2 border-[#0B0B0B] text-[#0B0B0B] font-bold py-3 rounded-full hover:bg-[#0B0B0B] hover:text-white transition">Nous contacter</a>
-        </div>
+          <h3 class="text-lg font-bold mb-1">{{ formule.name }}</h3>
 
-        <div class="plan-card is-featured p-7">
-          <span class="plan-badge">Populaire</span>
-          <h3 class="text-lg font-bold mb-1">Trimestriel</h3>
-          <p class="text-sm text-gray-300 mb-5">Le meilleur rapport engagement / prix</p>
-          <ul class="space-y-2 text-sm plan-feature mb-6">
-            <li><i class="fas fa-check text-[#C9A227] mr-2"></i>Tout le mensuel, inclus</li>
-            <li><i class="fas fa-check text-[#C9A227] mr-2"></i>Suivi coaching renforcé</li>
-            <li><i class="fas fa-check text-[#C9A227] mr-2"></i>Tarif préférentiel</li>
-          </ul>
-          <a href="#contact-form" class="block text-center bg-[#C9A227] text-[#0B0B0B] font-bold py-3 rounded-full hover:bg-white transition">Nous contacter</a>
-        </div>
+          {% if landing_contact.show_prices and formule.price %}
+          <p class="text-2xl font-extrabold mb-1">
+            {{ formule.price|floatformat:0 }} <span class="text-base font-semibold">USD</span>
+          </p>
+          <p class="text-sm {% if formule.featured %}text-gray-300{% else %}text-gray-500{% endif %} mb-5">
+            {{ formule.duration_label }}{% if formule.description %} &middot; {{ formule.description }}{% endif %}
+          </p>
+          {% else %}
+          <p class="text-sm {% if formule.featured %}text-gray-300{% else %}text-gray-500{% endif %} mb-5">
+            {{ formule.duration_label }}{% if formule.description %} &middot; {{ formule.description }}{% endif %}
+          </p>
+          {% endif %}
 
-        <div class="plan-card soft-card p-7">
-          <h3 class="text-lg font-bold mb-1">Annuel</h3>
-          <p class="text-sm text-gray-500 mb-5">Pour s'engager sur la durée</p>
-          <ul class="space-y-2 text-sm plan-feature text-gray-600 mb-6">
-            <li><i class="fas fa-check text-[#C9A227] mr-2"></i>Tout le trimestriel, inclus</li>
-            <li><i class="fas fa-check text-[#C9A227] mr-2"></i>Meilleur tarif à l'année</li>
-            <li><i class="fas fa-check text-[#C9A227] mr-2"></i>Coaching personnalisé</li>
+          {% if formule.offers %}
+          <ul class="space-y-2 text-sm plan-feature {% if not formule.featured %}text-gray-600{% endif %} mb-6">
+            {% for offre in formule.offers %}
+            <li><i class="fas fa-check text-[#C9A227] mr-2"></i>{{ offre }}</li>
+            {% endfor %}
           </ul>
-          <a href="#contact-form" class="block text-center border-2 border-[#0B0B0B] text-[#0B0B0B] font-bold py-3 rounded-full hover:bg-[#0B0B0B] hover:text-white transition">Nous contacter</a>
+          {% endif %}
+
+          <a href="#contact-form"
+             class="block text-center {% if formule.featured %}bg-[#C9A227] text-[#0B0B0B] hover:bg-white{% else %}border-2 border-[#0B0B0B] text-[#0B0B0B] hover:bg-[#0B0B0B] hover:text-white{% endif %} font-bold py-3 rounded-full transition">
+            Nous contacter
+          </a>
         </div>
+        {% endfor %}
       </div>
+      {% if not landing_contact.show_prices %}
       <p class="mt-8 text-center text-sm text-gray-500">Les tarifs exacts et offres en cours vous sont communiqués par notre équipe.</p>
+      {% endif %}
     </div>
   </section>
 

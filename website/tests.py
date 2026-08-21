@@ -3,7 +3,18 @@ from django.core import mail
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
+from datetime import timedelta
+
+from django.utils import timezone
+
 from compte.models import User, UserGymRole
+from members.models import Member
+from subscriptions.models import (
+    MemberSubscription,
+    SubscriptionOffer,
+    SubscriptionPlan,
+)
+from website.branding import landing_plans
 from organizations.models import (
     Gym,
     LandingFaq,
@@ -670,3 +681,176 @@ class LandingFaqSettingsTests(TestCase):
         self.assertContains(response, "Questions frequentes du site")
         self.assertContains(response, "Ma question")
         self.assertContains(response, "Ma reponse")
+
+
+class LandingPlanTests(TestCase):
+    """
+    Le site montre les formules reellement proposees.
+
+    Les cartes etaient ecrites en dur : la page annoncait quatre formules la
+    ou la salle n'en proposait qu'une.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Club Formules", slug="club-formules"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Club Formules Centre",
+            slug="club-formules-centre",
+            subdomain="club-formules-centre",
+        )
+        self.mensuel = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Mensuel", price=30, duration_days=30,
+            description="La formule souple",
+        )
+        self.annuel = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Annuel", price=300, duration_days=365,
+        )
+
+    def _cartes(self):
+        return landing_plans(self.organization)
+
+    # --- Ce que la page montre --------------------------------------------------
+
+    def test_the_page_shows_the_real_plans(self):
+        noms = [p["name"] for p in self._cartes()]
+
+        self.assertEqual(noms, ["Mensuel", "Annuel"])
+
+    def test_the_invented_plans_are_gone_from_the_page(self):
+        response = self.client.get("/")
+        html = response.content.decode("utf-8", "replace")
+        bloc = html[html.index('id="formules"'):html.index('id="faq"')]
+
+        # Ces trois cartes n'ont jamais correspondu a une formule enregistree.
+        self.assertNotIn("Journalier", bloc)
+        self.assertNotIn("Trimestriel", bloc)
+
+    def test_a_plan_carries_its_duration_in_plain_words(self):
+        carte = self._cartes()[0]
+
+        self.assertEqual(carte["duration_label"], "1 mois")
+
+    def test_an_odd_duration_stays_in_days(self):
+        # On ne convertit que les durees rondes : arrondir "45 jours" a un mois
+        # et demi vendrait autre chose que ce qui est facture.
+        SubscriptionPlan.objects.create(
+            gym=self.gym, name="Special", price=45, duration_days=45
+        )
+
+        carte = next(p for p in self._cartes() if p["name"] == "Special")
+        self.assertEqual(carte["duration_label"], "45 jours")
+
+    def test_a_plan_lists_its_offers(self):
+        offre = SubscriptionOffer.objects.create(gym=self.gym, name="Acces plateau")
+        self.mensuel.offers.add(offre)
+
+        carte = next(p for p in self._cartes() if p["name"] == "Mensuel")
+        self.assertEqual(carte["offers"], ["Acces plateau"])
+
+    def test_an_inactive_plan_never_reaches_the_public(self):
+        self.annuel.is_active = False
+        self.annuel.save(update_fields=["is_active"])
+
+        self.assertEqual([p["name"] for p in self._cartes()], ["Mensuel"])
+
+    # --- Plusieurs salles ---------------------------------------------------------
+
+    def test_the_same_plan_in_two_gyms_appears_once(self):
+        # Sans regroupement, une organisation a deux salles afficherait la meme
+        # carte en double.
+        seconde = Gym.objects.create(
+            organization=self.organization,
+            name="Club Formules Est",
+            slug="club-formules-est",
+            subdomain="club-formules-est",
+        )
+        SubscriptionPlan.objects.create(
+            gym=seconde, name="Mensuel", price=30, duration_days=30
+        )
+
+        noms = [p["name"] for p in self._cartes()]
+        self.assertEqual(noms.count("Mensuel"), 1)
+
+    def test_a_plan_of_another_organization_is_never_shown(self):
+        autre = Organization.objects.create(name="Voisin", slug="voisin-formules")
+        gym_voisin = Gym.objects.create(
+            organization=autre, name="Voisin Centre",
+            slug="voisin-centre", subdomain="voisin-centre",
+        )
+        SubscriptionPlan.objects.create(
+            gym=gym_voisin, name="Secret", price=99, duration_days=30
+        )
+
+        self.assertNotIn("Secret", [p["name"] for p in self._cartes()])
+
+    def test_a_plan_of_a_closed_gym_is_never_shown(self):
+        fermee = Gym.objects.create(
+            organization=self.organization, name="Fermee",
+            slug="fermee-formules", subdomain="fermee-formules",
+            is_active=False,
+        )
+        SubscriptionPlan.objects.create(
+            gym=fermee, name="Ancienne", price=20, duration_days=30
+        )
+
+        self.assertNotIn("Ancienne", [p["name"] for p in self._cartes()])
+
+    # --- Les prix -------------------------------------------------------------------
+
+    def test_prices_are_hidden_by_default(self):
+        response = self.client.get("/")
+
+        self.assertFalse(response.context["landing_contact"]["show_prices"])
+        self.assertContains(response, "Tarifs communiqués sur demande")
+
+    def test_prices_appear_once_the_setting_is_on(self):
+        self.organization.show_public_prices = True
+        self.organization.save(update_fields=["show_public_prices"])
+
+        response = self.client.get("/")
+        html = response.content.decode("utf-8", "replace")
+        bloc = html[html.index('id="formules"'):html.index('id="faq"')]
+
+        self.assertIn("30", bloc)
+        self.assertIn("USD", bloc)
+        self.assertNotContains(response, "Tarifs communiqués sur demande")
+
+    # --- La mise en avant -------------------------------------------------------------
+
+    def test_the_best_selling_plan_carries_the_badge(self):
+        # La mention "Populaire" repose sur les ventes reelles, pas sur un
+        # choix fige dans le gabarit.
+        membre = Member.objects.create(
+            gym=self.gym, first_name="Ada", last_name="Test", phone="+243890000010"
+        )
+        today = timezone.localdate()
+        MemberSubscription.objects.create(
+            gym=self.gym, member=membre, plan=self.annuel,
+            start_date=today, end_date=today + timedelta(days=365),
+        )
+
+        mis_en_avant = [p["name"] for p in self._cartes() if p["featured"]]
+        self.assertEqual(mis_en_avant, ["Annuel"])
+
+    def test_no_plan_is_featured_without_any_sale(self):
+        self.assertEqual([p["name"] for p in self._cartes() if p["featured"]], [])
+
+    # --- Sans formule enregistree -------------------------------------------------------
+
+    def test_an_organization_without_plans_keeps_the_delivered_cards(self):
+        SubscriptionPlan.objects.all().delete()
+
+        cartes = self._cartes()
+
+        self.assertEqual(len(cartes), 4)
+        self.assertIsNone(cartes[0]["price"])
+
+    def test_the_page_stands_without_any_organization(self):
+        Organization.objects.all().delete()
+
+        response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)

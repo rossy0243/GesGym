@@ -42,6 +42,7 @@ class OrganizationSettingsForm(forms.ModelForm):
             "landing_intro",
             "seo_description",
             "seo_keywords",
+            "show_public_prices",
             "landing_hero_image",
             "landing_image_1",
             "landing_image_2",
@@ -105,6 +106,7 @@ class OrganizationSettingsForm(forms.ModelForm):
                 "class": "form-control",
                 "placeholder": "salle de sport Kinshasa, musculation, fitness",
             }),
+            "show_public_prices": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "landing_hero_image": forms.ClearableFileInput(attrs={"class": "form-control"}),
             "landing_image_1": forms.ClearableFileInput(attrs={"class": "form-control"}),
             "landing_image_2": forms.ClearableFileInput(attrs={"class": "form-control"}),
@@ -128,6 +130,7 @@ class OrganizationSettingsForm(forms.ModelForm):
             "landing_intro": "Phrase d'introduction",
             "seo_description": "Description pour les moteurs de recherche",
             "seo_keywords": "Mots-cles",
+            "show_public_prices": "Afficher les prix des formules sur le site",
             "landing_hero_image": "Photo principale",
             "landing_image_1": "Photo espace 1",
             "landing_image_2": "Photo espace 2",
@@ -146,6 +149,10 @@ class OrganizationSettingsForm(forms.ModelForm):
             "landing_intro": "Le paragraphe sous le titre principal.",
             "seo_description": "Environ 160 caracteres. Reprise lors d'un partage sur les reseaux.",
             "seo_keywords": "Separes par des virgules.",
+            "show_public_prices": (
+                "Decochee, la page presente les formules et leur contenu sans "
+                "montant, et invite le prospect a contacter la salle."
+            ),
             "landing_hero_image": "Grande photo a droite du titre.",
             "landing_image_1": "Vignette de la section \"Nos espaces\".",
             "landing_image_2": "Vignette de la section \"Nos espaces\".",

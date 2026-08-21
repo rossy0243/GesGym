@@ -105,6 +105,15 @@ class Organization(models.Model):
         help_text="Environ 160 caracteres. Reprise aussi lors d'un partage sur les reseaux.",
     )
 
+    show_public_prices = models.BooleanField(
+        default=False,
+        verbose_name="Afficher les prix sur le site public",
+        help_text=(
+            "Decochee, la page affiche les formules et leur contenu sans "
+            "montant, et invite le prospect a contacter la salle."
+        ),
+    )
+
     seo_keywords = models.CharField(
         max_length=255,
         blank=True,
