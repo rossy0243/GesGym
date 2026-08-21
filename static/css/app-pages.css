@@ -1913,3 +1913,54 @@ body.modal-open {
         width: 100%;
     }
 }
+
+/* ---------------------------------------------------------------------------
+   Flou derriere les modals
+   ---------------------------------------------------------------------------
+   theme.min.css floute quatre conteneurs nommes tant que <body> porte
+   .modal-open :
+
+       body.modal-open .nxl-container,
+       body.modal-open .nxl-header,
+       body.modal-open .nxl-navigation,
+       body.modal-open .page-header { filter: blur(3px); }
+
+   Deux defauts en decoulaient.
+
+   1. Chaque page porte un .page-header a l'interieur de .nxl-container : le
+      bandeau de titre recevait le flou du conteneur puis le sien. Les filtres
+      se composent, il apparaissait deux fois plus flou que le reste.
+
+   2. filter: blur() ne floute que les pixels de l'element. Le fond de page et
+      les marges autour des conteneurs restaient nets, et le flou s'estompait
+      vers le transparent sur les bords : un voile qui s'arrete en chemin.
+
+   On floute donc le voile lui-meme. backdrop-filter agit sur tout ce qui se
+   trouve derriere l'element, uniformement, fond de page compris. Le modal est
+   au-dessus du voile, il reste net.
+
+   Effet de bord bienvenu : sans filter sur .nxl-container, celui-ci cesse
+   d'etre le bloc conteneur des descendants position:fixed. Le correctif
+   d'empilement des modals reste en place, il devient simplement une ceinture
+   de plus.
+   --------------------------------------------------------------------------- */
+
+body.modal-open .nxl-container,
+body.modal-open .nxl-header,
+body.modal-open .nxl-navigation,
+body.modal-open .page-header {
+    filter: none;
+}
+
+.modal-backdrop.show {
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+
+/* Navigateur sans backdrop-filter : on assombrit un peu plus, faute de
+   pouvoir flouter. Le contenu du modal reste lisible dans les deux cas. */
+@supports not ((backdrop-filter: blur(4px)) or (-webkit-backdrop-filter: blur(4px))) {
+    .modal-backdrop {
+        --bs-backdrop-opacity: 0.45;
+    }
+}
