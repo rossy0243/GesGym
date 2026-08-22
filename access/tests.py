@@ -23,7 +23,7 @@ from organizations.models import (
 )
 from subscriptions.models import MemberSubscription, SubscriptionPlan
 from . import enrollment, hikvision
-from .device_views import UNKNOWN_CREDENTIAL_REASON
+from .device_views import UNKNOWN_CREDENTIAL_REASON, _serialize_device
 from .hikvision import parse_event_payload
 from .models import AccessDevice, AccessLog
 from .views import (
@@ -2169,3 +2169,124 @@ class DeviceAnnounceButtonTests(TestCase):
         reponse = self.client.post(self.url)
 
         self.assertIn(reponse.status_code, (302, 403))
+
+
+class TunnelledDeviceTests(TestCase):
+    """
+    Un serveur heberge ne peut pas atteindre une adresse privee.
+
+    Le lecteur est alors joint par un tunnel, qui lui donne un nom public et
+    exige un jeton pour prouver que l'appel vient bien de notre serveur.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Tunnel", slug="org-tunnel"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Tunnel",
+            slug="gym-tunnel",
+            subdomain="gym-tunnel",
+        )
+
+    def _lecteur(self, **overrides):
+        champs = {
+            "gym": self.gym,
+            "name": "Terminal",
+            "host": "lecteur-kinshasa.exemple.com",
+            "port": 443,
+            "use_https": True,
+            "password": "secret",
+            "tunnel_client_id": "identifiant-du-jeton",
+            "tunnel_client_secret": "secret-du-jeton",
+        }
+        champs.update(overrides)
+        return AccessDevice.objects.create(**champs)
+
+    # --- L'adresse ---------------------------------------------------------
+
+    def test_a_hostname_is_accepted_as_an_address(self):
+        # Le champ n'acceptait qu'une adresse IP : un nom de tunnel etait
+        # refuse, ce qui rendait la solution impossible.
+        lecteur = self._lecteur()
+        lecteur.full_clean(exclude=["webhook_token"])
+
+        self.assertEqual(lecteur.host, "lecteur-kinshasa.exemple.com")
+
+    def test_a_local_address_still_works(self):
+        lecteur = self._lecteur(host="192.168.1.87", port=80, use_https=False)
+        lecteur.full_clean(exclude=["webhook_token"])
+
+    def test_an_absurd_address_is_refused_with_an_example(self):
+        lecteur = self._lecteur(host="ceci n'est pas une adresse")
+
+        with self.assertRaises(ValidationError) as capture:
+            lecteur.full_clean(exclude=["webhook_token"])
+
+        self.assertIn("nom d'hote", str(capture.exception))
+
+    def test_the_client_builds_an_https_url_from_the_hostname(self):
+        client = hikvision.HikvisionClient.from_device(self._lecteur())
+
+        self.assertEqual(client.base_url, "https://lecteur-kinshasa.exemple.com")
+
+    # --- Le jeton ------------------------------------------------------------
+
+    def test_every_request_carries_the_tunnel_token(self):
+        lecteur = self._lecteur()
+        client = hikvision.HikvisionClient.from_device(lecteur)
+
+        self.assertEqual(
+            client.tunnel_headers,
+            {
+                "CF-Access-Client-Id": "identifiant-du-jeton",
+                "CF-Access-Client-Secret": "secret-du-jeton",
+            },
+        )
+
+    def test_a_device_on_the_local_network_sends_no_token(self):
+        # Sur le LAN il n'y a pas de tunnel : ajouter des en-tetes inutiles
+        # risquerait de derouter le materiel.
+        lecteur = self._lecteur(
+            host="192.168.1.87", tunnel_client_id="", tunnel_client_secret=""
+        )
+
+        self.assertEqual(lecteur.tunnel_headers, {})
+
+    def test_half_a_token_is_treated_as_no_token(self):
+        lecteur = self._lecteur(tunnel_client_secret="")
+
+        self.assertEqual(lecteur.tunnel_headers, {})
+
+    def test_the_token_reaches_the_actual_request(self):
+        client = hikvision.HikvisionClient.from_device(self._lecteur())
+
+        with patch.object(client, "_opener") as ouvreur:
+            ouvreur.return_value.open.return_value.read.return_value = b"<x/>"
+            client.request("/ISAPI/System/deviceInfo")
+
+        envoyee = ouvreur.return_value.open.call_args.args[0]
+        self.assertEqual(
+            envoyee.get_header("Cf-access-client-id"), "identifiant-du-jeton"
+        )
+
+    # --- Ce que l'interface expose ---------------------------------------------
+
+    def test_the_secret_never_leaves_the_server(self):
+        lecteur = self._lecteur()
+
+        charge = _serialize_device(lecteur)
+
+        texte = json.dumps(charge)
+        self.assertNotIn("secret-du-jeton", texte)
+        self.assertNotIn("identifiant-du-jeton", texte)
+        self.assertNotIn("secret", texte.replace("tunnel_protege", ""))
+        self.assertTrue(charge["tunnel_protege"])
+
+    def test_a_local_device_is_reported_as_unprotected(self):
+        lecteur = self._lecteur(
+            host="192.168.1.87", tunnel_client_id="", tunnel_client_secret=""
+        )
+
+        self.assertFalse(_serialize_device(lecteur)["tunnel_protege"])

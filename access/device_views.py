@@ -54,6 +54,10 @@ def _serialize_device(device):
         "name": device.name,
         "brand": device.get_brand_display(),
         "host": device.host,
+        "use_https": device.use_https,
+        # Le secret du tunnel n'est jamais renvoye : on indique seulement
+        # qu'il est renseigne, comme pour le mot de passe du lecteur.
+        "tunnel_protege": bool(device.tunnel_client_id and device.tunnel_client_secret),
         "port": device.port,
         "door_number": device.door_number,
         "model": device.model_name,
@@ -165,6 +169,11 @@ def device_create(request):
         name=(payload.get("name") or "").strip() or f"Lecteur {host}",
         host=host,
         port=int(payload.get("port") or 80),
+        # Un lecteur joint par tunnel repond en HTTPS sur le port 443, et
+        # exige un jeton pour prouver que l'appel vient de notre serveur.
+        use_https=bool(payload.get("use_https")),
+        tunnel_client_id=(payload.get("tunnel_client_id") or "").strip(),
+        tunnel_client_secret=(payload.get("tunnel_client_secret") or "").strip(),
         username=(payload.get("username") or "admin").strip(),
         password=password,
         door_number=int(payload.get("door_number") or 1),

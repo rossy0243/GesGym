@@ -6,6 +6,35 @@ from members.models import Member
 from django.core.exceptions import ValidationError
 
 
+def validate_device_host(valeur):
+    """
+    Accepte une adresse IPv4 ou un nom d'hote.
+
+    Le lecteur est joint soit directement sur le reseau local, soit par un
+    tunnel qui lui donne un nom public. Les deux formes doivent passer.
+    """
+    import ipaddress
+    import re
+
+    brut = (valeur or "").strip()
+    if not brut:
+        raise ValidationError("Adresse du lecteur manquante.")
+
+    try:
+        ipaddress.IPv4Address(brut)
+        return
+    except ValueError:
+        pass
+
+    # Nom d'hote : etiquettes alphanumeriques separees par des points.
+    motif = r"^(?=.{1,253}$)([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}$"
+    if not re.match(motif, brut):
+        raise ValidationError(
+            "Indiquez une adresse IPv4 (192.168.1.87) ou un nom d'hote "
+            "(lecteur-kinshasa.exemple.com)."
+        )
+
+
 class AccessDevice(models.Model):
     """
     Lecteur physique de controle d'acces (borne QR / badge) rattache a un gym.
@@ -34,9 +63,33 @@ class AccessDevice(models.Model):
         default=BRAND_HIKVISION,
     )
 
-    host = models.GenericIPAddressField(protocol="IPv4")
+    # Adresse IP sur le reseau local, ou nom d'hote quand le lecteur est
+    # joint a travers un tunnel : un serveur heberge ne peut pas atteindre une
+    # adresse privee, il passe par un nom public que le tunnel resout.
+    host = models.CharField(
+        max_length=253,
+        validators=[validate_device_host],
+        verbose_name="Adresse ou nom d'hote",
+    )
     port = models.PositiveIntegerField(default=80)
     use_https = models.BooleanField(default=False)
+
+    # Jeton presente au tunnel pour prouver que l'appel vient bien de notre
+    # serveur. Sans lui, quiconque connait l'adresse du tunnel atteindrait le
+    # lecteur : on aurait remis le materiel sur Internet.
+    tunnel_client_id = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        verbose_name="Identifiant du jeton de tunnel",
+    )
+
+    tunnel_client_secret = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        verbose_name="Secret du jeton de tunnel",
+    )
 
     username = models.CharField(max_length=64, default="admin")
     # Stocke en clair : le lecteur exige les identifiants a chaque appel ISAPI.
@@ -83,6 +136,21 @@ class AccessDevice(models.Model):
         indexes = [
             models.Index(fields=["gym", "is_active"]),
         ]
+
+    @property
+    def tunnel_headers(self):
+        """
+        En-tetes a presenter au tunnel, vides quand le lecteur est sur le LAN.
+
+        Cloudflare Access reconnait un service par ce couple d'en-tetes. Tant
+        qu'ils ne sont pas renseignes, on parle au lecteur en direct.
+        """
+        if not (self.tunnel_client_id and self.tunnel_client_secret):
+            return {}
+        return {
+            "CF-Access-Client-Id": self.tunnel_client_id,
+            "CF-Access-Client-Secret": self.tunnel_client_secret,
+        }
 
     def __str__(self):
         return f"{self.name} ({self.host})"

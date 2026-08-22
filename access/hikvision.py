@@ -240,13 +240,17 @@ def _corps_erreur(exc):
 class HikvisionClient:
     """Client ISAPI minimal : lecture d'infos, test de liaison, ouverture porte."""
 
-    def __init__(self, host, username, password, port=80, use_https=False, timeout=DEFAULT_TIMEOUT):
+    def __init__(self, host, username, password, port=80, use_https=False,
+                 timeout=DEFAULT_TIMEOUT, tunnel_headers=None):
         self.host = host
         self.username = username
         self.password = password
         self.port = port or 80
         self.use_https = use_https
         self.timeout = timeout
+        # En-tetes exiges par le tunnel qui protege le lecteur. Sans eux,
+        # l'appel est refuse avant meme d'atteindre le materiel.
+        self.tunnel_headers = dict(tunnel_headers or {})
 
     @classmethod
     def from_device(cls, device, timeout=DEFAULT_TIMEOUT):
@@ -257,6 +261,7 @@ class HikvisionClient:
             port=device.port,
             use_https=device.use_https,
             timeout=timeout,
+            tunnel_headers=device.tunnel_headers,
         )
 
     @property
@@ -288,6 +293,8 @@ class HikvisionClient:
                     f"{self.username}:{self.password}".encode()
                 ).decode()
                 request.add_header("Authorization", f"Basic {token}")
+            for nom, valeur in self.tunnel_headers.items():
+                request.add_header(nom, valeur)
             return request
 
         try:
@@ -577,6 +584,8 @@ class HikvisionClient:
         request = urllib.request.Request(url, data=data, method=method)
         if data is not None:
             request.add_header("Content-Type", content_type)
+        for nom, valeur in self.tunnel_headers.items():
+            request.add_header(nom, valeur)
 
         try:
             return self._opener().open(request, timeout=self.timeout).read()

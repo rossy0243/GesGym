@@ -45,9 +45,11 @@ de ce que le logiciel fait reellement, pas de ce qu'on croit qu'il fait.
 | `gym` | ForeignKey |
 | `name` | CharField |
 | `brand` | CharField |
-| `host` | GenericIPAddressField |
+| `host` | CharField |
 | `port` | PositiveIntegerField |
 | `use_https` | BooleanField |
+| `tunnel_client_id` | CharField |
+| `tunnel_client_secret` | CharField |
 | `username` | CharField |
 | `password` | CharField |
 | `door_number` | PositiveSmallIntegerField |
@@ -116,10 +118,12 @@ formation : « la reception peut pointer mais pas consulter les salaires ».
 Refus opposes par le logiciel. Chacun merite une explication dans la
 formation : pourquoi la regle existe, et que faire quand on la rencontre.
 
+- Adresse du lecteur manquante.
 - Aucun lecteur actif a synchroniser.
 - Aucun lecteur actif enregistre.
 - Aucun lecteur enregistre dans l'application. Ajoute-le d'abord depuis Controle d'acces > Lecteurs.
 - Aucun lecteur numero {valeur}.
+- Indiquez une adresse IPv4 (192.168.1.87) ou un nom d'hote (lecteur-kinshasa.exemple.com).
 - Le membre n'appartient pas a ce gym.
 - Lecteur injoignable. Si Proton VPN tourne, quittez-le : son filtrage bloque le reseau local.
 - Lecteur {valeur} injoignable : {valeur} Verifie qu'il est alimente, cable, et qu'aucun VPN ne bloque le reseau local.
@@ -357,6 +361,21 @@ meilleure source pour les cas limites a montrer en formation.
 - the declaration is traced in the sensitive log
 - a reader of another gym is out of reach
 - a receptionist cannot declare the application
+
+### TunnelledDeviceTests
+
+> Un serveur heberge ne peut pas atteindre une adresse privee.
+
+- a hostname is accepted as an address
+- a local address still works
+- an absurd address is refused with an example
+- the client builds an https url from the hostname
+- every request carries the tunnel token
+- a device on the local network sends no token
+- half a token is treated as no token
+- the token reaches the actual request
+- the secret never leaves the server
+- a local device is reported as unprotected
 
 ## A completer par un humain
 
