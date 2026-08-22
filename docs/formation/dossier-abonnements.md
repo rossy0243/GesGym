@@ -129,7 +129,7 @@ formation : « la reception peut pointer mais pas consulter les salaires ».
 Refus opposes par le logiciel. Chacun merite une explication dans la
 formation : pourquoi la regle existe, et que faire quand on la rencontre.
 
-- Ce membre a déjà un abonnement actif.
+- Ce membre a deja un abonnement actif sur cette periode.
 - Ce membre n'appartient pas au gym courant.
 - Cette formule n'appartient pas au gym courant.
 - La date de fin doit être après la date de début.

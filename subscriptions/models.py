@@ -245,14 +245,22 @@ class MemberSubscription(models.Model):
             raise ValidationError("La date de fin doit être après la date de début.")
 
         if self.is_active and self.member_id and self.gym_id and not getattr(self, "_skip_active_collision_validation", False):
-            exists = MemberSubscription.objects.filter(
+            # Ce qu'il faut empecher, c'est le chevauchement : deux abonnements
+            # couvrant le meme jour feraient payer deux fois la meme periode.
+            # Deux periodes qui se suivent sont legitimes : un membre peut
+            # regler d'avance celui qui prendra le relais.
+            chevauche = MemberSubscription.objects.filter(
                 member=self.member,
                 gym=self.gym,
-                is_active=True
+                is_active=True,
+                start_date__lte=self.end_date,
+                end_date__gte=self.start_date,
             ).exclude(pk=self.pk).exists()
 
-            if exists:
-                raise ValidationError("Ce membre a déjà un abonnement actif.")
+            if chevauche:
+                raise ValidationError(
+                    "Ce membre a deja un abonnement actif sur cette periode."
+                )
             
     def save(self, *args, **kwargs):
         if self.member_id and not self.gym_id:

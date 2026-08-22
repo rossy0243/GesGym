@@ -108,13 +108,14 @@ formation : pourquoi la regle existe, et que faire quand on la rencontre.
 
 - Aucune caisse ouverte pour cet utilisateur. Ouvrez votre session POS avant tout mouvement financier.
 - Aucune caisse ouverte. Ouvrez une session POS avant tout mouvement financier.
+- Cet abonnement court jusqu'au {valeur}. Choisissez le {valeur}, ou laissez la date vide pour prolonger l'abonnement en cours.
 - Devise de decaissement invalide.
 - Impossible d'enregistrer un mouvement sur une caisse fermee.
 - L'abonnement n'appartient pas à ce gym.
 - La caisse n'appartient pas a ce gym.
 - La caisse ouverte n'a pas de taux USD-CDF valide.
 - La date de debut est invalide.
-- La date de debut ne peut pas etre dans le futur pour un abonnement encaisse.
+- La date de debut ne peut pas depasser {valeur} mois. Verifiez l'annee saisie.
 - La formule d'abonnement n'appartient pas a ce gym.
 - La quantite vendue doit etre superieure a zero.
 - La quantite vendue est invalide.
@@ -261,6 +262,25 @@ meilleure source pour les cas limites a montrer en formation.
 - a coach cannot search the clients
 - the cashier page no longer renders the whole list
 - the hidden field still carries the submitted member
+
+### FutureStartDateTests
+
+> Un abonnement peut se payer d'avance pour demarrer plus tard.
+
+- a start date next month is accepted
+- a subscription starting later is not active yet
+- the team sees that it is paid and when it starts
+- a date in the past stays allowed — _Rattraper un abonnement oublie reste possible._
+- a date beyond three months is refused as a typo
+- a date inside the running subscription is refused
+- the refusal names the first free date
+- the refusal explains how to extend instead
+- the day after the current one ends is accepted
+- the running subscription survives a future purchase
+- the member stays active today
+- paying without a date extends the running subscription
+- extending closes the previous subscription
+- a member without subscription starts today
 
 ## A completer par un humain
 

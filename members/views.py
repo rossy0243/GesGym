@@ -2108,6 +2108,17 @@ def member_detail(request, member_id):
         "qr_download_url": reverse("members:member_qr", args=[member.qr_code]) + "?download=1",
         "member_portal_url": build_public_url(request, reverse("members:member_portal")),
         # Qui a inscrit ce membre, et par quel chemin.
+        # Abonnement paye d'avance : l'accueil ne doit pas relancer un membre
+        # qui a deja regle pour le mois prochain.
+        "upcoming_start": (
+            member.upcoming_subscription.start_date.strftime("%d/%m/%Y")
+            if member.upcoming_subscription else ""
+        ),
+        "upcoming_plan": (
+            member.upcoming_subscription.plan.name
+            if member.upcoming_subscription and member.upcoming_subscription.plan
+            else ""
+        ),
         "registered_by": member.registered_by_label,
         "registration_source": member.get_registration_source_display(),
         "registered_on": timezone.localtime(member.created_at).strftime("%d/%m/%Y %H:%M"),

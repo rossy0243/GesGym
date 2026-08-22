@@ -1097,3 +1097,199 @@ class CashierMemberSearchTests(TestCase):
         )
 
         self.assertIn('name="member" id="memberSelect"', html)
+
+
+class FutureStartDateTests(TestCase):
+    """
+    Un abonnement peut se payer d'avance pour demarrer plus tard.
+
+    Cas reel : le membre paie aujourd'hui mais ne commencera qu'au mois
+    prochain.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Avance", slug="org-avance"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Avance",
+            slug="gym-avance",
+            subdomain="gym-avance",
+        )
+        self.caissier = User.objects.create_user(
+            username="caissier-avance", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.caissier, gym=self.gym, role="cashier", is_active=True
+        )
+        self.register = CashRegister.objects.create(
+            gym=self.gym,
+            opened_by=self.caissier,
+            opening_amount=Decimal("0.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+        self.plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Mensuel", price=30, duration_days=30
+        )
+        self.member = Member.objects.create(
+            gym=self.gym,
+            first_name="Ada",
+            last_name="Mbala",
+            phone="+243900000001",
+        )
+        self.today = timezone.localdate()
+
+    def _encaisser(self, start_date=None):
+        return record_subscription_payment(
+            gym=self.gym,
+            member=self.member,
+            plan=self.plan,
+            currency="USD",
+            method="cash",
+            start_date=start_date,
+            created_by=self.caissier,
+        )
+
+    def _abonnement(self, debut, fin):
+        return MemberSubscription.objects.create(
+            gym=self.gym,
+            member=self.member,
+            plan=self.plan,
+            start_date=debut,
+            end_date=fin,
+            is_active=True,
+        )
+
+    # --- Payer d'avance --------------------------------------------------------
+
+    def test_a_start_date_next_month_is_accepted(self):
+        debut = self.today + timedelta(days=30)
+
+        abonnement, _ = self._encaisser(start_date=debut)
+
+        self.assertEqual(abonnement.start_date, debut)
+        self.assertEqual(abonnement.end_date, debut + timedelta(days=30))
+
+    def test_a_subscription_starting_later_is_not_active_yet(self):
+        # La porte doit rester fermee jusqu'a la date de debut.
+        self._encaisser(start_date=self.today + timedelta(days=30))
+
+        self.assertIsNone(self.member.active_subscription)
+        self.assertEqual(self.member.computed_status, "expired")
+
+    def test_the_team_sees_that_it_is_paid_and_when_it_starts(self):
+        # Sans cette mention, l'accueil relancerait un membre a jour.
+        debut = self.today + timedelta(days=30)
+        self._encaisser(start_date=debut)
+
+        a_venir = self.member.upcoming_subscription
+        self.assertIsNotNone(a_venir)
+        self.assertEqual(a_venir.start_date, debut)
+
+    def test_a_date_in_the_past_stays_allowed(self):
+        """
+        Rattraper un abonnement oublie reste possible.
+
+        La demande portait sur l'ouverture des dates futures ; fermer le passe
+        au passage aurait empeche de saisir un abonnement commence la semaine
+        derniere et jamais enregistre.
+        """
+        debut = self.today - timedelta(days=5)
+
+        abonnement, _ = self._encaisser(start_date=debut)
+
+        self.assertEqual(abonnement.start_date, debut)
+
+    def test_a_date_beyond_three_months_is_refused_as_a_typo(self):
+        # Une annee mal saisie creerait un abonnement fantome que personne ne
+        # remarquerait avant des mois.
+        with self.assertRaises(ValidationError) as capture:
+            self._encaisser(start_date=self.today + timedelta(days=400))
+
+        self.assertIn("Verifiez l'annee", str(capture.exception))
+
+    # --- Ne pas payer deux fois les memes jours ----------------------------------
+
+    def test_a_date_inside_the_running_subscription_is_refused(self):
+        self._abonnement(self.today, self.today + timedelta(days=19))
+
+        with self.assertRaises(ValidationError) as capture:
+            self._encaisser(start_date=self.today + timedelta(days=10))
+
+        message = str(capture.exception)
+        self.assertIn("court jusqu'au", message)
+
+    def test_the_refusal_names_the_first_free_date(self):
+        fin = self.today + timedelta(days=19)
+        self._abonnement(self.today, fin)
+
+        with self.assertRaises(ValidationError) as capture:
+            self._encaisser(start_date=self.today + timedelta(days=10))
+
+        libre = (fin + timedelta(days=1)).strftime("%d/%m/%Y")
+        self.assertIn(libre, str(capture.exception))
+
+    def test_the_refusal_explains_how_to_extend_instead(self):
+        self._abonnement(self.today, self.today + timedelta(days=19))
+
+        with self.assertRaises(ValidationError) as capture:
+            self._encaisser(start_date=self.today + timedelta(days=10))
+
+        self.assertIn("laissez la date vide", str(capture.exception))
+
+    def test_the_day_after_the_current_one_ends_is_accepted(self):
+        fin = self.today + timedelta(days=19)
+        self._abonnement(self.today, fin)
+
+        abonnement, _ = self._encaisser(start_date=fin + timedelta(days=1))
+
+        self.assertEqual(abonnement.start_date, fin + timedelta(days=1))
+
+    # --- Le membre ne doit jamais se retrouver a la porte -------------------------
+
+    def test_the_running_subscription_survives_a_future_purchase(self):
+        # Le desactiver laisserait le membre dehors jusqu'a la date de debut.
+        fin = self.today + timedelta(days=19)
+        en_cours = self._abonnement(self.today, fin)
+
+        self._encaisser(start_date=fin + timedelta(days=1))
+
+        en_cours.refresh_from_db()
+        self.assertTrue(en_cours.is_active)
+        self.assertIsNotNone(self.member.active_subscription)
+
+    def test_the_member_stays_active_today(self):
+        fin = self.today + timedelta(days=19)
+        self._abonnement(self.today, fin)
+
+        self._encaisser(start_date=fin + timedelta(days=1))
+
+        self.assertEqual(self.member.computed_status, "active")
+
+    # --- Le renouvellement anticipe, inchange --------------------------------------
+
+    def test_paying_without_a_date_extends_the_running_subscription(self):
+        fin = self.today + timedelta(days=19)
+        self._abonnement(self.today, fin)
+
+        abonnement, _ = self._encaisser()
+
+        # Les 19 jours restants sont reportes : la nouvelle echeance vaut
+        # l'ancienne plus la duree de la formule.
+        self.assertEqual(abonnement.end_date, fin + timedelta(days=30))
+
+    def test_extending_closes_the_previous_subscription(self):
+        fin = self.today + timedelta(days=19)
+        en_cours = self._abonnement(self.today, fin)
+
+        self._encaisser()
+
+        en_cours.refresh_from_db()
+        self.assertFalse(en_cours.is_active)
+
+    def test_a_member_without_subscription_starts_today(self):
+        abonnement, _ = self._encaisser()
+
+        self.assertEqual(abonnement.start_date, self.today)
+        self.assertEqual(abonnement.end_date, self.today + timedelta(days=30))

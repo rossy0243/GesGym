@@ -3,12 +3,18 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from products.models import Product
 from subscriptions.models import MemberSubscription
 
 from .models import CashRegister, Payment, _money
+
+
+# Un abonnement se paie d'avance, mais pas indefiniment : au-dela, une date
+# est plus probablement une faute de frappe qu'une intention.
+DELAI_DEBUT_FUTUR_MAX = 90
 
 
 def _to_decimal(value, field_label="Montant"):
@@ -101,35 +107,61 @@ def record_subscription_payment(
     register = get_open_register(gym, created_by)
     today = timezone.localdate()
     start = start_date or today
-    if start > today:
-        raise ValidationError("La date de debut ne peut pas etre dans le futur pour un abonnement encaisse.")
 
-    current = (
+    # Un abonnement peut se payer d'avance pour demarrer plus tard. La borne
+    # attrape les fautes de frappe : une annee erronee creerait un abonnement
+    # fantome que personne ne remarquerait avant des mois.
+    if start > today + timedelta(days=DELAI_DEBUT_FUTUR_MAX):
+        raise ValidationError(
+            "La date de debut ne peut pas depasser "
+            f"{DELAI_DEBUT_FUTUR_MAX // 30} mois. Verifiez l'annee saisie."
+        )
+
+    en_cours = (
         MemberSubscription.objects.filter(
             gym=gym,
             member=member,
             is_active=True,
-            end_date__gt=start,
+            end_date__gte=today,
         )
         .order_by("-end_date")
         .first()
     )
 
-    # Renouvellement anticipe : le nouvel abonnement prolonge le temps qui
-    # restait au lieu de l'effacer. La date de debut reste celle de
-    # l'encaissement, exigee par la comptabilite, mais le membre ne perd aucun
-    # jour deja paye.
-    carried_over_days = (current.end_date - start).days if current else 0
+    # Une date choisie dans le futur, mais tombant au milieu de l'abonnement en
+    # cours, ferait payer deux fois les memes jours. On refuse en indiquant la
+    # premiere date libre plutot que de laisser le caissier deviner.
+    #
+    # Un debut aujourd'hui n'est pas concerne : c'est le renouvellement
+    # anticipe, ou les jours restants sont reportes. Le formulaire preremplit
+    # d'ailleurs ce champ a la date du jour.
+    if start > today and en_cours and start <= en_cours.end_date:
+        libre = en_cours.end_date + timedelta(days=1)
+        raise ValidationError(
+            f"Cet abonnement court jusqu'au {en_cours.end_date.strftime('%d/%m/%Y')}. "
+            f"Choisissez le {libre.strftime('%d/%m/%Y')}, ou laissez la date vide "
+            "pour prolonger l'abonnement en cours."
+        )
+
+    # Renouvellement anticipe sans date imposee : le nouvel abonnement
+    # prolonge le temps qui restait au lieu de l'effacer. Le membre ne perd
+    # aucun jour deja paye.
+    absorbe = en_cours if (en_cours and start <= en_cours.end_date) else None
+    carried_over_days = (absorbe.end_date - start).days if absorbe else 0
     end = start + timedelta(days=plan.duration_days + carried_over_days)
 
     amount_usd = _money(plan.price)
     amount = amount_usd if currency == "USD" else _money(amount_usd * register.exchange_rate)
 
     with transaction.atomic():
+        # On clot ce que le nouvel abonnement remplace : les periodes qui le
+        # chevauchent, et celles deja terminees qui trainaient encore marquees
+        # actives. Un abonnement qui demarre apres celui-ci est preserve : le
+        # desactiver laisserait le membre a la porte d'ici la.
         MemberSubscription.objects.filter(
-            gym=gym,
-            member=member,
-            is_active=True,
+            gym=gym, member=member, is_active=True
+        ).filter(
+            Q(start_date__lte=end, end_date__gte=start) | Q(end_date__lt=today)
         ).update(is_active=False)
 
         subscription = MemberSubscription.objects.create(

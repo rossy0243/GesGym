@@ -159,6 +159,24 @@ class Member(models.Model):
         return self._latest_active_subscription_queryset().first()
 
     @property
+    def upcoming_subscription(self):
+        """
+        Abonnement paye mais pas encore commence.
+
+        Sans cette mention, l'accueil croirait le membre impaye et le
+        relancerait, alors qu'il a regle d'avance pour le mois prochain. Il
+        reste bien sans abonnement actif : la porte lui est refusee jusqu'a la
+        date de debut, ce qui est le comportement voulu.
+        """
+        today = timezone.localdate()
+        return (
+            self.subscriptions.filter(is_active=True, start_date__gt=today)
+            .select_related("plan")
+            .order_by("start_date")
+            .first()
+        )
+
+    @property
     def expiration_date(self):
         sub = self.active_subscription
         return sub.end_date if sub else None

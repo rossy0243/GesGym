@@ -791,6 +791,12 @@ body.members-screen .modal.show .modal-dialog {
                                 <span class="material-icons" style="font-size:14px;">email</span>
                                 <span id="viewMemberEmail">-</span>
                             </p>
+                            <p class="mb-1 small d-none" id="viewMemberUpcoming">
+                                <span class="badge bg-info text-dark">
+                                    <span class="material-icons align-middle" style="font-size:13px;">schedule</span>
+                                    Abonnement payé — débute le <span id="viewMemberUpcomingStart">-</span>
+                                </span>
+                            </p>
                             <p class="mb-0 small text-muted">
                                 <span class="material-icons" style="font-size:14px;">how_to_reg</span>
                                 Inscrit par <span id="viewMemberRegisteredBy">-</span>
@@ -1283,6 +1289,18 @@ body.members-screen .modal.show .modal-dialog {
                     `${data.first_name || ''} ${data.last_name || ''}`.trim() || "-";
                 document.getElementById("viewMemberPhone").innerText = data.phone || "-";
                 document.getElementById("viewMemberEmail").innerText = data.email || "-";
+                // Un membre qui a paye d'avance n'est pas un impaye : sans cette
+                // mention, l'accueil le relancerait.
+                const bloqueAvenir = document.getElementById("viewMemberUpcoming");
+                if (bloqueAvenir) {
+                    if (data.upcoming_start) {
+                        document.getElementById("viewMemberUpcomingStart").innerText =
+                            data.upcoming_start + (data.upcoming_plan ? " (" + data.upcoming_plan + ")" : "");
+                        bloqueAvenir.classList.remove("d-none");
+                    } else {
+                        bloqueAvenir.classList.add("d-none");
+                    }
+                }
                 document.getElementById("viewMemberRegisteredBy").innerText = data.registered_by || "Inconnu";
                 document.getElementById("viewMemberRegisteredOn").innerText = data.registered_on || "-";
                 document.getElementById("viewMemberRegistrationSource").innerText = data.registration_source || "-";
