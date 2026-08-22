@@ -85,6 +85,7 @@ Valeurs possibles `BRAND_CHOICES` :
 | `device_used` | CharField |
 | `device` | ForeignKey |
 | `is_return` | BooleanField |
+| `device_event_id` | CharField |
 | `denial_reason` | CharField |
 | `scanned_by` | ForeignKey |
 
@@ -121,6 +122,7 @@ formation : pourquoi la regle existe, et que faire quand on la rencontre.
 - Adresse du lecteur manquante.
 - Aucun lecteur actif a synchroniser.
 - Aucun lecteur actif enregistre.
+- Aucun lecteur actif.
 - Aucun lecteur enregistre dans l'application. Ajoute-le d'abord depuis Controle d'acces > Lecteurs.
 - Aucun lecteur numero {valeur}.
 - Indiquez une adresse IPv4 (192.168.1.87) ou un nom d'hote (lecteur-kinshasa.exemple.com).
@@ -376,6 +378,26 @@ meilleure source pour les cas limites a montrer en formation.
 - the token reaches the actual request
 - the secret never leaves the server
 - a local device is reported as unprotected
+
+### OfflineDeviceBannerTests
+
+> Une panne franche se voit ; la panne silencieuse, non.
+
+- a reader silent for hours raises the banner
+- a short outage does not alarm the team
+- a reader never contacted stays quiet
+- an inactive reader is ignored
+- the banner follows the manager on every page
+- the banner says what stops working
+- a receptionist does not see the banner
+- a reader of another gym never raises our banner
+
+### DeviceAddressTests
+
+> L'adresse du lecteur, apres le changement de type du champ.
+
+- a netmask left by the type change is refused
+- a plain address passes
 
 ## A completer par un humain
 

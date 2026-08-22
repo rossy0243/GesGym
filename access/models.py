@@ -208,6 +208,16 @@ class AccessLog(models.Model):
         help_text="Passage suivant une entree deja accordee le meme jour.",
     )
 
+    # Numero de l'evenement dans la memoire du lecteur. Sert au rattrapage
+    # apres une coupure : il permet de relire le journal du materiel sans
+    # recreer deux fois le meme passage.
+    device_event_id = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        verbose_name="Numero d'evenement du lecteur",
+    )
+
     denial_reason = models.CharField(
         max_length=255,
         blank=True,
@@ -226,6 +236,7 @@ class AccessLog(models.Model):
 
         indexes = [
             models.Index(fields=["gym"]),
+            models.Index(fields=["device", "device_event_id"]),
             models.Index(fields=["member"]),
             models.Index(fields=["check_in_time"]),
             models.Index(fields=["member", "check_in_time"]),

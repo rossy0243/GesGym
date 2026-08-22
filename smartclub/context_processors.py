@@ -225,3 +225,24 @@ def maintenance_alert_processor(request):
         return {"maintenance_banner": None}
 
     return {"maintenance_banner": maintenance_alert_summary(gym)}
+
+
+def access_device_health_processor(request):
+    """
+    Signale un lecteur qui ne donne plus signe de vie.
+
+    Meme raison que pour les maintenances : une alerte qui n'apparait que sur
+    la page des lecteurs n'est vue que par celui qui y va deja. Or personne n'y
+    va tant que la porte fonctionne, et elle fonctionne justement toute seule.
+    """
+    from access.health import resume_hors_ligne
+    from smartclub.access_control import ACCESS_DEVICE_ROLES
+
+    gym = getattr(request, "gym", None)
+    if not request.user.is_authenticated or gym is None:
+        return {"device_offline_banner": None}
+
+    if not has_role(request, ACCESS_DEVICE_ROLES):
+        return {"device_offline_banner": None}
+
+    return {"device_offline_banner": resume_hors_ligne(gym)}

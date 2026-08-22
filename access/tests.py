@@ -25,7 +25,8 @@ from subscriptions.models import MemberSubscription, SubscriptionPlan
 from . import enrollment, hikvision
 from .device_views import UNKNOWN_CREDENTIAL_REASON, _serialize_device
 from .hikvision import parse_event_payload
-from .models import AccessDevice, AccessLog
+from .health import resume_hors_ligne
+from .models import AccessDevice, AccessLog, validate_device_host
 from .views import (
     EXPIRED_QR_REASON,
     NO_SUBSCRIPTION_REASON,
@@ -2290,3 +2291,138 @@ class TunnelledDeviceTests(TestCase):
         )
 
         self.assertFalse(_serialize_device(lecteur)["tunnel_protege"])
+
+
+class OfflineDeviceBannerTests(TestCase):
+    """
+    Une panne franche se voit ; la panne silencieuse, non.
+
+    Le lecteur continue d'ouvrir seul, mais les passages ne remontent plus et
+    les abonnements encaisses ne lui parviennent pas.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Sante", slug="org-sante"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Sante",
+            slug="gym-sante",
+            subdomain="gym-sante",
+        )
+        module, _ = Module.objects.get_or_create(
+            code="ACCESS", defaults={"name": "Access"}
+        )
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=module, defaults={"is_active": True}
+        )
+        self.device = AccessDevice.objects.create(
+            gym=self.gym, name="Terminal", host="10.0.0.9", password="secret"
+        )
+        self.manager = User.objects.create_user(
+            username="gerant-sante", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.manager, gym=self.gym, role="manager", is_active=True
+        )
+        self._connecter(self.manager)
+
+    def _connecter(self, utilisateur):
+        self.client.force_login(utilisateur)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _vu_il_y_a(self, heures):
+        AccessDevice.objects.filter(pk=self.device.pk).update(
+            last_seen_at=timezone.now() - timedelta(hours=heures)
+        )
+
+    # --- Quand le bandeau parait --------------------------------------------
+
+    def test_a_reader_silent_for_hours_raises_the_banner(self):
+        self._vu_il_y_a(5)
+
+        resume = resume_hors_ligne(self.gym)
+
+        self.assertIsNotNone(resume)
+        self.assertEqual(resume["total"], 1)
+
+    def test_a_short_outage_does_not_alarm_the_team(self):
+        # Une coupure d'une heure ne doit pas declencher l'alerte : elle serait
+        # criee si souvent qu'on cesserait de la lire.
+        self._vu_il_y_a(1)
+
+        self.assertIsNone(resume_hors_ligne(self.gym))
+
+    def test_a_reader_never_contacted_stays_quiet(self):
+        # La fiche vient d'etre creee : rien d'anormal a signaler.
+        self.assertIsNone(self.device.last_seen_at)
+        self.assertIsNone(resume_hors_ligne(self.gym))
+
+    def test_an_inactive_reader_is_ignored(self):
+        self._vu_il_y_a(10)
+        AccessDevice.objects.filter(pk=self.device.pk).update(is_active=False)
+
+        self.assertIsNone(resume_hors_ligne(self.gym))
+
+    # --- Ce que l'utilisateur lit ---------------------------------------------
+
+    def test_the_banner_follows_the_manager_on_every_page(self):
+        self._vu_il_y_a(5)
+
+        response = self.client.get(reverse("access:acces_dashboard"))
+
+        self.assertContains(response, "ne repond plus")
+        self.assertContains(response, "La porte continue de fonctionner")
+
+    def test_the_banner_says_what_stops_working(self):
+        # Sans cela, l'equipe pourrait croire que la salle est bloquee et
+        # renvoyer les membres chez eux.
+        self._vu_il_y_a(5)
+
+        response = self.client.get(reverse("access:acces_dashboard"))
+
+        self.assertContains(response, "les passages ne sont plus")
+
+    def test_a_receptionist_does_not_see_the_banner(self):
+        self._vu_il_y_a(5)
+        reception = User.objects.create_user(
+            username="reception-sante", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=reception, gym=self.gym, role="reception", is_active=True
+        )
+        self._connecter(reception)
+
+        response = self.client.get(reverse("access:acces_dashboard"))
+
+        self.assertNotContains(response, "ne repond plus")
+
+    def test_a_reader_of_another_gym_never_raises_our_banner(self):
+        autre = Gym.objects.create(
+            organization=self.organization, name="Ailleurs",
+            slug="ailleurs-sante", subdomain="ailleurs-sante",
+        )
+        AccessDevice.objects.create(
+            gym=autre, name="Autre", host="10.0.0.8", password="secret",
+            last_seen_at=timezone.now() - timedelta(hours=20),
+        )
+
+        self.assertIsNone(resume_hors_ligne(self.gym))
+
+
+class DeviceAddressTests(TestCase):
+    """L'adresse du lecteur, apres le changement de type du champ."""
+
+    def test_a_netmask_left_by_the_type_change_is_refused(self):
+        # PostgreSQL stockait ce champ en type inet : le convertir en texte a
+        # rendu "172.20.10.3" sous la forme "172.20.10.3/32", et la fiche ne
+        # passait plus la validation. Une migration nettoie l'existant ; ce
+        # test garantit qu'une telle valeur ne rentre pas de nouveau.
+        with self.assertRaises(ValidationError):
+            validate_device_host("172.20.10.3/32")
+
+    def test_a_plain_address_passes(self):
+        validate_device_host("172.20.10.3")

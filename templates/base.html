@@ -158,6 +158,37 @@
                     </a>
                 </div>
                 {% endif %}
+                {% if device_offline_banner %}
+                {% comment %}
+                Une panne franche se voit : la porte ne s'ouvre plus, quelqu'un
+                appelle. La panne silencieuse, non : le lecteur continue
+                d'ouvrir seul, mais les passages ne remontent plus et les
+                abonnements encaisses ne lui parviennent plus.
+                {% endcomment %}
+                <div class="alert alert-danger d-flex align-items-start gap-3 mb-4" role="alert">
+                    <span class="material-icons">wifi_off</span>
+                    <div class="flex-grow-1">
+                        <div class="fw-semibold">
+                            {% if device_offline_banner.total == 1 %}
+                            Le lecteur « {{ device_offline_banner.plus_ancien.name }} » ne repond plus
+                            {% else %}
+                            {{ device_offline_banner.total }} lecteurs ne repondent plus
+                            {% endif %}
+                        </div>
+                        <div class="small">
+                            Sans nouvelles depuis {{ device_offline_banner.heures }} heure(s).
+                            La porte continue de fonctionner, mais les passages ne sont plus
+                            journalises et les abonnements encaisses ne parviennent pas au lecteur.
+                            {% if device_offline_banner.erreur %}
+                            <span class="d-block">Derniere erreur : {{ device_offline_banner.erreur }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <a href="{% url 'access:acces_dashboard' %}" class="btn btn-sm btn-light flex-shrink-0">
+                        Voir les lecteurs
+                    </a>
+                </div>
+                {% endif %}
             {% block page_header %}{% endblock %}
             {% block content %}
             
