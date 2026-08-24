@@ -146,6 +146,50 @@ def capturer_visage(device):
         ) from exc
 
 
+# Le lecteur explique son refus dans un code technique. Le traduire evite
+# d'envoyer l'utilisateur sur une fausse piste : longtemps, tout refus etait
+# annonce comme "aucun visage exploitable", y compris quand le visage etait
+# parfaitement lisible mais deja enrole ailleurs.
+REFUS_VISAGE = (
+    (
+        "alreadyExistThisFace",
+        "Ce visage est deja enregistre sous une autre fiche du lecteur. Le "
+        "terminal refuse d'attacher un meme visage a deux identites. "
+        "Verifiez que cette personne n'est pas deja enrolee, sous un autre "
+        "membre ou sous une fiche creee a la main sur le terminal.",
+    ),
+    (
+        "lowScoreOfFaceQuality",
+        "Le visage est lisible mais de trop mauvaise qualite. Eclairez le "
+        "visage de face, sans contre-jour, et recommencez.",
+    ),
+    (
+        "faceQuality",
+        "Le visage est lisible mais de trop mauvaise qualite. Eclairez le "
+        "visage de face, sans contre-jour, et recommencez.",
+    ),
+    (
+        "noFace",
+        "Le lecteur ne distingue aucun visage sur l'image. Demandez a la "
+        "personne de se placer face au lecteur, a hauteur d'ecran.",
+    ),
+    (
+        "analysisPic",
+        "Le lecteur ne distingue aucun visage sur l'image. Demandez a la "
+        "personne de se placer face au lecteur, a hauteur d'ecran.",
+    ),
+)
+
+
+def _cause_du_refus(exc):
+    """Traduit le refus du lecteur, ou rend None si le code est inconnu."""
+    brut = str(exc)
+    for code, explication in REFUS_VISAGE:
+        if code.lower() in brut.lower():
+            return explication
+    return None
+
+
 def inscrire_membre(device, member, image_bytes=None):
     """
     Cree ou met a jour la fiche du membre sur le lecteur, avec son visage.
@@ -181,9 +225,11 @@ def inscrire_membre(device, member, image_bytes=None):
         except hikvision.HikvisionError as exc:
             # La fiche est posee ; seul le visage manque. On le dit sans
             # laisser croire que rien n'a marche.
+            cause = _cause_du_refus(exc) or (
+                f"le lecteur l'a refuse sans motif reconnu. ({exc})"
+            )
             raise EnrollmentError(
-                "La fiche est enregistree mais le visage a ete refuse : le "
-                f"lecteur n'y distingue pas de visage exploitable. ({exc})"
+                f"La fiche est enregistree mais le visage a ete refuse : {cause}"
             ) from exc
 
     device.last_seen_at = timezone.now()

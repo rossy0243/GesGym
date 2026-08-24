@@ -1107,6 +1107,75 @@ class FaceEnrollmentServiceTests(TestCase):
 
         self.assertIn("fiche est enregistree", str(capture.exception))
 
+    def _refus_du_lecteur(self, corps):
+        """Enrole un visage que le lecteur refuse, et rend le message affiche."""
+        tampon = BytesIO()
+        Image.new("RGB", (352, 432), (40, 40, 40)).save(tampon, format="JPEG")
+
+        with patch.object(hikvision.HikvisionClient, "upsert_user"), patch.object(
+            hikvision.HikvisionClient,
+            "set_face",
+            side_effect=hikvision.HikvisionError(corps),
+        ):
+            with self.assertRaises(enrollment.EnrollmentError) as capture:
+                enrollment.inscrire_membre(self.device, self.member, tampon.getvalue())
+
+        return str(capture.exception)
+
+    def test_a_face_already_enrolled_elsewhere_is_named_as_such(self):
+        # Le lecteur refuse d'attacher un meme visage a deux identites. Ce
+        # refus etait annonce comme "aucun visage exploitable", ce qui envoyait
+        # chercher un probleme de cadrage la ou l'image etait parfaite.
+        message = self._refus_du_lecteur(
+            'HTTP 400 : { "subStatusCode": "alreadyExistThisFace" }'
+        )
+
+        self.assertIn("deja enregistre sous une autre fiche", message)
+        self.assertNotIn("aucun visage", message.lower())
+
+    def test_that_refusal_says_where_to_look(self):
+        # Le doublon peut venir d'une fiche creee a la main sur le terminal :
+        # sans cette mention, on chercherait en vain du cote des membres.
+        message = self._refus_du_lecteur(
+            'HTTP 400 : { "subStatusCode": "alreadyExistThisFace" }'
+        )
+
+        self.assertIn("creee a la main", message)
+
+    def test_a_face_too_blurred_asks_for_better_light(self):
+        message = self._refus_du_lecteur(
+            'HTTP 400 : { "subStatusCode": "lowScoreOfFaceQuality" }'
+        )
+
+        self.assertIn("qualite", message)
+        self.assertIn("contre-jour", message)
+
+    def test_an_image_without_a_face_still_says_so(self):
+        message = self._refus_du_lecteur(
+            'HTTP 400 : { "subStatusCode": "noFaceDetected" }'
+        )
+
+        self.assertIn("aucun visage", message)
+
+    def test_an_unknown_refusal_keeps_the_reader_own_words(self):
+        # Un code que nous ne connaissons pas ne doit pas etre travesti en
+        # diagnostic invente : le texte brut reste la seule piste.
+        message = self._refus_du_lecteur("quelqueChoseDeJamaisVu")
+
+        self.assertIn("quelqueChoseDeJamaisVu", message)
+        self.assertIn("sans motif reconnu", message)
+
+    def test_every_refusal_says_the_record_was_saved(self):
+        # La fiche est posee avant l'envoi du visage : laisser croire l'inverse
+        # pousserait a tout recommencer.
+        for corps in (
+            'HTTP 400 : { "subStatusCode": "alreadyExistThisFace" }',
+            'HTTP 400 : { "subStatusCode": "lowScoreOfFaceQuality" }',
+            "quelqueChoseDeJamaisVu",
+        ):
+            with self.subTest(corps=corps):
+                self.assertIn("fiche est enregistree", self._refus_du_lecteur(corps))
+
     def test_a_file_that_is_not_an_image_is_caught_before_the_reader(self):
         with patch.object(hikvision.HikvisionClient, "upsert_user"), patch.object(
             hikvision.HikvisionClient, "set_face"
