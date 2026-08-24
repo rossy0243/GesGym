@@ -1489,9 +1489,18 @@ function loadDevices() {
         }
 
         container.innerHTML = data.devices.map(device => {
-            const badge = device.online
-                ? '<span class="badge bg-success px-3 py-2">En ligne</span>'
-                : '<span class="badge bg-danger px-3 py-2">Hors ligne</span>';
+            // Deux sens, deux voyants. Un seul pour les deux faisait passer
+            // un lecteur qui remonte fidelement ses passages pour une panne,
+            // au seul motif que le serveur ne peut pas l'appeler.
+            const badge = `
+                <span class="badge ${device.nous_parle ? "bg-success" : "bg-secondary"} px-3 py-2"
+                      title="Le lecteur envoie ses passages a l'application">
+                    ${device.nous_parle ? "Remonte les passages" : "Silencieux"}
+                </span>
+                <span class="badge ${device.joignable ? "bg-success" : "bg-warning text-dark"} px-3 py-2"
+                      title="L'application peut appeler le lecteur : ouverture a distance, enrolement">
+                    ${device.joignable ? "Pilotable" : "Non pilotable"}
+                </span>`;
 
             return `
             <div class="p-3 border rounded-3 mb-3">
@@ -1508,6 +1517,12 @@ function loadDevices() {
                         </div>
                         ${device.last_seen ? `<div class="text-muted small">Dernier contact : ${escapeHtml(device.last_seen)}</div>` : ""}
                         ${device.last_error ? `<div class="text-danger small mt-1">${escapeHtml(device.last_error)}</div>` : ""}
+                        ${!device.joignable && device.nous_parle ? `
+                            <div class="small mt-2 p-2 rounded bg-light border">
+                                Ce lecteur remonte bien ses passages, mais l'application ne peut pas
+                                l'appeler : ouverture à distance, enrôlement d'un visage et mise à jour
+                                des dates d'abonnement sont indisponibles depuis ce serveur.
+                            </div>` : ""}
                     </div>
                     <div class="d-flex align-items-center gap-2 flex-wrap">
                         ${badge}

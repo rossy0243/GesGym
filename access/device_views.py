@@ -67,6 +67,12 @@ def _serialize_device(device):
         "is_active": device.is_active,
         "open_on_granted": device.open_on_granted,
         "online": device.is_online,
+        # Les deux sens de circulation, distincts : le lecteur nous parle
+        # tout seul, mais lui parler exige d'entrer dans le reseau de la
+        # salle. Un seul voyant pour les deux faisait passer un lecteur
+        # parfaitement vivant pour une panne.
+        "nous_parle": device.nous_parle,
+        "joignable": device.est_joignable,
         "last_seen": device.last_seen_at.strftime("%d/%m/%Y %H:%M") if device.last_seen_at else "",
         "last_error": device.last_error,
         "webhook_path": f"/access/devices/webhook/{device.webhook_token}/",

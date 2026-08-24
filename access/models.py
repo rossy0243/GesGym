@@ -1,6 +1,8 @@
 import uuid
+from datetime import timedelta
 
 from django.db import models
+from django.utils import timezone
 from organizations.models import Gym
 from members.models import Member
 from django.core.exceptions import ValidationError
@@ -155,9 +157,39 @@ class AccessDevice(models.Model):
     def __str__(self):
         return f"{self.name} ({self.host})"
 
+    # Le lecteur bat toutes les 30 secondes des qu'une destination lui est
+    # declaree. Deux minutes absorbent un battement manque sans laisser croire
+    # qu'un lecteur mort est encore vivant.
+    FRAICHEUR_CONTACT = timedelta(minutes=2)
+
+    @property
+    def nous_parle(self):
+        """
+        Le lecteur pousse-t-il encore ses evenements vers l'application ?
+
+        Ce sens-la traverse tout seul : le lecteur sort vers internet comme un
+        navigateur. C'est de lui que dependent le journal des passages et la
+        frequentation.
+        """
+        if not self.last_seen_at:
+            return False
+        return timezone.now() - self.last_seen_at <= self.FRAICHEUR_CONTACT
+
+    @property
+    def est_joignable(self):
+        """
+        L'application a-t-elle reussi son dernier appel vers le lecteur ?
+
+        Ce sens-la exige d'entrer dans le reseau de la salle. Il porte
+        l'ouverture a distance, l'enrolement des visages et la propagation des
+        dates de validite.
+        """
+        return not self.last_error
+
     @property
     def is_online(self):
-        return bool(self.last_seen_at) and not self.last_error
+        """Conserve pour l'existant : les deux sens doivent fonctionner."""
+        return self.nous_parle and self.est_joignable
 
 
 class AccessLog(models.Model):

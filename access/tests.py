@@ -2742,3 +2742,92 @@ class DeviceScreenTemplateTests(TestCase):
 
         champ = gabarit[gabarit.find('id="deviceHost"') - 200 :][:400]
         self.assertNotIn("readonly", champ)
+
+
+class DeviceDirectionIndicatorTests(TestCase):
+    """
+    Deux sens de circulation, deux voyants.
+
+    Le lecteur sort vers internet tout seul ; c'est l'appeler qui exige
+    d'entrer dans le reseau de la salle. Un voyant unique melangeait les deux
+    et faisait passer un lecteur qui remonte fidelement ses passages pour une
+    panne, au seul motif que le serveur ne pouvait pas le joindre.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Sens", slug="org-sens"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Sens",
+            slug="gym-sens",
+            subdomain="gym-sens",
+        )
+        self.device = AccessDevice.objects.create(
+            gym=self.gym, name="Terminal", host="10.0.0.9", password="secret"
+        )
+
+    def _vu_il_y_a(self, **ecart):
+        AccessDevice.objects.filter(pk=self.device.pk).update(
+            last_seen_at=timezone.now() - timedelta(**ecart)
+        )
+        self.device.refresh_from_db()
+
+    # --- Le lecteur nous parle -------------------------------------------------
+
+    def test_a_recent_heartbeat_means_the_reader_speaks_to_us(self):
+        self._vu_il_y_a(seconds=30)
+
+        self.assertTrue(self.device.nous_parle)
+
+    def test_a_reader_silent_for_ten_minutes_no_longer_speaks(self):
+        self._vu_il_y_a(minutes=10)
+
+        self.assertFalse(self.device.nous_parle)
+
+    def test_a_reader_never_heard_from_does_not_speak(self):
+        self.assertIsNone(self.device.last_seen_at)
+        self.assertFalse(self.device.nous_parle)
+
+    def test_an_outbound_failure_does_not_silence_the_reader(self):
+        # C'est exactement le cas du serveur en ligne : il ne peut pas appeler
+        # le lecteur, mais recoit tous ses passages.
+        self._vu_il_y_a(seconds=30)
+        AccessDevice.objects.filter(pk=self.device.pk).update(
+            last_error="Lecteur injoignable"
+        )
+        self.device.refresh_from_db()
+
+        self.assertTrue(self.device.nous_parle)
+        self.assertFalse(self.device.est_joignable)
+
+    # --- L'application parle au lecteur ---------------------------------------
+
+    def test_a_reader_without_error_is_pilotable(self):
+        self.assertTrue(self.device.est_joignable)
+
+    def test_a_failed_call_makes_it_unpilotable(self):
+        AccessDevice.objects.filter(pk=self.device.pk).update(last_error="timeout")
+        self.device.refresh_from_db()
+
+        self.assertFalse(self.device.est_joignable)
+
+    # --- Ce que l'ecran recoit -------------------------------------------------
+
+    def test_both_directions_reach_the_screen(self):
+        self._vu_il_y_a(seconds=30)
+        AccessDevice.objects.filter(pk=self.device.pk).update(last_error="timeout")
+        self.device.refresh_from_db()
+
+        charge = _serialize_device(self.device)
+
+        self.assertTrue(charge["nous_parle"])
+        self.assertFalse(charge["joignable"])
+
+    def test_a_stale_reader_is_no_longer_called_online(self):
+        # L'ancien voyant restait au vert indefiniment : un lecteur mort depuis
+        # un mois passait pour vivant tant qu'aucun appel n'avait echoue.
+        self._vu_il_y_a(days=30)
+
+        self.assertFalse(self.device.is_online)
