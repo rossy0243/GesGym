@@ -562,10 +562,17 @@
                 <span class="material-icons">sensors</span>
                 Lecteurs enregistrés
             </h5>
-            <button class="btn btn-light btn-sm" onclick="loadDevices()">
-                <span class="material-icons me-2" style="font-size:16px;">refresh</span>
-                Actualiser
-            </button>
+            <div class="d-flex flex-wrap gap-2">
+                <button class="btn btn-primary btn-sm" onclick="openManualDeviceModal()"
+                        title="Saisir un lecteur que ce serveur ne peut pas detecter">
+                    <span class="material-icons me-2" style="font-size:16px;">add</span>
+                    Ajouter manuellement
+                </button>
+                <button class="btn btn-light btn-sm" onclick="loadDevices()">
+                    <span class="material-icons me-2" style="font-size:16px;">refresh</span>
+                    Actualiser
+                </button>
+            </div>
         </div>
         <div class="card-body">
             <div id="devicesList"></div>
@@ -594,8 +601,9 @@
 
                 <div class="row g-2 mb-3">
                     <div class="col-8">
-                        <label class="form-label fw-semibold">Adresse IP</label>
-                        <input type="text" class="form-control" id="deviceHost" readonly>
+                        <label class="form-label fw-semibold">Adresse ou nom d'hôte</label>
+                        <input type="text" class="form-control" id="deviceHost"
+                               placeholder="192.168.1.188">
                     </div>
                     <div class="col-4">
                         <label class="form-label fw-semibold">Port</label>
@@ -619,6 +627,26 @@
                     <input type="number" class="form-control" id="deviceDoor" value="1" style="max-width:120px;">
                 </div>
 
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="deviceHttps"
+                           onchange="toggleTunnelFields()">
+                    <label class="form-check-label" for="deviceHttps">
+                        Lecteur joint par un tunnel (HTTPS)
+                    </label>
+                </div>
+
+                <div id="deviceTunnelFields" class="row g-2 mb-3 d-none">
+                    <div class="col-6">
+                        <label class="form-label fw-semibold">Jeton du tunnel — identifiant</label>
+                        <input type="text" class="form-control" id="deviceTunnelId" autocomplete="off">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label fw-semibold">Jeton du tunnel — secret</label>
+                        <input type="password" class="form-control" id="deviceTunnelSecret"
+                               autocomplete="new-password">
+                    </div>
+                </div>
+
                 <input type="hidden" id="deviceMac">
                 <input type="hidden" id="deviceModel">
                 <input type="hidden" id="deviceSerial">
@@ -627,6 +655,12 @@
                 <p class="text-muted small mb-0">
                     Le mot de passe est celui défini sur l'écran du lecteur lors de son activation.
                 </p>
+
+                <div id="deviceManualHint" class="alert alert-light border small mt-3 mb-0 d-none">
+                    Ce serveur ne peut pas joindre un lecteur situé sur le réseau d'une salle :
+                    la liaison échouera, et c'est normal. La fiche sera quand même enregistrée,
+                    avec l'URL de notification à saisir dans le lecteur.
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
@@ -1335,10 +1369,47 @@ function discoverDevices() {
     });
 }
 
+function resetDeviceModal() {
+    document.getElementById("deviceModalError").classList.add("d-none");
+    document.getElementById("deviceHttps").checked = false;
+    document.getElementById("deviceTunnelId").value = "";
+    document.getElementById("deviceTunnelSecret").value = "";
+    toggleTunnelFields();
+}
+
+function toggleTunnelFields() {
+    const coche = document.getElementById("deviceHttps").checked;
+    document.getElementById("deviceTunnelFields").classList.toggle("d-none", !coche);
+}
+
+function openManualDeviceModal() {
+    // La detection balaie le reseau du serveur. Hebergee en ligne, elle ne
+    // verra jamais le lecteur d'une salle : la saisie manuelle est le seul
+    // moyen de creer la fiche, et donc d'obtenir son URL de notification.
+    const modalElement = document.getElementById("deviceModal");
+
+    resetDeviceModal();
+    document.getElementById("deviceName").value = "";
+    document.getElementById("deviceHost").value = "";
+    document.getElementById("devicePort").value = 80;
+    document.getElementById("deviceUsername").value = "admin";
+    document.getElementById("devicePassword").value = "";
+    document.getElementById("deviceDoor").value = 1;
+    document.getElementById("deviceMac").value = "";
+    document.getElementById("deviceModel").value = "";
+    document.getElementById("deviceSerial").value = "";
+    document.getElementById("deviceFirmware").value = "";
+    document.getElementById("deviceManualHint").classList.remove("d-none");
+
+    deviceModal = bootstrap.Modal.getOrCreateInstance(modalElement);
+    deviceModal.show();
+}
+
 function openDeviceModal(device) {
     const modalElement = document.getElementById("deviceModal");
 
-    document.getElementById("deviceModalError").classList.add("d-none");
+    resetDeviceModal();
+    document.getElementById("deviceManualHint").classList.add("d-none");
     document.getElementById("deviceName").value = device.model ? `Lecteur ${device.model}` : "Entrée principale";
     document.getElementById("deviceHost").value = device.host || "";
     document.getElementById("devicePort").value = device.http_port || 80;
@@ -1365,6 +1436,9 @@ function saveDevice() {
         username: document.getElementById("deviceUsername").value,
         password: document.getElementById("devicePassword").value,
         door_number: document.getElementById("deviceDoor").value,
+        use_https: document.getElementById("deviceHttps").checked,
+        tunnel_client_id: document.getElementById("deviceTunnelId").value,
+        tunnel_client_secret: document.getElementById("deviceTunnelSecret").value,
         mac: document.getElementById("deviceMac").value,
         model: document.getElementById("deviceModel").value,
         serial: document.getElementById("deviceSerial").value,
@@ -1387,7 +1461,10 @@ function saveDevice() {
         loadDevices();
 
         if (data.test && !data.test.ok) {
-            alert("Lecteur enregistré, mais la liaison a échoué :\n" + data.test.error);
+            alert("Lecteur enregistré. La liaison a échoué :\n"
+                  + data.test.error
+                  + "\n\nLa fiche existe : son URL de notification"
+                  + " est affichée dans la liste ci-dessous.");
         }
     }).catch(() => {
         button.disabled = false;

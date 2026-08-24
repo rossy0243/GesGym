@@ -9,6 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from io import BytesIO
+from pathlib import Path
 
 from PIL import Image
 
@@ -2579,3 +2580,165 @@ class DeviceAddressTests(TestCase):
 
     def test_a_plain_address_passes(self):
         validate_device_host("172.20.10.3")
+
+
+class ManualDeviceEntryTests(TestCase):
+    """
+    Creer la fiche d'un lecteur que le serveur ne peut pas joindre.
+
+    La detection balaie le reseau du serveur. Hebergee en ligne, elle ne verra
+    jamais le lecteur d'une salle : sans saisie manuelle, la fiche est
+    impossible a creer, et son URL de notification reste inaccessible.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Manuelle", slug="org-manuelle"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Manuel",
+            slug="gym-manuel",
+            subdomain="gym-manuel",
+        )
+        module, _ = Module.objects.get_or_create(
+            code="ACCESS", defaults={"name": "Access"}
+        )
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=module, defaults={"is_active": True}
+        )
+        self.owner = User.objects.create_user(username="owner-manuel", password="pass12345")
+        UserGymRole.objects.create(
+            user=self.owner, gym=self.gym, role="owner", is_active=True
+        )
+        self.client.force_login(self.owner)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _creer(self, **extra):
+        charge = {
+            "name": "Entree principale",
+            "host": "192.168.1.188",
+            "port": 80,
+            "username": "admin",
+            "password": "motdepasse",
+            "door_number": 1,
+        }
+        charge.update(extra)
+        return self.client.post(
+            reverse("access:device_create"),
+            data=json.dumps(charge),
+            content_type="application/json",
+        )
+
+    # --- La fiche existe meme sans liaison ------------------------------------
+
+    def test_an_unreachable_reader_is_still_registered(self):
+        with patch.object(
+            hikvision.HikvisionClient,
+            "device_info",
+            side_effect=hikvision.HikvisionUnreachable("hors de portee"),
+        ):
+            response = self._creer()
+
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(AccessDevice.objects.filter(gym=self.gym).exists())
+
+    def test_the_answer_carries_the_notification_url(self):
+        # C'est la seule facon d'obtenir le jeton du lecteur : il n'est
+        # affiche nulle part ailleurs.
+        with patch.object(
+            hikvision.HikvisionClient,
+            "device_info",
+            side_effect=hikvision.HikvisionUnreachable("hors de portee"),
+        ):
+            response = self._creer()
+
+        device = AccessDevice.objects.get(gym=self.gym)
+        self.assertEqual(
+            response.json()["device"]["webhook_path"],
+            f"/access/devices/webhook/{device.webhook_token}/",
+        )
+
+    def test_the_failed_link_is_reported_without_hiding_the_success(self):
+        with patch.object(
+            hikvision.HikvisionClient,
+            "device_info",
+            side_effect=hikvision.HikvisionUnreachable("hors de portee"),
+        ):
+            response = self._creer()
+
+        self.assertFalse(response.json()["test"]["ok"])
+
+    # --- Le tunnel se renseigne des la creation --------------------------------
+
+    def test_the_tunnel_token_is_kept(self):
+        # Sans ces champs, activer le tunnel plus tard obligeait a supprimer la
+        # fiche et a la recreer, ce qui change son jeton et fait taire le
+        # lecteur jusqu'a une nouvelle declaration.
+        with patch.object(
+            hikvision.HikvisionClient,
+            "device_info",
+            side_effect=hikvision.HikvisionUnreachable("hors de portee"),
+        ):
+            self._creer(
+                host="salle.exemple.com",
+                port=443,
+                use_https=True,
+                tunnel_client_id="identifiant.access",
+                tunnel_client_secret="secret-du-tunnel",
+            )
+
+        device = AccessDevice.objects.get(gym=self.gym)
+        self.assertTrue(device.use_https)
+        self.assertEqual(device.tunnel_headers["CF-Access-Client-Id"], "identifiant.access")
+
+    def test_the_tunnel_secret_is_never_sent_back(self):
+        with patch.object(
+            hikvision.HikvisionClient,
+            "device_info",
+            side_effect=hikvision.HikvisionUnreachable("hors de portee"),
+        ):
+            response = self._creer(
+                use_https=True,
+                tunnel_client_id="identifiant.access",
+                tunnel_client_secret="secret-du-tunnel",
+            )
+
+        self.assertNotIn("secret-du-tunnel", response.content.decode())
+
+    def test_a_host_name_is_accepted_as_an_address(self):
+        with patch.object(
+            hikvision.HikvisionClient,
+            "device_info",
+            side_effect=hikvision.HikvisionUnreachable("hors de portee"),
+        ):
+            response = self._creer(host="salle-royal.exemple.com")
+
+        self.assertEqual(response.status_code, 201)
+
+
+class DeviceScreenTemplateTests(TestCase):
+    """Ce que la page des lecteurs doit offrir."""
+
+    def test_the_page_offers_a_manual_entry(self):
+        # La detection ne suffit pas en production : le serveur en ligne ne
+        # voit aucun reseau de salle.
+        gabarit = (
+            Path(settings.BASE_DIR) / "access" / "templates" / "access" / "acces.html"
+        ).read_text(encoding="utf-8")
+
+        # Verifier la seule existence de la fonction ne prouverait rien :
+        # c est le bouton qui la rend atteignable.
+        self.assertIn('onclick="openManualDeviceModal()"', gabarit)
+
+    def test_the_address_field_is_not_locked(self):
+        # Verrouille, il ne pouvait recevoir qu'une adresse issue de la
+        # detection reseau.
+        gabarit = (
+            Path(settings.BASE_DIR) / "access" / "templates" / "access" / "acces.html"
+        ).read_text(encoding="utf-8")
+
+        champ = gabarit[gabarit.find('id="deviceHost"') - 200 :][:400]
+        self.assertNotIn("readonly", champ)
