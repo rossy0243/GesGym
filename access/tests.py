@@ -1585,6 +1585,90 @@ class ReaderDeclarationTests(TestCase):
 
         self.assertIn("injoignable", str(capture.exception))
 
+    # --- Viser le serveur public, sans tunnel --------------------------------
+    #
+    # Le lecteur sort vers internet tout seul : cette sortie n'est jamais
+    # bloquee, la ou entrer dans le reseau de la salle exige un tunnel. Le
+    # journal des passages n'a donc besoin d'aucun pont.
+
+    def _corps_declare(self, url, emplacement=1):
+        with patch.object(hikvision.HikvisionClient, "request") as appel:
+            enrollment.declarer_url(self.device, url, emplacement=emplacement)
+        return appel.mock_calls[0]
+
+    def test_a_domain_name_is_declared_as_a_hostname(self):
+        # Loge dans <ipAddress>, un nom de domaine est accepte sans erreur puis
+        # ignore : le lecteur n'enverrait plus rien, sans rien signaler.
+        corps = self._corps_declare(
+            "https://www.royalgym-fitness.com/access/devices/webhook/abc/"
+        ).kwargs["body"]
+
+        self.assertIn("<hostName>www.royalgym-fitness.com</hostName>", corps)
+        self.assertIn("<addressingFormatType>hostname</addressingFormatType>", corps)
+        self.assertNotIn("<ipAddress>", corps)
+
+    def test_an_ip_address_is_still_declared_as_an_ip(self):
+        corps = self._corps_declare("http://10.0.0.1:8000/x/").kwargs["body"]
+
+        self.assertIn("<ipAddress>10.0.0.1</ipAddress>", corps)
+        self.assertIn("<addressingFormatType>ipaddress</addressingFormatType>", corps)
+        self.assertNotIn("<hostName>", corps)
+
+    def test_a_public_url_defaults_to_the_https_port(self):
+        corps = self._corps_declare(
+            "https://www.royalgym-fitness.com/access/devices/webhook/abc/"
+        ).kwargs["body"]
+
+        self.assertIn("<portNo>443</portNo>", corps)
+        self.assertIn("<protocolType>HTTPS</protocolType>", corps)
+
+    def test_the_public_target_uses_the_second_slot(self):
+        # Ecrire dans le premier effacerait la destination locale, qui reste
+        # necessaire tant que le tunnel n'existe pas.
+        appel = self._corps_declare(
+            "https://www.royalgym-fitness.com/access/devices/webhook/abc/",
+            emplacement=enrollment.EMPLACEMENT_PUBLIC,
+        )
+
+        self.assertIn("/httpHosts/2", appel.args[0])
+        self.assertIn("<id>2</id>", appel.kwargs["body"])
+
+    def test_the_local_target_keeps_the_first_slot(self):
+        appel = self._corps_declare("http://10.0.0.1:8000/x/")
+
+        self.assertIn("/httpHosts/1", appel.args[0])
+
+    def test_a_host_name_longer_than_the_hardware_limit_is_refused(self):
+        # Le lecteur annonce hostName max=64 : au-dela il tronque en silence.
+        client = hikvision.HikvisionClient("10.0.0.9", "admin", "x")
+
+        with self.assertRaises(hikvision.HikvisionError) as capture:
+            client.set_event_notification("https://" + "a" * 70 + ".com/x/")
+
+        self.assertIn("trop long", str(capture.exception))
+
+    def test_reading_back_a_hostname_target_shows_the_name(self):
+        # Le lecteur laisse "0.0.0.0" dans <ipAddress> quand il vise un nom :
+        # relire ce champ seul ferait croire a une declaration perdue.
+        xml = (
+            "<HttpHostNotification><id>2</id>"
+            "<url>/access/devices/webhook/abc/</url>"
+            "<protocolType>HTTPS</protocolType>"
+            "<parameterFormatType>JSON</parameterFormatType>"
+            "<addressingFormatType>hostname</addressingFormatType>"
+            "<hostName>www.royalgym-fitness.com</hostName>"
+            "<ipAddress>0.0.0.0</ipAddress>"
+            "<portNo>443</portNo>"
+            "</HttpHostNotification>"
+        )
+        client = hikvision.HikvisionClient("10.0.0.9", "admin", "x")
+
+        with patch.object(hikvision.HikvisionClient, "request", return_value=xml):
+            relu = client.get_event_notification(2)
+
+        self.assertEqual(relu["hote"], "www.royalgym-fitness.com")
+        self.assertNotEqual(relu["ip"], "0.0.0.0")
+
 
 class DeviceScreenMessagesTests(TestCase):
     """Reglage des phrases affichees sur l'ecran du terminal."""

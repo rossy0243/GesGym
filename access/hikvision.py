@@ -12,6 +12,7 @@ Aucune dependance externe : uniquement la bibliotheque standard.
 """
 
 import base64
+import ipaddress
 import json
 import socket
 import struct
@@ -37,6 +38,8 @@ JPEG_FIN = bytes.fromhex("ffd9")
 
 # Longueur maximale du chemin de notification acceptee par le materiel.
 URL_LONGUEUR_MAX = 128
+# Le lecteur annonce hostName min=1 max=64 dans ses capacites.
+HOTE_LONGUEUR_MAX = 64
 
 
 class HikvisionError(Exception):
@@ -235,6 +238,15 @@ def _corps_erreur(exc):
 
     texte = " ".join(brut.split())
     return texte[:400] if texte else "(corps vide)"
+
+
+def _est_une_adresse_ip(hote):
+    """Distingue "192.168.1.51" de "www.royalgym-fitness.com"."""
+    try:
+        ipaddress.ip_address(hote)
+    except ValueError:
+        return False
+    return True
 
 
 class HikvisionClient:
@@ -658,11 +670,33 @@ class HikvisionClient:
         chemin = parsed.path or "/"
         port = parsed.port or (443 if parsed.scheme == "https" else 80)
         protocole = "HTTPS" if parsed.scheme == "https" else "HTTP"
+        hote = parsed.hostname or ""
 
         if len(chemin) > URL_LONGUEUR_MAX:
             raise HikvisionError(
                 f"Chemin de notification trop long pour le lecteur "
                 f"({len(chemin)} caracteres, maximum {URL_LONGUEUR_MAX})."
+            )
+        if len(hote) > HOTE_LONGUEUR_MAX:
+            raise HikvisionError(
+                f"Nom d'hote trop long pour le lecteur ({len(hote)} "
+                f"caracteres, maximum {HOTE_LONGUEUR_MAX})."
+            )
+
+        # Une adresse IP et un nom de domaine ne se declarent pas de la meme
+        # facon : le lecteur attend <ipAddress> pour l'une, <hostName> pour
+        # l'autre, et rejette silencieusement un nom loge dans <ipAddress>.
+        # C'est ce qui permet de viser le serveur public plutot qu'une adresse
+        # locale qui change a chaque reseau.
+        if _est_une_adresse_ip(hote):
+            adressage = (
+                "<addressingFormatType>ipaddress</addressingFormatType>"
+                f"<ipAddress>{hote}</ipAddress>"
+            )
+        else:
+            adressage = (
+                "<addressingFormatType>hostname</addressingFormatType>"
+                f"<hostName>{hote}</hostName>"
             )
 
         body = (
@@ -673,8 +707,7 @@ class HikvisionClient:
             f"<protocolType>{protocole}</protocolType>"
             # Le lecteur annonce "XML,JSON" : la casse compte, "json" est refuse.
             "<parameterFormatType>JSON</parameterFormatType>"
-            "<addressingFormatType>ipaddress</addressingFormatType>"
-            f"<ipAddress>{parsed.hostname or ''}</ipAddress>"
+            f"{adressage}"
             f"<portNo>{port}</portNo>"
             "<httpAuthenticationMethod>none</httpAuthenticationMethod>"
             "<SubscribeEvent>"
@@ -703,9 +736,16 @@ class HikvisionClient:
             debut += len(balise) + 2
             return brut[debut : brut.find(f"</{balise}>", debut)].strip()
 
+        ip = valeur("ipAddress")
+        nom = valeur("hostName")
+        # Le lecteur laisse "0.0.0.0" dans <ipAddress> quand il vise un nom.
+        if ip in ("", "0.0.0.0") and nom:
+            ip = nom
+
         return {
             "url": valeur("url"),
-            "ip": valeur("ipAddress"),
+            "ip": ip,
+            "hote": nom or ip,
             "port": valeur("portNo"),
             "protocole": valeur("protocolType"),
             "format": valeur("parameterFormatType"),

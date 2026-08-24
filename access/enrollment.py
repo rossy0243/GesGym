@@ -319,19 +319,20 @@ def url_de_notification(device, port_serveur, adresse=None):
     return f"http://{hote}:{port_serveur}{chemin}"
 
 
-def declarer_application(device, port_serveur, adresse=None):
-    """
-    Apprend au lecteur ou pousser ses evenements.
+# Le lecteur retient deux destinations. La premiere sert au serveur du reseau
+# local ; la seconde peut viser le serveur public, que le lecteur atteint tout
+# seul en sortant vers internet. Cette sortie-la n'est jamais bloquee, la ou
+# entrer dans le reseau de la salle exige un tunnel.
+EMPLACEMENT_LOCAL = 1
+EMPLACEMENT_PUBLIC = 2
 
-    Sans cette declaration, un visage reconnu ouvre bien la porte mais
-    n'apparait nulle part : ni journal d'acces, ni frequentation, ni
-    "dernier acces" sur la fiche du membre.
-    """
-    url = url_de_notification(device, port_serveur, adresse)
+
+def declarer_url(device, url, emplacement=EMPLACEMENT_LOCAL):
+    """Ecrit une destination d'evenements dans un emplacement du lecteur."""
     client = hikvision.HikvisionClient.from_device(device, timeout=25)
 
     try:
-        client.set_event_notification(url)
+        client.set_event_notification(url, host_index=emplacement)
     except hikvision.HikvisionUnreachable as exc:
         raise EnrollmentError(f"Lecteur injoignable ({device.host}).") from exc
     except hikvision.HikvisionError as exc:
@@ -342,6 +343,21 @@ def declarer_application(device, port_serveur, adresse=None):
     device.save(update_fields=["last_seen_at", "last_error", "updated_at"])
 
     return url
+
+
+def declarer_application(device, port_serveur, adresse=None):
+    """
+    Apprend au lecteur ou pousser ses evenements.
+
+    Sans cette declaration, un visage reconnu ouvre bien la porte mais
+    n'apparait nulle part : ni journal d'acces, ni frequentation, ni
+    "dernier acces" sur la fiche du membre.
+    """
+    return declarer_url(
+        device,
+        url_de_notification(device, port_serveur, adresse),
+        emplacement=EMPLACEMENT_LOCAL,
+    )
 
 
 # ---------------------------------------------------------------------------
