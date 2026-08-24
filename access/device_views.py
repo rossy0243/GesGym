@@ -357,9 +357,11 @@ def device_webhook(request, token):
         parsed["raw"],
     )
 
+    # Seule la date de contact est rafraichie. ``last_error`` decrit le dernier
+    # appel **sortant** : l'effacer ici remettait le voyant "Pilotable" au vert
+    # a chaque battement du lecteur, trente secondes apres chaque echec.
     device.last_seen_at = now()
-    device.last_error = ""
-    device.save(update_fields=["last_seen_at", "last_error", "updated_at"])
+    device.save(update_fields=["last_seen_at", "updated_at"])
 
     if not credential:
         # Evenements de service (etat porte, sabotage...) : rien a journaliser.

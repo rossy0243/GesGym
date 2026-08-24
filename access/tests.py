@@ -24,7 +24,11 @@ from organizations.models import (
 )
 from subscriptions.models import MemberSubscription, SubscriptionPlan
 from . import enrollment, hikvision
-from .device_views import UNKNOWN_CREDENTIAL_REASON, _serialize_device
+from .device_views import (
+    UNKNOWN_CREDENTIAL_REASON,
+    _refresh_device_state,
+    _serialize_device,
+)
 from .hikvision import parse_event_payload
 from .health import resume_hors_ligne
 from .models import AccessDevice, AccessLog, validate_device_host
@@ -2824,6 +2828,52 @@ class DeviceDirectionIndicatorTests(TestCase):
 
         self.assertTrue(charge["nous_parle"])
         self.assertFalse(charge["joignable"])
+
+    def test_a_heartbeat_does_not_clear_a_failed_outbound_call(self):
+        # Le battement du lecteur effacait l'erreur du dernier appel sortant :
+        # le voyant "Pilotable" repassait au vert trente secondes apres chaque
+        # echec, et annoncait joignable un lecteur que rien ne pouvait appeler.
+        AccessDevice.objects.filter(pk=self.device.pk).update(
+            last_error="Lecteur injoignable : timed out"
+        )
+
+        self.client.post(
+            reverse("access:device_webhook", args=[self.device.webhook_token]),
+            data=json.dumps({"AccessControllerEvent": {}}),
+            content_type="application/json",
+        )
+
+        self.device.refresh_from_db()
+        self.assertFalse(self.device.est_joignable)
+
+    def test_a_heartbeat_still_refreshes_the_contact_date(self):
+        AccessDevice.objects.filter(pk=self.device.pk).update(
+            last_error="Lecteur injoignable : timed out"
+        )
+
+        self.client.post(
+            reverse("access:device_webhook", args=[self.device.webhook_token]),
+            data=json.dumps({"AccessControllerEvent": {}}),
+            content_type="application/json",
+        )
+
+        self.device.refresh_from_db()
+        self.assertTrue(self.device.nous_parle)
+
+    def test_a_successful_outbound_call_clears_the_error(self):
+        # C'est le seul evenement qui prouve que le lecteur est joignable.
+        AccessDevice.objects.filter(pk=self.device.pk).update(last_error="timed out")
+        self.device.refresh_from_db()
+
+        with patch.object(
+            hikvision.HikvisionClient,
+            "device_info",
+            return_value={"model": "X", "serial": "1", "firmware": "V1", "mac": ""},
+        ):
+            _refresh_device_state(self.device)
+
+        self.device.refresh_from_db()
+        self.assertTrue(self.device.est_joignable)
 
     def test_a_stale_reader_is_no_longer_called_online(self):
         # L'ancien voyant restait au vert indefiniment : un lecteur mort depuis
