@@ -3189,6 +3189,35 @@ class DeviceUpdateTests(TestCase):
 
         self.assertNotIn("secret-du-tunnel", reponse.content.decode())
 
+    def test_editing_something_else_keeps_the_tunnel_identifier(self):
+        # Le formulaire ne reproposait pas l'identifiant : changer l'adresse
+        # l'effacait en laissant le secret, et l'application cessait de
+        # s'authentifier sans rien signaler.
+        self.device.tunnel_client_id = "identifiant.access"
+        self.device.tunnel_client_secret = "secret-du-tunnel"
+        self.device.save(update_fields=["tunnel_client_id", "tunnel_client_secret"])
+
+        charge = _serialize_device(self.device)
+        self.assertEqual(charge["tunnel_client_id"], "identifiant.access")
+
+        # Le formulaire renvoie ce qu'il a recu : la paire survit.
+        self._modifier(
+            host="autre.trycloudflare.com",
+            tunnel_client_id=charge["tunnel_client_id"],
+        )
+
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.tunnel_client_id, "identifiant.access")
+        self.assertEqual(self.device.tunnel_client_secret, "secret-du-tunnel")
+
+    def test_an_empty_tunnel_token_is_valid_before_access_is_set_up(self):
+        # Tant qu'aucune application Access ne protege le nom, il n'y a pas de
+        # jeton a saisir : les deux champs restent vides.
+        self._modifier(tunnel_client_id="", tunnel_client_secret="")
+
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.tunnel_headers, {})
+
     def test_the_user_name_is_offered_back_to_the_form(self):
         # Sans lui, le formulaire le remettrait a "admin" a chaque modification.
         self.assertEqual(_serialize_device(self.device)["username"], "operateur")

@@ -61,6 +61,10 @@ def _serialize_device(device):
         # Le secret du tunnel n'est jamais renvoye : on indique seulement
         # qu'il est renseigne, comme pour le mot de passe du lecteur.
         "tunnel_protege": bool(device.tunnel_client_id and device.tunnel_client_secret),
+        # L'identifiant est repropose au formulaire ; sans lui, la moindre
+        # modification l'effacait en laissant le secret, et l'application
+        # cessait de s'authentifier sans rien signaler.
+        "tunnel_client_id": device.tunnel_client_id,
         "port": device.port,
         "door_number": device.door_number,
         "model": device.model_name,
