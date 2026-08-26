@@ -63,7 +63,7 @@ faire une installation.
 
 Double-cliquez **`INSTALLER.cmd`** et acceptez la demande d'autorisation.
 
-Le script avance en six étapes numérotées et dit à chacune ce qu'il fait. Au
+Le script avance en sept étapes numérotées et dit à chacune ce qu'il fait. Au
 milieu, votre navigateur s'ouvre : choisissez **royalgym.site** dans la liste,
 puis revenez à la fenêtre.
 
@@ -137,8 +137,8 @@ dans `%LOCALAPPDATA%\RoyalGym\installation-tunnel.log`.
 
 | Chemin | Contenu |
 | --- | --- |
-| `%LOCALAPPDATA%\RoyalGym	unnel\` | le programme `cloudflared.exe` |
-| `C:\ProgramData\RoyalGym	unnel\` | la configuration et les identifiants du service |
+| `%LOCALAPPDATA%\RoyalGym\tunnel\` | le programme `cloudflared.exe` |
+| `C:\ProgramData\RoyalGym\tunnel\` | la configuration et les identifiants du service |
 | `%USERPROFILE%\.cloudflared\` | l'autorisation Cloudflare (`cert.pem`) |
 
 Le service tourne sous le compte SYSTÈME : sa configuration vit dans
