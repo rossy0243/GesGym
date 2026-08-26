@@ -132,3 +132,19 @@ sur le routeur.
 
 **Autre chose ?** Le détail complet de la dernière installation est conservé
 dans `%LOCALAPPDATA%\RoyalGym\installation-tunnel.log`.
+
+## Où vivent les fichiers
+
+| Chemin | Contenu |
+| --- | --- |
+| `%LOCALAPPDATA%\RoyalGym	unnel\` | le programme `cloudflared.exe` |
+| `C:\ProgramData\RoyalGym	unnel\` | la configuration et les identifiants du service |
+| `%USERPROFILE%\.cloudflared\` | l'autorisation Cloudflare (`cert.pem`) |
+
+Le service tourne sous le compte SYSTÈME : sa configuration vit dans
+`ProgramData`, commun à toute la machine, et non dans un profil utilisateur.
+
+**N'utilisez pas `cloudflared service install`.** Cette commande enregistre un
+service sans le moindre argument, qui meurt à la seconde où il démarre. Le
+script déclare le service lui-même, avec le chemin de sa configuration et un
+redémarrage automatique en cas de chute.

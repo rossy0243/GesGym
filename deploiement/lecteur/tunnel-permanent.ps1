@@ -49,19 +49,22 @@ try {
 
     $nomTunnel = "royalgym-$Salle"
     $hote = "$Salle.$Domaine"
-    $dossier = Join-Path $env:LOCALAPPDATA "RoyalGym\tunnel"
-    $exe = Join-Path $dossier "cloudflared.exe"
-    $dossierCloudflare = Join-Path $env:USERPROFILE ".cloudflared"
-    $configuration = Join-Path $dossierCloudflare "config.yml"
+    $dossierExe = Join-Path $env:LOCALAPPDATA "RoyalGym\tunnel"
+    $exe = Join-Path $dossierExe "cloudflared.exe"
+    $dossierUtilisateur = Join-Path $env:USERPROFILE ".cloudflared"
 
-    foreach ($chemin in @($dossier, $dossierCloudflare)) {
+    # Le service tourne sous le compte SYSTEME. Un emplacement commun a toute
+    # la machine evite de dependre d'un profil utilisateur.
+    $dossierService = "C:\ProgramData\RoyalGym\tunnel"
+
+    foreach ($chemin in @($dossierExe, $dossierUtilisateur, $dossierService)) {
         if (-not (Test-Path $chemin)) {
             New-Item -ItemType Directory -Force -Path $chemin | Out-Null
         }
     }
 
     # --- 1. Le programme ---------------------------------------------------
-    Etape "1/6  Programme cloudflared"
+    Etape "1/7  Programme cloudflared"
     if (Test-Path $exe) {
         Write-Host "     deja present"
     } else {
@@ -73,7 +76,7 @@ try {
     try { Unblock-File -Path $exe } catch { }
 
     # --- 2. Le lecteur repond-il ? -----------------------------------------
-    Etape "2/6  Liaison avec le lecteur"
+    Etape "2/7  Liaison avec le lecteur"
     $liaison = Test-NetConnection -ComputerName $Lecteur -Port $Port -WarningAction SilentlyContinue
     if (-not $liaison.TcpTestSucceeded) {
         Write-Host "     le lecteur ne repond pas sur $Lecteur : $Port" -ForegroundColor Red
@@ -86,13 +89,13 @@ try {
     Write-Host "     le lecteur repond" -ForegroundColor Green
 
     # --- 3. Autorisation Cloudflare ----------------------------------------
-    Etape "3/6  Autorisation Cloudflare"
-    $certificat = Join-Path $dossierCloudflare "cert.pem"
+    Etape "3/7  Autorisation Cloudflare"
+    $certificat = Join-Path $dossierUtilisateur "cert.pem"
     if (Test-Path $certificat) {
         Write-Host "     deja autorisee"
     } else {
-        Write-Host "     votre navigateur va s'ouvrir : choisissez $Domaine,"
-        Write-Host "     puis revenez ici."
+        Write-Host "     une adresse va s'afficher, puis votre navigateur"
+        Write-Host "     s'ouvrira : choisissez $Domaine et autorisez."
         & $exe tunnel login
         if (-not (Test-Path $certificat)) {
             Write-Host "     autorisation non terminee." -ForegroundColor Red
@@ -103,7 +106,7 @@ try {
     }
 
     # --- 4. Le tunnel -------------------------------------------------------
-    Etape "4/6  Tunnel $nomTunnel"
+    Etape "4/7  Tunnel $nomTunnel"
     $existants = (& $exe tunnel list 2>&1 | Out-String)
     if ($existants -match [regex]::Escape($nomTunnel)) {
         Write-Host "     existe deja, reutilise"
@@ -118,76 +121,75 @@ try {
         Select-Object -First 1
     $identifiant = ($ligne -split "\s+" | Where-Object { $_ } | Select-Object -First 1)
 
-    $fichierIdentifiants = Join-Path $dossierCloudflare "$identifiant.json"
-    if (-not (Test-Path $fichierIdentifiants)) {
+    $identifiantsUtilisateur = Join-Path $dossierUtilisateur "$identifiant.json"
+    if (-not (Test-Path $identifiantsUtilisateur)) {
         Write-Host "     fichier d'identifiants introuvable :" -ForegroundColor Red
-        Write-Host "     $fichierIdentifiants" -ForegroundColor Red
+        Write-Host "     $identifiantsUtilisateur" -ForegroundColor Red
         Write-Host "     Supprimez le tunnel dans Cloudflare, puis relancez."
         return
     }
 
     # --- 5. Configuration et nom public -------------------------------------
     Etape "5/7  Configuration"
-
-    # Le service Windows tourne sous le compte SYSTEME, qui ne voit pas le
-    # dossier .cloudflared de l'utilisateur. Sans cette copie, le service
-    # demarre, ne trouve aucune configuration, ne se rattache a rien, et
-    # Cloudflare repond "error code: 1033" a chaque appel.
-    $profilSysteme = Join-Path $env:WINDIR "System32\config\systemprofile\.cloudflared"
-    if (-not (Test-Path $profilSysteme)) {
-        New-Item -ItemType Directory -Force -Path $profilSysteme | Out-Null
-    }
-    $identifiantsSysteme = Join-Path $profilSysteme "$identifiant.json"
-    Copy-Item -Path $fichierIdentifiants -Destination $identifiantsSysteme -Force
+    $identifiantsService = Join-Path $dossierService "$identifiant.json"
+    Copy-Item -Path $identifiantsUtilisateur -Destination $identifiantsService -Force
 
     # Le tunnel ne publie qu'une chose : le lecteur. Le reste est refuse.
+    $config = Join-Path $dossierService "config.yml"
     $contenu = @"
 tunnel: $identifiant
-credentials-file: $identifiantsSysteme
+credentials-file: $identifiantsService
 
 ingress:
   - hostname: $hote
     service: http://${Lecteur}:${Port}
   - service: http_status:404
 "@
-    Set-Content -Path $configuration -Value $contenu -Encoding utf8
-    Copy-Item -Path $configuration -Destination (Join-Path $profilSysteme "config.yml") -Force
-    Write-Host "     ecrite pour l'utilisateur et pour le service"
+    Set-Content -Path $config -Value $contenu -Encoding utf8
+    Write-Host "     ecrite dans $config"
 
     & $exe tunnel route dns --overwrite-dns $nomTunnel $hote
     Write-Host "     $hote associe au tunnel" -ForegroundColor Green
 
     # --- 6. Service Windows --------------------------------------------------
     Etape "6/7  Service Windows"
-    # Sans service, le tunnel meurt avec la session : apres une coupure de
-    # courant, personne ne penserait a le relancer.
-    $service = Get-Service -Name "cloudflared" -ErrorAction SilentlyContinue
-    if ($service) {
-        Restart-Service -Name "cloudflared"
-        Write-Host "     redemarre"
-    } else {
-        & $exe service install
-        Start-Service -Name "cloudflared"
-        Write-Host "     installe et demarre"
+    # On declare le service nous-memes plutot que d'utiliser
+    # "cloudflared service install" : celui-ci enregistre un chemin sans le
+    # moindre argument, et le service meurt a la seconde ou il demarre.
+    if (Get-Service -Name "cloudflared" -ErrorAction SilentlyContinue) {
+        Stop-Service -Name "cloudflared" -Force -ErrorAction SilentlyContinue
+        & sc.exe delete cloudflared | Out-Null
+        Start-Sleep -Seconds 3
     }
-    Set-Service -Name "cloudflared" -StartupType Automatic
-    Write-Host "     demarrage automatique active" -ForegroundColor Green
+
+    $chemin = '"' + $exe + '" --config "' + $config + '" --no-autoupdate tunnel run'
+    New-Service -Name "cloudflared" -DisplayName "RoyalGym - tunnel du lecteur" `
+        -BinaryPathName $chemin -StartupType Automatic | Out-Null
+
+    # Redemarrage automatique si le processus tombe : une coupure de courant
+    # ne doit pas laisser la salle sans liaison jusqu'a la prochaine visite.
+    & sc.exe failure cloudflared reset= 86400 `
+        actions= restart/5000/restart/10000/restart/30000 | Out-Null
+
+    Start-Service -Name "cloudflared"
+    Start-Sleep -Seconds 5
+    Write-Host "     $((Get-Service cloudflared).Status), demarrage automatique" -ForegroundColor Green
 
     # --- 7. Verification de bout en bout -------------------------------------
     Etape "7/7  Verification"
     # Le service peut tourner sans que le tunnel soit rattache. Seule une
     # requete reelle sur le nom public le prouve.
     Write-Host "     patientez, le tunnel s'annonce a Cloudflare..."
-    Start-Sleep -Seconds 10
+    Start-Sleep -Seconds 12
 
+    # curl.exe est livre avec Windows 10 et rend le code sans lever
+    # d'exception : Invoke-WebRequest affichait l'erreur brute juste avant la
+    # ligne de conclusion, ce qui brouillait la lecture.
     $code = 0
     try {
-        $reponse = Invoke-WebRequest -Uri "https://$hote/ISAPI/System/deviceInfo" `
-            -UseBasicParsing -TimeoutSec 25 -ErrorAction Stop
-        $code = [int]$reponse.StatusCode
-    } catch {
-        if ($_.Exception.Response) { $code = [int]$_.Exception.Response.StatusCode }
-    }
+        $code = [int](& curl.exe -s -o NUL -w "%{http_code}" --max-time 25 `
+            "https://$hote/ISAPI/System/deviceInfo" 2>$null)
+    } catch { $code = 0 }
 
     if ($code -eq 401) {
         # Le lecteur reclame ses identifiants : la chaine complete repond.
@@ -195,7 +197,6 @@ ingress:
     } elseif ($code -eq 530) {
         Write-Host "     le tunnel n'est pas rattache (erreur 1033)" -ForegroundColor Red
         Write-Host "     Lancez : Restart-Service cloudflared"
-        Write-Host "     puis relancez INSTALLER.cmd si cela persiste."
     } elseif ($code -eq 403) {
         Write-Host "     Cloudflare bloque l'appel (erreur 1010)" -ForegroundColor Yellow
         Write-Host "     Desactivez Browser Integrity Check pour $hote :"
