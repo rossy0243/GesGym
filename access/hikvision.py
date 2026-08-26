@@ -874,6 +874,10 @@ def parse_event_payload(raw_body, content_type=""):
     return {
         "credential": credential,
         "verify_mode": _mode_de_verification(event, payload),
+        # Numero que le lecteur attribue a chaque passage. Il ne change pas
+        # quand le materiel reemet la meme notification : c'est ce qui permet
+        # de reconnaitre une redite.
+        "event_id": str(event.get("serialNo") or payload.get("serialNo") or ""),
         "event": event,
         "payload": payload,
         "raw": text[:2000],

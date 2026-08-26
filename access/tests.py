@@ -23,7 +23,7 @@ from organizations.models import (
     SensitiveActivityLog,
 )
 from subscriptions.models import MemberSubscription, SubscriptionPlan
-from . import enrollment, hikvision
+from . import door, enrollment, hikvision
 from .device_views import (
     UNKNOWN_CREDENTIAL_REASON,
     _refresh_device_state,
@@ -2881,3 +2881,195 @@ class DeviceDirectionIndicatorTests(TestCase):
         self._vu_il_y_a(days=30)
 
         self.assertFalse(self.device.is_online)
+
+
+class RepeatedDeviceEventTests(TestCase):
+    """
+    Le lecteur reemet la meme notification tant qu'il ne l'estime pas acquittee.
+
+    Observe en production : un seul passage a produit dix-neuf lignes de
+    journal, toutes portant le meme numero d'evenement du materiel.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Redite", slug="org-redite"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Redite",
+            slug="gym-redite",
+            subdomain="gym-redite",
+        )
+        self.device = AccessDevice.objects.create(
+            gym=self.gym, name="L1", host="10.0.0.9", password="secret",
+            open_on_granted=True,
+        )
+        self.member = Member.objects.create(
+            gym=self.gym, first_name="Rossy", last_name="Mundyo",
+            phone="+243870000001",
+        )
+        self.plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Standard", price=80, duration_days=30
+        )
+        MemberSubscription.objects.create(
+            gym=self.gym, member=self.member, plan=self.plan,
+            start_date=timezone.localdate(),
+            end_date=timezone.localdate() + timedelta(days=30),
+            is_active=True,
+        )
+        self.url = reverse("access:device_webhook", args=[self.device.webhook_token])
+
+    def _pousser(self, serial, minor=75):
+        charge = {
+            "AccessControllerEvent": {
+                "employeeNoString": enrollment.employee_no(self.member),
+                "serialNo": serial,
+                "minor": minor,
+                "currentVerifyMode": "faceOrFpOrCardOrPw",
+            }
+        }
+        return self.client.post(
+            self.url, data=json.dumps(charge), content_type="application/json"
+        )
+
+    # --- La redite ne doit rien ajouter ---------------------------------------
+
+    def test_the_same_event_logs_only_once(self):
+        for _ in range(5):
+            self._pousser(1177)
+
+        self.assertEqual(AccessLog.objects.filter(gym=self.gym).count(), 1)
+
+    def test_the_repeat_still_answers_access_granted(self):
+        # Repondre par un refus ferait clignoter un feu rouge sur le terminal
+        # pour un passage deja autorise.
+        premier = self._pousser(1177)
+        redite = self._pousser(1177)
+
+        self.assertTrue(premier.json()["access"])
+        self.assertTrue(redite.json()["access"])
+
+    def test_the_repeat_points_at_the_original_line(self):
+        premier = self._pousser(1177)
+        redite = self._pousser(1177)
+
+        self.assertEqual(redite.json()["log_id"], premier.json()["log_id"])
+
+    def test_a_new_event_number_is_a_new_passage(self):
+        # Une redite se distingue d'un vrai retour par le numero du materiel.
+        self._pousser(1177)
+        self._pousser(1178)
+
+        self.assertEqual(AccessLog.objects.filter(gym=self.gym).count(), 2)
+
+    def test_the_event_number_is_kept_on_the_line(self):
+        # C'est aussi la cle qui empeche le rattrapage de recreer ce passage.
+        self._pousser(1177)
+
+        log = AccessLog.objects.get(gym=self.gym)
+        self.assertEqual(log.device_event_id, "1177")
+
+    def test_an_event_without_a_number_is_still_logged(self):
+        # Certains firmwares n'en envoient pas : mieux vaut un doublon possible
+        # qu'un passage perdu.
+        self._pousser("")
+
+        self.assertEqual(AccessLog.objects.filter(gym=self.gym).count(), 1)
+
+
+class DoorCommandScopeTests(TestCase):
+    """
+    Quand l'application doit commander le relais, et quand elle doit s'abstenir.
+
+    Un appel impossible expirait au bout de cinq secondes et retardait la
+    reponse au lecteur, qui cessait d'attendre et reemettait son evenement.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Relais", slug="org-relais"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Relais",
+            slug="gym-relais",
+            subdomain="gym-relais",
+        )
+        self.device = AccessDevice.objects.create(
+            gym=self.gym, name="L1", host="10.0.0.9", password="secret",
+            open_on_granted=True,
+        )
+        self.member = Member.objects.create(
+            gym=self.gym, first_name="Ada", last_name="Mbala",
+            phone="+243870000002",
+        )
+        self.plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Standard", price=80, duration_days=30
+        )
+        MemberSubscription.objects.create(
+            gym=self.gym, member=self.member, plan=self.plan,
+            start_date=timezone.localdate(),
+            end_date=timezone.localdate() + timedelta(days=30),
+            is_active=True,
+        )
+        self.url = reverse("access:device_webhook", args=[self.device.webhook_token])
+
+    def _pousser(self, charge):
+        return self.client.post(
+            self.url, data=json.dumps(charge), content_type="application/json"
+        )
+
+    def test_a_recognised_face_does_not_trigger_the_relay(self):
+        # Le lecteur a decide seul : la porte est deja ouverte.
+        with patch.object(door, "open_doors") as commande:
+            self._pousser({
+                "AccessControllerEvent": {
+                    "employeeNoString": enrollment.employee_no(self.member),
+                    "serialNo": 2001,
+                    "minor": 75,
+                }
+            })
+
+        commande.assert_not_called()
+
+    def test_a_qr_code_still_triggers_the_relay(self):
+        # Le lecteur n'est alors qu'un scanner : sans cet ordre, rien n'ouvre.
+        with patch.object(door, "open_doors", return_value=[]) as commande:
+            self._pousser({
+                "AccessControllerEvent": {
+                    "QRCodeInfo": str(self.member.qr_code),
+                    "serialNo": 2002,
+                }
+            })
+
+        commande.assert_called_once()
+
+    def test_a_refused_qr_code_never_opens(self):
+        self.member.status = "suspended"
+        self.member.save(update_fields=["status"])
+
+        with patch.object(door, "open_doors") as commande:
+            self._pousser({
+                "AccessControllerEvent": {
+                    "QRCodeInfo": str(self.member.qr_code),
+                    "serialNo": 2003,
+                }
+            })
+
+        commande.assert_not_called()
+
+    def test_the_face_passage_is_still_logged_as_granted(self):
+        # Ne plus commander le relais ne doit rien changer a la decision.
+        with patch.object(door, "open_doors") as commande:
+            reponse = self._pousser({
+                "AccessControllerEvent": {
+                    "employeeNoString": enrollment.employee_no(self.member),
+                    "serialNo": 2004,
+                    "minor": 75,
+                }
+            })
+
+        commande.assert_not_called()
+        self.assertTrue(reponse.json()["access"])
+        self.assertTrue(AccessLog.objects.get(gym=self.gym).access_granted)

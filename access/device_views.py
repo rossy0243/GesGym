@@ -23,7 +23,7 @@ from smartclub.access_control import ACCESS_DEVICE_ROLES
 from smartclub.decorators import module_required, role_required
 
 from . import door, enrollment, hikvision
-from .models import AccessDevice
+from .models import AccessDevice, AccessLog
 from .views import _record_access, _today_stats
 
 
@@ -371,6 +371,30 @@ def device_webhook(request, token):
     if member is None:
         return JsonResponse({"access": False, "reason": UNKNOWN_CREDENTIAL_REASON})
 
+    # Le lecteur reemet la meme notification tant qu'il ne l'estime pas
+    # acquittee. Sans cette garde, un seul passage remplissait le journal de
+    # lignes identiques, indefiniment. Le numero d'evenement du materiel ne
+    # change pas d'une redite a l'autre : il les distingue d'un vrai retour.
+    numero_evenement = parsed.get("event_id") or ""
+    if numero_evenement:
+        deja = (
+            AccessLog.objects.filter(
+                device=device, device_event_id=numero_evenement
+            )
+            .order_by("-check_in_time")
+            .first()
+        )
+        if deja is not None:
+            return JsonResponse({
+                "access": deja.access_granted,
+                "member": f"{deja.member.first_name} {deja.member.last_name}",
+                "reason": deja.denial_reason or "",
+                "log_id": deja.id,
+                "stats": _today_stats(device.gym),
+                "door": {"attempted": False, "opened": False, "message": ""},
+                "repeated": True,
+            })
+
     # Seul un visage autorise un second passage le meme jour : un badge ou un
     # QR code se pretent, et le lecteur ne saurait pas dire que la personne
     # devant lui n'est pas la bonne.
@@ -386,12 +410,20 @@ def device_webhook(request, token):
         require_valid_qr=(nature == "qr"),
         device=device,
         allow_return=par_le_visage,
+        device_event_id=numero_evenement,
     )
 
-    # Le lecteur a lu le QR, l'application a tranche : on lui rend la main sur
-    # le relais uniquement si l'acces est accorde.
+    # Le relais ne se commande que pour un QR code, ou le lecteur n'est qu'un
+    # scanner et attend la decision de l'application.
+    #
+    # Pour un visage ou un badge, le lecteur a decide seul et la porte est deja
+    # ouverte : l'appel etait redondant. Pire, depuis un serveur qui ne peut
+    # pas joindre le lecteur, il expirait au bout de cinq secondes et retardait
+    # d'autant la reponse, jusqu'a ce que le materiel cesse d'attendre et
+    # reemette son evenement. C'est ce qui remplissait le journal.
+    commander_le_relais = access_granted and nature == "qr"
     door_status = door.summarize(
-        door.open_doors(device.gym, device=device) if access_granted else []
+        door.open_doors(device.gym, device=device) if commander_le_relais else []
     )
 
     return JsonResponse({

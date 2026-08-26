@@ -121,7 +121,7 @@ def _today_stats(gym):
 
 def _record_access(
     gym, member, user, method, require_valid_qr=False, device=None,
-    allow_return=False,
+    allow_return=False, device_event_id="",
 ):
     """
     Enregistre un passage et tranche s'il ouvre la porte.
@@ -163,6 +163,7 @@ def _record_access(
             device_used=method,
             scanned_by=user,
             device=device,
+            device_event_id=device_event_id,
         )
 
     return access_granted, reason, log
