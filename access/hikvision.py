@@ -37,6 +37,14 @@ JPEG_DEBUT = bytes.fromhex("ffd8ff")
 JPEG_FIN = bytes.fromhex("ffd9")
 
 # Longueur maximale du chemin de notification acceptee par le materiel.
+# Un tunnel Cloudflare inspecte la signature du client avant de transmettre.
+# La signature par defaut de Python y est refusee : le lecteur repondait
+# "HTTP 403 error code: 1010" sans que l'appel l'atteigne jamais.
+SIGNATURE_CLIENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+)
+
 URL_LONGUEUR_MAX = 128
 # Le lecteur annonce hostName min=1 max=64 dans ses capacites.
 HOTE_LONGUEUR_MAX = 64
@@ -298,6 +306,7 @@ class HikvisionClient:
 
         def build_request(with_basic_header):
             request = urllib.request.Request(url, data=data, method=method)
+            request.add_header("User-Agent", SIGNATURE_CLIENT)
             if data is not None:
                 request.add_header("Content-Type", content_type)
             if with_basic_header:
@@ -594,6 +603,7 @@ class HikvisionClient:
         data = body.encode("utf-8") if isinstance(body, str) else body
 
         request = urllib.request.Request(url, data=data, method=method)
+        request.add_header("User-Agent", SIGNATURE_CLIENT)
         if data is not None:
             request.add_header("Content-Type", content_type)
         for nom, valeur in self.tunnel_headers.items():

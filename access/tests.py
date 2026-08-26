@@ -3240,3 +3240,54 @@ class DeviceUpdateTests(TestCase):
         self.assertIn(reponse.status_code, (302, 403))
         self.device.refresh_from_db()
         self.assertEqual(self.device.host, "192.168.1.188")
+
+
+class TunnelClientSignatureTests(TestCase):
+    """
+    Le tunnel inspecte la signature du client avant de transmettre.
+
+    Observe en production : Cloudflare renvoyait "HTTP 403 error code: 1010"
+    sur la seule signature par defaut de Python, et l'appel n'atteignait
+    jamais le lecteur.
+    """
+
+    def _entetes(self, appel):
+        return {nom.lower(): valeur for nom, valeur in appel.header_items()}
+
+    def test_every_call_announces_a_browser_signature(self):
+        client = hikvision.HikvisionClient("10.0.0.9", "admin", "x")
+
+        with patch.object(hikvision.HikvisionClient, "_opener") as ouvreur:
+            ouvreur.return_value.open.return_value.read.return_value = b"<x/>"
+            client.request("/ISAPI/System/deviceInfo")
+
+        appel = ouvreur.return_value.open.call_args[0][0]
+        self.assertIn("mozilla", self._entetes(appel)["user-agent"].lower())
+
+    def test_the_binary_call_announces_it_too(self):
+        # Celui qui rapporte les images passe par un autre chemin : il etait
+        # reste sans signature.
+        client = hikvision.HikvisionClient("10.0.0.9", "admin", "x")
+
+        with patch.object(hikvision.HikvisionClient, "_opener") as ouvreur:
+            ouvreur.return_value.open.return_value.read.return_value = b"donnees-image"
+            client.request_raw("/ISAPI/Intelligent/FDLib/FDSetUp")
+
+        appel = ouvreur.return_value.open.call_args[0][0]
+        self.assertIn("mozilla", self._entetes(appel)["user-agent"].lower())
+
+    def test_the_tunnel_token_still_travels(self):
+        # La signature ne doit pas avoir chasse les en-tetes du tunnel.
+        device = AccessDevice(
+            host="salle.exemple.com", username="admin", password="x",
+            tunnel_client_id="identifiant.access",
+            tunnel_client_secret="secret",
+        )
+        client = hikvision.HikvisionClient.from_device(device)
+
+        with patch.object(hikvision.HikvisionClient, "_opener") as ouvreur:
+            ouvreur.return_value.open.return_value.read.return_value = b"<x/>"
+            client.request("/ISAPI/System/deviceInfo")
+
+        entetes = self._entetes(ouvreur.return_value.open.call_args[0][0])
+        self.assertEqual(entetes["cf-access-client-id"], "identifiant.access")

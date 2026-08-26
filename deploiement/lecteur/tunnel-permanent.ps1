@@ -127,11 +127,23 @@ try {
     }
 
     # --- 5. Configuration et nom public -------------------------------------
-    Etape "5/6  Configuration"
+    Etape "5/7  Configuration"
+
+    # Le service Windows tourne sous le compte SYSTEME, qui ne voit pas le
+    # dossier .cloudflared de l'utilisateur. Sans cette copie, le service
+    # demarre, ne trouve aucune configuration, ne se rattache a rien, et
+    # Cloudflare repond "error code: 1033" a chaque appel.
+    $profilSysteme = Join-Path $env:WINDIR "System32\config\systemprofile\.cloudflared"
+    if (-not (Test-Path $profilSysteme)) {
+        New-Item -ItemType Directory -Force -Path $profilSysteme | Out-Null
+    }
+    $identifiantsSysteme = Join-Path $profilSysteme "$identifiant.json"
+    Copy-Item -Path $fichierIdentifiants -Destination $identifiantsSysteme -Force
+
     # Le tunnel ne publie qu'une chose : le lecteur. Le reste est refuse.
     $contenu = @"
 tunnel: $identifiant
-credentials-file: $fichierIdentifiants
+credentials-file: $identifiantsSysteme
 
 ingress:
   - hostname: $hote
@@ -139,13 +151,14 @@ ingress:
   - service: http_status:404
 "@
     Set-Content -Path $configuration -Value $contenu -Encoding utf8
-    Write-Host "     ecrite dans $configuration"
+    Copy-Item -Path $configuration -Destination (Join-Path $profilSysteme "config.yml") -Force
+    Write-Host "     ecrite pour l'utilisateur et pour le service"
 
     & $exe tunnel route dns --overwrite-dns $nomTunnel $hote
     Write-Host "     $hote associe au tunnel" -ForegroundColor Green
 
     # --- 6. Service Windows --------------------------------------------------
-    Etape "6/6  Service Windows"
+    Etape "6/7  Service Windows"
     # Sans service, le tunnel meurt avec la session : apres une coupure de
     # courant, personne ne penserait a le relancer.
     $service = Get-Service -Name "cloudflared" -ErrorAction SilentlyContinue
@@ -159,6 +172,40 @@ ingress:
     }
     Set-Service -Name "cloudflared" -StartupType Automatic
     Write-Host "     demarrage automatique active" -ForegroundColor Green
+
+    # --- 7. Verification de bout en bout -------------------------------------
+    Etape "7/7  Verification"
+    # Le service peut tourner sans que le tunnel soit rattache. Seule une
+    # requete reelle sur le nom public le prouve.
+    Write-Host "     patientez, le tunnel s'annonce a Cloudflare..."
+    Start-Sleep -Seconds 10
+
+    $code = 0
+    try {
+        $reponse = Invoke-WebRequest -Uri "https://$hote/ISAPI/System/deviceInfo" `
+            -UseBasicParsing -TimeoutSec 25 -ErrorAction Stop
+        $code = [int]$reponse.StatusCode
+    } catch {
+        if ($_.Exception.Response) { $code = [int]$_.Exception.Response.StatusCode }
+    }
+
+    if ($code -eq 401) {
+        # Le lecteur reclame ses identifiants : la chaine complete repond.
+        Write-Host "     le lecteur repond a travers le tunnel" -ForegroundColor Green
+    } elseif ($code -eq 530) {
+        Write-Host "     le tunnel n'est pas rattache (erreur 1033)" -ForegroundColor Red
+        Write-Host "     Lancez : Restart-Service cloudflared"
+        Write-Host "     puis relancez INSTALLER.cmd si cela persiste."
+    } elseif ($code -eq 403) {
+        Write-Host "     Cloudflare bloque l'appel (erreur 1010)" -ForegroundColor Yellow
+        Write-Host "     Desactivez Browser Integrity Check pour $hote :"
+        Write-Host "     Cloudflare > Rules > Configuration Rules."
+    } elseif ($code -eq 0) {
+        Write-Host "     aucune reponse du nom public" -ForegroundColor Red
+        Write-Host "     Verifiez que $Domaine est bien gere par Cloudflare."
+    } else {
+        Write-Host "     reponse inattendue : HTTP $code" -ForegroundColor Yellow
+    }
 
     Write-Host ""
     Write-Host "----------------------------------------------" -ForegroundColor Green
