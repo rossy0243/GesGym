@@ -3189,26 +3189,51 @@ class DeviceUpdateTests(TestCase):
 
         self.assertNotIn("secret-du-tunnel", reponse.content.decode())
 
-    def test_editing_something_else_keeps_the_tunnel_identifier(self):
-        # Le formulaire ne reproposait pas l'identifiant : changer l'adresse
-        # l'effacait en laissant le secret, et l'application cessait de
-        # s'authentifier sans rien signaler.
+    def _avec_jeton(self):
         self.device.tunnel_client_id = "identifiant.access"
         self.device.tunnel_client_secret = "secret-du-tunnel"
-        self.device.save(update_fields=["tunnel_client_id", "tunnel_client_secret"])
+        self.device.use_https = True
+        self.device.save(update_fields=[
+            "tunnel_client_id", "tunnel_client_secret", "use_https",
+        ])
 
-        charge = _serialize_device(self.device)
-        self.assertEqual(charge["tunnel_client_id"], "identifiant.access")
+    def test_editing_something_else_keeps_the_tunnel_pair(self):
+        # Les identifiants ne quittent jamais le serveur : le formulaire les
+        # renvoie donc vides. Sans cette garde, changer l'adresse du lecteur
+        # les effacait, et l'application cessait de s'authentifier en silence.
+        self._avec_jeton()
 
-        # Le formulaire renvoie ce qu'il a recu : la paire survit.
-        self._modifier(
-            host="autre.trycloudflare.com",
-            tunnel_client_id=charge["tunnel_client_id"],
-        )
+        self._modifier(host="autre.trycloudflare.com",
+                       tunnel_client_id="", tunnel_client_secret="")
 
         self.device.refresh_from_db()
         self.assertEqual(self.device.tunnel_client_id, "identifiant.access")
         self.assertEqual(self.device.tunnel_client_secret, "secret-du-tunnel")
+
+    def test_the_identifier_is_never_sent_back_either(self):
+        # Le secret seul ne suffit pas : les deux moities restent au serveur.
+        self._avec_jeton()
+
+        self.assertNotIn("tunnel_client_id", _serialize_device(self.device))
+
+    def test_unchecking_the_tunnel_clears_the_pair(self):
+        # Le geste explicite pour retirer un jeton, puisqu'un champ vide
+        # signifie desormais "ne change pas".
+        self._avec_jeton()
+
+        self._modifier(use_https=False)
+
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.tunnel_client_id, "")
+        self.assertEqual(self.device.tunnel_client_secret, "")
+
+    def test_a_new_identifier_still_replaces_the_old_one(self):
+        self._avec_jeton()
+
+        self._modifier(tunnel_client_id="nouvel.identifiant")
+
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.tunnel_client_id, "nouvel.identifiant")
 
     def test_an_empty_tunnel_token_is_valid_before_access_is_set_up(self):
         # Tant qu'aucune application Access ne protege le nom, il n'y a pas de

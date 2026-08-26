@@ -61,10 +61,6 @@ def _serialize_device(device):
         # Le secret du tunnel n'est jamais renvoye : on indique seulement
         # qu'il est renseigne, comme pour le mot de passe du lecteur.
         "tunnel_protege": bool(device.tunnel_client_id and device.tunnel_client_secret),
-        # L'identifiant est repropose au formulaire ; sans lui, la moindre
-        # modification l'effacait en laissant le secret, et l'application
-        # cessait de s'authentifier sans rien signaler.
-        "tunnel_client_id": device.tunnel_client_id,
         "port": device.port,
         "door_number": device.door_number,
         "model": device.model_name,
@@ -297,12 +293,20 @@ def device_update(request, device_id):
     if mot_de_passe:
         device.password = mot_de_passe
 
-    identifiant_tunnel = payload.get("tunnel_client_id")
-    if identifiant_tunnel is not None:
-        device.tunnel_client_id = identifiant_tunnel.strip()
-    secret_tunnel = payload.get("tunnel_client_secret") or ""
-    if secret_tunnel:
-        device.tunnel_client_secret = secret_tunnel
+    # Les identifiants du tunnel ne quittent jamais le serveur : le formulaire
+    # ne peut donc pas les reproposer. Un champ vide signifie "ne change pas",
+    # sinon la moindre modification d'adresse les effacerait en silence.
+    # Decocher la case du tunnel reste le geste explicite pour les retirer.
+    if not device.use_https:
+        device.tunnel_client_id = ""
+        device.tunnel_client_secret = ""
+    else:
+        identifiant_tunnel = (payload.get("tunnel_client_id") or "").strip()
+        if identifiant_tunnel:
+            device.tunnel_client_id = identifiant_tunnel
+        secret_tunnel = payload.get("tunnel_client_secret") or ""
+        if secret_tunnel:
+            device.tunnel_client_secret = secret_tunnel
 
     try:
         device.full_clean(exclude=["webhook_token"])

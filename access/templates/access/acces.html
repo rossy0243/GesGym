@@ -1407,6 +1407,7 @@ function resetDeviceModal() {
     document.getElementById("deviceHttps").checked = false;
     document.getElementById("deviceTunnelId").value = "";
     document.getElementById("deviceTunnelSecret").value = "";
+    document.getElementById("deviceTunnelId").placeholder = "";
     document.getElementById("deviceTunnelSecret").placeholder = "";
     toggleTunnelFields();
 }
@@ -1433,10 +1434,9 @@ function openEditDeviceModal(device) {
     document.getElementById("devicePassword").placeholder = "Laisser vide pour conserver";
     document.getElementById("deviceDoor").value = device.door_number || 1;
     document.getElementById("deviceHttps").checked = !!device.use_https;
-    document.getElementById("deviceTunnelId").value = device.tunnel_client_id || "";
-    document.getElementById("deviceTunnelSecret").placeholder = device.tunnel_protege
-        ? "Laisser vide pour conserver"
-        : "";
+    const marque = device.tunnel_protege ? "Laisser vide pour conserver" : "";
+    document.getElementById("deviceTunnelId").placeholder = marque;
+    document.getElementById("deviceTunnelSecret").placeholder = marque;
     toggleTunnelFields();
     document.getElementById("deviceManualHint").classList.add("d-none");
 
