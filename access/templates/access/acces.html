@@ -1283,7 +1283,33 @@ document.addEventListener("DOMContentLoaded", function () {
 
 let deviceModal = null;
 
-function devicePost(url, payload) {
+// Un appel vers un lecteur peut durer plusieurs secondes : sans marque
+// visible, le bouton semble mort et l'utilisateur reclique, declenchant
+// autant d'ouvertures de porte qu'il a de fois appuye.
+function occuperBouton(bouton) {
+    if (!bouton || bouton.dataset.occupe === "1") return null;
+
+    bouton.dataset.occupe = "1";
+    const contenu = bouton.innerHTML;
+    bouton.disabled = true;
+    bouton.innerHTML =
+        '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>'
+        + '<span>Patientez...</span>';
+
+    return () => {
+        bouton.disabled = false;
+        bouton.innerHTML = contenu;
+        delete bouton.dataset.occupe;
+    };
+}
+
+function devicePost(url, payload, bouton) {
+    const liberer = occuperBouton(bouton);
+    const rendre = (resultat) => {
+        if (liberer) liberer();
+        return resultat;
+    };
+
     return fetch(url, {
         method: "POST",
         headers: {
@@ -1291,7 +1317,12 @@ function devicePost(url, payload) {
             "Content-Type": "application/json"
         },
         body: JSON.stringify(payload || {})
-    }).then(response => response.json().then(data => ({ ok: response.ok, data })));
+    })
+        .then(response => response.json().then(data => rendre({ ok: response.ok, data })))
+        .catch(erreur => {
+            rendre(null);
+            throw erreur;
+        });
 }
 
 function escapeHtml(value) {
@@ -1556,15 +1587,15 @@ function loadDevices() {
                     </div>
                     <div class="d-flex align-items-center gap-2 flex-wrap">
                         ${badge}
-                        <button class="btn btn-light btn-sm" onclick="testDevice(${device.id})">
+                        <button class="btn btn-light btn-sm" onclick="testDevice(${device.id}, this)">
                             <span class="material-icons me-1" style="font-size:16px;">network_check</span>
                             Tester
                         </button>
-                        <button class="btn btn-light btn-sm" onclick="openDoor(${device.id})">
+                        <button class="btn btn-light btn-sm" onclick="openDoor(${device.id}, this)">
                             <span class="material-icons me-1" style="font-size:16px;">lock_open</span>
                             Ouvrir
                         </button>
-                        <button class="btn btn-light btn-sm" onclick="announceDevice(${device.id})"
+                        <button class="btn btn-light btn-sm" onclick="announceDevice(${device.id}, this)"
                                 title="Donner au lecteur l'adresse de l'application, pour qu'il remonte les passages">
                             <span class="material-icons me-1" style="font-size:16px;">cell_tower</span>
                             Declarer l'app
@@ -1580,7 +1611,7 @@ function loadDevices() {
                             <span class="material-icons me-1" style="font-size:16px;">chat</span>
                             Messages
                         </a>
-                        <button class="btn btn-light btn-sm text-danger" onclick="deleteDevice(${device.id})">
+                        <button class="btn btn-light btn-sm text-danger" onclick="deleteDevice(${device.id}, this)">
                             <span class="material-icons" style="font-size:16px;">delete</span>
                         </button>
                     </div>
@@ -1599,8 +1630,8 @@ function loadDevices() {
     });
 }
 
-function testDevice(deviceId) {
-    devicePost(`/access/devices/${deviceId}/test/`).then(({ data }) => {
+function testDevice(deviceId, bouton) {
+    devicePost(`/access/devices/${deviceId}/test/`, {}, bouton).then(({ data }) => {
         loadDevices();
         if (data.test && !data.test.ok) {
             alert("Test échoué :\n" + data.test.error);
@@ -1608,10 +1639,10 @@ function testDevice(deviceId) {
     });
 }
 
-function announceDevice(deviceId) {
+function announceDevice(deviceId, bouton) {
     // A ne pas confondre avec la detection reseau : le lecteur est deja connu,
     // on lui donne ici l'adresse a laquelle joindre l'application.
-    devicePost(`/access/devices/${deviceId}/annoncer/`).then(({ ok, data }) => {
+    devicePost(`/access/devices/${deviceId}/annoncer/`, {}, bouton).then(({ ok, data }) => {
         if (ok) {
             alert(data.message + "\n\n" + data.url);
         } else {
@@ -1621,16 +1652,16 @@ function announceDevice(deviceId) {
     });
 }
 
-function openDoor(deviceId) {
-    devicePost(`/access/devices/${deviceId}/open/`).then(({ ok, data }) => {
+function openDoor(deviceId, bouton) {
+    devicePost(`/access/devices/${deviceId}/open/`, {}, bouton).then(({ ok, data }) => {
         alert(ok ? data.message : "Ouverture impossible :\n" + (data.error || ""));
         loadDevices();
     });
 }
 
-function deleteDevice(deviceId) {
+function deleteDevice(deviceId, bouton) {
     if (!confirm("Supprimer ce lecteur ?")) return;
-    devicePost(`/access/devices/${deviceId}/delete/`).then(() => loadDevices());
+    devicePost(`/access/devices/${deviceId}/delete/`, {}, bouton).then(() => loadDevices());
 }
 </script>
 
