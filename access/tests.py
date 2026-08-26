@@ -3073,3 +3073,170 @@ class DoorCommandScopeTests(TestCase):
         commande.assert_not_called()
         self.assertTrue(reponse.json()["access"])
         self.assertTrue(AccessLog.objects.get(gym=self.gym).access_granted)
+
+
+class DeviceUpdateTests(TestCase):
+    """
+    Modifier la fiche d'un lecteur sans perdre son jeton.
+
+    Sans cette operation, changer d'adresse imposait de supprimer la fiche et
+    de la recreer. Le jeton du webhook changeait alors, le lecteur continuait
+    d'ecrire a l'ancien, et les passages disparaissaient du journal sans que
+    rien ne le signale.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Edition", slug="org-edition"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization,
+            name="Gym Edition",
+            slug="gym-edition",
+            subdomain="gym-edition",
+        )
+        module, _ = Module.objects.get_or_create(
+            code="ACCESS", defaults={"name": "Access"}
+        )
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=module, defaults={"is_active": True}
+        )
+        self.device = AccessDevice.objects.create(
+            gym=self.gym, name="Entree", host="192.168.1.188", port=80,
+            username="operateur", password="motdepasse-origine",
+        )
+        self.jeton = self.device.webhook_token
+        self.owner = User.objects.create_user(
+            username="owner-edition", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.owner, gym=self.gym, role="owner", is_active=True
+        )
+        self.client.force_login(self.owner)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _modifier(self, **extra):
+        charge = {
+            "name": "Entree",
+            "host": "exemple.trycloudflare.com",
+            "port": 443,
+            "use_https": True,
+            "username": "operateur",
+            "door_number": 1,
+        }
+        charge.update(extra)
+        with patch.object(
+            hikvision.HikvisionClient,
+            "device_info",
+            side_effect=hikvision.HikvisionUnreachable("hors de portee"),
+        ):
+            return self.client.post(
+                reverse("access:device_update", args=[self.device.id]),
+                data=json.dumps(charge),
+                content_type="application/json",
+            )
+
+    # --- Ce qui doit survivre -------------------------------------------------
+
+    def test_the_webhook_token_never_changes(self):
+        self._modifier()
+
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.webhook_token, self.jeton)
+
+    def test_an_empty_password_keeps_the_previous_one(self):
+        # Reafficher un mot de passe pour le faire retaper le ferait circuler
+        # sans raison ; le champ vide doit donc signifier "ne change pas".
+        self._modifier(password="")
+
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.password, "motdepasse-origine")
+
+    def test_a_new_password_replaces_it(self):
+        self._modifier(password="nouveau-motdepasse")
+
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.password, "nouveau-motdepasse")
+
+    # --- Ce qui doit changer ---------------------------------------------------
+
+    def test_the_address_moves_to_the_tunnel(self):
+        self._modifier()
+
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.host, "exemple.trycloudflare.com")
+        self.assertEqual(self.device.port, 443)
+        self.assertTrue(self.device.use_https)
+
+    def test_the_tunnel_token_can_be_added_later(self):
+        self._modifier(
+            tunnel_client_id="identifiant.access",
+            tunnel_client_secret="secret-du-tunnel",
+        )
+
+        self.device.refresh_from_db()
+        self.assertEqual(
+            self.device.tunnel_headers["CF-Access-Client-Id"], "identifiant.access"
+        )
+
+    def test_the_tunnel_secret_is_never_sent_back(self):
+        reponse = self._modifier(
+            tunnel_client_id="identifiant.access",
+            tunnel_client_secret="secret-du-tunnel",
+        )
+
+        self.assertNotIn("secret-du-tunnel", reponse.content.decode())
+
+    def test_the_user_name_is_offered_back_to_the_form(self):
+        # Sans lui, le formulaire le remettrait a "admin" a chaque modification.
+        self.assertEqual(_serialize_device(self.device)["username"], "operateur")
+
+    # --- Ce qui doit etre refuse -----------------------------------------------
+
+    def test_an_empty_address_is_refused(self):
+        reponse = self._modifier(host="")
+
+        self.assertEqual(reponse.status_code, 400)
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.host, "192.168.1.188")
+
+    def test_a_reader_of_another_gym_is_out_of_reach(self):
+        autre = Gym.objects.create(
+            organization=self.organization, name="Ailleurs",
+            slug="ailleurs-edition", subdomain="ailleurs-edition",
+        )
+        etranger = AccessDevice.objects.create(
+            gym=autre, name="Autre", host="10.0.0.8", password="secret"
+        )
+
+        reponse = self.client.post(
+            reverse("access:device_update", args=[etranger.id]),
+            data=json.dumps({"host": "pirate.example.com"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(reponse.status_code, 404)
+
+    def test_a_receptionist_cannot_move_a_reader(self):
+        reception = User.objects.create_user(
+            username="reception-edition", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=reception, gym=self.gym, role="reception", is_active=True
+        )
+        self.client.force_login(reception)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+        reponse = self.client.post(
+            reverse("access:device_update", args=[self.device.id]),
+            data=json.dumps({"host": "pirate.example.com"}),
+            content_type="application/json",
+        )
+
+        self.assertIn(reponse.status_code, (302, 403))
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.host, "192.168.1.188")

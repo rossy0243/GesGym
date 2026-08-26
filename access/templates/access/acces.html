@@ -1370,6 +1370,8 @@ function discoverDevices() {
 }
 
 function resetDeviceModal() {
+    deviceEditId = null;
+    document.getElementById("devicePassword").placeholder = "";
     document.getElementById("deviceModalError").classList.add("d-none");
     document.getElementById("deviceHttps").checked = false;
     document.getElementById("deviceTunnelId").value = "";
@@ -1380,6 +1382,30 @@ function resetDeviceModal() {
 function toggleTunnelFields() {
     const coche = document.getElementById("deviceHttps").checked;
     document.getElementById("deviceTunnelFields").classList.toggle("d-none", !coche);
+}
+
+let deviceEditId = null;
+
+function openEditDeviceModal(device) {
+    // Modifier plutot que supprimer-recreer : recreer changerait le jeton du
+    // webhook, et le lecteur continuerait d'ecrire a l'ancien.
+    const modalElement = document.getElementById("deviceModal");
+
+    resetDeviceModal();
+    deviceEditId = device.id;
+    document.getElementById("deviceName").value = device.name || "";
+    document.getElementById("deviceHost").value = device.host || "";
+    document.getElementById("devicePort").value = device.port || 80;
+    document.getElementById("deviceUsername").value = device.username || "admin";
+    document.getElementById("devicePassword").value = "";
+    document.getElementById("devicePassword").placeholder = "Laisser vide pour conserver";
+    document.getElementById("deviceDoor").value = device.door_number || 1;
+    document.getElementById("deviceHttps").checked = !!device.use_https;
+    toggleTunnelFields();
+    document.getElementById("deviceManualHint").classList.add("d-none");
+
+    deviceModal = bootstrap.Modal.getOrCreateInstance(modalElement);
+    deviceModal.show();
 }
 
 function openManualDeviceModal() {
@@ -1448,7 +1474,11 @@ function saveDevice() {
     button.disabled = true;
     errorBox.classList.add("d-none");
 
-    devicePost("/access/devices/create/", payload).then(({ ok, data }) => {
+    const cible = deviceEditId
+        ? `/access/devices/${deviceEditId}/update/`
+        : "/access/devices/create/";
+
+    devicePost(cible, payload).then(({ ok, data }) => {
         button.disabled = false;
 
         if (!ok) {
@@ -1538,6 +1568,12 @@ function loadDevices() {
                                 title="Donner au lecteur l'adresse de l'application, pour qu'il remonte les passages">
                             <span class="material-icons me-1" style="font-size:16px;">cell_tower</span>
                             Declarer l'app
+                        </button>
+                        <button class="btn btn-light btn-sm"
+                                onclick='openEditDeviceModal(${JSON.stringify(device).replace(/'/g, "&#39;")})'
+                                title="Changer l'adresse, le port ou le jeton du tunnel">
+                            <span class="material-icons me-1" style="font-size:16px;">edit</span>
+                            Modifier
                         </button>
                         <a class="btn btn-light btn-sm" href="/access/devices/${device.id}/messages/"
                            title="Messages affiches sur l'ecran du lecteur">

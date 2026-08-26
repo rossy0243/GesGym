@@ -54,6 +54,9 @@ def _serialize_device(device):
         "name": device.name,
         "brand": device.get_brand_display(),
         "host": device.host,
+        # Le formulaire de modification le repropose : sans lui, il le
+        # remettrait silencieusement a "admin". Le mot de passe, lui, ne sort jamais.
+        "username": device.username,
         "use_https": device.use_https,
         # Le secret du tunnel n'est jamais renvoye : on indique seulement
         # qu'il est renseigne, comme pour le mot de passe du lecteur.
@@ -255,6 +258,71 @@ def device_open_door(request, device_id):
         gym=request.gym,
     )
     return JsonResponse({"ok": True, "message": "Commande d'ouverture envoyee."})
+
+
+@login_required
+@role_required(ACCESS_DEVICE_ROLES)
+@require_POST
+@module_required("ACCESS")
+def device_update(request, device_id):
+    """
+    Modifie la fiche d'un lecteur sans changer son jeton.
+
+    Sans cette operation, changer d'adresse imposait de supprimer la fiche et
+    de la recreer. Le jeton du webhook changeait alors, le lecteur continuait
+    d'ecrire a l'ancien, et les passages disparaissaient du journal sans que
+    rien ne le signale.
+    """
+    device = get_object_or_404(AccessDevice, id=device_id, gym=request.gym)
+    payload = _request_payload(request)
+
+    host = (payload.get("host") or "").strip()
+    if not host:
+        return JsonResponse({"error": "Adresse du lecteur manquante."}, status=400)
+
+    device.name = (payload.get("name") or "").strip() or device.name
+    device.host = host
+    device.port = int(payload.get("port") or 80)
+    device.use_https = bool(payload.get("use_https"))
+    device.username = (payload.get("username") or "admin").strip()
+    device.door_number = int(payload.get("door_number") or 1)
+
+    # Un champ secret laisse vide signifie "ne change pas" : reafficher un mot
+    # de passe pour le faire retaper le ferait circuler sans raison.
+    mot_de_passe = payload.get("password") or ""
+    if mot_de_passe:
+        device.password = mot_de_passe
+
+    identifiant_tunnel = payload.get("tunnel_client_id")
+    if identifiant_tunnel is not None:
+        device.tunnel_client_id = identifiant_tunnel.strip()
+    secret_tunnel = payload.get("tunnel_client_secret") or ""
+    if secret_tunnel:
+        device.tunnel_client_secret = secret_tunnel
+
+    try:
+        device.full_clean(exclude=["webhook_token"])
+    except Exception as exc:  # ValidationError : messages deja lisibles
+        return JsonResponse({"error": _first_error(exc)}, status=400)
+
+    try:
+        device.save()
+    except IntegrityError:
+        return JsonResponse(
+            {"error": "Un lecteur est deja enregistre sur cette adresse."},
+            status=400,
+        )
+
+    log_sensitive_action(
+        request,
+        "access.device_updated",
+        "AccessDevice",
+        device.name,
+        metadata={"device_id": device.id, "host": device.host, "port": device.port},
+        gym=request.gym,
+    )
+    status = _refresh_device_state(device)
+    return JsonResponse({"device": _serialize_device(device), "test": status})
 
 
 @login_required
