@@ -1,11 +1,12 @@
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.db.models import Q
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils.timezone import localtime, now
 from django.views.decorators.http import require_POST
 
+from members import invitations
 from members.models import Member
 from smartclub.access_control import ACCESS_ROLES
 from smartclub.decorators import module_required, role_required
@@ -121,6 +122,10 @@ def _today_stats(gym):
             access_granted=True, is_return=False, member__isnull=False
         ).count(),
         "returns": logs_today.filter(is_return=True).count(),
+        # Un invite n'est pas un abonne : il se compte, mais ailleurs.
+        "guests": logs_today.filter(
+            access_granted=True, guest_pass__isnull=False
+        ).count(),
         "denied": logs_today.filter(access_granted=False).count(),
     }
 
@@ -183,10 +188,15 @@ def _serialize_log(log):
     return {
         "id": log.id,
         "member": (
-            f"{log.member.first_name} {log.member.last_name}"
-            if log.member else "Ouverture manuelle"
+            f"{log.member.first_name} {log.member.last_name}" if log.member
+            else f"{log.guest_pass.guest_name} (invite)" if log.guest_pass_id
+            else "Ouverture manuelle"
         ),
-        "phone": log.member.phone if log.member else "",
+        "phone": (
+            log.member.phone if log.member
+            else log.guest_pass.guest_phone if log.guest_pass_id
+            else ""
+        ),
         "qr_code": str(log.member.qr_code) if log.member else "",
         "time": checked_at.strftime("%H:%M"),
         "date": checked_at.strftime("%d/%m/%Y"),
@@ -318,16 +328,69 @@ def manual_access_entry(request, member_id):
     })
 
 
+def enregistrer_passage_invite(gym, carnet, user=None, device=None, methode=""):
+    """
+    Fait entrer - ou refuse - une personne invitee, et le journalise.
+
+    Partage par le comptoir et par le lecteur : la meme regle doit s'appliquer
+    ou que l'invite se presente. La ligne de journal n'a pas de membre, comme
+    une ouverture manuelle, mais porte le carnet : c'est ce qui les distingue.
+    """
+    refus = invitations.refus_eventuel(carnet)
+    if refus:
+        log = AccessLog.objects.create(
+            gym=gym,
+            member=None,
+            guest_pass=carnet,
+            device=device,
+            device_used=methode or f"Invite - {carnet.guest_name}",
+            access_granted=False,
+            denial_reason=refus,
+            scanned_by=user,
+        )
+        return False, refus, log
+
+    carnet = invitations.consommer(carnet)
+    log = AccessLog.objects.create(
+        gym=gym,
+        member=None,
+        guest_pass=carnet,
+        device=device,
+        device_used=invitations.libelle_passage(carnet),
+        access_granted=True,
+        denial_reason=f"Invite de {carnet.host.first_name} {carnet.host.last_name}",
+        scanned_by=user,
+    )
+    return True, "", log
+
+
 @login_required
 @role_required(ACCESS_ROLES)
 @require_POST
 @module_required("ACCESS")
 def member_access(request, qr_code):
-    member = get_object_or_404(
-        Member,
-        qr_code=qr_code,
-        gym=request.gym
-    )
+    member = Member.objects.filter(qr_code=qr_code, gym=request.gym).first()
+
+    # Un QR que les membres ne reconnaissent pas peut etre un carnet
+    # d'invitation : meme geste au comptoir, meme porte qui s'ouvre.
+    if member is None:
+        carnet = invitations.retrouver(request.gym, qr_code)
+        if carnet is None:
+            raise Http404("Ce QR code ne correspond a personne.")
+
+        access_granted, reason, log = enregistrer_passage_invite(
+            request.gym, carnet, user=request.user, methode="QR Scanner"
+        )
+        return JsonResponse({
+            "member": f"{carnet.guest_name} (invite)",
+            "access": access_granted,
+            "reason": reason,
+            "stats": _today_stats(request.gym),
+            "log": _serialize_log(log),
+            "door": door.summarize(
+                door.open_doors(request.gym) if access_granted else []
+            ),
+        })
 
     access_granted, reason, log = _record_access(
         gym=request.gym,
@@ -350,4 +413,35 @@ def member_access(request, qr_code):
         "stats": _today_stats(request.gym),
         "log": _serialize_log(log),
         "door": door_status,
+    })
+
+
+@login_required
+@role_required(ACCESS_ROLES)
+@module_required("ACCESS")
+def guest_passes(request):
+    """
+    Invitations en cours, pour verifier a l'entree.
+
+    Quelqu'un se presente en disant « je viens en invite » : l'accueil retrouve
+    son nom, voit qui l'invite et ce qu'il lui reste, sans avoir besoin du QR.
+    """
+    carnets = invitations.en_cours(request.gym)
+
+    return JsonResponse({
+        "invitations": [
+            {
+                "id": carnet.id,
+                "invite": carnet.guest_name,
+                "telephone": carnet.guest_phone,
+                "hote": f"{carnet.host.first_name} {carnet.host.last_name}",
+                "seances_restantes": carnet.sessions_left,
+                "seances_accordees": carnet.sessions_allowed,
+                "deja_passe": carnet.sessions_used > 0,
+                "etat": carnet.state,
+                "etat_libelle": carnet.state_label,
+                "expire_le": localtime(carnet.expires_at).strftime("%d/%m/%Y"),
+            }
+            for carnet in carnets
+        ]
     })

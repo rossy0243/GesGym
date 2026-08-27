@@ -18,12 +18,14 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
 from core.audit import log_sensitive_action
+from members import invitations
 from members.models import Member
 from smartclub.access_control import ACCESS_DEVICE_ROLES, ACCESS_DEVICE_USE_ROLES
 from smartclub.decorators import module_required, role_required
 
 from . import door, enrollment, hikvision
 from .models import AccessDevice, AccessLog
+from .views import enregistrer_passage_invite
 from .views import _record_access, _today_stats
 
 
@@ -459,7 +461,24 @@ def device_webhook(request, token):
         return JsonResponse({"access": False, "reason": EMPTY_CREDENTIAL_REASON})
 
     member, nature = _resolve_member(device.gym, credential)
+
+    # Un identifiant que les membres ne reconnaissent pas peut etre un carnet
+    # d'invitation. Le lecteur ne fait pas la difference ; l'application si.
     if member is None:
+        carnet = invitations.retrouver(device.gym, credential)
+        if carnet is not None:
+            accorde, motif, log = enregistrer_passage_invite(
+                device.gym, carnet, device=device
+            )
+            return JsonResponse({
+                "access": accorde,
+                "member": f"{carnet.guest_name} (invite)",
+                "reason": motif,
+                "log_id": log.id,
+                "stats": _today_stats(device.gym),
+                "door": {"attempted": False, "opened": False, "message": ""},
+            })
+
         return JsonResponse({"access": False, "reason": UNKNOWN_CREDENTIAL_REASON})
 
     # Le lecteur reemet la meme notification tant qu'il ne l'estime pas

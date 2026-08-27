@@ -42,7 +42,8 @@ from smartclub.access_control import (
 )
 from smartclub.public_links import build_public_url
 from .forms import MemberCreationForm, MemberGoalForm, MemberWeightMeasurementForm
-from .models import Member, MemberGoal, MemberPreRegistration, MemberPreRegistrationLink, MemberWeightMeasurement
+from members import invitations
+from .models import GuestPass, Member, MemberGoal, MemberPreRegistration, MemberPreRegistrationLink, MemberWeightMeasurement
 from notifications.models import Notification
 from organizations.models import Organization
 from pos.models import Payment
@@ -846,6 +847,10 @@ def member_portal(request):
         "can_member_record_goal_measurement": goal_access["can_member_record"],
         "goal_waiting_for": goal_access["waiting_for"],
         "goal_direction_label": _goal_direction_label(active_goal),
+        # Le membre voit son droit d'inviter, ses carnets, et pour chacun le
+        # nom, le numero et l'etat de son invite.
+        "guest_quota": invitations.quota(member),
+        "guest_passes": _carnets_du_membre(member),
     }
     return render(request, "members/member_portal.html", context)
 
@@ -2394,3 +2399,88 @@ def reactivate_member(request, member_id):
         f"{member.first_name} {member.last_name} a ete reactive. {detail}",
     )
     return redirect("members:member_list")
+
+
+# ---------------------------------------------------------------------------
+# Invitations
+# ---------------------------------------------------------------------------
+
+
+def _carnets_du_membre(member):
+    """Ses carnets, du plus recent au plus ancien."""
+    return member.guest_passes.all()[:20]
+
+
+@login_required
+@require_POST
+def member_guest_pass_create(request):
+    """Le membre remet un carnet a une personne de son choix."""
+    member = _get_current_member(request.user)
+    if not member:
+        raise PermissionDenied
+
+    try:
+        carnet = invitations.emettre(
+            member,
+            request.POST.get("guest_name"),
+            request.POST.get("guest_phone"),
+            par=request.user,
+        )
+    except ValidationError as exc:
+        messages.error(request, exc.messages[0])
+    else:
+        messages.success(
+            request,
+            f"Invitation creee pour {carnet.guest_name}. "
+            f"Transmettez-lui son QR code, valable jusqu'au "
+            f"{timezone.localtime(carnet.expires_at).strftime('%d/%m/%Y')}.",
+        )
+
+    return redirect(f"{reverse('members:member_portal')}#invitations")
+
+
+@login_required
+@require_POST
+def member_guest_pass_reassign(request, pass_id):
+    """
+    Change le destinataire d'un carnet que personne n'a encore utilise.
+
+    Le recours du membre dont l'invite se decommande : la date limite ne bouge
+    pas, seul le nom change.
+    """
+    member = _get_current_member(request.user)
+    if not member:
+        raise PermissionDenied
+
+    carnet = get_object_or_404(GuestPass, id=pass_id, host=member)
+
+    try:
+        invitations.reattribuer(
+            carnet,
+            request.POST.get("guest_name"),
+            request.POST.get("guest_phone"),
+        )
+    except ValidationError as exc:
+        messages.error(request, exc.messages[0])
+    else:
+        messages.success(request, "Invitation reattribuee.")
+
+    return redirect(f"{reverse('members:member_portal')}#invitations")
+
+
+@login_required
+def member_guest_pass_qr(request, pass_id):
+    """Le QR code du carnet, a transmettre a l'invite."""
+    member = _get_current_member(request.user)
+    if not member:
+        raise PermissionDenied
+
+    carnet = get_object_or_404(GuestPass, id=pass_id, host=member)
+
+    from members.card_images import render_qr_png
+
+    return _image_response(
+        render_qr_png(str(carnet.code), size=request.GET.get("size")),
+        f"invitation-{carnet.guest_name}".replace(" ", "-").lower(),
+        _wants_download(request),
+    )

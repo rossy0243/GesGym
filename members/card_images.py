@@ -295,7 +295,23 @@ def render_member_qr_png(member, size=QR_DOWNLOAD_SIZE):
         size = QR_DOWNLOAD_SIZE
     size = max(QR_DOWNLOAD_MIN, min(size, QR_DOWNLOAD_MAX))
 
-    image = _qr_image(member.get_qr_data(), size, border=4)
+    return render_qr_png(member.get_qr_data(), size)
+
+
+def render_qr_png(contenu, size=QR_DOWNLOAD_SIZE):
+    """
+    QR code d'un contenu quelconque, au meme rendu que celui des membres.
+
+    Sert aussi aux invitations : un carnet n'est pas un membre, mais son code
+    finit sur le meme genre d'ecran, et parfois sur du papier.
+    """
+    try:
+        size = int(size or QR_DOWNLOAD_SIZE)
+    except (TypeError, ValueError):
+        size = QR_DOWNLOAD_SIZE
+    size = max(QR_DOWNLOAD_MIN, min(size, QR_DOWNLOAD_MAX))
+
+    image = _qr_image(contenu, size, border=4)
 
     output = BytesIO()
     image.convert("RGB").save(output, format="PNG", optimize=True)
