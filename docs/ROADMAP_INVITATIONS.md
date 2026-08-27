@@ -4,44 +4,54 @@ Cadrage arrete le 27 aout 2026 avec le proprietaire. Rien n'est encore code.
 
 ## L'idee en une phrase
 
-Une formule d'abonnement donne au membre le droit d'inviter quelqu'un. Le
-membre emet lui-meme un laissez-passer depuis son espace ; l'invite entre une
-fois avec un QR code temporaire, sans jamais devenir membre.
+Une formule d'abonnement donne au membre le droit d'inviter une personne par
+mois d'abonnement. Le membre emet lui-meme le laissez-passer depuis son espace ;
+l'invite obtient un QR code valable pour un nombre de seances fixe par la salle,
+sans jamais devenir membre.
 
 ## Ce qui a ete tranche
 
 | Question | Decision |
 | --- | --- |
-| D'ou vient le droit | Inclus dans la formule, avec un quota mensuel |
-| Portee du laissez-passer | Une seule entree, puis il s'eteint |
+| D'ou vient le droit | Inclus dans la formule, avec un quota |
+| Combien de personnes | Reglable par formule ; l'exemple du proprietaire est 1 par mois |
+| Combien de seances par invite | Reglable par la salle, **1 par defaut** |
+| Renouvellement | A chaque mois d'abonnement ecoule : 3 mois achetes, 3 invitations |
+| Validite des seances | Jusqu'a la fin du mois d'invitation ; le reliquat tombe |
 | Identite de l'invite | Nom et telephone, saisis a l'emission |
 | Qui emet | Le membre, depuis son espace |
 | Meme personne invitee plusieurs fois | Plafonnee, pour ne pas remplacer un abonnement |
-| Remise a zero du quota | Mois calendaire, le 1er |
 | Hote plus a jour a l'entree | Le laissez-passer est refuse |
+
+**Le laissez-passer est un carnet, pas un billet.** Il porte un invite nomme et
+un nombre de seances ; il s'epuise, il ne se consomme pas d'un coup. C'est la
+correction apportee au premier cadrage, qui parlait a tort d'usage unique.
 
 ## Ce que j'ai decide seul, a confirmer
 
-Trois points de detail n'ont pas ete poses ; ils se corrigent en une ligne si
-le choix ne convient pas.
+Ces points n'ont pas ete poses ; chacun se corrige en une ligne.
 
-- **Le quota vit sur la formule**, pas sur l'offre. C'est la formule qui est
-  vendue et facturee : le droit d'inviter est une propriete de ce qu'on a
-  achete. L'offre nommee « Invitations » reste descriptive, pour l'affichage
-  et l'argumentaire commercial. Deux sources de verite auraient fini par
-  diverger.
-- **Un laissez-passer non utilise expire au bout de 7 jours.** Sans cela, un
-  membre accumulerait des QR actifs pendant des mois et les distribuerait d'un
-  coup.
-- **Le plafond par personne se compte sur 12 mois glissants**, pas sur toute la
-  vie. Interdire a quelqu'un de revenir deux ans plus tard serait absurde ; le
-  but est d'empecher l'invitation permanente, pas de bannir.
+- **Les deux quotas vivent sur la formule**, pas sur l'offre. C'est la formule
+  qui est vendue et facturee : le droit d'inviter est une propriete de ce qu'on
+  a achete. L'offre nommee « Invitations » reste descriptive, pour l'affichage
+  et l'argumentaire. Deux sources de verite auraient fini par diverger.
+- **Un mois d'abonnement est une tranche de 30 jours depuis la date de debut**,
+  et non un mois calendaire. Les durees du projet s'expriment deja en
+  `duration_days` : compter autrement ferait diverger le quota de l'abonnement
+  qui le porte.
+- **Le plafond par personne se compte sur 12 mois glissants.** Interdire a
+  quelqu'un de revenir deux ans plus tard serait absurde ; le but est
+  d'empecher l'invitation permanente, pas de bannir.
+- **Un laissez-passer jamais utilise peut etre annule par le membre**, ce qui
+  lui rend son quota du mois. Sans cela, un numero mal saisi lui couterait son
+  invitation.
 
 ## Modele de donnees
 
 ### `GuestPass`
 
-Un laissez-passer, dans `members` : c'est l'invite d'un membre, pas un passage.
+Un carnet d'invitation, dans `members` : c'est l'invite d'un membre, pas un
+passage.
 
 | Champ | Role |
 | --- | --- |
@@ -49,60 +59,76 @@ Un laissez-passer, dans `members` : c'est l'invite d'un membre, pas un passage.
 | `host` | le membre qui invite |
 | `guest_name`, `guest_phone` | l'invite ; deux champs, pas une fiche |
 | `code` | l'UUID porte par le QR |
+| `sessions_allowed` | seances accordees, copiees de la formule a l'emission |
+| `sessions_used` | seances deja consommees |
 | `created_at` | emission |
-| `expires_at` | emission + 7 jours |
-| `used_at` | horodatage du passage, vide tant qu'inutilise |
+| `expires_at` | fin du mois d'abonnement en cours |
+| `cancelled_at` | annulation par le membre, tant qu'aucune seance n'a servi |
 | `created_by` | le compte du membre, pour la trace |
 
 Le telephone est indexe : c'est la cle du plafond par personne.
 
-### `SubscriptionPlan.guest_passes_per_month`
+`sessions_allowed` est **copie** a l'emission plutot que lu sur la formule :
+changer le reglage de la salle ne doit pas modifier des carnets deja remis.
 
-Entier, zero par defaut. Une formule sans invitations n'a rien a declarer.
+### `SubscriptionPlan`
+
+Deux entiers, tous deux a zero ou un par defaut :
+
+| Champ | Defaut | Role |
+| --- | --- | --- |
+| `guest_invites_per_month` | `0` | personnes invitables par mois d'abonnement |
+| `guest_sessions_per_invite` | `1` | seances offertes a chaque invite |
+
+Une formule sans invitations n'a rien a declarer : `0` suffit a la taire.
 
 ### `AccessLog.guest_pass`
 
-Lien facultatif vers le laissez-passer. Le journal accepte deja une ligne sans
-membre - travail fait pour les ouvertures manuelles - mais il faut distinguer
-les deux a l'affichage : une ouverture manuelle et un invite ne racontent pas
-la meme chose.
+Lien facultatif vers le carnet. Le journal accepte deja une ligne sans membre -
+travail fait pour les ouvertures manuelles - mais il faut distinguer les deux a
+l'affichage : une ouverture manuelle et un invite ne racontent pas la meme
+chose.
 
 ## Regles de validation
 
 A l'emission, dans cet ordre :
 
 1. le membre a un abonnement actif ;
-2. sa formule accorde des invitations ;
-3. son quota du mois calendaire n'est pas epuise ;
+2. sa formule accorde des invitations (`guest_invites_per_month > 0`) ;
+3. son quota du mois d'abonnement en cours n'est pas epuise, annulations
+   deduites ;
 4. ce numero de telephone n'a pas atteint le plafond sur 12 mois glissants.
 
-A l'entree :
+A chaque entree de l'invite :
 
-1. le laissez-passer existe, n'a pas servi, n'a pas expire ;
-2. **l'hote est toujours a jour** - reverifie a cet instant, pas a l'emission ;
-3. le passage est journalise, et le laissez-passer s'eteint.
+1. le carnet existe, n'est ni annule ni expire ;
+2. il reste au moins une seance (`sessions_used < sessions_allowed`) ;
+3. **l'hote est toujours a jour** - reverifie a cet instant, pas a l'emission ;
+4. le passage est journalise et une seance est decomptee.
 
-Chaque refus doit nommer sa cause : « ce laissez-passer a deja servi »,
-« l'abonnement de l'hote a expire », « cette personne a deja ete invitee trois
-fois ». Un refus muet enverrait l'accueil chercher une panne inexistante.
+Chaque refus doit nommer sa cause : « ce carnet est epuise », « l'abonnement de
+l'hote a expire », « cette personne a deja ete invitee trois fois ». Un refus
+muet enverrait l'accueil chercher une panne inexistante.
 
 ## Ce que voit le membre
 
-Dans son espace : le nombre d'invitations restantes ce mois-ci, un formulaire a
-deux champs, le QR a transmettre, et l'etat de ce qu'il a deja emis - utilise,
-en attente, expire.
+Dans son espace : son quota du mois, un formulaire a deux champs, le QR a
+transmettre, et l'etat de ses carnets - seances restantes, expire, annule. Un
+carnet non entame peut etre annule pour recuperer l'invitation.
 
 ## Ce que voit la salle
 
-Le passage d'un invite apparait au journal, nomme, avec son hote. Il **ne
-compte pas** dans la frequentation des membres : personne ne s'est abonne. Un
-compteur separe le rend visible sans fausser les statistiques.
+Le passage d'un invite apparait au journal, nomme, avec son hote et le rang de
+la seance : « Invite - Paul Kabeya (2/3), invite par Ada Mbala ». Il **ne compte
+pas** dans la frequentation des membres : personne ne s'est abonne. Un compteur
+separe le rend visible sans fausser les statistiques.
 
 ## Risques reconnus
 
 - **Le QR se transfere.** Il part par messagerie, donc n'importe qui peut le
-  presenter. L'usage unique, le nom releve et l'expiration courte limitent la
-  portee, sans l'annuler.
+  presenter. Le nom releve et le decompte des seances limitent la portee, sans
+  l'annuler. Un carnet de plusieurs seances est plus expose qu'un billet unique :
+  c'est le prix du confort demande.
 - **Un telephone invente contourne le plafond.** Rien ne l'empeche
   techniquement. C'est l'accueil qui voit la personne ; la regle decourage
   l'abus ordinaire, elle n'arrete pas la fraude deliberee.
@@ -115,7 +141,7 @@ compteur separe le rend visible sans fausser les statistiques.
 | Fichier | Role |
 | --- | --- |
 | `members/models.py` | `GuestPass`, et le lien vers l'hote |
-| `subscriptions/models.py` | `SubscriptionPlan.guest_passes_per_month` |
+| `subscriptions/models.py` | les deux quotas sur `SubscriptionPlan` |
 | `access/models.py` | `AccessLog.guest_pass` |
-| `access/views.py` | resolution du QR, journalisation, statistiques |
-| `members/views.py` | espace membre : emission et suivi |
+| `access/views.py` | resolution du QR, decompte, journalisation, statistiques |
+| `members/views.py` | espace membre : emission, suivi, annulation |
