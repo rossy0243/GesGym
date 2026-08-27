@@ -203,14 +203,23 @@ def _member_can_choose_group_program(member, subscription):
     return member.has_group_coaching_access
 
 
-def _member_tab_config(unread_notification_count):
+def _member_tab_config(unread_notification_count, invitations_ouvertes=False):
     badge = str(unread_notification_count) if unread_notification_count else ""
-    return [
+    onglets = [
         {"key": "home", "label": "Accueil", "icon": "home"},
         {"key": "goal", "label": "Objectif", "icon": "goal"},
         {"key": "messages", "label": "Messages", "icon": "mail", "badge": badge},
         {"key": "plans", "label": "Formules", "icon": "plans"},
     ]
+
+    # Un membre dont la formule n'accorde rien n'a pas a voir un onglet vide :
+    # ce serait lui promettre une possibilite qu'il n'a pas achetee.
+    if invitations_ouvertes:
+        onglets.insert(3, {
+            "key": "invitations", "label": "Invitations", "icon": "guest",
+        })
+
+    return onglets
 
 
 def _build_feedback_form(prefix):
@@ -751,7 +760,11 @@ def member_portal(request):
             )
     unread_notifications = [item for item in member_notifications_list if not item.read_at]
     read_notifications = [item for item in member_notifications_list if item.read_at]
-    visible_tabs = _member_tab_config(unread_notification_count)
+    quota_invitations = invitations.quota(member)
+    visible_tabs = _member_tab_config(
+        unread_notification_count,
+        invitations_ouvertes=quota_invitations["accorde"] > 0,
+    )
     if active_tab not in {tab["key"] for tab in visible_tabs} | {"password"}:
         active_tab = "home"
 
@@ -849,7 +862,7 @@ def member_portal(request):
         "goal_direction_label": _goal_direction_label(active_goal),
         # Le membre voit son droit d'inviter, ses carnets, et pour chacun le
         # nom, le numero et l'etat de son invite.
-        "guest_quota": invitations.quota(member),
+        "guest_quota": quota_invitations,
         "guest_passes": _carnets_du_membre(member),
     }
     return render(request, "members/member_portal.html", context)

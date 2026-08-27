@@ -3441,3 +3441,162 @@ class GuestEntryTests(TestCase):
         reponse = self.client.get(reverse("access:guest_passes"))
 
         self.assertEqual(reponse.json()["invitations"], [])
+
+
+class GuestPassScreenTests(TestCase):
+    """Ce que le membre voit et peut faire depuis son espace."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Ecran", slug="org-ecran"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Ecran",
+            slug="gym-ecran", subdomain="gym-ecran",
+        )
+        self.plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Premium", price=50, duration_days=30,
+            guest_invites_per_month=1, guest_sessions_per_invite=2,
+        )
+        self.simple = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Standard", price=30, duration_days=30,
+        )
+        self.compte = User.objects.create_user(username="ada-portail", password="pass12345")
+        self.member = Member.objects.create(
+            gym=self.gym, first_name="Ada", last_name="Mbala",
+            phone="+243900004444", user=self.compte,
+        )
+        self.client.force_login(self.compte)
+
+    def _abonner(self, plan=None):
+        return MemberSubscription.objects.create(
+            gym=self.gym, member=self.member, plan=plan or self.plan,
+            start_date=timezone.localdate(),
+            end_date=timezone.localdate() + timedelta(days=30),
+            is_active=True,
+        )
+
+    def _portail(self, onglet=None):
+        url = reverse("members:member_portal")
+        return self.client.get(f"{url}?tab={onglet}" if onglet else url)
+
+    # --- L'onglet n'apparait que s'il sert -------------------------------------
+
+    def test_a_plan_with_invitations_shows_the_tab(self):
+        self._abonner()
+
+        self.assertContains(self._portail(), "Invitations")
+
+    def test_a_plan_without_invitations_hides_the_tab(self):
+        # Promettre une possibilite non achetee serait pire que de la taire.
+        self._abonner(plan=self.simple)
+
+        self.assertNotContains(self._portail(), "member_guest_pass_create")
+
+    # --- Emettre ----------------------------------------------------------------
+
+    def test_the_member_can_issue_a_pass(self):
+        self._abonner()
+
+        self.client.post(
+            reverse("members:member_guest_pass_create"),
+            {"guest_name": "Paul Kabeya", "guest_phone": "0820000001"},
+        )
+
+        carnet = GuestPass.objects.get(host=self.member)
+        self.assertEqual(carnet.guest_name, "Paul Kabeya")
+        self.assertEqual(carnet.sessions_allowed, 2)
+
+    def test_the_screen_shows_the_guest_and_whether_he_came(self):
+        self._abonner()
+        invitations.emettre(self.member, "Paul Kabeya", "0820000001")
+
+        page = self._portail("invitations").content.decode()
+
+        self.assertIn("Paul Kabeya", page)
+        self.assertIn("0820000001", page)
+        self.assertIn("pas encore venu", page)
+
+    def test_the_screen_says_when_the_guest_has_come(self):
+        self._abonner()
+        carnet = invitations.emettre(self.member, "Paul Kabeya", "0820000001")
+        invitations.consommer(carnet)
+
+        self.assertContains(self._portail("invitations"), "déjà venu")
+
+    def test_a_refused_issue_explains_why(self):
+        self._abonner(plan=self.simple)
+
+        reponse = self.client.post(
+            reverse("members:member_guest_pass_create"),
+            {"guest_name": "Paul Kabeya", "guest_phone": "0820000001"},
+            follow=True,
+        )
+
+        # L apostrophe est echappee dans le HTML : on cherche la partie stable.
+        self.assertContains(reponse, "ne comprend pas")
+        self.assertFalse(GuestPass.objects.exists())
+
+    # --- Reattribuer --------------------------------------------------------------
+
+    def test_the_member_can_reassign_an_untouched_pass(self):
+        self._abonner()
+        carnet = invitations.emettre(self.member, "Paul Kabeya", "0820000001")
+
+        self.client.post(
+            reverse("members:member_guest_pass_reassign", args=[carnet.id]),
+            {"guest_name": "Jean Musa", "guest_phone": "0820000002"},
+        )
+
+        carnet.refresh_from_db()
+        self.assertEqual(carnet.guest_name, "Jean Musa")
+
+    def test_a_member_cannot_touch_someone_elses_pass(self):
+        autre = Member.objects.create(
+            gym=self.gym, first_name="Bob", last_name="Autre",
+            phone="+243900005555",
+        )
+        carnet = GuestPass.objects.create(
+            gym=self.gym, host=autre, guest_name="Intrus",
+            guest_phone="0829999999", sessions_allowed=1,
+            expires_at=timezone.now() + timedelta(days=30),
+        )
+
+        reponse = self.client.post(
+            reverse("members:member_guest_pass_reassign", args=[carnet.id]),
+            {"guest_name": "Detourne", "guest_phone": "0820000009"},
+        )
+
+        self.assertEqual(reponse.status_code, 404)
+        carnet.refresh_from_db()
+        self.assertEqual(carnet.guest_name, "Intrus")
+
+    # --- Le QR ----------------------------------------------------------------------
+
+    def test_the_member_gets_a_qr_image_for_his_guest(self):
+        self._abonner()
+        carnet = invitations.emettre(self.member, "Paul Kabeya", "0820000001")
+
+        reponse = self.client.get(
+            reverse("members:member_guest_pass_qr", args=[carnet.id])
+        )
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertEqual(reponse["Content-Type"], "image/png")
+
+    def test_the_qr_of_another_member_is_out_of_reach(self):
+        autre = Member.objects.create(
+            gym=self.gym, first_name="Bob", last_name="Autre",
+            phone="+243900006666",
+        )
+        carnet = GuestPass.objects.create(
+            gym=self.gym, host=autre, guest_name="Intrus",
+            guest_phone="0829999999", sessions_allowed=1,
+            expires_at=timezone.now() + timedelta(days=30),
+        )
+
+        reponse = self.client.get(
+            reverse("members:member_guest_pass_qr", args=[carnet.id])
+        )
+
+        self.assertEqual(reponse.status_code, 404)

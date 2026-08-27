@@ -227,6 +227,10 @@
         <span class="material-icons me-1" style="font-size:18px;">history</span>
         Historique
     </button>
+    <button type="button" class="btn btn-light" onclick="showSection('invitations')">
+        <span class="material-icons me-1" style="font-size:18px;">group_add</span>
+        Invités
+    </button>
     <button type="button" class="btn btn-light" onclick="showSection('lecteurs')">
         <span class="material-icons me-1" style="font-size:18px;">sensors</span>
         Lecteurs
@@ -542,6 +546,29 @@
 </div>
 
 <!-- SECTION LECTEURS -->
+<div id="invitationsSection" class="mx-2" style="display:none;">
+    <div class="card section-card">
+        <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <h5 class="mb-0 d-flex align-items-center gap-2">
+                <span class="material-icons">group_add</span>
+                Invitations en cours
+            </h5>
+            <button class="btn btn-light btn-sm" onclick="chargerInvitations()">
+                <span class="material-icons me-2" style="font-size:16px;">refresh</span>
+                Actualiser
+            </button>
+        </div>
+        <div class="card-body">
+            <p class="text-muted small mb-3">
+                Quelqu'un se présente en disant « je viens en invité » ? Retrouvez-le ici :
+                son hôte, ses séances restantes et s'il est déjà venu. Le QR code n'est pas
+                nécessaire pour vérifier.
+            </p>
+            <div id="invitationsListe"></div>
+        </div>
+    </div>
+</div>
+
 <div id="lecteursSection" class="mx-2" style="display:none;">
     {% if can_devices_admin %}
     <div class="card section-card mb-4">
@@ -897,19 +924,83 @@ function showSection(section) {
     const manuel = document.getElementById("manuelSection");
     const historique = document.getElementById("historiqueSection");
     const lecteurs = document.getElementById("lecteursSection");
+    const invites = document.getElementById("invitationsSection");
 
     if (scan) scan.style.display = "none";
     if (manuel) manuel.style.display = "none";
     if (historique) historique.style.display = "none";
     if (lecteurs) lecteurs.style.display = "none";
+    if (invites) invites.style.display = "none";
 
     if (section === "scan" && scan) scan.style.display = "block";
     if (section === "manual" && manuel) manuel.style.display = "block";
     if (section === "historique" && historique) historique.style.display = "block";
+    if (section === "invitations" && invites) {
+        invites.style.display = "block";
+        chargerInvitations();
+    }
+
     if (section === "lecteurs" && lecteurs) {
         lecteurs.style.display = "block";
         loadDevices();
     }
+}
+
+// Liste de verification a l'entree : l'accueil retrouve un invite par son nom,
+// sans avoir besoin de son QR code.
+function chargerInvitations() {
+    const boite = document.getElementById("invitationsListe");
+    if (!boite) return;
+
+    boite.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Lecture en cours...';
+
+    fetch("/access/invitations/")
+        .then(reponse => reponse.json())
+        .then(donnees => {
+            const lignes = donnees.invitations || [];
+            if (!lignes.length) {
+                boite.innerHTML = `
+                    <div class="text-center py-4">
+                        <span class="material-icons empty-state-icon">group_off</span>
+                        <p class="mt-2 mb-0 text-muted">Aucune invitation en cours.</p>
+                    </div>`;
+                return;
+            }
+
+            boite.innerHTML = `
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Invité</th>
+                                <th>Téléphone</th>
+                                <th>Invité par</th>
+                                <th>Séances</th>
+                                <th>Déjà venu</th>
+                                <th>Valable jusqu'au</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${lignes.map(ligne => `
+                                <tr>
+                                    <td class="fw-semibold">${escapeHtml(ligne.invite)}</td>
+                                    <td>${escapeHtml(ligne.telephone)}</td>
+                                    <td>${escapeHtml(ligne.hote)}</td>
+                                    <td>${ligne.seances_restantes} / ${ligne.seances_accordees}</td>
+                                    <td>
+                                        ${ligne.deja_passe
+                                            ? '<span class="badge bg-success px-3 py-2">Oui</span>'
+                                            : '<span class="badge bg-secondary px-3 py-2">Pas encore</span>'}
+                                    </td>
+                                    <td>${escapeHtml(ligne.expire_le)}</td>
+                                </tr>`).join("")}
+                        </tbody>
+                    </table>
+                </div>`;
+        })
+        .catch(() => {
+            boite.innerHTML = '<p class="text-danger mb-0">Lecture impossible.</p>';
+        });
 }
 </script>
 
