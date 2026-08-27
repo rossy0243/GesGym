@@ -325,6 +325,33 @@
             {% endif %}
         </div>
     </div>
+
+{% if can_manage_organization %}
+<div class="settings-card mt-4 border-danger">
+    <div class="card-header">
+        <h5 class="card-title mb-1 text-danger d-flex align-items-center gap-2">
+            <span class="material-icons">warning</span>
+            Zone dangereuse
+        </h5>
+        <small class="text-muted">Reserve au proprietaire de l'organisation.</small>
+    </div>
+    <div class="card-body">
+        <p class="mb-2">
+            <strong>Remettre cette salle a zero</strong> efface definitivement les membres,
+            leurs abonnements, les paiements, les passages et l'historique du personnel.
+        </p>
+        <p class="text-muted small mb-3">
+            La configuration reste en place : formules, catalogue produits, machines,
+            employes, coachs, lecteurs et acces du personnel. La salle est utilisable
+            immediatement apres, comme au premier jour.
+        </p>
+        <button type="button" class="btn btn-outline-danger" onclick="ouvrirRemiseAZero()">
+            <span class="material-icons me-2" style="font-size:18px;">delete_forever</span>
+            Remettre cette salle a zero
+        </button>
+    </div>
+</div>
+{% endif %}
 </div>
 
 {% if can_manage_organization %}
@@ -1100,7 +1127,208 @@
 {% endblock %}
 
 {% block extra_js %}
+
+{% if can_manage_organization %}
+<div class="modal fade" id="purgeModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header border-danger">
+                <h5 class="modal-title text-danger d-flex align-items-center gap-2">
+                    <span class="material-icons">delete_forever</span>
+                    Remettre {{ gym.name }} a zero
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+            </div>
+            <div class="modal-body">
+                <div id="purgeErreur" class="alert alert-danger d-none"></div>
+
+                <div class="alert alert-danger">
+                    <strong>Cette action est irreversible.</strong>
+                    Aucun bouton ne permet de revenir en arriere, et l'application
+                    ne conserve aucune copie de son cote.
+                </div>
+
+                <h6 class="fw-semibold">Ce qui sera efface</h6>
+                <div id="purgeEfface" class="mb-3">
+                    <span class="spinner-border spinner-border-sm me-2"></span>Lecture en cours...
+                </div>
+
+                <h6 class="fw-semibold">Ce qui sera conserve</h6>
+                <div id="purgeConserve" class="mb-4 text-muted small"></div>
+
+                <hr>
+
+                <p class="fw-semibold mb-2">1. Emportez une copie</p>
+                <p class="text-muted small">
+                    Telechargez la sauvegarde avant d'effacer. C'est votre seul recours
+                    si ce geste etait une erreur.
+                </p>
+                <button type="button" class="btn btn-light mb-4" id="btnPurgeSauvegarde"
+                        onclick="telechargerSauvegarde(this)">
+                    <span class="material-icons me-2" style="font-size:18px;">download</span>
+                    Telecharger la sauvegarde
+                </button>
+
+                <p class="fw-semibold mb-2">2. Confirmez que vous savez ce que vous faites</p>
+                <div class="mb-3">
+                    <label class="form-label small">
+                        Recopiez le nom exact de la salle : <code>{{ gym.name }}</code>
+                    </label>
+                    <input type="text" class="form-control" id="purgeNomSalle"
+                           autocomplete="off" oninput="verifierPurge()">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small">Votre mot de passe</label>
+                    <input type="password" class="form-control" id="purgeMotDePasse"
+                           autocomplete="current-password" oninput="verifierPurge()">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-danger" id="btnPurgeConfirmer" disabled
+                        onclick="confirmerRemiseAZero(this)">
+                    Effacer definitivement
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <script>
+// --- Remise a zero d'une salle ---------------------------------------------
+//
+// Trois barrieres, dans cet ordre : voir ce qu'on perd, en emporter une copie,
+// puis prouver qu'on sait de quelle salle il s'agit. La derniere seule est
+// verifiee par le serveur ; les deux premieres existent pour qu'on ne detruise
+// pas sans avoir regarde.
+
+const PURGE_NOM_SALLE = "{{ gym.name|escapejs }}";
+
+// La page de base porte le jeton CSRF en balise meta ; cette page-ci n'a pas
+// d'aide de lecture des cookies, et un jeton vide ferait echouer l'appel sans
+// que rien ne l'explique.
+function jetonCsrf() {
+    const balise = document.querySelector('meta[name="csrf-token"]');
+    return balise ? balise.getAttribute("content") : "";
+}
+let purgeSauvegardeFaite = false;
+
+function ouvrirRemiseAZero() {
+    purgeSauvegardeFaite = false;
+    document.getElementById("purgeErreur").classList.add("d-none");
+    document.getElementById("purgeNomSalle").value = "";
+    document.getElementById("purgeMotDePasse").value = "";
+    document.getElementById("btnPurgeConfirmer").disabled = true;
+
+    const efface = document.getElementById("purgeEfface");
+    efface.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Lecture en cours...';
+    document.getElementById("purgeConserve").innerHTML = "";
+
+    bootstrap.Modal.getOrCreateInstance(document.getElementById("purgeModal")).show();
+
+    fetch("/parametres/salle/remise-a-zero/apercu/")
+        .then(reponse => reponse.json())
+        .then(donnees => {
+            efface.innerHTML = donnees.efface.length
+                ? '<ul class="mb-0">' + donnees.efface.map(l =>
+                    `<li><strong>${l.nombre}</strong> ${l.libelle}</li>`).join("") + "</ul>"
+                : '<p class="text-muted mb-0">Cette salle ne contient aucune donnee a effacer.</p>';
+
+            document.getElementById("purgeConserve").innerHTML = donnees.conserve.length
+                ? donnees.conserve.map(l => `${l.nombre} ${l.libelle}`).join(" &middot; ")
+                : "Rien de configure pour l'instant.";
+        })
+        .catch(() => {
+            efface.innerHTML = '<p class="text-danger mb-0">Lecture impossible.</p>';
+        });
+}
+
+function verifierPurge() {
+    const nom = document.getElementById("purgeNomSalle").value.trim();
+    const motDePasse = document.getElementById("purgeMotDePasse").value;
+    document.getElementById("btnPurgeConfirmer").disabled =
+        !(purgeSauvegardeFaite && nom === PURGE_NOM_SALLE && motDePasse.length > 0);
+}
+
+function telechargerSauvegarde(bouton) {
+    const contenu = bouton.innerHTML;
+    bouton.disabled = true;
+    bouton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Preparation...';
+
+    fetch("/parametres/salle/remise-a-zero/sauvegarde/", {
+        method: "POST",
+        headers: { "X-CSRFToken": jetonCsrf() }
+    })
+        .then(reponse => {
+            if (!reponse.ok) throw new Error();
+            return reponse.blob();
+        })
+        .then(blob => {
+            const lien = document.createElement("a");
+            lien.href = URL.createObjectURL(blob);
+            lien.download = "sauvegarde-salle.json";
+            document.body.appendChild(lien);
+            lien.click();
+            document.body.removeChild(lien);
+
+            purgeSauvegardeFaite = true;
+            bouton.disabled = false;
+            bouton.innerHTML = '<span class="material-icons me-2" style="font-size:18px;">check</span>Sauvegarde telechargee';
+            bouton.classList.replace("btn-light", "btn-success");
+            verifierPurge();
+        })
+        .catch(() => {
+            bouton.disabled = false;
+            bouton.innerHTML = contenu;
+            afficherErreurPurge("La sauvegarde n'a pas pu etre produite. Effacement bloque.");
+        });
+}
+
+function afficherErreurPurge(texte) {
+    const boite = document.getElementById("purgeErreur");
+    boite.textContent = texte;
+    boite.classList.remove("d-none");
+}
+
+function confirmerRemiseAZero(bouton) {
+    if (!confirm("Dernier avertissement : les donnees de " + PURGE_NOM_SALLE
+                 + " vont etre effacees definitivement. Continuer ?")) {
+        return;
+    }
+
+    bouton.disabled = true;
+    bouton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Effacement...';
+
+    fetch("/parametres/salle/remise-a-zero/", {
+        method: "POST",
+        headers: {
+            "X-CSRFToken": jetonCsrf(),
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            nom_salle: document.getElementById("purgeNomSalle").value.trim(),
+            password: document.getElementById("purgeMotDePasse").value
+        })
+    })
+        .then(reponse => reponse.json().then(donnees => ({ ok: reponse.ok, donnees })))
+        .then(({ ok, donnees }) => {
+            if (!ok) {
+                bouton.disabled = false;
+                bouton.innerHTML = "Effacer definitivement";
+                afficherErreurPurge(donnees.error || "Effacement refuse.");
+                return;
+            }
+            alert("Salle remise a zero : " + donnees.total + " enregistrements supprimes.");
+            window.location.reload();
+        })
+        .catch(() => {
+            bouton.disabled = false;
+            bouton.innerHTML = "Effacer definitivement";
+            afficherErreurPurge("Erreur reseau. Rien n'a ete efface.");
+        });
+}
+
 document.addEventListener("DOMContentLoaded", function () {
     const activeTab = "{{ active_tab|default:'employees' }}";
     const sections = document.querySelectorAll(".settings-section");

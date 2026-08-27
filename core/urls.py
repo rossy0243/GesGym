@@ -2,6 +2,9 @@ from django.urls import path
 from .views import (
     accounting_report_export,
     activity_log_export,
+    gym_purge,
+    gym_purge_export,
+    gym_purge_preview,
     dashboard_redirect,
     gym_dashboard,
     reports_dashboard,
@@ -20,5 +23,8 @@ urlpatterns = [
     path('rapport/export/', accounting_report_export, name='rapport_export'),
     path('parametres/', settings_dashboard, name='settings'),
     path('parametres/journal/export/', activity_log_export, name='activity_log_export'),
+    path('parametres/salle/remise-a-zero/apercu/', gym_purge_preview, name='gym_purge_preview'),
+    path('parametres/salle/remise-a-zero/sauvegarde/', gym_purge_export, name='gym_purge_export'),
+    path('parametres/salle/remise-a-zero/', gym_purge, name='gym_purge'),
     path('switch-gym/<int:gym_id>/', switch_gym, name='switch_gym'),
 ]

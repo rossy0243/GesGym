@@ -1,3 +1,4 @@
+import json
 import re
 from decimal import Decimal
 from datetime import date, datetime, time, timedelta
@@ -15,13 +16,13 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from access.models import AccessLog
+from access.models import AccessDevice, AccessLog
 from coaching.kpis import build_coaching_kpis
 from coaching.models import Coach, CoachingFeedback, CoachingFollowUp, GroupCoachingProgram
 from compte.models import User
 from compte.models import UserGymRole
 from core.forms import INTERNAL_ROLE_CHOICES, InternalEmployeeForm
-from members.models import MemberPreRegistration
+from members.models import Member, MemberPreRegistration
 from organizations.models import LandingFaq
 from smartclub.access_control import (
     DASHBOARD_ROLES,
@@ -3315,3 +3316,258 @@ class CommercialRoleWiringTests(TestCase):
         # Cet ensemble remplace trois listes ecrites en dur : le comportement
         # existant doit etre strictement conserve.
         self.assertEqual(DASHBOARD_SALES_ROLES, {"owner", "manager", "cashier"})
+
+
+class GymPurgeTests(TestCase):
+    """
+    Remise a zero d'une salle : ce qui doit disparaitre, et surtout ce qui ne
+    doit pas.
+
+    Le geste est irreversible. Chaque garde-fou est verifie separement, parce
+    qu'un seul d'entre eux qui cede suffit a detruire le travail d'une annee.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Purge", slug="org-purge"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Royal Gym Purge",
+            slug="gym-purge", subdomain="gym-purge",
+        )
+        self.autre = Gym.objects.create(
+            organization=self.organization, name="Voisine",
+            slug="gym-voisine", subdomain="gym-voisine",
+        )
+
+        self.owner = User.objects.create_user(username="proprio", password="pass12345")
+        UserGymRole.objects.create(
+            user=self.owner, gym=self.gym, role="owner", is_active=True
+        )
+
+        self.plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Mensuel", price=30, duration_days=30
+        )
+        self.member = Member.objects.create(
+            gym=self.gym, first_name="Ada", last_name="Mbala",
+            phone="+243890000001",
+        )
+        self.compte_membre = User.objects.create_user(
+            username="ada-membre", password="pass12345"
+        )
+        self.member.user = self.compte_membre
+        self.member.save(update_fields=["user"])
+
+        MemberSubscription.objects.create(
+            gym=self.gym, member=self.member, plan=self.plan,
+            start_date=timezone.localdate(),
+            end_date=timezone.localdate() + timedelta(days=30),
+            is_active=True,
+        )
+        self.device = AccessDevice.objects.create(
+            gym=self.gym, name="Entree", host="10.0.0.9", password="secret"
+        )
+        AccessLog.objects.create(gym=self.gym, member=self.member, device=self.device)
+
+        # Une voisine, qui ne doit rien perdre.
+        self.membre_voisin = Member.objects.create(
+            gym=self.autre, first_name="Voisin", last_name="Intact",
+            phone="+243890000002",
+        )
+
+        self._connecter(self.owner)
+
+    def _connecter(self, utilisateur):
+        self.client.force_login(utilisateur)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _effacer(self, **extra):
+        charge = {"nom_salle": self.gym.name, "password": "pass12345"}
+        charge.update(extra)
+        return self.client.post(
+            reverse("core:gym_purge"),
+            data=json.dumps(charge),
+            content_type="application/json",
+        )
+
+    # --- Ce qui disparait ------------------------------------------------------
+
+    def test_the_members_are_gone(self):
+        self._effacer()
+
+        self.assertFalse(Member.objects.filter(gym=self.gym).exists())
+
+    def test_their_subscriptions_go_with_them(self):
+        self._effacer()
+
+        self.assertFalse(MemberSubscription.objects.filter(gym=self.gym).exists())
+
+    def test_the_access_journal_is_emptied(self):
+        self._effacer()
+
+        self.assertFalse(AccessLog.objects.filter(gym=self.gym).exists())
+
+    def test_the_member_login_account_is_removed_too(self):
+        # Le lien part du membre vers le compte : supprimer la fiche laissait
+        # l'identifiant de connexion derriere elle.
+        self._effacer()
+
+        self.assertFalse(User.objects.filter(id=self.compte_membre.id).exists())
+
+    # --- Ce qui survit ---------------------------------------------------------
+
+    def test_the_configuration_survives(self):
+        self._effacer()
+
+        self.assertTrue(SubscriptionPlan.objects.filter(gym=self.gym).exists())
+        self.assertTrue(AccessDevice.objects.filter(gym=self.gym).exists())
+
+    def test_the_owner_keeps_his_access(self):
+        # Sans cela, le proprietaire se verrouillerait dehors d'un seul clic.
+        self._effacer()
+
+        self.assertTrue(User.objects.filter(id=self.owner.id).exists())
+        self.assertTrue(
+            UserGymRole.objects.filter(user=self.owner, gym=self.gym).exists()
+        )
+
+    def test_the_neighbouring_gym_is_untouched(self):
+        # Le pire defaut possible : vider la mauvaise salle.
+        self._effacer()
+
+        self.assertTrue(Member.objects.filter(id=self.membre_voisin.id).exists())
+
+    # --- Les garde-fous ---------------------------------------------------------
+
+    def test_a_wrong_gym_name_changes_nothing(self):
+        reponse = self._effacer(nom_salle="Royal Gym")
+
+        self.assertEqual(reponse.status_code, 400)
+        self.assertTrue(Member.objects.filter(gym=self.gym).exists())
+
+    def test_a_wrong_password_changes_nothing(self):
+        reponse = self._effacer(password="pas-le-bon")
+
+        self.assertEqual(reponse.status_code, 400)
+        self.assertTrue(Member.objects.filter(gym=self.gym).exists())
+
+    def test_a_manager_cannot_do_it(self):
+        # Reserve au proprietaire : un gerant administre, il ne detruit pas.
+        gerant = User.objects.create_user(username="gerant-purge", password="pass12345")
+        UserGymRole.objects.create(
+            user=gerant, gym=self.gym, role="manager", is_active=True
+        )
+        self._connecter(gerant)
+
+        reponse = self._effacer()
+
+        self.assertEqual(reponse.status_code, 403)
+        self.assertTrue(Member.objects.filter(gym=self.gym).exists())
+
+    def test_a_receptionist_cannot_do_it(self):
+        accueil = User.objects.create_user(username="accueil-purge", password="pass12345")
+        UserGymRole.objects.create(
+            user=accueil, gym=self.gym, role="reception", is_active=True
+        )
+        self._connecter(accueil)
+
+        self.assertEqual(self._effacer().status_code, 403)
+
+    def test_a_get_request_is_refused(self):
+        reponse = self.client.get(reverse("core:gym_purge"))
+
+        self.assertEqual(reponse.status_code, 405)
+        self.assertTrue(Member.objects.filter(gym=self.gym).exists())
+
+    # --- L'inventaire prealable --------------------------------------------------
+
+    def test_the_preview_counts_what_would_be_lost(self):
+        reponse = self.client.get(reverse("core:gym_purge_preview"))
+
+        libelles = {l["libelle"]: l["nombre"] for l in reponse.json()["efface"]}
+        self.assertEqual(libelles["Membres"], 1)
+        self.assertEqual(libelles["Passages"], 1)
+
+    def test_the_preview_also_says_what_survives(self):
+        # Dire ce qui reste rassure autant que dire ce qui meurt.
+        reponse = self.client.get(reverse("core:gym_purge_preview"))
+
+        libelles = {l["libelle"] for l in reponse.json()["conserve"]}
+        self.assertIn("Formules d'abonnement", libelles)
+        self.assertIn("Lecteurs", libelles)
+
+    def test_the_preview_changes_nothing(self):
+        self.client.get(reverse("core:gym_purge_preview"))
+
+        self.assertTrue(Member.objects.filter(gym=self.gym).exists())
+
+    def test_the_preview_is_refused_to_a_manager(self):
+        gerant = User.objects.create_user(username="gerant-apercu", password="pass12345")
+        UserGymRole.objects.create(
+            user=gerant, gym=self.gym, role="manager", is_active=True
+        )
+        self._connecter(gerant)
+
+        self.assertEqual(
+            self.client.get(reverse("core:gym_purge_preview")).status_code, 403
+        )
+
+    # --- La sauvegarde ------------------------------------------------------------
+
+    def test_the_backup_carries_the_members(self):
+        reponse = self.client.post(reverse("core:gym_purge_export"))
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertIn("Ada", reponse.content.decode())
+
+    def test_the_backup_is_offered_as_a_file(self):
+        reponse = self.client.post(reverse("core:gym_purge_export"))
+
+        self.assertIn("attachment", reponse["Content-Disposition"])
+        self.assertIn("gym-purge", reponse["Content-Disposition"])
+
+    def test_the_backup_changes_nothing(self):
+        self.client.post(reverse("core:gym_purge_export"))
+
+        self.assertTrue(Member.objects.filter(gym=self.gym).exists())
+
+    def test_the_backup_is_refused_to_a_manager(self):
+        gerant = User.objects.create_user(username="gerant-export", password="pass12345")
+        UserGymRole.objects.create(
+            user=gerant, gym=self.gym, role="manager", is_active=True
+        )
+        self._connecter(gerant)
+
+        self.assertEqual(
+            self.client.post(reverse("core:gym_purge_export")).status_code, 403
+        )
+
+    # --- La trace -------------------------------------------------------------------
+
+    def test_the_erasure_leaves_a_named_trace(self):
+        # La trace vit sur l'organisation, pas sur la salle : elle survit a
+        # l'effacement, et nomme qui a decide.
+        self._effacer()
+
+        trace = SensitiveActivityLog.objects.filter(
+            organization=self.organization, action="gym.purged"
+        ).first()
+        self.assertIsNotNone(trace)
+        self.assertEqual(trace.actor, self.owner)
+
+    def test_the_trace_says_how_much_was_destroyed(self):
+        self._effacer()
+
+        trace = SensitiveActivityLog.objects.get(
+            organization=self.organization, action="gym.purged"
+        )
+        self.assertGreater(trace.metadata["total"], 0)
+
+    def test_a_refused_attempt_leaves_no_trace_of_erasure(self):
+        self._effacer(password="pas-le-bon")
+
+        self.assertFalse(
+            SensitiveActivityLog.objects.filter(action="gym.purged").exists()
+        )

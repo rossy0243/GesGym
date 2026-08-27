@@ -14,6 +14,8 @@ from datetime import timedelta
 import calendar
 import json
 from access.models import AccessLog
+from core import purge
+from core.audit import log_sensitive_action
 from compte.models import UserGymRole
 from compte.models import User
 from compte.utils import generate_temporary_password, generate_username, has_other_active_access
@@ -2148,3 +2150,112 @@ def health_details(request):
         },
     }
     return JsonResponse(payload, status=200 if database_ok else 503)
+
+
+# ---------------------------------------------------------------------------
+# Remise a zero d'une salle
+# ---------------------------------------------------------------------------
+#
+# Trois vues pour un seul geste, volontairement : on regarde ce qu'on va
+# perdre, on emporte une copie, puis on detruit. Chaque etape est verrouillee
+# separement, et la derniere exige de reecrire le nom de la salle et son propre
+# mot de passe. Aucune de ces barrieres n'empeche une decision reflechie ; elles
+# empechent un clic distrait.
+
+
+def _salle_effacable(request):
+    """La salle courante, si l'utilisateur a le droit d'y toucher."""
+    if not has_role(request, SETTINGS_ORGANIZATION_ROLES):
+        return None, HttpResponseForbidden("Acces reserve au proprietaire")
+
+    gym = getattr(request, "gym", None)
+    if not gym:
+        return None, HttpResponseBadRequest("Aucune salle active")
+
+    return gym, None
+
+
+@login_required
+def gym_purge_preview(request):
+    """Ce que l'effacement detruirait, chiffre, avant toute action."""
+    gym, refus = _salle_effacable(request)
+    if refus:
+        return refus
+
+    return JsonResponse({"salle": gym.name, **purge.inventaire(gym)})
+
+
+@login_required
+@require_POST
+def gym_purge_export(request):
+    """Copie des donnees sur le point de disparaitre, remise avant l'effacement."""
+    gym, refus = _salle_effacable(request)
+    if refus:
+        return refus
+
+    contenu = purge.exporter(gym)
+
+    log_sensitive_action(
+        request,
+        "gym.purge_exported",
+        "Gym",
+        gym.name,
+        metadata={"gym_id": gym.id, "octets": len(contenu)},
+        gym=gym,
+    )
+
+    horodatage = now().strftime("%Y%m%d-%H%M")
+    reponse = HttpResponse(contenu, content_type="application/json; charset=utf-8")
+    reponse["Content-Disposition"] = (
+        f'attachment; filename="sauvegarde-{gym.slug}-{horodatage}.json"'
+    )
+    return reponse
+
+
+@login_required
+@require_POST
+def gym_purge(request):
+    """
+    Efface les donnees d'exploitation de la salle.
+
+    Irreversible. Le nom de la salle recopie a l'identique et le mot de passe
+    de l'utilisateur sont exiges : le premier prouve qu'on sait quelle salle on
+    vide, le second qu'on est bien celui qu'on pretend etre.
+    """
+    gym, refus = _salle_effacable(request)
+    if refus:
+        return refus
+
+    try:
+        charge = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return HttpResponseBadRequest("Requete illisible")
+
+    nom_saisi = (charge.get("nom_salle") or "").strip()
+    if nom_saisi != gym.name:
+        return JsonResponse(
+            {"error": "Le nom saisi ne correspond pas a celui de la salle."},
+            status=400,
+        )
+
+    mot_de_passe = charge.get("password") or ""
+    if not request.user.check_password(mot_de_passe):
+        return JsonResponse({"error": "Mot de passe incorrect."}, status=400)
+
+    # Releve avant destruction : apres, plus rien ne permettrait de dire ce
+    # qui a disparu.
+    avant = purge.inventaire(gym)
+    supprime = purge.purger(gym)
+
+    # La trace survit a l'effacement : elle vit sur l'organisation, pas sur la
+    # salle, et nomme qui a decide.
+    log_sensitive_action(
+        request,
+        "gym.purged",
+        "Gym",
+        gym.name,
+        metadata={"gym_id": gym.id, "total": avant["total"], "detail": supprime},
+        gym=gym,
+    )
+
+    return JsonResponse({"ok": True, "supprime": supprime, "total": avant["total"]})
