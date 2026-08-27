@@ -6,8 +6,8 @@ Cadrage arrete le 27 aout 2026 avec le proprietaire. Rien n'est encore code.
 
 Une formule d'abonnement donne au membre le droit d'inviter une personne par
 mois d'abonnement. Le membre emet lui-meme le laissez-passer depuis son espace ;
-l'invite obtient un QR code valable pour un nombre de seances fixe par la salle,
-sans jamais devenir membre.
+l'invite obtient un QR code valable 30 jours pour un nombre de seances fixe par
+la salle, sans jamais devenir membre.
 
 ## Ce qui a ete tranche
 
@@ -17,7 +17,7 @@ sans jamais devenir membre.
 | Combien de personnes | Reglable par formule ; l'exemple du proprietaire est 1 par mois |
 | Combien de seances par invite | Reglable par la salle, **1 par defaut** |
 | Renouvellement | A chaque mois d'abonnement ecoule : 3 mois achetes, 3 invitations |
-| Validite des seances | Jusqu'a la fin du mois d'invitation ; le reliquat tombe |
+| Validite des seances | **30 jours pleins depuis l'emission**, ou que l'on soit dans le mois |
 | Identite de l'invite | Nom et telephone, saisis a l'emission |
 | Qui emet | Le membre, depuis son espace |
 | Meme personne invitee plusieurs fois | Plafonnee, pour ne pas remplacer un abonnement |
@@ -39,6 +39,11 @@ Ces points n'ont pas ete poses ; chacun se corrige en une ligne.
   et non un mois calendaire. Les durees du projet s'expriment deja en
   `duration_days` : compter autrement ferait diverger le quota de l'abonnement
   qui le porte.
+- **Un carnet peut deborder sur le mois suivant.** Emis le 25e jour d'une
+  tranche, il vit jusqu'au 55e. Le membre recoit alors sa nouvelle invitation
+  alors que l'ancienne court encore : deux carnets actifs en meme temps, pour
+  quelques jours. C'est la contrepartie assumee des 30 jours pleins ; le quota
+  continue de limiter les emissions, pas les chevauchements.
 - **Le plafond par personne se compte sur 12 mois glissants.** Interdire a
   quelqu'un de revenir deux ans plus tard serait absurde ; le but est
   d'empecher l'invitation permanente, pas de bannir.
@@ -62,7 +67,7 @@ passage.
 | `sessions_allowed` | seances accordees, copiees de la formule a l'emission |
 | `sessions_used` | seances deja consommees |
 | `created_at` | emission |
-| `expires_at` | fin du mois d'abonnement en cours |
+| `expires_at` | emission + 30 jours |
 | `cancelled_at` | annulation par le membre, tant qu'aucune seance n'a servi |
 | `created_by` | le compte du membre, pour la trace |
 
@@ -113,13 +118,25 @@ muet enverrait l'accueil chercher une panne inexistante.
 ## Ce que voit le membre
 
 Dans son espace : son quota du mois, un formulaire a deux champs, le QR a
-transmettre, et l'etat de ses carnets - seances restantes, expire, annule. Un
-carnet non entame peut etre annule pour recuperer l'invitation.
+transmettre, et l'etat de ses carnets. Pour chacun, **le nom et le numero de
+l'invite, et s'il est deja passe** - c'est ce qui permet au membre de savoir si
+son ami est bien venu, et de repondre a l'accueil sans hesiter.
+
+Un carnet non entame peut etre annule pour recuperer l'invitation.
 
 ## Ce que voit la salle
 
-Le passage d'un invite apparait au journal, nomme, avec son hote et le rang de
-la seance : « Invite - Paul Kabeya (2/3), invite par Ada Mbala ». Il **ne compte
+**Une liste des invitations en cours**, consultable a l'accueil : nom de
+l'invite, numero, membre hote, seances restantes et date du dernier passage.
+
+C'est l'ecran de verification a l'entree. Quelqu'un se presente en disant
+« je viens en invite » : l'accueil retrouve son nom dans la liste, voit qui
+l'invite et combien de seances il lui reste, sans avoir besoin du QR. Ce
+recours compte double tant que la lecture des QR a la porte n'est pas
+confirmee.
+
+Le passage lui-meme apparait au journal, nomme, avec son hote et le rang de la
+seance : « Invite - Paul Kabeya (2/3), invite par Ada Mbala ». Il **ne compte
 pas** dans la frequentation des membres : personne ne s'est abonne. Un compteur
 separe le rend visible sans fausser les statistiques.
 
@@ -145,3 +162,4 @@ separe le rend visible sans fausser les statistiques.
 | `access/models.py` | `AccessLog.guest_pass` |
 | `access/views.py` | resolution du QR, decompte, journalisation, statistiques |
 | `members/views.py` | espace membre : emission, suivi, annulation |
+| `access/views.py` ou `members/views.py` | liste des invitations en cours, pour l'accueil |
