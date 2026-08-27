@@ -113,7 +113,13 @@ def _today_stats(gym):
     return {
         # Un retour n'est pas une nouvelle visite : sans cette exclusion, un
         # membre qui ressort et revient compterait double.
-        "entries": logs_today.filter(access_granted=True, is_return=False).count(),
+        #
+        # Une ouverture commandee depuis l'application n'en est pas une non
+        # plus : personne ne s'est presente, et la compter gonflerait la
+        # frequentation d'entrees sans visage.
+        "entries": logs_today.filter(
+            access_granted=True, is_return=False, member__isnull=False
+        ).count(),
         "returns": logs_today.filter(is_return=True).count(),
         "denied": logs_today.filter(access_granted=False).count(),
     }
@@ -172,11 +178,16 @@ def _record_access(
 def _serialize_log(log):
     checked_at = localtime(log.check_in_time)
 
+    # Une ouverture commandee depuis l'application n'a pas de membre : la
+    # ligne porte alors le geste, pas une personne qui se serait presentee.
     return {
         "id": log.id,
-        "member": f"{log.member.first_name} {log.member.last_name}",
-        "phone": log.member.phone,
-        "qr_code": str(log.member.qr_code),
+        "member": (
+            f"{log.member.first_name} {log.member.last_name}"
+            if log.member else "Ouverture manuelle"
+        ),
+        "phone": log.member.phone if log.member else "",
+        "qr_code": str(log.member.qr_code) if log.member else "",
         "time": checked_at.strftime("%H:%M"),
         "date": checked_at.strftime("%d/%m/%Y"),
         "date_iso": checked_at.strftime("%Y-%m-%d"),

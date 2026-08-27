@@ -204,10 +204,15 @@ class AccessLog(models.Model):
         db_index=True
     )
 
+    # Une ouverture commandee depuis le tableau de bord n'a pas de membre :
+    # quelqu'un a ouvert la porte, sans que personne ne se soit presente. La
+    # ligne doit exister quand meme, sinon le geste reste invisible.
     member = models.ForeignKey(
         Member,
         on_delete=models.CASCADE,
-        related_name="access_logs"
+        related_name="access_logs",
+        null=True,
+        blank=True,
     )
 
     check_in_time = models.DateTimeField(auto_now_add=True)

@@ -1208,7 +1208,9 @@ class RoleAccessMatrixTests(TestCase):
         )
         self.assertNotIn('href="/rapport/?section=journalier"', content)
         self.assertNotIn('href="/parametres/?tab=employees"', content)
-        self.assertNotIn('href="/access/access-dashboard/?section=scan"', content)
+        # La caisse enrole les visages et ouvre la porte : le controle d'acces
+        # lui est ouvert, contrairement aux rapports et aux reglages.
+        self.assertIn('href="/access/access-dashboard/?section=scan"', content)
 
     def test_reception_navigation_exposes_access_and_operational_tools_only(self):
         self.client.force_login(self.reception)

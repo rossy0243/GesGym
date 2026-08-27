@@ -19,7 +19,7 @@ from django.views.decorators.http import require_POST
 
 from core.audit import log_sensitive_action
 from members.models import Member
-from smartclub.access_control import ACCESS_DEVICE_ROLES
+from smartclub.access_control import ACCESS_DEVICE_ROLES, ACCESS_DEVICE_USE_ROLES
 from smartclub.decorators import module_required, role_required
 
 from . import door, enrollment, hikvision
@@ -83,7 +83,7 @@ def _serialize_device(device):
 
 
 @login_required
-@role_required(ACCESS_DEVICE_ROLES)
+@role_required(ACCESS_DEVICE_USE_ROLES)
 @module_required("ACCESS")
 def device_list(request):
     """Lecteurs deja enregistres pour la salle courante."""
@@ -218,7 +218,7 @@ def device_create(request):
 
 
 @login_required
-@role_required(ACCESS_DEVICE_ROLES)
+@role_required(ACCESS_DEVICE_USE_ROLES)
 @require_POST
 @module_required("ACCESS")
 def device_test(request, device_id):
@@ -229,7 +229,7 @@ def device_test(request, device_id):
 
 
 @login_required
-@role_required(ACCESS_DEVICE_ROLES)
+@role_required(ACCESS_DEVICE_USE_ROLES)
 @require_POST
 @module_required("ACCESS")
 def device_open_door(request, device_id):
@@ -257,6 +257,21 @@ def device_open_door(request, device_id):
         metadata={"device_id": device.id, "host": device.host, "porte": device.door_number},
         gym=request.gym,
     )
+
+    # La trace ci-dessus vit dans le journal d'activite de l'organisation, que
+    # l'equipe de salle ne consulte pas. Une porte ouverte appartient au
+    # journal des passages, a cote des entrees qu'elle remplace : sans cela,
+    # ouvrir a un ami ne laisse aucune trace visible.
+    AccessLog.objects.create(
+        gym=request.gym,
+        member=None,
+        device=device,
+        device_used=f"{device.name} (ouverture manuelle)",
+        access_granted=True,
+        scanned_by=request.user,
+        denial_reason="Ouverture commandee depuis l'application",
+    )
+
     return JsonResponse({"ok": True, "message": "Commande d'ouverture envoyee."})
 
 

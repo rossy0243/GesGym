@@ -14,8 +14,16 @@ MEMBER_ADMIN_ROLES = MEMBER_STATUS_ROLES
 SUBSCRIPTION_ROLES = frozenset({"owner", "manager"})
 POS_CASHIER_ROLES = frozenset({"owner", "manager", "reception", "cashier"})
 POS_HISTORY_ROLES = frozenset({"owner", "manager"})
-ACCESS_ROLES = frozenset({"owner", "manager", "reception"})
+ACCESS_ROLES = frozenset({"owner", "manager", "reception", "cashier"})
+
+# Administrer un lecteur : le declarer, changer son adresse, le supprimer,
+# regler ses messages. Ces gestes engagent l'installation entiere.
 ACCESS_DEVICE_ROLES = frozenset({"owner", "manager"})
+
+# S'en servir au quotidien : voir l'etat, tester la liaison, ouvrir la porte,
+# enroler le visage d'un membre. L'accueil et la caisse en ont besoin ; il n'y
+# a aucune raison de leur confier la suppression d'un lecteur pour autant.
+ACCESS_DEVICE_USE_ROLES = frozenset({"owner", "manager", "reception", "cashier"})
 REPORT_ROLES = frozenset({"owner", "manager"})
 COACHING_ROLES = frozenset({"owner", "manager"})
 NOTIFICATION_ROLES = frozenset({"owner", "manager", "commercial"})
@@ -96,6 +104,8 @@ def permission_flags(request):
         "can_settings_gym_contact": has_role(request, SETTINGS_GYM_CONTACT_ROLES),
         "can_pos_history": has_role(request, POS_HISTORY_ROLES),
         "can_access": has_role(request, ACCESS_ROLES),
+        "can_devices_use": has_role(request, ACCESS_DEVICE_USE_ROLES),
+        "can_devices_admin": has_role(request, ACCESS_DEVICE_ROLES),
         "can_reports": has_role(request, REPORT_ROLES),
         "can_coaching": has_role(request, COACHING_ROLES),
         "can_notifications": has_role(request, NOTIFICATION_ROLES),

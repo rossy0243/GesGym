@@ -467,7 +467,7 @@
                     <tbody id="historiqueBody">
                         {% for log in history_logs %}
                         <tr data-history-row
-                            data-search="{{ log.member.first_name }} {{ log.member.last_name }} {{ log.member.phone }} {{ log.member.qr_code }}"
+                            data-search="{% if log.member %}{{ log.member.first_name }} {{ log.member.last_name }} {{ log.member.phone }} {{ log.member.qr_code }}{% else %}Ouverture manuelle{% endif %}"
                             data-date="{{ log.check_in_time|date:'Y-m-d' }}"
                             data-status="{% if log.access_granted %}success{% else %}denied{% endif %}"
                             data-method="{{ log.device_used|default:'' }}"
@@ -477,10 +477,18 @@
                                 <small class="text-muted">{{ log.check_in_time|date:"H:i" }}</small>
                             </td>
                             <td>
-                                <div class="fw-semibold">{{ log.member.first_name }} {{ log.member.last_name }}</div>
-                                <small class="text-muted">{{ log.member.phone }}</small>
+                                {% if log.member %}
+                                    <div class="fw-semibold">{{ log.member.first_name }} {{ log.member.last_name }}</div>
+                                    <small class="text-muted">{{ log.member.phone }}</small>
+                                {% else %}
+                                    <div class="fw-semibold d-flex align-items-center gap-1">
+                                        <span class="material-icons text-warning" style="font-size:18px;">lock_open</span>
+                                        Ouverture manuelle
+                                    </div>
+                                    <small class="text-muted">Aucun membre présenté</small>
+                                {% endif %}
                             </td>
-                            <td><code>{{ log.member.qr_code }}</code></td>
+                            <td>{% if log.member %}<code>{{ log.member.qr_code }}</code>{% else %}<span class="text-muted">—</span>{% endif %}</td>
                             <td>
                                 {% if log.access_granted %}
                                     <span class="badge bg-success px-3 py-2">AutorisÃ©</span>
@@ -535,6 +543,7 @@
 
 <!-- SECTION LECTEURS -->
 <div id="lecteursSection" class="mx-2" style="display:none;">
+    {% if can_devices_admin %}
     <div class="card section-card mb-4">
         <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-3">
             <h5 class="mb-0 d-flex align-items-center gap-2">
@@ -555,6 +564,7 @@
             <div id="discoverResults"></div>
         </div>
     </div>
+    {% endif %}
 
     <div class="card section-card">
         <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-3">
@@ -563,11 +573,13 @@
                 Lecteurs enregistrés
             </h5>
             <div class="d-flex flex-wrap gap-2">
+                {% if can_devices_admin %}
                 <button class="btn btn-primary btn-sm" onclick="openManualDeviceModal()"
                         title="Saisir un lecteur que ce serveur ne peut pas detecter">
                     <span class="material-icons me-2" style="font-size:16px;">add</span>
                     Ajouter manuellement
                 </button>
+                {% endif %}
                 <button class="btn btn-light btn-sm" onclick="loadDevices()">
                     <span class="material-icons me-2" style="font-size:16px;">refresh</span>
                     Actualiser
@@ -1281,6 +1293,10 @@ document.addEventListener("DOMContentLoaded", function () {
    Lecteurs physiques : détection réseau, enregistrement, tests
    ------------------------------------------------------------------ */
 
+// Administrer un lecteur (le declarer, le deplacer, le supprimer) reste
+// reserve. L'accueil et la caisse s'en servent sans y toucher.
+const PEUT_ADMINISTRER_LECTEURS = {% if can_devices_admin %}true{% else %}false{% endif %};
+
 let deviceModal = null;
 
 // Un appel vers un lecteur peut durer plusieurs secondes : sans marque
@@ -1600,6 +1616,7 @@ function loadDevices() {
                             <span class="material-icons me-1" style="font-size:16px;">lock_open</span>
                             Ouvrir
                         </button>
+                        ${PEUT_ADMINISTRER_LECTEURS ? `
                         <button class="btn btn-light btn-sm" onclick="announceDevice(${device.id}, this)"
                                 title="Donner au lecteur l'adresse de l'application, pour qu'il remonte les passages">
                             <span class="material-icons me-1" style="font-size:16px;">cell_tower</span>
@@ -1618,7 +1635,7 @@ function loadDevices() {
                         </a>
                         <button class="btn btn-light btn-sm text-danger" onclick="deleteDevice(${device.id}, this)">
                             <span class="material-icons" style="font-size:16px;">delete</span>
-                        </button>
+                        </button>` : ""}
                     </div>
                 </div>
 
