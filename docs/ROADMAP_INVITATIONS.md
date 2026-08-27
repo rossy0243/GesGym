@@ -131,14 +131,32 @@ l'invite, numero, membre hote, seances restantes et date du dernier passage.
 
 C'est l'ecran de verification a l'entree. Quelqu'un se presente en disant
 « je viens en invite » : l'accueil retrouve son nom dans la liste, voit qui
-l'invite et combien de seances il lui reste, sans avoir besoin du QR. Ce
-recours compte double tant que la lecture des QR a la porte n'est pas
-confirmee.
+l'invite et combien de seances il lui reste, sans avoir besoin du QR - utile
+quand le telephone est vide, le QR perdu, ou l'invite arrive avant son hote.
 
 Le passage lui-meme apparait au journal, nomme, avec son hote et le rang de la
 seance : « Invite - Paul Kabeya (2/3), invite par Ada Mbala ». Il **ne compte
 pas** dans la frequentation des membres : personne ne s'est abonne. Un compteur
 separe le rend visible sans fausser les statistiques.
+
+## Les etats d'un carnet
+
+Quatre etats, les memes mots des deux cotes de l'ecran :
+
+| Etat | Ce qui s'est passe |
+| --- | --- |
+| **Actif** | il reste des seances et la date limite n'est pas atteinte |
+| **Epuise** | toutes les seances ont ete consommees |
+| **Caduc** | les 30 jours sont passes ; l'invite ne s'est jamais presente, ou pas jusqu'au bout |
+| **Annule** | le membre l'a retire avant tout usage, et a recupere son invitation |
+
+Un carnet **caduc ne rend pas l'invitation** : le mois a passe avec lui. Seule
+l'annulation volontaire, avant la premiere seance, restitue le droit - c'est ce
+qui distingue un numero mal saisi d'un ami qui n'est pas venu.
+
+Le membre comme l'accueil voient l'etat en toutes lettres, avec la date : « caduc
+depuis le 12/09, jamais utilise ». Personne ne doit avoir a deviner pourquoi un
+QR ne fonctionne plus.
 
 ## Risques reconnus
 
@@ -149,9 +167,9 @@ separe le rend visible sans fausser les statistiques.
 - **Un telephone invente contourne le plafond.** Rien ne l'empeche
   techniquement. C'est l'accueil qui voit la personne ; la regle decourage
   l'abus ordinaire, elle n'arrete pas la fraude deliberee.
-- **La lecture des QR a la porte n'est pas verifiee.** Si le terminal ne les lit
-  pas, l'invite est scanne a l'accueil. Cela ne bloque rien mais deplace le
-  geste, et il faut le savoir avant de promettre l'entree autonome.
+- ~~La lecture des QR n'est pas verifiee.~~ **Point clos** : le poste de
+  l'accueil lit les QR codes et commande l'ouverture. L'invite se presente
+  comme un membre, sans traitement particulier.
 
 ## Fichiers concernes
 
