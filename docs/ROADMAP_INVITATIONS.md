@@ -22,6 +22,7 @@ la salle, sans jamais devenir membre.
 | Qui emet | Le membre, depuis son espace |
 | Meme personne invitee plusieurs fois | Plafonnee, pour ne pas remplacer un abonnement |
 | Hote plus a jour a l'entree | Le laissez-passer est refuse |
+| Invite qui ne vient pas | Le membre peut reattribuer le carnet tant qu'aucune seance n'a servi |
 
 **Le laissez-passer est un carnet, pas un billet.** Il porte un invite nomme et
 un nombre de seances ; il s'epuise, il ne se consomme pas d'un coup. C'est la
@@ -47,9 +48,16 @@ Ces points n'ont pas ete poses ; chacun se corrige en une ligne.
 - **Le plafond par personne se compte sur 12 mois glissants.** Interdire a
   quelqu'un de revenir deux ans plus tard serait absurde ; le but est
   d'empecher l'invitation permanente, pas de bannir.
-- **Un laissez-passer jamais utilise peut etre annule par le membre**, ce qui
-  lui rend son quota du mois. Sans cela, un numero mal saisi lui couterait son
-  invitation.
+- **Un carnet jamais entame se reattribue.** Le membre change le nom et le
+  numero ; le carnet garde son identite et sa date limite. Il n'y a donc plus
+  d'annulation : rendre le quota puis en re-emettre un aurait fait le meme
+  travail en deux gestes, avec un etat de plus a expliquer.
+- **La reattribution ne relance pas les 30 jours.** La date limite appartient au
+  carnet, pas a l'invite. Sinon un membre la repousserait indefiniment en
+  changeant de nom la veille de l'echeance.
+- **Un carnet entame ne se reattribue plus.** Une seance consommee a profite a
+  quelqu'un ; offrir le reliquat a un second invite reviendrait a contourner la
+  regle d'une personne par mois.
 
 ## Modele de donnees
 
@@ -68,7 +76,7 @@ passage.
 | `sessions_used` | seances deja consommees |
 | `created_at` | emission |
 | `expires_at` | emission + 30 jours |
-| `cancelled_at` | annulation par le membre, tant qu'aucune seance n'a servi |
+| `reassigned_count` | nombre de reattributions, pour reperer un carnet qui tourne |
 | `created_by` | le compte du membre, pour la trace |
 
 Le telephone est indexe : c'est la cle du plafond par personne.
@@ -100,13 +108,21 @@ A l'emission, dans cet ordre :
 
 1. le membre a un abonnement actif ;
 2. sa formule accorde des invitations (`guest_invites_per_month > 0`) ;
-3. son quota du mois d'abonnement en cours n'est pas epuise, annulations
-   deduites ;
+3. son quota du mois d'abonnement en cours n'est pas epuise - un carnet emis
+   compte, qu'il ait servi, expire ou change de nom ;
 4. ce numero de telephone n'a pas atteint le plafond sur 12 mois glissants.
+
+A la reattribution :
+
+1. aucune seance n'a encore ete consommee ;
+2. la date limite n'est pas atteinte ;
+3. le nouveau numero n'a pas atteint le plafond sur 12 mois glissants - la
+   verification recommence, elle ne se transmet pas de l'ancien invite au
+   nouveau.
 
 A chaque entree de l'invite :
 
-1. le carnet existe, n'est ni annule ni expire ;
+1. le carnet existe et n'est pas expire ;
 2. il reste au moins une seance (`sessions_used < sessions_allowed`) ;
 3. **l'hote est toujours a jour** - reverifie a cet instant, pas a l'emission ;
 4. le passage est journalise et une seance est decomptee.
@@ -122,7 +138,8 @@ transmettre, et l'etat de ses carnets. Pour chacun, **le nom et le numero de
 l'invite, et s'il est deja passe** - c'est ce qui permet au membre de savoir si
 son ami est bien venu, et de repondre a l'accueil sans hesiter.
 
-Un carnet non entame peut etre annule pour recuperer l'invitation.
+Un carnet non entame peut etre reattribue a quelqu'un d'autre, sans que la
+date limite ne bouge.
 
 ## Ce que voit la salle
 
@@ -148,11 +165,14 @@ Quatre etats, les memes mots des deux cotes de l'ecran :
 | **Actif** | il reste des seances et la date limite n'est pas atteinte |
 | **Epuise** | toutes les seances ont ete consommees |
 | **Caduc** | les 30 jours sont passes ; l'invite ne s'est jamais presente, ou pas jusqu'au bout |
-| **Annule** | le membre l'a retire avant tout usage, et a recupere son invitation |
 
-Un carnet **caduc ne rend pas l'invitation** : le mois a passe avec lui. Seule
-l'annulation volontaire, avant la premiere seance, restitue le droit - c'est ce
-qui distingue un numero mal saisi d'un ami qui n'est pas venu.
+Un carnet **caduc ne rend rien** : le mois a passe avec lui. Le recours du membre
+n'est pas de recuperer son quota, mais de **reattribuer le carnet avant
+l'echeance**. Tant qu'aucune seance n'a servi, il change de nom et de numero, et
+la date limite ne bouge pas.
+
+C'est ce qui distingue un ami qui se decommande - on reattribue - d'un ami qu'on
+oublie de relancer : le carnet meurt, et l'invitation du mois avec lui.
 
 Le membre comme l'accueil voient l'etat en toutes lettres, avec la date : « caduc
 depuis le 12/09, jamais utilise ». Personne ne doit avoir a deviner pourquoi un
@@ -179,5 +199,5 @@ QR ne fonctionne plus.
 | `subscriptions/models.py` | les deux quotas sur `SubscriptionPlan` |
 | `access/models.py` | `AccessLog.guest_pass` |
 | `access/views.py` | resolution du QR, decompte, journalisation, statistiques |
-| `members/views.py` | espace membre : emission, suivi, annulation |
+| `members/views.py` | espace membre : emission, suivi, reattribution |
 | `access/views.py` ou `members/views.py` | liste des invitations en cours, pour l'accueil |
