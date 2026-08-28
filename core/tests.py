@@ -1,3 +1,4 @@
+import uuid
 import json
 import re
 from decimal import Decimal
@@ -21,8 +22,9 @@ from coaching.kpis import build_coaching_kpis
 from coaching.models import Coach, CoachingFeedback, CoachingFollowUp, GroupCoachingProgram
 from compte.models import User
 from compte.models import UserGymRole
+from core import marketing_qr
 from core.forms import INTERNAL_ROLE_CHOICES, InternalEmployeeForm
-from members.models import Member, MemberPreRegistration
+from members.models import GuestPass, Member, MemberPreRegistration, MemberPreRegistrationLink
 from organizations.models import LandingFaq
 from smartclub.access_control import (
     DASHBOARD_ROLES,
@@ -3571,3 +3573,180 @@ class GymPurgeTests(TestCase):
         self.assertFalse(
             SensitiveActivityLog.objects.filter(action="gym.purged").exists()
         )
+
+
+class MarketingQrTests(TestCase):
+    """
+    Les QR codes destines au mur de la salle.
+
+    Ils finissent parfois en tres grand format : le rendu doit rester vectoriel,
+    et le dessin doit reproduire la grille sans la trahir - un module deplace,
+    et le code ne se lit plus.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org QR", slug="org-qr"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym QR",
+            slug="gym-qr", subdomain="gym-qr",
+        )
+        module, _ = Module.objects.get_or_create(
+            code="MEMBERS", defaults={"name": "Members"}
+        )
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=module, defaults={"is_active": True}
+        )
+        # Une salle nait avec son lien : on le retrouve plutot que de le creer.
+        self.lien, _ = MemberPreRegistrationLink.objects.get_or_create(gym=self.gym)
+
+        self.gerant = User.objects.create_user(username="gerant-qr", password="pass12345")
+        UserGymRole.objects.create(
+            user=self.gerant, gym=self.gym, role="manager", is_active=True
+        )
+        self._connecter(self.gerant)
+
+    def _connecter(self, utilisateur):
+        self.client.force_login(utilisateur)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    # --- Le rendu vectoriel ----------------------------------------------------
+
+    def test_the_pdf_is_a_real_pdf(self):
+        contenu = marketing_qr.en_pdf("https://exemple.test/")
+
+        self.assertTrue(contenu.startswith(b"%PDF-"))
+        self.assertTrue(contenu.rstrip().endswith(b"%%EOF"))
+
+    def test_the_cross_reference_table_points_at_each_object(self):
+        # Un lecteur PDF refuse un fichier dont la table est decalee d'un octet.
+        contenu = marketing_qr.en_pdf("https://exemple.test/")
+
+        debut = int(re.search(rb"startxref\n(\d+)", contenu).group(1))
+        positions = re.findall(rb"(\d{10}) 00000 n ", contenu[debut:])
+        self.assertEqual(len(positions), 4)
+        for position in positions:
+            extrait = contenu[int(position):int(position) + 12]
+            self.assertRegex(extrait, rb"\d+ 0 obj")
+
+    def test_the_drawing_reproduces_the_grid(self):
+        # La verification qui compte : on relit les rectangles du PDF et on
+        # reconstruit la grille qu'ils dessinent.
+        adresse = "https://exemple.test/preinscription/abc/"
+        grille = marketing_qr.matrice(adresse)
+        contenu = marketing_qr.en_pdf(adresse)
+
+        total = len(grille)
+        module = marketing_qr.COTE_PAGE / total
+        relue = [[False] * total for _ in range(total)]
+        for x, y, _, _ in re.findall(rb"([\d.]+) ([\d.]+) ([\d.]+) ([\d.]+) re", contenu):
+            colonne = round(float(x) / module)
+            rang = round((marketing_qr.COTE_PAGE - float(y)) / module) - 1
+            relue[rang][colonne] = True
+
+        self.assertEqual(relue, [[bool(c) for c in ligne] for ligne in grille])
+
+    def test_the_quiet_zone_is_kept(self):
+        # Sans les quatre modules blancs de la norme, un scanner ne delimite
+        # pas le code sur un mur charge.
+        grille = marketing_qr.matrice("https://exemple.test/")
+
+        # Quatre en dur, pas la constante : un test qui lit le reglage qu'il
+        # surveille ne surveille rien. C'est la norme qui impose ce chiffre.
+        for rang in range(4):
+            self.assertFalse(any(grille[rang]), f"ligne {rang} non vide")
+            self.assertFalse(any(ligne[rang] for ligne in grille),
+                             f"colonne {rang} non vide")
+            self.assertFalse(any(grille[-1 - rang]), f"ligne -{rang + 1} non vide")
+
+    def test_two_different_links_give_two_different_codes(self):
+        premier = marketing_qr.en_pdf("https://exemple.test/a/")
+        second = marketing_qr.en_pdf("https://exemple.test/b/")
+
+        self.assertNotEqual(premier, second)
+
+    # --- Le telechargement -------------------------------------------------------
+
+    def test_the_pre_registration_code_is_downloadable(self):
+        reponse = self.client.get(
+            reverse("core:marketing_qr_download", args=["preinscription"])
+        )
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertEqual(reponse["Content-Type"], "application/pdf")
+        self.assertIn("attachment", reponse["Content-Disposition"])
+
+    def test_the_site_code_is_downloadable(self):
+        reponse = self.client.get(
+            reverse("core:marketing_qr_download", args=["site"])
+        )
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertTrue(reponse.content.startswith(b"%PDF-"))
+
+    def test_png_is_offered_too(self):
+        reponse = self.client.get(
+            reverse("core:marketing_qr_download", args=["site"]) + "?format=png"
+        )
+
+        self.assertEqual(reponse["Content-Type"], "image/png")
+
+    def test_the_pre_registration_code_carries_the_current_token(self):
+        reponse = self.client.get(
+            reverse("core:marketing_qr_download", args=["preinscription"])
+        )
+
+        # Le contenu encode n'est pas lisible dans le PDF : on verifie que
+        # regenerer le lien change bien le dessin.
+        avant = reponse.content
+        self.lien.token = uuid.uuid4()
+        self.lien.save(update_fields=["token"])
+
+        apres = self.client.get(
+            reverse("core:marketing_qr_download", args=["preinscription"])
+        ).content
+
+        self.assertNotEqual(avant, apres)
+
+    def test_an_unknown_support_is_refused(self):
+        reponse = self.client.get(
+            reverse("core:marketing_qr_download", args=["autre"])
+        )
+
+        self.assertEqual(reponse.status_code, 404)
+
+    # --- Qui peut les obtenir -------------------------------------------------------
+
+    def test_a_commercial_can_download_them(self):
+        # C'est du marketing : le commercial est concerne au premier chef.
+        commercial = User.objects.create_user(
+            username="commercial-qr", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=commercial, gym=self.gym, role="commercial", is_active=True
+        )
+        self._connecter(commercial)
+
+        reponse = self.client.get(
+            reverse("core:marketing_qr_download", args=["site"])
+        )
+
+        self.assertEqual(reponse.status_code, 200)
+
+    def test_a_cashier_cannot(self):
+        caissiere = User.objects.create_user(
+            username="caisse-qr", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=caissiere, gym=self.gym, role="cashier", is_active=True
+        )
+        self._connecter(caissiere)
+
+        reponse = self.client.get(
+            reverse("core:marketing_qr_download", args=["site"])
+        )
+
+        self.assertEqual(reponse.status_code, 403)

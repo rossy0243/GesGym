@@ -4,7 +4,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.hashers import make_password
 from django.shortcuts import get_object_or_404, redirect, render
 from django.core.paginator import Paginator
-from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseForbidden, JsonResponse
+from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseForbidden, JsonResponse
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.db.models import Q, Count, Sum, Exists, OuterRef
@@ -14,8 +14,12 @@ from datetime import timedelta
 import calendar
 import json
 from access.models import AccessLog
+from smartclub.decorators import role_required
+from core import marketing_qr
 from core import purge
 from core.audit import log_sensitive_action
+from members.models import MemberPreRegistrationLink
+from smartclub.public_links import build_public_url, public_base_url
 from compte.models import UserGymRole
 from compte.models import User
 from compte.utils import generate_temporary_password, generate_username, has_other_active_access
@@ -57,6 +61,7 @@ from smartclub.access_control import (
     DASHBOARD_ROLES,
     REPORT_ROLES,
     SETTINGS_ORGANIZATION_ROLES,
+    PRE_REGISTRATION_LINK_ROLES,
     SETTINGS_ROLES,
     current_role,
     has_role,
@@ -2279,3 +2284,77 @@ def gym_purge(request):
     )
 
     return JsonResponse({"ok": True, "supprime": supprime, "total": avant["total"]})
+
+
+# ---------------------------------------------------------------------------
+# QR codes a afficher en salle
+# ---------------------------------------------------------------------------
+#
+# Deux supports : l'adresse du site, et le lien de preinscription. Ils finissent
+# sur un mur, parfois en tres grand : le PDF est vectoriel et s'agrandit sans
+# perte, le PNG sert au partage rapide.
+
+
+SUPPORTS_QR = {
+    "site": {
+        "libelle": "Notre site",
+        "fichier": "qr-site",
+    },
+    "preinscription": {
+        "libelle": "Preinscription",
+        "fichier": "qr-preinscription",
+    },
+}
+
+
+def _contenu_du_qr(request, support):
+    """L'adresse que portera le QR code, ou None si elle n'existe pas."""
+    if support == "site":
+        return public_base_url(request) or request.build_absolute_uri("/")
+
+    lien = MemberPreRegistrationLink.objects.filter(
+        gym=request.gym, is_active=True
+    ).first()
+    if not lien:
+        return None
+    return build_public_url(
+        request, reverse("members:public_pre_registration", args=[lien.token])
+    )
+
+
+@login_required
+@role_required(PRE_REGISTRATION_LINK_ROLES)
+def marketing_qr_download(request, support):
+    """
+    Telecharge un QR code d'affichage, en PDF vectoriel ou en PNG.
+
+    Le PDF est le format a donner a un imprimeur : une bache de deux metres y
+    reste aussi nette qu'un A4. Le PNG depanne pour un envoi par messagerie.
+    """
+    if support not in SUPPORTS_QR:
+        raise Http404("Support inconnu.")
+
+    contenu = _contenu_du_qr(request, support)
+    if not contenu:
+        return HttpResponseBadRequest(
+            "Aucun lien de preinscription actif pour cette salle."
+        )
+
+    fichier = SUPPORTS_QR[support]["fichier"]
+
+    if request.GET.get("format") == "png":
+        return _fichier_a_telecharger(
+            marketing_qr.en_png(contenu, request.GET.get("taille")),
+            f"{fichier}.png",
+            "image/png",
+        )
+
+    return _fichier_a_telecharger(
+        marketing_qr.en_pdf(contenu), f"{fichier}.pdf", "application/pdf"
+    )
+
+
+def _fichier_a_telecharger(contenu, nom, type_mime):
+    reponse = HttpResponse(contenu, content_type=type_mime)
+    reponse["Content-Disposition"] = f'attachment; filename="{nom}"'
+    return reponse
