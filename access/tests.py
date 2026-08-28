@@ -3617,3 +3617,67 @@ class ManualDoorOpeningTraceTests(TestCase):
 
         self.assertEqual(reponse.status_code, 200)
         self.assertEqual(reponse.json()[0]["member"], "Ouverture manuelle")
+
+
+class ReaderLogVolumeTests(TestCase):
+    """
+    Ce que le lecteur ecrit dans les journaux du serveur.
+
+    Il bat toutes les trente secondes. Journaliser la charge complete a chaque
+    fois produisait cinq megaoctets par jour et par lecteur, ou les vrais
+    passages devenaient introuvables - c'est arrive.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Volume", slug="org-volume"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Volume",
+            slug="gym-volume", subdomain="gym-volume",
+        )
+        self.device = AccessDevice.objects.create(
+            gym=self.gym, name="L1", host="10.0.0.9", password="secret"
+        )
+        self.member = Member.objects.create(
+            gym=self.gym, first_name="Ada", last_name="Mbala",
+            phone="+243870000101",
+        )
+        self.url = reverse("access:device_webhook", args=[self.device.webhook_token])
+
+    def _pousser(self, charge):
+        return self.client.post(
+            self.url, data=json.dumps(charge), content_type="application/json"
+        )
+
+    def test_a_heartbeat_writes_nothing(self):
+        # Deux mille huit cents fois par jour : le silence est la seule option
+        # tenable.
+        with self.assertNoLogs("access", level="INFO"):
+            self._pousser({"eventType": "heartBeat", "AccessControllerEvent": {}})
+
+    def test_a_passage_is_logged_without_its_payload(self):
+        with self.assertLogs("access", level="INFO") as journal:
+            self._pousser({
+                "AccessControllerEvent": {
+                    "employeeNoString": enrollment.employee_no(self.member),
+                    "serialNo": 1,
+                    "minor": 75,
+                }
+            })
+
+        trace = chr(10).join(journal.output)
+        self.assertIn("identifiant=", trace)
+        self.assertNotIn("brut=", trace)
+
+    def test_an_unrecognised_event_keeps_its_payload(self):
+        # Le seul cas ou la trace integrale sert : le materiel a parle et nous
+        # n'avons rien reconnu.
+        with self.assertLogs("access", level="INFO") as journal:
+            self._pousser({
+                "AccessControllerEvent": {"minor": 217, "quelqueChose": "inconnu"}
+            })
+
+        trace = chr(10).join(journal.output)
+        self.assertIn("non reconnu", trace)
+        self.assertIn("brut=", trace)

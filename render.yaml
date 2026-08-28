@@ -21,7 +21,7 @@ services:
     branch: main
     autoDeployTrigger: commit
     buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
-    startCommand: python manage.py migrate --noinput && python -m gunicorn smartclub.wsgi:application --bind 0.0.0.0:$PORT --log-file - --access-logfile -
+    startCommand: python manage.py migrate --noinput && python -m gunicorn smartclub.wsgi:application -c gunicorn_conf.py --bind 0.0.0.0:$PORT --log-file - --access-logfile -
     healthCheckPath: /health/
     envVars:
       - key: DJANGO_ENV
@@ -107,7 +107,7 @@ services:
     branch: royal-gym-rebrand
     autoDeployTrigger: commit
     buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
-    startCommand: python manage.py migrate --noinput && python -m gunicorn smartclub.wsgi:application --bind 0.0.0.0:$PORT --log-file - --access-logfile -
+    startCommand: python manage.py migrate --noinput && python -m gunicorn smartclub.wsgi:application -c gunicorn_conf.py --bind 0.0.0.0:$PORT --log-file - --access-logfile -
     healthCheckPath: /health/
     envVars:
       - key: DJANGO_ENV

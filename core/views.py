@@ -1580,7 +1580,11 @@ def gym_dashboard(request, gym_id):
 
     recent_access = []
     if user_role in ["owner", "manager", "reception"]:
-        recent_access = AccessLog.objects.filter(gym=gym).select_related("member").order_by("-check_in_time")[:5]
+        recent_access = (
+            AccessLog.objects.filter(gym=gym)
+            .select_related("member", "guest_pass")
+            .order_by("-check_in_time")[:5]
+        )
 
     my_members = []
     coach_name = None

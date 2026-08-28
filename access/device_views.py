@@ -439,16 +439,28 @@ def device_webhook(request, token):
     )
     credential = parsed["credential"]
 
-    # Trace integrale : indispensable pour identifier ce que le materiel
-    # transmet reellement lors des premiers essais sur site.
-    logger.info(
-        "Evenement lecteur '%s' | content-type=%s | identifiant=%r | mode=%r | brut=%s",
-        device.name,
-        request.META.get("CONTENT_TYPE", ""),
-        credential,
-        parsed["verify_mode"],
-        parsed["raw"],
-    )
+    # Le lecteur bat toutes les trente secondes : journaliser la charge
+    # complete a chaque fois produisait cinq megaoctets par jour et par
+    # lecteur, ou les vrais passages devenaient introuvables. La trace
+    # integrale est donc reservee au cas ou elle sert : le materiel a parle et
+    # nous n'avons rien reconnu.
+    battement = str(
+        (parsed.get("payload") or {}).get("eventType") or ""
+    ).lower() == "heartbeat"
+
+    if credential:
+        logger.info(
+            "Evenement lecteur '%s' | identifiant=%r | mode=%r",
+            device.name, credential, parsed["verify_mode"],
+        )
+    elif not battement:
+        logger.info(
+            "Evenement lecteur '%s' non reconnu | content-type=%s | mode=%r | brut=%s",
+            device.name,
+            request.META.get("CONTENT_TYPE", ""),
+            parsed["verify_mode"],
+            parsed["raw"],
+        )
 
     # Seule la date de contact est rafraichie. ``last_error`` decrit le dernier
     # appel **sortant** : l'effacer ici remettait le voyant "Pilotable" au vert

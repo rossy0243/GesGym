@@ -23,6 +23,7 @@ from coaching.models import Coach, CoachingFeedback, CoachingFollowUp, GroupCoac
 from compte.models import User
 from compte.models import UserGymRole
 from core import marketing_qr
+from core.log_filtering import doit_journaliser
 from core.forms import INTERNAL_ROLE_CHOICES, InternalEmployeeForm
 from members.models import GuestPass, Member, MemberPreRegistration, MemberPreRegistrationLink
 from organizations.models import LandingFaq
@@ -3750,3 +3751,38 @@ class MarketingQrTests(TestCase):
         )
 
         self.assertEqual(reponse.status_code, 403)
+
+
+class ServerLogFilterTests(SimpleTestCase):
+    """
+    Les sondes de sante ne doivent pas remplir le journal.
+
+    Render interroge /health/ toutes les quatre secondes : vingt mille lignes
+    par jour qui ne disent rien, et qui noient celles qui disent quelque chose.
+    """
+
+    def test_a_health_probe_is_not_written(self):
+        self.assertFalse(doit_journaliser("/health/"))
+
+    def test_the_detailed_probe_is_quiet_too(self):
+        self.assertFalse(doit_journaliser("/health/details/"))
+
+    def test_a_real_request_is_still_written(self):
+        # Faire taire la sonde ne doit pas rendre le journal aveugle.
+        self.assertTrue(doit_journaliser("/members/"))
+        self.assertTrue(doit_journaliser("/access/devices/webhook/abc/"))
+
+    def test_an_empty_path_is_written(self):
+        # Dans le doute, on ecrit : une ligne de trop se lit, une ligne
+        # manquante ne se devine pas.
+        self.assertTrue(doit_journaliser(""))
+        self.assertTrue(doit_journaliser(None))
+
+    def test_the_server_configuration_uses_this_rule(self):
+        # Le fichier de configuration ne s'importe pas sous Windows : on
+        # verifie au moins qu'il s'appuie sur la regle testee ici.
+        configuration = Path(settings.BASE_DIR, "gunicorn_conf.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("doit_journaliser", configuration)
+        self.assertIn("logger_class", configuration)

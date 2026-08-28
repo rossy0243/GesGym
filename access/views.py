@@ -252,10 +252,10 @@ def acces_dashboard(request):
     stats = _today_stats(gym)
     recent_logs = AccessLog.objects.filter(
         gym=gym
-    ).select_related("member", "scanned_by").order_by("-check_in_time")[:10]
+    ).select_related("member", "scanned_by", "guest_pass").order_by("-check_in_time")[:10]
     history_logs = AccessLog.objects.filter(
         gym=gym
-    ).select_related("member", "scanned_by").order_by("-check_in_time")[:200]
+    ).select_related("member", "scanned_by", "guest_pass").order_by("-check_in_time")[:200]
     agents = (
         AccessLog.objects.filter(gym=gym, scanned_by__isnull=False)
         .select_related("scanned_by")
@@ -292,7 +292,7 @@ def _legacy_member_access_unused(request, qr_code):
 def realtime_access(request):
     logs = AccessLog.objects.filter(
         gym=request.gym
-    ).select_related("member", "scanned_by").order_by("-check_in_time")[:10]
+    ).select_related("member", "scanned_by", "guest_pass").order_by("-check_in_time")[:10]
 
     return JsonResponse([_serialize_log(log) for log in logs], safe=False)
 
