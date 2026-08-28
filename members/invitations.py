@@ -180,10 +180,10 @@ def reattribuer(carnet, nom, telephone):
     """
     if carnet.sessions_used:
         raise ValidationError(
-            "Ce carnet a deja servi : il ne peut plus changer de destinataire."
+            "Cette invitation a deja servi : elle ne peut plus changer de destinataire."
         )
     if carnet.is_expired:
-        raise ValidationError("Ce carnet est caduc.")
+        raise ValidationError("Cette invitation est caduque.")
 
     # Le plafond se reverifie sur le nouveau numero : sans cela, la
     # reattribution deviendrait la porte de sortie pour l'atteindre.
@@ -219,9 +219,9 @@ def refus_eventuel(carnet):
     panne inexistante.
     """
     if carnet.sessions_left == 0:
-        return "Ce carnet d'invitation est epuise."
+        return "Cette invitation est epuisee."
     if carnet.is_expired:
-        return "Ce carnet d'invitation est caduc."
+        return "Cette invitation est caduque."
 
     # La validite de l'hote se reverifie ici, et pas seulement a l'emission :
     # un membre dont l'abonnement expire ne doit pas laisser derriere lui des

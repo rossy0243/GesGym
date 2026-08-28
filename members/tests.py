@@ -3367,7 +3367,7 @@ class GuestEntryTests(TestCase):
         reponse = self._presenter()
 
         self.assertFalse(reponse.json()["access"])
-        self.assertIn("caduc", reponse.json()["reason"])
+        self.assertIn("caduque", reponse.json()["reason"])
 
     def test_the_host_losing_his_subscription_closes_the_pass(self):
         # Un membre partant ne doit pas laisser derriere lui des invitations
@@ -3600,3 +3600,116 @@ class GuestPassScreenTests(TestCase):
         )
 
         self.assertEqual(reponse.status_code, 404)
+
+
+class GuestKpiTests(TestCase):
+    """
+    Les invites se comptent, mais jamais avec les abonnes.
+
+    Un passage d'invite qui gonflerait la frequentation ferait croire a une
+    salle plus remplie qu'elle ne l'est, et fausserait toute decision prise
+    sur ce chiffre.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Kpi", slug="org-kpi"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Kpi",
+            slug="gym-kpi", subdomain="gym-kpi",
+        )
+        module, _ = Module.objects.get_or_create(
+            code="ACCESS", defaults={"name": "Access"}
+        )
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=module, defaults={"is_active": True}
+        )
+        self.plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Premium", price=50, duration_days=30,
+            guest_invites_per_month=1, guest_sessions_per_invite=2,
+        )
+        self.member = Member.objects.create(
+            gym=self.gym, first_name="Ada", last_name="Mbala",
+            phone="+243900007777",
+        )
+        MemberSubscription.objects.create(
+            gym=self.gym, member=self.member, plan=self.plan,
+            start_date=timezone.localdate(),
+            end_date=timezone.localdate() + timedelta(days=30),
+            is_active=True,
+        )
+        self.carnet = invitations.emettre(self.member, "Paul Kabeya", "0820000001")
+
+        self.agent = User.objects.create_user(username="agent-kpi", password="pass12345")
+        UserGymRole.objects.create(
+            user=self.agent, gym=self.gym, role="manager", is_active=True
+        )
+        self.client.force_login(self.agent)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _passage_invite(self):
+        with patch.object(door, "open_doors", return_value=[]):
+            self.client.post(
+                reverse("access:member_access", args=[self.carnet.code])
+            )
+
+    def _passage_membre(self):
+        with patch.object(door, "open_doors", return_value=[]):
+            self.client.post(
+                reverse("access:member_access", args=[self.member.qr_code])
+            )
+
+    # --- Le compteur du jour ------------------------------------------------------
+
+    def test_the_dashboard_counts_guests_apart(self):
+        self._passage_invite()
+
+        page = self.client.get(reverse("access:acces_dashboard"))
+
+        self.assertEqual(page.context["today_guests"], 1)
+        self.assertEqual(page.context["today_entries"], 0)
+
+    def test_a_member_entry_is_not_counted_as_a_guest(self):
+        self._passage_membre()
+
+        page = self.client.get(reverse("access:acces_dashboard"))
+
+        self.assertEqual(page.context["today_guests"], 0)
+        self.assertEqual(page.context["today_entries"], 1)
+
+    def test_both_are_counted_side_by_side(self):
+        self._passage_membre()
+        self._passage_invite()
+
+        page = self.client.get(reverse("access:acces_dashboard"))
+
+        self.assertEqual(page.context["today_entries"], 1)
+        self.assertEqual(page.context["today_guests"], 1)
+
+    def test_a_refused_guest_is_not_counted(self):
+        GuestPass.objects.filter(pk=self.carnet.pk).update(
+            expires_at=timezone.now() - timedelta(days=1)
+        )
+
+        self._passage_invite()
+
+        page = self.client.get(reverse("access:acces_dashboard"))
+        self.assertEqual(page.context["today_guests"], 0)
+
+    def test_each_session_counts_as_a_passage(self):
+        self._passage_invite()
+        self._passage_invite()
+
+        page = self.client.get(reverse("access:acces_dashboard"))
+        self.assertEqual(page.context["today_guests"], 2)
+
+    # --- Le tableau de bord l'affiche -----------------------------------------------
+
+    def test_the_tile_is_on_the_screen(self):
+        page = self.client.get(reverse("access:acces_dashboard"))
+
+        self.assertContains(page, "todayGuests")
+        self.assertContains(page, "Invités aujourd'hui")

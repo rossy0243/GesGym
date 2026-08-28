@@ -1836,6 +1836,14 @@ def _legacy_reports_dashboard(request):
         access_granted=False
     ).count()
 
+    # Un invite n'est pas un abonne : il se compte, mais jamais avec eux.
+    guest_visits = AccessLog.objects.filter(
+        gym=gym,
+        check_in_time__date=today,
+        access_granted=True,
+        guest_pass__isnull=False,
+    ).count()
+
     # =========================
     # Transactions détaillées
     # =========================
@@ -1936,6 +1944,7 @@ def _legacy_reports_dashboard(request):
         "daily_new_clients": daily_new_clients,
         "daily_visits": daily_visits,
         "denied_access": denied_access,
+        "guest_visits": guest_visits,
         "transactions": transactions,
 
         # mensuel
@@ -1988,16 +1997,26 @@ def reports_dashboard(request):
         gym=gym,
         created_at__date__range=(period_data["start_date"], period_data["end_date"]),
     ).count()
+    # member__isnull=False ecarte les invites et les ouvertures manuelles :
+    # sans lui, une entree sans abonne gonflait la frequentation.
     daily_visits = AccessLog.objects.filter(
         gym=gym,
         check_in_time__date__range=(period_data["start_date"], period_data["end_date"]),
         access_granted=True,
         is_return=False,
+        member__isnull=False,
     ).count()
     denied_access = AccessLog.objects.filter(
         gym=gym,
         check_in_time__date__range=(period_data["start_date"], period_data["end_date"]),
         access_granted=False,
+        member__isnull=False,
+    ).count()
+    guest_visits = AccessLog.objects.filter(
+        gym=gym,
+        check_in_time__date__range=(period_data["start_date"], period_data["end_date"]),
+        access_granted=True,
+        guest_pass__isnull=False,
     ).count()
     transactions = payments_period.select_related("member", "cash_register").order_by("-created_at")[:50]
 
@@ -2054,6 +2073,7 @@ def reports_dashboard(request):
         "daily_new_clients": daily_new_clients,
         "daily_visits": daily_visits,
         "denied_access": denied_access,
+        "guest_visits": guest_visits,
         "transactions": transactions,
         "monthly_revenue": monthly_revenue,
         "monthly_new_members": monthly_new_members,

@@ -275,6 +275,7 @@ def acces_dashboard(request):
         "selected_member": selected_member,
         "today_entries": stats["entries"],
         "today_denied": stats["denied"],
+        "today_guests": stats["guests"],
         "section": section,
         "recent_logs": recent_logs,
         "history_logs": history_logs,
