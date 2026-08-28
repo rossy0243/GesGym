@@ -89,6 +89,22 @@ def product_create(request):
                     reason="Stock initial",
                 )
 
+            # Modifier et supprimer un produit laissaient une trace, pas le
+            # creer. Un catalogue qui s'enrichit sans qu'on sache par qui est
+            # aussi difficile a relire qu'un catalogue qui se vide.
+            log_sensitive_action(
+                request,
+                "products.product_created",
+                "Product",
+                product.name,
+                metadata={
+                    "product_id": product.id,
+                    "prix": str(product.price),
+                    "stock_initial": product.quantity,
+                },
+                gym=gym,
+            )
+
             messages.success(request, f'Produit "{product.name}" cree avec succes.')
             return redirect("products:detail", product_id=product.id)
     else:

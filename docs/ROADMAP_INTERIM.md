@@ -112,6 +112,20 @@ Le remplaçant debloque la journee. Il ne voit ni le chiffre d'affaires, ni
 l'historique de caisse, ni la paie, et ne touche ni aux reglages ni aux
 lecteurs. C'est la difference entre tenir la salle et la diriger.
 
+### Deux groupes ouvrent plus que leur nom ne le dit
+
+Le proprietaire a choisi de les laisser tels quels, la tracabilite servant de
+contrepartie. Il faut donc le savoir :
+
+- `MEMBER_STATUS_ROLES` ouvre aussi la **regeneration du QR** d'un membre, ce
+  qui invalide sa carte imprimee. Le geste est journalise sous
+  `member.qr_regenerated`.
+- `PRODUCT_ROLES` ouvre **tout le catalogue** - creer, modifier, supprimer un
+  produit - la ou le besoin ne demandait qu'un mouvement de stock.
+
+La suppression d'un membre reste hors de portee en toutes circonstances :
+`MEMBER_DELETE_ROLES = {"owner"}`, et meme le gerant ne l'a pas.
+
 ## Le parcours
 
 1. La caissiere bute sur un geste ferme. L'ecran lui propose de **demander
@@ -136,6 +150,11 @@ tout doit rester attribuable.
 - **chaque action faite sous interim y est marquee comme telle** - sans quoi
   une correction de stock du mardi serait indistinguable d'une correction
   ordinaire ;
+- **tous les gestes ouverts sont deja journalises** : creation et modification
+  de membre, suspension, reactivation, regeneration de QR, confirmation de
+  preinscription, mouvements et ajustements de stock, creation, modification et
+  suppression de produit. La creation de produit ne l'etait pas ; elle l'est
+  desormais, verifiee par un test qui tombe si la trace disparait ;
 - un auto-octroi est signale distinctement : c'est l'evenement que le
   proprietaire veut pouvoir relire.
 
