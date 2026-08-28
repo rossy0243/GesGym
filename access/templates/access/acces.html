@@ -1097,7 +1097,11 @@ function loadRealtimeAccess() {
         });
 }
 
-setInterval(loadRealtimeAccess, 5000);
+// Chaque ecran ouvert interrogeait le serveur toutes les cinq secondes, soit
+// dix-sept mille requetes par jour et par onglet. Quinze secondes divisent la
+// charge par trois sans qu'un agent d'accueil le remarque : un passage met
+// plus longtemps que cela a franchir la porte.
+setInterval(loadRealtimeAccess, 15000);
 
 document.addEventListener("DOMContentLoaded", function () {
     loadRealtimeAccess();
