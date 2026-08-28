@@ -28,16 +28,19 @@ salle. On ne peut pas lui ajouter le role reception a cote de la caisse.
 | --- | --- |
 | Mecanisme | Delegation temporaire : elle recoit les droits et travaille normalement |
 | Qui accorde | Le proprietaire ou le gerant, a distance |
-| Si personne ne repond | Apres un delai d'attente, elle peut se l'accorder en se justifiant |
+| Si personne ne repond | Apres cinq minutes, elle peut se l'accorder en se justifiant |
 | Etendue | Les gestes du quotidien seulement |
 | Duree | Jusqu'a la fin de la journee, extinction automatique |
 | Beneficiaire | Tout employe present, sauf proprietaire et gerant |
 
 ## Ce que j'ai decide seul, a confirmer
 
-- **Le delai avant auto-octroi est de dix minutes.** Assez long pour qu'une
-  reponse arrive, assez court pour qu'un client ne reparte pas. C'est une
-  constante, pas un reglage : un delai negociable finirait a zero.
+- **Le delai avant auto-octroi est de cinq minutes.** Les notifications de
+  l'application visent les membres, pas le personnel : prevenir un gerant
+  passe donc par un e-mail, qu'un gerant absent lit rarement dans l'instant.
+  Attendre dix minutes devant un client pour une reponse qui viendra
+  rarement etait un coût sans contrepartie. C'est une constante, pas un
+  reglage : un delai negociable finirait a zero.
 - **Un seul interim actif a la fois par salle.** Deux interimaires simultanes
   brouilleraient la question de qui tient la salle, et diluerait la
   responsabilite au moment ou elle compte le plus.
@@ -132,7 +135,7 @@ La suppression d'un membre reste hors de portee en toutes circonstances :
    l'interim**, en indiquant pourquoi.
 2. Le proprietaire et le gerant sont prevenus. L'un d'eux accorde depuis son
    telephone : l'interim demarre aussitot.
-3. **Si personne n'a repondu au bout de dix minutes**, un bouton lui permet de
+3. **Si personne n'a repondu au bout de cinq minutes**, un bouton lui permet de
    se l'accorder. Le motif devient obligatoire, et l'octroi est marque comme
    auto-accorde.
 4. Pendant toute la duree, un **bandeau permanent** rappelle qu'elle agit sous
@@ -164,9 +167,10 @@ tout doit rester attribuable.
   obligatoire, la notification immediate et la revocation a distance
   l'encadrent ; ils ne l'empechent pas. C'est un choix assume : une salle
   paralysee coute plus qu'un abus rare et visible.
-- **Dix minutes d'attente devant un client, c'est long.** Si l'usage montre que
-  le delai est trop lourd, c'est une constante a baisser - pas une regle a
-  supprimer.
+- **La validation a distance sera l'exception.** Faute de canal vers le
+  personnel, l'alerte part par e-mail ; en pratique, c'est l'auto-octroi qui
+  portera la fonction. L'e-mail sert alors de trace et d'alerte differee, ce
+  qui reste utile - mais autant le savoir avant de construire.
 - **Un interim quotidien signale autre chose.** Si la caissiere le demande tous
   les jours, le probleme n'est pas technique : c'est le role de la personne
   qu'il faut revoir. Un compteur mensuel par beneficiaire le rendrait visible.
