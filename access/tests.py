@@ -401,7 +401,13 @@ class AccessControlTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'id="lecteursSection"')
-        self.assertContains(response, "Détecter un lecteur sur le réseau")
+
+    def test_the_desk_does_not_see_network_discovery(self):
+        # L'accueil se sert des lecteurs sans les administrer : balayer le
+        # reseau appartient a l'installation, pas au comptoir.
+        response = self.client.get(reverse("access:acces_dashboard"))
+
+        self.assertNotContains(response, "Détecter un lecteur sur le réseau")
 
     def test_access_dashboard_requires_active_module(self):
         GymModule.objects.filter(gym=self.gym_a, module__code="ACCESS").update(is_active=False)
@@ -1276,7 +1282,9 @@ class FaceEnrollmentScreenTests(TestCase):
 
         self.assertEqual(response.status_code, 404)
 
-    def test_a_receptionist_cannot_enrol_faces(self):
+    def test_a_receptionist_can_enrol_faces(self):
+        # C'est l'accueil qui inscrit les membres : lui refuser l'enrolement
+        # obligeait a deranger un gerant pour chaque nouveau visage.
         reception = User.objects.create_user(
             username="reception-visage", password="pass12345"
         )
@@ -1284,6 +1292,22 @@ class FaceEnrollmentScreenTests(TestCase):
             user=reception, gym=self.gym, role="reception", is_active=True
         )
         self._connecter(reception)
+
+        response = self.client.get(
+            reverse("access:face_enrollment", args=[self.member.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_a_coach_still_cannot_enrol_faces(self):
+        # L'elargissement s'arrete a l'accueil et a la caisse.
+        coach = User.objects.create_user(
+            username="coach-visage", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=coach, gym=self.gym, role="coach", is_active=True
+        )
+        self._connecter(coach)
 
         response = self.client.get(
             reverse("access:face_enrollment", args=[self.member.id])
@@ -3189,6 +3213,60 @@ class DeviceUpdateTests(TestCase):
 
         self.assertNotIn("secret-du-tunnel", reponse.content.decode())
 
+    def _avec_jeton(self):
+        self.device.tunnel_client_id = "identifiant.access"
+        self.device.tunnel_client_secret = "secret-du-tunnel"
+        self.device.use_https = True
+        self.device.save(update_fields=[
+            "tunnel_client_id", "tunnel_client_secret", "use_https",
+        ])
+
+    def test_editing_something_else_keeps_the_tunnel_pair(self):
+        # Les identifiants ne quittent jamais le serveur : le formulaire les
+        # renvoie donc vides. Sans cette garde, changer l'adresse du lecteur
+        # les effacait, et l'application cessait de s'authentifier en silence.
+        self._avec_jeton()
+
+        self._modifier(host="autre.trycloudflare.com",
+                       tunnel_client_id="", tunnel_client_secret="")
+
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.tunnel_client_id, "identifiant.access")
+        self.assertEqual(self.device.tunnel_client_secret, "secret-du-tunnel")
+
+    def test_the_identifier_is_never_sent_back_either(self):
+        # Le secret seul ne suffit pas : les deux moities restent au serveur.
+        self._avec_jeton()
+
+        self.assertNotIn("tunnel_client_id", _serialize_device(self.device))
+
+    def test_unchecking_the_tunnel_clears_the_pair(self):
+        # Le geste explicite pour retirer un jeton, puisqu'un champ vide
+        # signifie desormais "ne change pas".
+        self._avec_jeton()
+
+        self._modifier(use_https=False)
+
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.tunnel_client_id, "")
+        self.assertEqual(self.device.tunnel_client_secret, "")
+
+    def test_a_new_identifier_still_replaces_the_old_one(self):
+        self._avec_jeton()
+
+        self._modifier(tunnel_client_id="nouvel.identifiant")
+
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.tunnel_client_id, "nouvel.identifiant")
+
+    def test_an_empty_tunnel_token_is_valid_before_access_is_set_up(self):
+        # Tant qu'aucune application Access ne protege le nom, il n'y a pas de
+        # jeton a saisir : les deux champs restent vides.
+        self._modifier(tunnel_client_id="", tunnel_client_secret="")
+
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.tunnel_headers, {})
+
     def test_the_user_name_is_offered_back_to_the_form(self):
         # Sans lui, le formulaire le remettrait a "admin" a chaque modification.
         self.assertEqual(_serialize_device(self.device)["username"], "operateur")
@@ -3240,3 +3318,366 @@ class DeviceUpdateTests(TestCase):
         self.assertIn(reponse.status_code, (302, 403))
         self.device.refresh_from_db()
         self.assertEqual(self.device.host, "192.168.1.188")
+
+
+class TunnelClientSignatureTests(TestCase):
+    """
+    Le tunnel inspecte la signature du client avant de transmettre.
+
+    Observe en production : Cloudflare renvoyait "HTTP 403 error code: 1010"
+    sur la seule signature par defaut de Python, et l'appel n'atteignait
+    jamais le lecteur.
+    """
+
+    def _entetes(self, appel):
+        return {nom.lower(): valeur for nom, valeur in appel.header_items()}
+
+    def test_every_call_announces_a_browser_signature(self):
+        client = hikvision.HikvisionClient("10.0.0.9", "admin", "x")
+
+        with patch.object(hikvision.HikvisionClient, "_opener") as ouvreur:
+            ouvreur.return_value.open.return_value.read.return_value = b"<x/>"
+            client.request("/ISAPI/System/deviceInfo")
+
+        appel = ouvreur.return_value.open.call_args[0][0]
+        self.assertIn("mozilla", self._entetes(appel)["user-agent"].lower())
+
+    def test_the_binary_call_announces_it_too(self):
+        # Celui qui rapporte les images passe par un autre chemin : il etait
+        # reste sans signature.
+        client = hikvision.HikvisionClient("10.0.0.9", "admin", "x")
+
+        with patch.object(hikvision.HikvisionClient, "_opener") as ouvreur:
+            ouvreur.return_value.open.return_value.read.return_value = b"donnees-image"
+            client.request_raw("/ISAPI/Intelligent/FDLib/FDSetUp")
+
+        appel = ouvreur.return_value.open.call_args[0][0]
+        self.assertIn("mozilla", self._entetes(appel)["user-agent"].lower())
+
+    def test_the_tunnel_token_still_travels(self):
+        # La signature ne doit pas avoir chasse les en-tetes du tunnel.
+        device = AccessDevice(
+            host="salle.exemple.com", username="admin", password="x",
+            tunnel_client_id="identifiant.access",
+            tunnel_client_secret="secret",
+        )
+        client = hikvision.HikvisionClient.from_device(device)
+
+        with patch.object(hikvision.HikvisionClient, "_opener") as ouvreur:
+            ouvreur.return_value.open.return_value.read.return_value = b"<x/>"
+            client.request("/ISAPI/System/deviceInfo")
+
+        entetes = self._entetes(ouvreur.return_value.open.call_args[0][0])
+        self.assertEqual(entetes["cf-access-client-id"], "identifiant.access")
+
+
+class DeviceRoleSplitTests(TestCase):
+    """
+    Se servir d'un lecteur et l'administrer sont deux droits distincts.
+
+    L'accueil et la caisse enrolent des visages et ouvrent la porte ; ils n'ont
+    aucune raison de pouvoir supprimer un lecteur ou changer son adresse.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Roles", slug="org-roles"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Roles",
+            slug="gym-roles", subdomain="gym-roles",
+        )
+        module, _ = Module.objects.get_or_create(
+            code="ACCESS", defaults={"name": "Access"}
+        )
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=module, defaults={"is_active": True}
+        )
+        self.device = AccessDevice.objects.create(
+            gym=self.gym, name="Entree", host="10.0.0.9", password="secret"
+        )
+        self.member = Member.objects.create(
+            gym=self.gym, first_name="Ada", last_name="Mbala",
+            phone="+243880000001",
+        )
+
+    def _connecter(self, role):
+        utilisateur = User.objects.create_user(
+            username=f"agent-{role}", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=utilisateur, gym=self.gym, role=role, is_active=True
+        )
+        self.client.force_login(utilisateur)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+        return utilisateur
+
+    def _refuse(self, reponse):
+        return reponse.status_code in (302, 403)
+
+    # --- Ce que l'accueil et la caisse peuvent faire --------------------------
+
+    def test_reception_and_cashier_reach_the_access_page(self):
+        for role in ("reception", "cashier"):
+            with self.subTest(role=role):
+                self._connecter(role)
+                reponse = self.client.get(reverse("access:acces_dashboard"))
+                self.assertEqual(reponse.status_code, 200)
+
+    def test_reception_and_cashier_see_the_readers(self):
+        for role in ("reception", "cashier"):
+            with self.subTest(role=role):
+                self._connecter(role)
+                reponse = self.client.get(reverse("access:device_list"))
+                self.assertEqual(reponse.status_code, 200)
+
+    def test_reception_and_cashier_can_enrol_a_face(self):
+        for role in ("reception", "cashier"):
+            with self.subTest(role=role):
+                self._connecter(role)
+                reponse = self.client.get(
+                    reverse("access:face_enrollment", args=[self.member.id])
+                )
+                self.assertEqual(reponse.status_code, 200)
+
+    def test_reception_and_cashier_can_open_the_door(self):
+        for role in ("reception", "cashier"):
+            with self.subTest(role=role):
+                self._connecter(role)
+                with patch.object(hikvision.HikvisionClient, "open_door"):
+                    reponse = self.client.post(
+                        reverse("access:device_open_door", args=[self.device.id])
+                    )
+                self.assertEqual(reponse.status_code, 200)
+
+    # --- Ce qui leur reste ferme ----------------------------------------------
+
+    def test_they_cannot_delete_a_reader(self):
+        for role in ("reception", "cashier"):
+            with self.subTest(role=role):
+                self._connecter(role)
+                reponse = self.client.post(
+                    reverse("access:device_delete", args=[self.device.id])
+                )
+                self.assertTrue(self._refuse(reponse))
+        self.assertTrue(AccessDevice.objects.filter(pk=self.device.pk).exists())
+
+    def test_they_cannot_move_a_reader(self):
+        for role in ("reception", "cashier"):
+            with self.subTest(role=role):
+                self._connecter(role)
+                reponse = self.client.post(
+                    reverse("access:device_update", args=[self.device.id]),
+                    data=json.dumps({"host": "pirate.example.com"}),
+                    content_type="application/json",
+                )
+                self.assertTrue(self._refuse(reponse))
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.host, "10.0.0.9")
+
+    def test_they_cannot_register_a_new_reader(self):
+        self._connecter("reception")
+
+        reponse = self.client.post(
+            reverse("access:device_create"),
+            data=json.dumps({"host": "10.0.0.7", "password": "x"}),
+            content_type="application/json",
+        )
+
+        self.assertTrue(self._refuse(reponse))
+
+    def test_they_cannot_change_the_screen_messages(self):
+        self._connecter("cashier")
+
+        reponse = self.client.get(
+            reverse("access:device_messages", args=[self.device.id])
+        )
+
+        self.assertTrue(self._refuse(reponse))
+
+    def test_a_coach_still_has_no_access_at_all(self):
+        # L'elargissement ne doit pas deborder sur les autres roles.
+        self._connecter("coach")
+
+        self.assertTrue(self._refuse(self.client.get(reverse("access:device_list"))))
+
+    # --- Ce que l'ecran propose ------------------------------------------------
+
+    def test_the_page_hides_administration_from_the_desk(self):
+        self._connecter("reception")
+
+        html = self.client.get(reverse("access:acces_dashboard")).content.decode()
+
+        self.assertIn("PEUT_ADMINISTRER_LECTEURS = false", html)
+        self.assertNotIn("Ajouter manuellement", html)
+
+    def test_the_page_offers_administration_to_the_manager(self):
+        self._connecter("manager")
+
+        html = self.client.get(reverse("access:acces_dashboard")).content.decode()
+
+        self.assertIn("PEUT_ADMINISTRER_LECTEURS = true", html)
+        self.assertIn("Ajouter manuellement", html)
+
+
+class ManualDoorOpeningTraceTests(TestCase):
+    """
+    Ouvrir la porte depuis l'application doit laisser une trace visible.
+
+    Le geste donne acces a la salle sans que personne se presente. Sans ligne
+    au journal, ouvrir a un ami ne se voit nulle part.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Trace", slug="org-trace"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Trace",
+            slug="gym-trace", subdomain="gym-trace",
+        )
+        module, _ = Module.objects.get_or_create(
+            code="ACCESS", defaults={"name": "Access"}
+        )
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=module, defaults={"is_active": True}
+        )
+        self.device = AccessDevice.objects.create(
+            gym=self.gym, name="Entree", host="10.0.0.9", password="secret"
+        )
+        self.agent = User.objects.create_user(
+            username="hotesse", password="pass12345", first_name="Sarah",
+        )
+        UserGymRole.objects.create(
+            user=self.agent, gym=self.gym, role="reception", is_active=True
+        )
+        self.client.force_login(self.agent)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _ouvrir(self):
+        with patch.object(hikvision.HikvisionClient, "open_door"):
+            return self.client.post(
+                reverse("access:device_open_door", args=[self.device.id])
+            )
+
+    def test_the_opening_creates_a_journal_line(self):
+        self._ouvrir()
+
+        self.assertEqual(AccessLog.objects.filter(gym=self.gym).count(), 1)
+
+    def test_the_line_names_who_opened(self):
+        # C'est tout l'interet : rattacher le geste a quelqu'un.
+        self._ouvrir()
+
+        log = AccessLog.objects.get(gym=self.gym)
+        self.assertEqual(log.scanned_by, self.agent)
+        self.assertIsNone(log.member)
+
+    def test_the_line_says_it_was_a_manual_opening(self):
+        self._ouvrir()
+
+        log = AccessLog.objects.get(gym=self.gym)
+        self.assertIn("ouverture manuelle", log.device_used.lower())
+
+    def test_a_failed_opening_leaves_no_line(self):
+        # Rien ne s'est ouvert : journaliser tromperait la lecture.
+        with patch.object(
+            hikvision.HikvisionClient,
+            "open_door",
+            side_effect=hikvision.HikvisionUnreachable("hors de portee"),
+        ):
+            self.client.post(reverse("access:device_open_door", args=[self.device.id]))
+
+        self.assertFalse(AccessLog.objects.filter(gym=self.gym).exists())
+
+    def test_it_does_not_inflate_the_attendance_count(self):
+        # Personne ne s'est presente : compter cette ouverture comme une
+        # entree fausserait la frequentation du jour.
+        self._ouvrir()
+
+        reponse = self.client.get(reverse("access:acces_dashboard"))
+        self.assertEqual(reponse.context["today_entries"], 0)
+
+    def test_the_journal_shows_it_without_a_member(self):
+        self._ouvrir()
+
+        html = self.client.get(reverse("access:acces_dashboard")).content.decode()
+
+        self.assertIn("Ouverture manuelle", html)
+
+    def test_the_realtime_feed_survives_a_line_without_a_member(self):
+        # Le flux temps reel lisait le nom du membre sans precaution.
+        self._ouvrir()
+
+        reponse = self.client.get("/access/access/realtime/")
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertEqual(reponse.json()[0]["member"], "Ouverture manuelle")
+
+
+class ReaderLogVolumeTests(TestCase):
+    """
+    Ce que le lecteur ecrit dans les journaux du serveur.
+
+    Il bat toutes les trente secondes. Journaliser la charge complete a chaque
+    fois produisait cinq megaoctets par jour et par lecteur, ou les vrais
+    passages devenaient introuvables - c'est arrive.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Volume", slug="org-volume"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Volume",
+            slug="gym-volume", subdomain="gym-volume",
+        )
+        self.device = AccessDevice.objects.create(
+            gym=self.gym, name="L1", host="10.0.0.9", password="secret"
+        )
+        self.member = Member.objects.create(
+            gym=self.gym, first_name="Ada", last_name="Mbala",
+            phone="+243870000101",
+        )
+        self.url = reverse("access:device_webhook", args=[self.device.webhook_token])
+
+    def _pousser(self, charge):
+        return self.client.post(
+            self.url, data=json.dumps(charge), content_type="application/json"
+        )
+
+    def test_a_heartbeat_writes_nothing(self):
+        # Deux mille huit cents fois par jour : le silence est la seule option
+        # tenable.
+        with self.assertNoLogs("access", level="INFO"):
+            self._pousser({"eventType": "heartBeat", "AccessControllerEvent": {}})
+
+    def test_a_passage_is_logged_without_its_payload(self):
+        with self.assertLogs("access", level="INFO") as journal:
+            self._pousser({
+                "AccessControllerEvent": {
+                    "employeeNoString": enrollment.employee_no(self.member),
+                    "serialNo": 1,
+                    "minor": 75,
+                }
+            })
+
+        trace = chr(10).join(journal.output)
+        self.assertIn("identifiant=", trace)
+        self.assertNotIn("brut=", trace)
+
+    def test_an_unrecognised_event_keeps_its_payload(self):
+        # Le seul cas ou la trace integrale sert : le materiel a parle et nous
+        # n'avons rien reconnu.
+        with self.assertLogs("access", level="INFO") as journal:
+            self._pousser({
+                "AccessControllerEvent": {"minor": 217, "quelqueChose": "inconnu"}
+            })
+
+        trace = chr(10).join(journal.output)
+        self.assertIn("non reconnu", trace)
+        self.assertIn("brut=", trace)

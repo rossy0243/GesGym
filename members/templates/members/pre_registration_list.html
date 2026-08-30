@@ -277,8 +277,61 @@
                 </div>
                 {% endif %}
 
+                <hr class="my-4">
+                <h6 class="fw-semibold d-flex align-items-center gap-2 mb-1">
+                    <span class="material-icons" style="font-size:18px;">qr_code_2</span>
+                    À afficher dans la salle
+                </h6>
+                <p class="text-muted small mb-3">
+                    Le PDF se redimensionne sans jamais pixeliser : donnez-le tel quel
+                    à un imprimeur, de l'A4 à la bâche. Le PNG dépanne pour un envoi
+                    par messagerie.
+                </p>
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="border rounded-3 p-3 h-100">
+                            <div class="fw-semibold mb-1">Préinscription</div>
+                            <p class="text-muted small mb-3">
+                                Le visiteur scanne et remplit sa demande depuis son téléphone.
+                            </p>
+                            <a class="btn btn-primary btn-sm"
+                               href="{% url 'core:marketing_qr_download' 'preinscription' %}">
+                                <span class="material-icons me-1" style="font-size:16px;">picture_as_pdf</span>
+                                PDF
+                            </a>
+                            <a class="btn btn-light btn-sm"
+                               href="{% url 'core:marketing_qr_download' 'preinscription' %}?format=png">
+                                PNG
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="border rounded-3 p-3 h-100">
+                            <div class="fw-semibold mb-1">Notre site</div>
+                            <p class="text-muted small mb-3">
+                                Mène à la page d'accueil publique, formules et contact compris.
+                            </p>
+                            <a class="btn btn-primary btn-sm"
+                               href="{% url 'core:marketing_qr_download' 'site' %}">
+                                <span class="material-icons me-1" style="font-size:16px;">picture_as_pdf</span>
+                                PDF
+                            </a>
+                            <a class="btn btn-light btn-sm"
+                               href="{% url 'core:marketing_qr_download' 'site' %}?format=png">
+                                PNG
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
                 {% if can_member_status_admin %}
                 <hr class="my-4">
+                <div class="alert alert-warning py-2 px-3 small mb-2">
+                    <strong>Attention aux affiches deja posees.</strong>
+                    Regenerer le lien rend inutilisable tout QR code de preinscription
+                    deja imprime : il faudra les remplacer.
+                </div>
                 <p class="text-muted small mb-2">
                     Si ce lien a ete diffuse par erreur, generez-en un nouveau :
                     l'ancien cessera immediatement de fonctionner et les demandes

@@ -822,6 +822,117 @@
                     <p class="empty-state">Aucun message de votre salle pour le moment.</p>
                 {% endif %}
             </section>
+        {% elif active_tab == "invitations" %}
+            <section class="content-panel" id="invitations">
+                <div class="section-heading">
+                    <div>
+                        <p class="eyebrow">Inviter quelqu'un</p>
+                        <h2>Vos invitations</h2>
+                    </div>
+                </div>
+
+                <div class="access-summary-grid">
+                    <article class="summary-card">
+                        <p class="eyebrow">Restantes</p>
+                        <strong>{{ guest_quota.restant }} / {{ guest_quota.accorde }}</strong>
+                        <p>pour ce mois d'abonnement</p>
+                    </article>
+                    <article class="summary-card">
+                        <p class="eyebrow">Séances offertes</p>
+                        <strong>{{ guest_quota.seances }}</strong>
+                        <p>à chaque personne invitée</p>
+                    </article>
+                </div>
+
+                {% if guest_quota.restant %}
+                    <form method="post" action="{% url 'members:member_guest_pass_create' %}" class="member-password-form">
+                        {% csrf_token %}
+                        <label class="form-field">
+                            <span>Nom de l'invité</span>
+                            <input type="text" name="guest_name" required maxlength="120" placeholder="Paul Kabeya">
+                        </label>
+                        <label class="form-field">
+                            <span>Téléphone</span>
+                            <input type="tel" name="guest_phone" required maxlength="30" placeholder="0820000000">
+                        </label>
+                        <button type="submit" class="action-button">Créer l'invitation</button>
+                    </form>
+                    <p class="empty-state">
+                        Votre invité recevra un QR code valable 30 jours, pour
+                        {{ guest_quota.seances }} séance{{ guest_quota.seances|pluralize }}.
+                    </p>
+                {% else %}
+                    <p class="empty-state">
+                        Vous avez utilisé vos invitations pour cette période.
+                        Elles repartiront au prochain mois de votre abonnement.
+                    </p>
+                {% endif %}
+
+                {% if guest_passes %}
+                    <div class="access-compact-list">
+                        {% for carnet in guest_passes %}
+                            <article class="access-compact-card {% if carnet.state == 'actif' %}is-ok{% else %}is-ko{% endif %}">
+                                <div class="access-compact-status">
+                                    <span class="dot {% if carnet.state == 'actif' %}ok{% else %}ko{% endif %}"></span>
+                                    <strong>{{ carnet.guest_name }}</strong>
+                                </div>
+                                <div class="access-compact-meta">
+                                    <p>
+                                        {{ carnet.guest_phone }} &middot; {{ carnet.state_label }}
+                                        &middot;
+                                        {{ carnet.sessions_used }}/{{ carnet.sessions_allowed }}
+                                        séance{{ carnet.sessions_allowed|pluralize }} utilisée{{ carnet.sessions_used|pluralize }}
+                                    </p>
+                                    <p>
+                                        {% if carnet.state == "caduc" %}
+                                            Caduc depuis le {{ carnet.expires_at|date:"d/m/Y" }} &middot;
+                                        {% else %}
+                                            Valable jusqu'au {{ carnet.expires_at|date:"d/m/Y" }} &middot;
+                                        {% endif %}
+                                        {% if carnet.sessions_used %}déjà venu{% else %}pas encore venu{% endif %}
+                                    </p>
+
+                                    {% if carnet.state == "actif" %}
+                                        <details>
+                                            <summary>Son QR code</summary>
+                                            <img class="guest-qr"
+                                                 src="{% url 'members:member_guest_pass_qr' carnet.id %}?size=320"
+                                                 alt="QR code de {{ carnet.guest_name }}">
+                                            <a class="action-button muted"
+                                               href="{% url 'members:member_guest_pass_qr' carnet.id %}?download=1">
+                                                Télécharger
+                                            </a>
+                                        </details>
+
+                                        {% if carnet.can_be_reassigned %}
+                                            <details>
+                                                <summary>Inviter quelqu'un d'autre</summary>
+                                                <form method="post"
+                                                      action="{% url 'members:member_guest_pass_reassign' carnet.id %}"
+                                                      class="member-password-form">
+                                                    {% csrf_token %}
+                                                    <label class="form-field">
+                                                        <span>Nom</span>
+                                                        <input type="text" name="guest_name" required maxlength="120">
+                                                    </label>
+                                                    <label class="form-field">
+                                                        <span>Téléphone</span>
+                                                        <input type="tel" name="guest_phone" required maxlength="30">
+                                                    </label>
+                                                    <button type="submit" class="action-button muted">Réattribuer</button>
+                                                </form>
+                                                <p>La date limite ne change pas.</p>
+                                            </details>
+                                        {% endif %}
+                                    {% endif %}
+                                </div>
+                            </article>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="empty-state">Vous n'avez encore invité personne.</p>
+                {% endif %}
+            </section>
         {% elif active_tab == "plans" %}
             <section class="content-panel">
                 <div class="section-heading plan-heading">

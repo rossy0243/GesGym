@@ -5,7 +5,13 @@ from django.test import TestCase
 from django.urls import reverse
 
 from compte.models import User, UserGymRole
-from organizations.models import Gym, GymModule, Module, Organization
+from organizations.models import (
+    Gym,
+    GymModule,
+    Module,
+    Organization,
+    SensitiveActivityLog,
+)
 from pos.models import CashRegister
 from pos.services import record_product_sale
 
@@ -288,3 +294,77 @@ class ProductCurrencyTests(TestCase):
         self.assertIsNone(kpis["stock_exchange_rate"])
         self.assertEqual(kpis["products_without_rate"], 1)
         self.assertEqual(kpis["stock_value_total"], Decimal("150.00"))
+
+
+class ProductAuditTests(TestCase):
+    """
+    Le catalogue doit se relire.
+
+    Modifier et supprimer un produit laissaient une trace, pas le creer. Un
+    catalogue qui s'enrichit sans qu'on sache par qui est aussi difficile a
+    relire qu'un catalogue qui se vide - et l'interim ouvrira ce geste a
+    d'autres que le gerant.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Audit", slug="products-org-audit"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Audit",
+            slug="products-gym-audit", subdomain="products-gym-audit",
+        )
+        module, _ = Module.objects.get_or_create(
+            code="PRODUCTS", defaults={"name": "Products"}
+        )
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=module, defaults={"is_active": True}
+        )
+        self.gerant = User.objects.create_user(
+            username="gerant-audit", password="test-pass"
+        )
+        UserGymRole.objects.create(user=self.gerant, gym=self.gym, role="manager")
+
+        self.client.force_login(self.gerant)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _creer(self, nom="Eau minerale", quantite=12):
+        return self.client.post(
+            reverse("products:create"),
+            {"name": nom, "price": "1.50", "quantity": quantite, "currency": "USD"},
+        )
+
+    def test_creating_a_product_leaves_a_trace(self):
+        self._creer()
+
+        self.assertTrue(
+            SensitiveActivityLog.objects.filter(
+                organization=self.organization, action="products.product_created"
+            ).exists()
+        )
+
+    def test_the_trace_names_who_did_it(self):
+        self._creer()
+
+        trace = SensitiveActivityLog.objects.get(action="products.product_created")
+        self.assertEqual(trace.actor, self.gerant)
+        self.assertEqual(trace.target_label, "Eau minerale")
+
+    def test_the_trace_keeps_the_initial_stock(self):
+        # Sans lui, un stock initial genereux serait indistinguable d'une
+        # correction ulterieure.
+        self._creer(quantite=40)
+
+        trace = SensitiveActivityLog.objects.get(action="products.product_created")
+        self.assertEqual(trace.metadata["stock_initial"], 40)
+
+    def test_a_refused_creation_leaves_no_trace(self):
+        self.client.post(reverse("products:create"), {"name": "", "price": "1.50"})
+
+        self.assertFalse(
+            SensitiveActivityLog.objects.filter(
+                action="products.product_created"
+            ).exists()
+        )

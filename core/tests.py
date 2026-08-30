@@ -1,3 +1,5 @@
+import uuid
+import json
 import re
 from decimal import Decimal
 from datetime import date, datetime, time, timedelta
@@ -15,13 +17,15 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from access.models import AccessLog
+from access.models import AccessDevice, AccessLog
 from coaching.kpis import build_coaching_kpis
 from coaching.models import Coach, CoachingFeedback, CoachingFollowUp, GroupCoachingProgram
 from compte.models import User
 from compte.models import UserGymRole
+from core import marketing_qr
+from core.log_filtering import doit_journaliser
 from core.forms import INTERNAL_ROLE_CHOICES, InternalEmployeeForm
-from members.models import MemberPreRegistration
+from members.models import GuestPass, Member, MemberPreRegistration, MemberPreRegistrationLink
 from organizations.models import LandingFaq
 from smartclub.access_control import (
     DASHBOARD_ROLES,
@@ -1208,7 +1212,9 @@ class RoleAccessMatrixTests(TestCase):
         )
         self.assertNotIn('href="/rapport/?section=journalier"', content)
         self.assertNotIn('href="/parametres/?tab=employees"', content)
-        self.assertNotIn('href="/access/access-dashboard/?section=scan"', content)
+        # La caisse enrole les visages et ouvre la porte : le controle d'acces
+        # lui est ouvert, contrairement aux rapports et aux reglages.
+        self.assertIn('href="/access/access-dashboard/?section=scan"', content)
 
     def test_reception_navigation_exposes_access_and_operational_tools_only(self):
         self.client.force_login(self.reception)
@@ -3313,3 +3319,470 @@ class CommercialRoleWiringTests(TestCase):
         # Cet ensemble remplace trois listes ecrites en dur : le comportement
         # existant doit etre strictement conserve.
         self.assertEqual(DASHBOARD_SALES_ROLES, {"owner", "manager", "cashier"})
+
+
+class GymPurgeTests(TestCase):
+    """
+    Remise a zero d'une salle : ce qui doit disparaitre, et surtout ce qui ne
+    doit pas.
+
+    Le geste est irreversible. Chaque garde-fou est verifie separement, parce
+    qu'un seul d'entre eux qui cede suffit a detruire le travail d'une annee.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Purge", slug="org-purge"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Royal Gym Purge",
+            slug="gym-purge", subdomain="gym-purge",
+        )
+        self.autre = Gym.objects.create(
+            organization=self.organization, name="Voisine",
+            slug="gym-voisine", subdomain="gym-voisine",
+        )
+
+        self.owner = User.objects.create_user(username="proprio", password="pass12345")
+        UserGymRole.objects.create(
+            user=self.owner, gym=self.gym, role="owner", is_active=True
+        )
+
+        self.plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Mensuel", price=30, duration_days=30
+        )
+        self.member = Member.objects.create(
+            gym=self.gym, first_name="Ada", last_name="Mbala",
+            phone="+243890000001",
+        )
+        self.compte_membre = User.objects.create_user(
+            username="ada-membre", password="pass12345"
+        )
+        self.member.user = self.compte_membre
+        self.member.save(update_fields=["user"])
+
+        MemberSubscription.objects.create(
+            gym=self.gym, member=self.member, plan=self.plan,
+            start_date=timezone.localdate(),
+            end_date=timezone.localdate() + timedelta(days=30),
+            is_active=True,
+        )
+        self.device = AccessDevice.objects.create(
+            gym=self.gym, name="Entree", host="10.0.0.9", password="secret"
+        )
+        AccessLog.objects.create(gym=self.gym, member=self.member, device=self.device)
+
+        # Une voisine, qui ne doit rien perdre.
+        self.membre_voisin = Member.objects.create(
+            gym=self.autre, first_name="Voisin", last_name="Intact",
+            phone="+243890000002",
+        )
+
+        self._connecter(self.owner)
+
+    def _connecter(self, utilisateur):
+        self.client.force_login(utilisateur)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _effacer(self, **extra):
+        charge = {"nom_salle": self.gym.name, "password": "pass12345"}
+        charge.update(extra)
+        return self.client.post(
+            reverse("core:gym_purge"),
+            data=json.dumps(charge),
+            content_type="application/json",
+        )
+
+    # --- Ce qui disparait ------------------------------------------------------
+
+    def test_the_members_are_gone(self):
+        self._effacer()
+
+        self.assertFalse(Member.objects.filter(gym=self.gym).exists())
+
+    def test_their_subscriptions_go_with_them(self):
+        self._effacer()
+
+        self.assertFalse(MemberSubscription.objects.filter(gym=self.gym).exists())
+
+    def test_the_access_journal_is_emptied(self):
+        self._effacer()
+
+        self.assertFalse(AccessLog.objects.filter(gym=self.gym).exists())
+
+    def test_the_member_login_account_is_removed_too(self):
+        # Le lien part du membre vers le compte : supprimer la fiche laissait
+        # l'identifiant de connexion derriere elle.
+        self._effacer()
+
+        self.assertFalse(User.objects.filter(id=self.compte_membre.id).exists())
+
+    # --- Ce qui survit ---------------------------------------------------------
+
+    def test_the_configuration_survives(self):
+        self._effacer()
+
+        self.assertTrue(SubscriptionPlan.objects.filter(gym=self.gym).exists())
+        self.assertTrue(AccessDevice.objects.filter(gym=self.gym).exists())
+
+    def test_the_owner_keeps_his_access(self):
+        # Sans cela, le proprietaire se verrouillerait dehors d'un seul clic.
+        self._effacer()
+
+        self.assertTrue(User.objects.filter(id=self.owner.id).exists())
+        self.assertTrue(
+            UserGymRole.objects.filter(user=self.owner, gym=self.gym).exists()
+        )
+
+    def test_the_neighbouring_gym_is_untouched(self):
+        # Le pire defaut possible : vider la mauvaise salle.
+        self._effacer()
+
+        self.assertTrue(Member.objects.filter(id=self.membre_voisin.id).exists())
+
+    # --- Les garde-fous ---------------------------------------------------------
+
+    def test_a_wrong_gym_name_changes_nothing(self):
+        reponse = self._effacer(nom_salle="Royal Gym")
+
+        self.assertEqual(reponse.status_code, 400)
+        self.assertTrue(Member.objects.filter(gym=self.gym).exists())
+
+    def test_a_wrong_password_changes_nothing(self):
+        reponse = self._effacer(password="pas-le-bon")
+
+        self.assertEqual(reponse.status_code, 400)
+        self.assertTrue(Member.objects.filter(gym=self.gym).exists())
+
+    def test_a_manager_cannot_do_it(self):
+        # Reserve au proprietaire : un gerant administre, il ne detruit pas.
+        gerant = User.objects.create_user(username="gerant-purge", password="pass12345")
+        UserGymRole.objects.create(
+            user=gerant, gym=self.gym, role="manager", is_active=True
+        )
+        self._connecter(gerant)
+
+        reponse = self._effacer()
+
+        self.assertEqual(reponse.status_code, 403)
+        self.assertTrue(Member.objects.filter(gym=self.gym).exists())
+
+    def test_a_receptionist_cannot_do_it(self):
+        accueil = User.objects.create_user(username="accueil-purge", password="pass12345")
+        UserGymRole.objects.create(
+            user=accueil, gym=self.gym, role="reception", is_active=True
+        )
+        self._connecter(accueil)
+
+        self.assertEqual(self._effacer().status_code, 403)
+
+    def test_a_get_request_is_refused(self):
+        reponse = self.client.get(reverse("core:gym_purge"))
+
+        self.assertEqual(reponse.status_code, 405)
+        self.assertTrue(Member.objects.filter(gym=self.gym).exists())
+
+    # --- L'inventaire prealable --------------------------------------------------
+
+    def test_the_preview_counts_what_would_be_lost(self):
+        reponse = self.client.get(reverse("core:gym_purge_preview"))
+
+        libelles = {l["libelle"]: l["nombre"] for l in reponse.json()["efface"]}
+        self.assertEqual(libelles["Membres"], 1)
+        self.assertEqual(libelles["Passages"], 1)
+
+    def test_the_preview_also_says_what_survives(self):
+        # Dire ce qui reste rassure autant que dire ce qui meurt.
+        reponse = self.client.get(reverse("core:gym_purge_preview"))
+
+        libelles = {l["libelle"] for l in reponse.json()["conserve"]}
+        self.assertIn("Formules d'abonnement", libelles)
+        self.assertIn("Lecteurs", libelles)
+
+    def test_the_preview_changes_nothing(self):
+        self.client.get(reverse("core:gym_purge_preview"))
+
+        self.assertTrue(Member.objects.filter(gym=self.gym).exists())
+
+    def test_the_preview_is_refused_to_a_manager(self):
+        gerant = User.objects.create_user(username="gerant-apercu", password="pass12345")
+        UserGymRole.objects.create(
+            user=gerant, gym=self.gym, role="manager", is_active=True
+        )
+        self._connecter(gerant)
+
+        self.assertEqual(
+            self.client.get(reverse("core:gym_purge_preview")).status_code, 403
+        )
+
+    # --- La sauvegarde ------------------------------------------------------------
+
+    def test_the_backup_carries_the_members(self):
+        reponse = self.client.post(reverse("core:gym_purge_export"))
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertIn("Ada", reponse.content.decode())
+
+    def test_the_backup_is_offered_as_a_file(self):
+        reponse = self.client.post(reverse("core:gym_purge_export"))
+
+        self.assertIn("attachment", reponse["Content-Disposition"])
+        self.assertIn("gym-purge", reponse["Content-Disposition"])
+
+    def test_the_backup_changes_nothing(self):
+        self.client.post(reverse("core:gym_purge_export"))
+
+        self.assertTrue(Member.objects.filter(gym=self.gym).exists())
+
+    def test_the_backup_is_refused_to_a_manager(self):
+        gerant = User.objects.create_user(username="gerant-export", password="pass12345")
+        UserGymRole.objects.create(
+            user=gerant, gym=self.gym, role="manager", is_active=True
+        )
+        self._connecter(gerant)
+
+        self.assertEqual(
+            self.client.post(reverse("core:gym_purge_export")).status_code, 403
+        )
+
+    # --- La trace -------------------------------------------------------------------
+
+    def test_the_erasure_leaves_a_named_trace(self):
+        # La trace vit sur l'organisation, pas sur la salle : elle survit a
+        # l'effacement, et nomme qui a decide.
+        self._effacer()
+
+        trace = SensitiveActivityLog.objects.filter(
+            organization=self.organization, action="gym.purged"
+        ).first()
+        self.assertIsNotNone(trace)
+        self.assertEqual(trace.actor, self.owner)
+
+    def test_the_trace_says_how_much_was_destroyed(self):
+        self._effacer()
+
+        trace = SensitiveActivityLog.objects.get(
+            organization=self.organization, action="gym.purged"
+        )
+        self.assertGreater(trace.metadata["total"], 0)
+
+    def test_a_refused_attempt_leaves_no_trace_of_erasure(self):
+        self._effacer(password="pas-le-bon")
+
+        self.assertFalse(
+            SensitiveActivityLog.objects.filter(action="gym.purged").exists()
+        )
+
+
+class MarketingQrTests(TestCase):
+    """
+    Les QR codes destines au mur de la salle.
+
+    Ils finissent parfois en tres grand format : le rendu doit rester vectoriel,
+    et le dessin doit reproduire la grille sans la trahir - un module deplace,
+    et le code ne se lit plus.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org QR", slug="org-qr"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym QR",
+            slug="gym-qr", subdomain="gym-qr",
+        )
+        module, _ = Module.objects.get_or_create(
+            code="MEMBERS", defaults={"name": "Members"}
+        )
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=module, defaults={"is_active": True}
+        )
+        # Une salle nait avec son lien : on le retrouve plutot que de le creer.
+        self.lien, _ = MemberPreRegistrationLink.objects.get_or_create(gym=self.gym)
+
+        self.gerant = User.objects.create_user(username="gerant-qr", password="pass12345")
+        UserGymRole.objects.create(
+            user=self.gerant, gym=self.gym, role="manager", is_active=True
+        )
+        self._connecter(self.gerant)
+
+    def _connecter(self, utilisateur):
+        self.client.force_login(utilisateur)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    # --- Le rendu vectoriel ----------------------------------------------------
+
+    def test_the_pdf_is_a_real_pdf(self):
+        contenu = marketing_qr.en_pdf("https://exemple.test/")
+
+        self.assertTrue(contenu.startswith(b"%PDF-"))
+        self.assertTrue(contenu.rstrip().endswith(b"%%EOF"))
+
+    def test_the_cross_reference_table_points_at_each_object(self):
+        # Un lecteur PDF refuse un fichier dont la table est decalee d'un octet.
+        contenu = marketing_qr.en_pdf("https://exemple.test/")
+
+        debut = int(re.search(rb"startxref\n(\d+)", contenu).group(1))
+        positions = re.findall(rb"(\d{10}) 00000 n ", contenu[debut:])
+        self.assertEqual(len(positions), 4)
+        for position in positions:
+            extrait = contenu[int(position):int(position) + 12]
+            self.assertRegex(extrait, rb"\d+ 0 obj")
+
+    def test_the_drawing_reproduces_the_grid(self):
+        # La verification qui compte : on relit les rectangles du PDF et on
+        # reconstruit la grille qu'ils dessinent.
+        adresse = "https://exemple.test/preinscription/abc/"
+        grille = marketing_qr.matrice(adresse)
+        contenu = marketing_qr.en_pdf(adresse)
+
+        total = len(grille)
+        module = marketing_qr.COTE_PAGE / total
+        relue = [[False] * total for _ in range(total)]
+        for x, y, _, _ in re.findall(rb"([\d.]+) ([\d.]+) ([\d.]+) ([\d.]+) re", contenu):
+            colonne = round(float(x) / module)
+            rang = round((marketing_qr.COTE_PAGE - float(y)) / module) - 1
+            relue[rang][colonne] = True
+
+        self.assertEqual(relue, [[bool(c) for c in ligne] for ligne in grille])
+
+    def test_the_quiet_zone_is_kept(self):
+        # Sans les quatre modules blancs de la norme, un scanner ne delimite
+        # pas le code sur un mur charge.
+        grille = marketing_qr.matrice("https://exemple.test/")
+
+        # Quatre en dur, pas la constante : un test qui lit le reglage qu'il
+        # surveille ne surveille rien. C'est la norme qui impose ce chiffre.
+        for rang in range(4):
+            self.assertFalse(any(grille[rang]), f"ligne {rang} non vide")
+            self.assertFalse(any(ligne[rang] for ligne in grille),
+                             f"colonne {rang} non vide")
+            self.assertFalse(any(grille[-1 - rang]), f"ligne -{rang + 1} non vide")
+
+    def test_two_different_links_give_two_different_codes(self):
+        premier = marketing_qr.en_pdf("https://exemple.test/a/")
+        second = marketing_qr.en_pdf("https://exemple.test/b/")
+
+        self.assertNotEqual(premier, second)
+
+    # --- Le telechargement -------------------------------------------------------
+
+    def test_the_pre_registration_code_is_downloadable(self):
+        reponse = self.client.get(
+            reverse("core:marketing_qr_download", args=["preinscription"])
+        )
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertEqual(reponse["Content-Type"], "application/pdf")
+        self.assertIn("attachment", reponse["Content-Disposition"])
+
+    def test_the_site_code_is_downloadable(self):
+        reponse = self.client.get(
+            reverse("core:marketing_qr_download", args=["site"])
+        )
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertTrue(reponse.content.startswith(b"%PDF-"))
+
+    def test_png_is_offered_too(self):
+        reponse = self.client.get(
+            reverse("core:marketing_qr_download", args=["site"]) + "?format=png"
+        )
+
+        self.assertEqual(reponse["Content-Type"], "image/png")
+
+    def test_the_pre_registration_code_carries_the_current_token(self):
+        reponse = self.client.get(
+            reverse("core:marketing_qr_download", args=["preinscription"])
+        )
+
+        # Le contenu encode n'est pas lisible dans le PDF : on verifie que
+        # regenerer le lien change bien le dessin.
+        avant = reponse.content
+        self.lien.token = uuid.uuid4()
+        self.lien.save(update_fields=["token"])
+
+        apres = self.client.get(
+            reverse("core:marketing_qr_download", args=["preinscription"])
+        ).content
+
+        self.assertNotEqual(avant, apres)
+
+    def test_an_unknown_support_is_refused(self):
+        reponse = self.client.get(
+            reverse("core:marketing_qr_download", args=["autre"])
+        )
+
+        self.assertEqual(reponse.status_code, 404)
+
+    # --- Qui peut les obtenir -------------------------------------------------------
+
+    def test_a_commercial_can_download_them(self):
+        # C'est du marketing : le commercial est concerne au premier chef.
+        commercial = User.objects.create_user(
+            username="commercial-qr", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=commercial, gym=self.gym, role="commercial", is_active=True
+        )
+        self._connecter(commercial)
+
+        reponse = self.client.get(
+            reverse("core:marketing_qr_download", args=["site"])
+        )
+
+        self.assertEqual(reponse.status_code, 200)
+
+    def test_a_cashier_cannot(self):
+        caissiere = User.objects.create_user(
+            username="caisse-qr", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=caissiere, gym=self.gym, role="cashier", is_active=True
+        )
+        self._connecter(caissiere)
+
+        reponse = self.client.get(
+            reverse("core:marketing_qr_download", args=["site"])
+        )
+
+        self.assertEqual(reponse.status_code, 403)
+
+
+class ServerLogFilterTests(SimpleTestCase):
+    """
+    Les sondes de sante ne doivent pas remplir le journal.
+
+    Render interroge /health/ toutes les quatre secondes : vingt mille lignes
+    par jour qui ne disent rien, et qui noient celles qui disent quelque chose.
+    """
+
+    def test_a_health_probe_is_not_written(self):
+        self.assertFalse(doit_journaliser("/health/"))
+
+    def test_the_detailed_probe_is_quiet_too(self):
+        self.assertFalse(doit_journaliser("/health/details/"))
+
+    def test_a_real_request_is_still_written(self):
+        # Faire taire la sonde ne doit pas rendre le journal aveugle.
+        self.assertTrue(doit_journaliser("/members/"))
+        self.assertTrue(doit_journaliser("/access/devices/webhook/abc/"))
+
+    def test_an_empty_path_is_written(self):
+        # Dans le doute, on ecrit : une ligne de trop se lit, une ligne
+        # manquante ne se devine pas.
+        self.assertTrue(doit_journaliser(""))
+        self.assertTrue(doit_journaliser(None))
+
+    def test_the_server_configuration_uses_this_rule(self):
+        # Le fichier de configuration ne s'importe pas sous Windows : on
+        # verifie au moins qu'il s'appuie sur la regle testee ici.
+        configuration = Path(settings.BASE_DIR, "gunicorn_conf.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("doit_journaliser", configuration)
+        self.assertIn("logger_class", configuration)

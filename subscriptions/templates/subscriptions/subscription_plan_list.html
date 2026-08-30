@@ -708,6 +708,27 @@ body.subscription-plan-screen #addFormuleModal .modal-dialog {
                             {{ form.price|default:"" }}
                         </div>
                     </div>
+
+                    <div class="border rounded-3 p-3 mb-3 bg-light">
+                        <div class="fw-semibold mb-1 d-flex align-items-center gap-2">
+                            <span class="material-icons" style="font-size:18px;">group_add</span>
+                            Invitations
+                        </div>
+                        <p class="text-muted small mb-3">
+                            Laissez à zéro si cette formule ne permet pas d'inviter.
+                            Le membre remet un QR code à son invité depuis son espace.
+                        </p>
+                        <div class="row">
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label small">Personnes invitables par mois</label>
+                                {{ form.guest_invites_per_month|default:"" }}
+                            </div>
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label small">Séances offertes à chaque invité</label>
+                                {{ form.guest_sessions_per_invite|default:"" }}
+                            </div>
+                        </div>
+                    </div>
                     <div class="mb-3">
                         <div class="form-check mb-2">
                             {{ form.is_active|default:"" }}
@@ -943,6 +964,8 @@ document.addEventListener('DOMContentLoaded', function () {
         id: document.getElementById('formuleId'),
         name: document.getElementById('id_name'),
         duration: document.getElementById('id_duration_days'),
+        guestInvites: document.getElementById('id_guest_invites_per_month'),
+        guestSessions: document.getElementById('id_guest_sessions_per_invite'),
         price: document.getElementById('id_price'),
         description: document.getElementById('id_description'),
         coachingMode: document.getElementById('id_coaching_mode'),
@@ -1087,6 +1110,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (fields.id) fields.id.value = data.id || '';
                 if (fields.name) fields.name.value = data.name || '';
                 if (fields.duration) fields.duration.value = data.duration_days || '';
+                if (fields.guestInvites) fields.guestInvites.value = data.guest_invites_per_month ?? 0;
+                if (fields.guestSessions) fields.guestSessions.value = data.guest_sessions_per_invite ?? 1;
                 if (fields.price) fields.price.value = data.price || '';
                 if (fields.description) fields.description.value = data.description || '';
                 if (fields.coachingMode) fields.coachingMode.value = data.coaching_mode || 'none';

@@ -120,6 +120,22 @@ class SubscriptionPlan(models.Model):
         choices=COACHING_LEVEL_CHOICES,
         default=COACHING_LEVEL_STANDARD,
     )
+    # Le droit d'inviter appartient a la formule : c'est elle qui est vendue.
+    # A zero, la formule n'offre rien et ne dit rien.
+    guest_invites_per_month = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Invitations par mois d'abonnement",
+        help_text=(
+            "Nombre de personnes qu'un membre peut inviter par tranche de "
+            "30 jours d'abonnement. Zero desactive les invitations."
+        ),
+    )
+    guest_sessions_per_invite = models.PositiveIntegerField(
+        default=1,
+        verbose_name="Seances offertes a chaque invite",
+        help_text="Nombre de passages accordes a une personne invitee.",
+    )
+
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     class Meta:

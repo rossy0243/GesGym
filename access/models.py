@@ -204,10 +204,15 @@ class AccessLog(models.Model):
         db_index=True
     )
 
+    # Une ouverture commandee depuis le tableau de bord n'a pas de membre :
+    # quelqu'un a ouvert la porte, sans que personne ne se soit presente. La
+    # ligne doit exister quand meme, sinon le geste reste invisible.
     member = models.ForeignKey(
         Member,
         on_delete=models.CASCADE,
-        related_name="access_logs"
+        related_name="access_logs",
+        null=True,
+        blank=True,
     )
 
     check_in_time = models.DateTimeField(auto_now_add=True)
@@ -243,6 +248,17 @@ class AccessLog(models.Model):
     # Numero de l'evenement dans la memoire du lecteur. Sert au rattrapage
     # apres une coupure : il permet de relire le journal du materiel sans
     # recreer deux fois le meme passage.
+    # Un passage d'invite n'a pas de membre, comme une ouverture manuelle. Ce
+    # lien les distingue : les deux lignes ne racontent pas la meme chose.
+    guest_pass = models.ForeignKey(
+        "members.GuestPass",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="access_logs",
+        verbose_name="Invitation utilisee",
+    )
+
     device_event_id = models.CharField(
         max_length=64,
         blank=True,

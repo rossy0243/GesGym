@@ -762,3 +762,124 @@ class MemberPreRegistration(models.Model):
         return f"{self.full_name} - {self.gym}"
 
 
+class GuestPass(models.Model):
+    """
+    Carnet d'invitation remis par un membre a une personne exterieure.
+
+    Ce n'est pas un billet mais un carnet : il porte un invite nomme et un
+    nombre de seances qui s'epuise. L'invite ne devient jamais membre - deux
+    champs suffisent a le designer, et rien de plus n'est conserve.
+
+    Le carnet vit trente jours pleins depuis son emission, ou que l'on soit
+    dans le mois : adosse au mois calendaire, un carnet emis le 29 n'aurait
+    dure que deux jours.
+    """
+
+    DUREE_JOURS = 30
+
+    gym = models.ForeignKey(
+        Gym,
+        on_delete=models.CASCADE,
+        related_name="guest_passes",
+        db_index=True,
+    )
+    host = models.ForeignKey(
+        "members.Member",
+        on_delete=models.CASCADE,
+        related_name="guest_passes",
+        verbose_name="Membre qui invite",
+    )
+
+    guest_name = models.CharField(max_length=120, verbose_name="Nom de l'invite")
+    guest_phone = models.CharField(
+        max_length=30,
+        db_index=True,
+        verbose_name="Telephone de l'invite",
+        help_text="Sert a reperer une personne invitee trop souvent.",
+    )
+
+    code = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+
+    # Copiees a l'emission plutot que relues sur la formule : changer le
+    # reglage de la salle ne doit pas vider des carnets deja remis.
+    sessions_allowed = models.PositiveIntegerField(default=1)
+    sessions_used = models.PositiveIntegerField(default=0)
+
+    # Une reattribution ne repousse pas cette date : elle appartient au carnet,
+    # pas a l'invite. Sinon un membre la reculerait indefiniment.
+    expires_at = models.DateTimeField()
+
+    reassigned_count = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Reattributions",
+        help_text="Nombre de fois que le carnet a change de destinataire.",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="guest_passes_created",
+    )
+
+    class Meta:
+        verbose_name = "Invitation"
+        verbose_name_plural = "Invitations"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["gym", "-created_at"]),
+            models.Index(fields=["host", "-created_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.guest_name} (invite par {self.host})"
+
+    def save(self, *args, **kwargs):
+        if not self.expires_at:
+            self.expires_at = timezone.now() + timedelta(days=self.DUREE_JOURS)
+        super().save(*args, **kwargs)
+
+    # --- Etat -----------------------------------------------------------------
+
+    @property
+    def sessions_left(self):
+        return max(self.sessions_allowed - self.sessions_used, 0)
+
+    @property
+    def is_expired(self):
+        return timezone.now() >= self.expires_at
+
+    @property
+    def state(self):
+        """
+        Trois etats, et pas un de plus : actif, epuise, caduc.
+
+        Un carnet epuise l'emporte sur un carnet perime : ce qui compte pour le
+        membre, c'est que son invite est venu, pas que la date soit passee
+        depuis.
+        """
+        if self.sessions_left == 0:
+            return "epuise"
+        if self.is_expired:
+            return "caduc"
+        return "actif"
+
+    @property
+    def state_label(self):
+        return {
+            "actif": "Actif",
+            "epuise": "Epuise",
+            "caduc": "Caduc",
+        }[self.state]
+
+    @property
+    def can_be_reassigned(self):
+        """
+        Un carnet se reattribue tant qu'il n'a servi a personne.
+
+        Une seance consommee a profite a quelqu'un : offrir le reliquat a un
+        second invite contournerait la regle d'une personne par mois.
+        """
+        return self.sessions_used == 0 and not self.is_expired

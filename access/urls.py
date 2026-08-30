@@ -6,6 +6,7 @@ urlpatterns = [
         path("access/<uuid:qr_code>/", views.member_access, name="member_access"),
         path("access-dashboard/", views.acces_dashboard, name="acces_dashboard"),
         path("access/realtime/", views.realtime_access),
+        path("invitations/", views.guest_passes, name="guest_passes"),
         path("access/manual/entry/<int:member_id>/", views.manual_access_entry, name="manual_access_entry"),
 
         # Lecteurs physiques

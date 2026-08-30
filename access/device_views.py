@@ -18,12 +18,14 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
 from core.audit import log_sensitive_action
+from members import invitations
 from members.models import Member
-from smartclub.access_control import ACCESS_DEVICE_ROLES
+from smartclub.access_control import ACCESS_DEVICE_ROLES, ACCESS_DEVICE_USE_ROLES
 from smartclub.decorators import module_required, role_required
 
 from . import door, enrollment, hikvision
 from .models import AccessDevice, AccessLog
+from .views import enregistrer_passage_invite
 from .views import _record_access, _today_stats
 
 
@@ -83,7 +85,7 @@ def _serialize_device(device):
 
 
 @login_required
-@role_required(ACCESS_DEVICE_ROLES)
+@role_required(ACCESS_DEVICE_USE_ROLES)
 @module_required("ACCESS")
 def device_list(request):
     """Lecteurs deja enregistres pour la salle courante."""
@@ -218,7 +220,7 @@ def device_create(request):
 
 
 @login_required
-@role_required(ACCESS_DEVICE_ROLES)
+@role_required(ACCESS_DEVICE_USE_ROLES)
 @require_POST
 @module_required("ACCESS")
 def device_test(request, device_id):
@@ -229,7 +231,7 @@ def device_test(request, device_id):
 
 
 @login_required
-@role_required(ACCESS_DEVICE_ROLES)
+@role_required(ACCESS_DEVICE_USE_ROLES)
 @require_POST
 @module_required("ACCESS")
 def device_open_door(request, device_id):
@@ -257,6 +259,21 @@ def device_open_door(request, device_id):
         metadata={"device_id": device.id, "host": device.host, "porte": device.door_number},
         gym=request.gym,
     )
+
+    # La trace ci-dessus vit dans le journal d'activite de l'organisation, que
+    # l'equipe de salle ne consulte pas. Une porte ouverte appartient au
+    # journal des passages, a cote des entrees qu'elle remplace : sans cela,
+    # ouvrir a un ami ne laisse aucune trace visible.
+    AccessLog.objects.create(
+        gym=request.gym,
+        member=None,
+        device=device,
+        device_used=f"{device.name} (ouverture manuelle)",
+        access_granted=True,
+        scanned_by=request.user,
+        denial_reason="Ouverture commandee depuis l'application",
+    )
+
     return JsonResponse({"ok": True, "message": "Commande d'ouverture envoyee."})
 
 
@@ -293,12 +310,20 @@ def device_update(request, device_id):
     if mot_de_passe:
         device.password = mot_de_passe
 
-    identifiant_tunnel = payload.get("tunnel_client_id")
-    if identifiant_tunnel is not None:
-        device.tunnel_client_id = identifiant_tunnel.strip()
-    secret_tunnel = payload.get("tunnel_client_secret") or ""
-    if secret_tunnel:
-        device.tunnel_client_secret = secret_tunnel
+    # Les identifiants du tunnel ne quittent jamais le serveur : le formulaire
+    # ne peut donc pas les reproposer. Un champ vide signifie "ne change pas",
+    # sinon la moindre modification d'adresse les effacerait en silence.
+    # Decocher la case du tunnel reste le geste explicite pour les retirer.
+    if not device.use_https:
+        device.tunnel_client_id = ""
+        device.tunnel_client_secret = ""
+    else:
+        identifiant_tunnel = (payload.get("tunnel_client_id") or "").strip()
+        if identifiant_tunnel:
+            device.tunnel_client_id = identifiant_tunnel
+        secret_tunnel = payload.get("tunnel_client_secret") or ""
+        if secret_tunnel:
+            device.tunnel_client_secret = secret_tunnel
 
     try:
         device.full_clean(exclude=["webhook_token"])
@@ -414,16 +439,28 @@ def device_webhook(request, token):
     )
     credential = parsed["credential"]
 
-    # Trace integrale : indispensable pour identifier ce que le materiel
-    # transmet reellement lors des premiers essais sur site.
-    logger.info(
-        "Evenement lecteur '%s' | content-type=%s | identifiant=%r | mode=%r | brut=%s",
-        device.name,
-        request.META.get("CONTENT_TYPE", ""),
-        credential,
-        parsed["verify_mode"],
-        parsed["raw"],
-    )
+    # Le lecteur bat toutes les trente secondes : journaliser la charge
+    # complete a chaque fois produisait cinq megaoctets par jour et par
+    # lecteur, ou les vrais passages devenaient introuvables. La trace
+    # integrale est donc reservee au cas ou elle sert : le materiel a parle et
+    # nous n'avons rien reconnu.
+    battement = str(
+        (parsed.get("payload") or {}).get("eventType") or ""
+    ).lower() == "heartbeat"
+
+    if credential:
+        logger.info(
+            "Evenement lecteur '%s' | identifiant=%r | mode=%r",
+            device.name, credential, parsed["verify_mode"],
+        )
+    elif not battement:
+        logger.info(
+            "Evenement lecteur '%s' non reconnu | content-type=%s | mode=%r | brut=%s",
+            device.name,
+            request.META.get("CONTENT_TYPE", ""),
+            parsed["verify_mode"],
+            parsed["raw"],
+        )
 
     # Seule la date de contact est rafraichie. ``last_error`` decrit le dernier
     # appel **sortant** : l'effacer ici remettait le voyant "Pilotable" au vert
@@ -436,7 +473,24 @@ def device_webhook(request, token):
         return JsonResponse({"access": False, "reason": EMPTY_CREDENTIAL_REASON})
 
     member, nature = _resolve_member(device.gym, credential)
+
+    # Un identifiant que les membres ne reconnaissent pas peut etre un carnet
+    # d'invitation. Le lecteur ne fait pas la difference ; l'application si.
     if member is None:
+        carnet = invitations.retrouver(device.gym, credential)
+        if carnet is not None:
+            accorde, motif, log = enregistrer_passage_invite(
+                device.gym, carnet, device=device
+            )
+            return JsonResponse({
+                "access": accorde,
+                "member": f"{carnet.guest_name} (invite)",
+                "reason": motif,
+                "log_id": log.id,
+                "stats": _today_stats(device.gym),
+                "door": {"attempted": False, "opened": False, "message": ""},
+            })
+
         return JsonResponse({"access": False, "reason": UNKNOWN_CREDENTIAL_REASON})
 
     # Le lecteur reemet la meme notification tant qu'il ne l'estime pas

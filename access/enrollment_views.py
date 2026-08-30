@@ -26,7 +26,7 @@ from django.views.decorators.http import require_POST
 
 from core.audit import log_sensitive_action
 from members.models import Member
-from smartclub.access_control import ACCESS_DEVICE_ROLES, has_role
+from smartclub.access_control import ACCESS_DEVICE_ROLES, ACCESS_DEVICE_USE_ROLES, has_role
 from smartclub.decorators import module_required, role_required
 
 from . import enrollment
@@ -51,7 +51,7 @@ def _lecteur_de(request, device_id=None):
 
 @login_required
 @module_required("ACCESS")
-@role_required(ACCESS_DEVICE_ROLES)
+@role_required(ACCESS_DEVICE_USE_ROLES)
 def face_enrollment(request, member_id):
     """Ecran d'enrolement : consignes, capture, validation."""
     member = get_object_or_404(
@@ -81,7 +81,7 @@ def face_enrollment(request, member_id):
 
 @login_required
 @module_required("ACCESS")
-@role_required(ACCESS_DEVICE_ROLES)
+@role_required(ACCESS_DEVICE_USE_ROLES)
 @require_POST
 def face_capture(request, member_id):
     """
@@ -118,7 +118,7 @@ def face_capture(request, member_id):
 
 @login_required
 @module_required("ACCESS")
-@role_required(ACCESS_DEVICE_ROLES)
+@role_required(ACCESS_DEVICE_USE_ROLES)
 @require_POST
 def face_confirm(request, member_id):
     """Range la photo dans la fiche membre et inscrit le membre sur le lecteur."""
@@ -181,7 +181,7 @@ def face_confirm(request, member_id):
 
 @login_required
 @module_required("ACCESS")
-@role_required(ACCESS_DEVICE_ROLES)
+@role_required(ACCESS_DEVICE_USE_ROLES)
 @require_POST
 def face_remove(request, member_id):
     """Retire le membre des lecteurs de la salle."""

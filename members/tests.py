@@ -3,6 +3,7 @@ from datetime import timedelta
 from io import BytesIO, StringIO
 from unittest.mock import PropertyMock, patch
 
+from django.core.exceptions import ValidationError
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
@@ -11,11 +12,14 @@ from django.urls import reverse
 from django.utils import timezone
 from PIL import Image
 
+from access import door
 from access.models import AccessLog
 from coaching.models import Coach, CoachAssignment, CoachingFeedback, GroupCoachingProgram
 from compte.models import User, UserGymRole
+from members import invitations
 from members.forms import MemberCreationForm, MemberPreRegistrationForm
 from members.models import (
+    GuestPass,
     Member,
     MemberGoal,
     MemberPreRegistration,
@@ -23,7 +27,7 @@ from members.models import (
     MemberWeightMeasurement,
 )
 from notifications.models import Notification
-from organizations.models import Gym, Organization, SensitiveActivityLog
+from organizations.models import Gym, GymModule, Module, Organization, SensitiveActivityLog
 from subscriptions.models import MemberSubscription, SubscriptionOffer, SubscriptionPlan, SubscriptionRequest
 
 
@@ -3002,3 +3006,710 @@ class GymContactSettingsTests(TestCase):
 
         self.assertContains(response, "Ma salle")
         self.assertContains(response, "Coordonnees de Gym Coordonnees")
+
+
+class GuestPassQuotaTests(TestCase):
+    """
+    Le droit d'inviter : d'ou il vient, quand il s'epuise, quand il repart.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Invite", slug="org-invite"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Invite",
+            slug="gym-invite", subdomain="gym-invite",
+        )
+        self.plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Premium", price=50, duration_days=30,
+            guest_invites_per_month=1, guest_sessions_per_invite=3,
+        )
+        self.simple = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Standard", price=30, duration_days=30,
+        )
+        self.member = Member.objects.create(
+            gym=self.gym, first_name="Ada", last_name="Mbala",
+            phone="+243900001111",
+        )
+
+    def _abonner(self, plan=None, debut=None):
+        debut = debut or timezone.localdate()
+        return MemberSubscription.objects.create(
+            gym=self.gym, member=self.member, plan=plan or self.plan,
+            start_date=debut, end_date=debut + timedelta(days=90),
+            is_active=True,
+        )
+
+    # --- D'ou vient le droit ---------------------------------------------------
+
+    def test_a_plan_without_invitations_grants_none(self):
+        self._abonner(plan=self.simple)
+
+        self.assertEqual(invitations.quota(self.member)["accorde"], 0)
+
+    def test_a_member_without_subscription_grants_none(self):
+        # Sans abonnement il n'y a pas de formule, donc pas de droit.
+        self.assertEqual(invitations.quota(self.member)["accorde"], 0)
+
+    def test_the_plan_decides_how_many_sessions(self):
+        self._abonner()
+
+        self.assertEqual(invitations.quota(self.member)["seances"], 3)
+
+    # --- Le quota s'epuise et repart -------------------------------------------
+
+    def test_issuing_consumes_the_quota(self):
+        self._abonner()
+
+        invitations.emettre(self.member, "Paul Kabeya", "0820000001")
+
+        self.assertEqual(invitations.quota(self.member)["restant"], 0)
+
+    def test_a_second_invitation_is_refused_in_the_same_month(self):
+        self._abonner()
+        invitations.emettre(self.member, "Paul Kabeya", "0820000001")
+
+        with self.assertRaises(ValidationError) as capture:
+            invitations.emettre(self.member, "Jean Musa", "0820000002")
+
+        self.assertIn("toutes vos invitations", str(capture.exception))
+
+    def test_the_quota_returns_the_next_subscription_month(self):
+        # Un abonnement de trois mois donne trois invitations, une par tranche.
+        self._abonner(debut=timezone.localdate() - timedelta(days=35))
+        carnet = invitations.emettre(self.member, "Paul Kabeya", "0820000001")
+        GuestPass.objects.filter(pk=carnet.pk).update(
+            created_at=timezone.now() - timedelta(days=34)
+        )
+
+        self.assertEqual(invitations.quota(self.member)["restant"], 1)
+
+    def test_an_expired_pass_does_not_give_the_quota_back(self):
+        # Le mois a passe avec lui : le recours est la reattribution, pas la
+        # restitution.
+        self._abonner()
+        carnet = invitations.emettre(self.member, "Paul Kabeya", "0820000001")
+        GuestPass.objects.filter(pk=carnet.pk).update(
+            expires_at=timezone.now() - timedelta(days=1)
+        )
+
+        self.assertEqual(invitations.quota(self.member)["restant"], 0)
+
+    # --- Le plafond par personne ------------------------------------------------
+
+    def test_the_same_person_cannot_be_invited_for_ever(self):
+        # Deux invitations par mois a la meme personne vaudraient un demi
+        # abonnement gratuit a vie.
+        self._abonner()
+        for numero in range(invitations.PLAFOND_PAR_PERSONNE):
+            carnet = invitations.emettre(self.member, "Paul Kabeya", "0820000001")
+            GuestPass.objects.filter(pk=carnet.pk).update(
+                created_at=timezone.now() - timedelta(days=31 * (numero + 1))
+            )
+
+        with self.assertRaises(ValidationError) as capture:
+            invitations.emettre(self.member, "Paul Kabeya", "0820000001")
+
+        self.assertIn("abonnement", str(capture.exception))
+
+    def test_the_cap_ignores_how_the_number_is_written(self):
+        # « 0820000001 » et « 082 000 00 01 » sont la meme personne.
+        self._abonner()
+        carnet = invitations.emettre(self.member, "Paul Kabeya", "0820000001")
+        GuestPass.objects.filter(pk=carnet.pk).update(
+            created_at=timezone.now() - timedelta(days=31)
+        )
+
+        self.assertEqual(
+            invitations.passages_de(self.gym, "082 000 00 01"), 1
+        )
+
+    # --- Ce qui est refuse a l'emission -------------------------------------------
+
+    def test_a_nameless_guest_is_refused(self):
+        self._abonner()
+
+        with self.assertRaises(ValidationError):
+            invitations.emettre(self.member, "", "0820000001")
+
+    def test_a_guest_without_a_number_is_refused(self):
+        self._abonner()
+
+        with self.assertRaises(ValidationError):
+            invitations.emettre(self.member, "Paul Kabeya", "")
+
+
+class GuestPassLifeTests(TestCase):
+    """Les trois etats d'un carnet, et la reattribution."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Vie", slug="org-vie"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Vie",
+            slug="gym-vie", subdomain="gym-vie",
+        )
+        self.plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Premium", price=50, duration_days=30,
+            guest_invites_per_month=1, guest_sessions_per_invite=2,
+        )
+        self.member = Member.objects.create(
+            gym=self.gym, first_name="Ada", last_name="Mbala",
+            phone="+243900002222",
+        )
+        MemberSubscription.objects.create(
+            gym=self.gym, member=self.member, plan=self.plan,
+            start_date=timezone.localdate(),
+            end_date=timezone.localdate() + timedelta(days=30),
+            is_active=True,
+        )
+        self.carnet = invitations.emettre(self.member, "Paul Kabeya", "0820000001")
+
+    # --- Les etats ---------------------------------------------------------------
+
+    def test_a_fresh_pass_is_active(self):
+        self.assertEqual(self.carnet.state, "actif")
+
+    def test_a_pass_lasts_thirty_full_days(self):
+        # Adosse au mois, un carnet emis le 29 n'aurait dure que deux jours.
+        ecart = self.carnet.expires_at - self.carnet.created_at
+        self.assertEqual(ecart.days, 30)
+
+    def test_a_used_up_pass_is_exhausted(self):
+        invitations.consommer(self.carnet)
+        invitations.consommer(self.carnet)
+        self.carnet.refresh_from_db()
+
+        self.assertEqual(self.carnet.state, "epuise")
+
+    def test_an_untouched_pass_past_its_date_is_lapsed(self):
+        GuestPass.objects.filter(pk=self.carnet.pk).update(
+            expires_at=timezone.now() - timedelta(days=1)
+        )
+        self.carnet.refresh_from_db()
+
+        self.assertEqual(self.carnet.state, "caduc")
+
+    def test_being_used_up_wins_over_being_late(self):
+        # Ce qui compte pour le membre, c'est que son invite est venu.
+        invitations.consommer(self.carnet)
+        invitations.consommer(self.carnet)
+        GuestPass.objects.filter(pk=self.carnet.pk).update(
+            expires_at=timezone.now() - timedelta(days=1)
+        )
+        self.carnet.refresh_from_db()
+
+        self.assertEqual(self.carnet.state, "epuise")
+
+    # --- La reattribution ----------------------------------------------------------
+
+    def test_an_untouched_pass_can_change_hands(self):
+        invitations.reattribuer(self.carnet, "Jean Musa", "0820000002")
+        self.carnet.refresh_from_db()
+
+        self.assertEqual(self.carnet.guest_name, "Jean Musa")
+        self.assertEqual(self.carnet.reassigned_count, 1)
+
+    def test_reassigning_does_not_push_the_deadline(self):
+        # Sinon un membre la reculerait indefiniment en changeant de nom la
+        # veille de chaque echeance.
+        avant = self.carnet.expires_at
+
+        invitations.reattribuer(self.carnet, "Jean Musa", "0820000002")
+        self.carnet.refresh_from_db()
+
+        self.assertEqual(self.carnet.expires_at, avant)
+
+    def test_reassigning_does_not_consume_a_new_invitation(self):
+        invitations.reattribuer(self.carnet, "Jean Musa", "0820000002")
+
+        self.assertEqual(invitations.quota(self.member)["utilise"], 1)
+
+    def test_a_used_pass_cannot_change_hands(self):
+        # Une seance consommee a profite a quelqu'un.
+        invitations.consommer(self.carnet)
+        self.carnet.refresh_from_db()
+
+        with self.assertRaises(ValidationError) as capture:
+            invitations.reattribuer(self.carnet, "Jean Musa", "0820000002")
+
+        self.assertIn("deja servi", str(capture.exception))
+
+    def test_a_lapsed_pass_cannot_change_hands(self):
+        GuestPass.objects.filter(pk=self.carnet.pk).update(
+            expires_at=timezone.now() - timedelta(days=1)
+        )
+        self.carnet.refresh_from_db()
+
+        with self.assertRaises(ValidationError):
+            invitations.reattribuer(self.carnet, "Jean Musa", "0820000002")
+
+    def test_the_cap_is_rechecked_on_the_new_number(self):
+        # Sans cela, la reattribution serait la porte de sortie du plafond.
+        for numero in range(invitations.PLAFOND_PAR_PERSONNE):
+            autre = GuestPass.objects.create(
+                gym=self.gym, host=self.member, guest_name="Jean Musa",
+                guest_phone="0820000002", sessions_allowed=1,
+                expires_at=timezone.now() + timedelta(days=30),
+            )
+            GuestPass.objects.filter(pk=autre.pk).update(
+                created_at=timezone.now() - timedelta(days=31 * (numero + 1))
+            )
+
+        with self.assertRaises(ValidationError) as capture:
+            invitations.reattribuer(self.carnet, "Jean Musa", "0820000002")
+
+        self.assertIn("deja ete invitee", str(capture.exception))
+
+
+class GuestEntryTests(TestCase):
+    """L'invite se presente : ce qui le laisse entrer, ce qui l'arrete."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Entree", slug="org-entree"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Entree",
+            slug="gym-entree", subdomain="gym-entree",
+        )
+        module, _ = Module.objects.get_or_create(
+            code="ACCESS", defaults={"name": "Access"}
+        )
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=module, defaults={"is_active": True}
+        )
+        self.plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Premium", price=50, duration_days=30,
+            guest_invites_per_month=1, guest_sessions_per_invite=2,
+        )
+        self.member = Member.objects.create(
+            gym=self.gym, first_name="Ada", last_name="Mbala",
+            phone="+243900003333",
+        )
+        self.abonnement = MemberSubscription.objects.create(
+            gym=self.gym, member=self.member, plan=self.plan,
+            start_date=timezone.localdate(),
+            end_date=timezone.localdate() + timedelta(days=30),
+            is_active=True,
+        )
+        self.carnet = invitations.emettre(self.member, "Paul Kabeya", "0820000001")
+
+        self.agent = User.objects.create_user(username="accueil-invite", password="pass12345")
+        UserGymRole.objects.create(
+            user=self.agent, gym=self.gym, role="reception", is_active=True
+        )
+        self.client.force_login(self.agent)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _presenter(self, code=None):
+        with patch.object(door, "open_doors", return_value=[]):
+            return self.client.post(
+                reverse("access:member_access", args=[code or self.carnet.code])
+            )
+
+    # --- Ce qui laisse entrer ------------------------------------------------------
+
+    def test_a_valid_pass_opens_the_door(self):
+        reponse = self._presenter()
+
+        self.assertTrue(reponse.json()["access"])
+
+    def test_the_entry_consumes_one_session(self):
+        self._presenter()
+        self.carnet.refresh_from_db()
+
+        self.assertEqual(self.carnet.sessions_used, 1)
+
+    def test_the_journal_names_the_guest_and_the_host(self):
+        self._presenter()
+
+        log = AccessLog.objects.get(gym=self.gym)
+        self.assertIsNone(log.member)
+        self.assertEqual(log.guest_pass_id, self.carnet.id)
+        self.assertIn("Paul Kabeya", log.device_used)
+        self.assertIn("Ada", log.device_used)
+
+    def test_a_guest_does_not_inflate_member_attendance(self):
+        # Personne ne s'est abonne : la frequentation ne doit pas bouger.
+        self._presenter()
+
+        stats = self.client.get(reverse("access:acces_dashboard")).context
+        self.assertEqual(stats["today_entries"], 0)
+
+    def test_the_second_session_still_works(self):
+        self._presenter()
+
+        reponse = self._presenter()
+
+        self.assertTrue(reponse.json()["access"])
+
+    # --- Ce qui l'arrete -------------------------------------------------------------
+
+    def test_an_exhausted_pass_is_refused(self):
+        self._presenter()
+        self._presenter()
+
+        reponse = self._presenter()
+
+        self.assertFalse(reponse.json()["access"])
+        self.assertIn("epuise", reponse.json()["reason"])
+
+    def test_a_lapsed_pass_is_refused(self):
+        GuestPass.objects.filter(pk=self.carnet.pk).update(
+            expires_at=timezone.now() - timedelta(days=1)
+        )
+
+        reponse = self._presenter()
+
+        self.assertFalse(reponse.json()["access"])
+        self.assertIn("caduque", reponse.json()["reason"])
+
+    def test_the_host_losing_his_subscription_closes_the_pass(self):
+        # Un membre partant ne doit pas laisser derriere lui des invitations
+        # encore vivantes.
+        MemberSubscription.objects.filter(pk=self.abonnement.pk).update(
+            is_active=False, end_date=timezone.localdate() - timedelta(days=1)
+        )
+
+        reponse = self._presenter()
+
+        self.assertFalse(reponse.json()["access"])
+        self.assertIn("expire", reponse.json()["reason"])
+
+    def test_a_refusal_is_journalised_too(self):
+        # Un invite refoule doit laisser une trace : c'est le genre de passage
+        # que le gerant veut pouvoir relire.
+        GuestPass.objects.filter(pk=self.carnet.pk).update(
+            expires_at=timezone.now() - timedelta(days=1)
+        )
+
+        self._presenter()
+
+        log = AccessLog.objects.get(gym=self.gym)
+        self.assertFalse(log.access_granted)
+        self.assertEqual(log.guest_pass_id, self.carnet.id)
+
+    def test_an_unknown_code_is_still_a_404(self):
+        import uuid as uuid_module
+
+        reponse = self._presenter(code=uuid_module.uuid4())
+
+        self.assertEqual(reponse.status_code, 404)
+
+    def test_a_pass_of_another_gym_does_not_open_this_door(self):
+        autre = Gym.objects.create(
+            organization=self.organization, name="Ailleurs",
+            slug="ailleurs-invite", subdomain="ailleurs-invite",
+        )
+        etranger = GuestPass.objects.create(
+            gym=autre, host=self.member, guest_name="Intrus",
+            guest_phone="0829999999", sessions_allowed=1,
+            expires_at=timezone.now() + timedelta(days=30),
+        )
+
+        reponse = self._presenter(code=etranger.code)
+
+        self.assertEqual(reponse.status_code, 404)
+
+    # --- La liste de l'accueil ----------------------------------------------------
+
+    def test_reception_sees_the_running_invitations(self):
+        reponse = self.client.get(reverse("access:guest_passes"))
+
+        ligne = reponse.json()["invitations"][0]
+        self.assertEqual(ligne["invite"], "Paul Kabeya")
+        self.assertEqual(ligne["telephone"], "0820000001")
+        self.assertEqual(ligne["hote"], "Ada Mbala")
+        self.assertFalse(ligne["deja_passe"])
+
+    def test_the_list_says_who_has_already_come(self):
+        self._presenter()
+
+        ligne = self.client.get(reverse("access:guest_passes")).json()["invitations"][0]
+        self.assertTrue(ligne["deja_passe"])
+        self.assertEqual(ligne["seances_restantes"], 1)
+
+    def test_an_exhausted_pass_leaves_the_list(self):
+        self._presenter()
+        self._presenter()
+
+        reponse = self.client.get(reverse("access:guest_passes"))
+
+        self.assertEqual(reponse.json()["invitations"], [])
+
+
+class GuestPassScreenTests(TestCase):
+    """Ce que le membre voit et peut faire depuis son espace."""
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Ecran", slug="org-ecran"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Ecran",
+            slug="gym-ecran", subdomain="gym-ecran",
+        )
+        self.plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Premium", price=50, duration_days=30,
+            guest_invites_per_month=1, guest_sessions_per_invite=2,
+        )
+        self.simple = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Standard", price=30, duration_days=30,
+        )
+        self.compte = User.objects.create_user(username="ada-portail", password="pass12345")
+        self.member = Member.objects.create(
+            gym=self.gym, first_name="Ada", last_name="Mbala",
+            phone="+243900004444", user=self.compte,
+        )
+        self.client.force_login(self.compte)
+
+    def _abonner(self, plan=None):
+        return MemberSubscription.objects.create(
+            gym=self.gym, member=self.member, plan=plan or self.plan,
+            start_date=timezone.localdate(),
+            end_date=timezone.localdate() + timedelta(days=30),
+            is_active=True,
+        )
+
+    def _portail(self, onglet=None):
+        url = reverse("members:member_portal")
+        return self.client.get(f"{url}?tab={onglet}" if onglet else url)
+
+    # --- L'onglet n'apparait que s'il sert -------------------------------------
+
+    def test_a_plan_with_invitations_shows_the_tab(self):
+        self._abonner()
+
+        self.assertContains(self._portail(), "Invitations")
+
+    def test_a_plan_without_invitations_hides_the_tab(self):
+        # Promettre une possibilite non achetee serait pire que de la taire.
+        self._abonner(plan=self.simple)
+
+        self.assertNotContains(self._portail(), "member_guest_pass_create")
+
+    # --- Emettre ----------------------------------------------------------------
+
+    def test_the_member_can_issue_a_pass(self):
+        self._abonner()
+
+        self.client.post(
+            reverse("members:member_guest_pass_create"),
+            {"guest_name": "Paul Kabeya", "guest_phone": "0820000001"},
+        )
+
+        carnet = GuestPass.objects.get(host=self.member)
+        self.assertEqual(carnet.guest_name, "Paul Kabeya")
+        self.assertEqual(carnet.sessions_allowed, 2)
+
+    def test_the_screen_shows_the_guest_and_whether_he_came(self):
+        self._abonner()
+        invitations.emettre(self.member, "Paul Kabeya", "0820000001")
+
+        page = self._portail("invitations").content.decode()
+
+        self.assertIn("Paul Kabeya", page)
+        self.assertIn("0820000001", page)
+        self.assertIn("pas encore venu", page)
+
+    def test_the_screen_says_when_the_guest_has_come(self):
+        self._abonner()
+        carnet = invitations.emettre(self.member, "Paul Kabeya", "0820000001")
+        invitations.consommer(carnet)
+
+        self.assertContains(self._portail("invitations"), "déjà venu")
+
+    def test_a_refused_issue_explains_why(self):
+        self._abonner(plan=self.simple)
+
+        reponse = self.client.post(
+            reverse("members:member_guest_pass_create"),
+            {"guest_name": "Paul Kabeya", "guest_phone": "0820000001"},
+            follow=True,
+        )
+
+        # L apostrophe est echappee dans le HTML : on cherche la partie stable.
+        self.assertContains(reponse, "ne comprend pas")
+        self.assertFalse(GuestPass.objects.exists())
+
+    # --- Reattribuer --------------------------------------------------------------
+
+    def test_the_member_can_reassign_an_untouched_pass(self):
+        self._abonner()
+        carnet = invitations.emettre(self.member, "Paul Kabeya", "0820000001")
+
+        self.client.post(
+            reverse("members:member_guest_pass_reassign", args=[carnet.id]),
+            {"guest_name": "Jean Musa", "guest_phone": "0820000002"},
+        )
+
+        carnet.refresh_from_db()
+        self.assertEqual(carnet.guest_name, "Jean Musa")
+
+    def test_a_member_cannot_touch_someone_elses_pass(self):
+        autre = Member.objects.create(
+            gym=self.gym, first_name="Bob", last_name="Autre",
+            phone="+243900005555",
+        )
+        carnet = GuestPass.objects.create(
+            gym=self.gym, host=autre, guest_name="Intrus",
+            guest_phone="0829999999", sessions_allowed=1,
+            expires_at=timezone.now() + timedelta(days=30),
+        )
+
+        reponse = self.client.post(
+            reverse("members:member_guest_pass_reassign", args=[carnet.id]),
+            {"guest_name": "Detourne", "guest_phone": "0820000009"},
+        )
+
+        self.assertEqual(reponse.status_code, 404)
+        carnet.refresh_from_db()
+        self.assertEqual(carnet.guest_name, "Intrus")
+
+    # --- Le QR ----------------------------------------------------------------------
+
+    def test_the_member_gets_a_qr_image_for_his_guest(self):
+        self._abonner()
+        carnet = invitations.emettre(self.member, "Paul Kabeya", "0820000001")
+
+        reponse = self.client.get(
+            reverse("members:member_guest_pass_qr", args=[carnet.id])
+        )
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertEqual(reponse["Content-Type"], "image/png")
+
+    def test_the_qr_of_another_member_is_out_of_reach(self):
+        autre = Member.objects.create(
+            gym=self.gym, first_name="Bob", last_name="Autre",
+            phone="+243900006666",
+        )
+        carnet = GuestPass.objects.create(
+            gym=self.gym, host=autre, guest_name="Intrus",
+            guest_phone="0829999999", sessions_allowed=1,
+            expires_at=timezone.now() + timedelta(days=30),
+        )
+
+        reponse = self.client.get(
+            reverse("members:member_guest_pass_qr", args=[carnet.id])
+        )
+
+        self.assertEqual(reponse.status_code, 404)
+
+
+class GuestKpiTests(TestCase):
+    """
+    Les invites se comptent, mais jamais avec les abonnes.
+
+    Un passage d'invite qui gonflerait la frequentation ferait croire a une
+    salle plus remplie qu'elle ne l'est, et fausserait toute decision prise
+    sur ce chiffre.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Kpi", slug="org-kpi"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Kpi",
+            slug="gym-kpi", subdomain="gym-kpi",
+        )
+        module, _ = Module.objects.get_or_create(
+            code="ACCESS", defaults={"name": "Access"}
+        )
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=module, defaults={"is_active": True}
+        )
+        self.plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Premium", price=50, duration_days=30,
+            guest_invites_per_month=1, guest_sessions_per_invite=2,
+        )
+        self.member = Member.objects.create(
+            gym=self.gym, first_name="Ada", last_name="Mbala",
+            phone="+243900007777",
+        )
+        MemberSubscription.objects.create(
+            gym=self.gym, member=self.member, plan=self.plan,
+            start_date=timezone.localdate(),
+            end_date=timezone.localdate() + timedelta(days=30),
+            is_active=True,
+        )
+        self.carnet = invitations.emettre(self.member, "Paul Kabeya", "0820000001")
+
+        self.agent = User.objects.create_user(username="agent-kpi", password="pass12345")
+        UserGymRole.objects.create(
+            user=self.agent, gym=self.gym, role="manager", is_active=True
+        )
+        self.client.force_login(self.agent)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _passage_invite(self):
+        with patch.object(door, "open_doors", return_value=[]):
+            self.client.post(
+                reverse("access:member_access", args=[self.carnet.code])
+            )
+
+    def _passage_membre(self):
+        with patch.object(door, "open_doors", return_value=[]):
+            self.client.post(
+                reverse("access:member_access", args=[self.member.qr_code])
+            )
+
+    # --- Le compteur du jour ------------------------------------------------------
+
+    def test_the_dashboard_counts_guests_apart(self):
+        self._passage_invite()
+
+        page = self.client.get(reverse("access:acces_dashboard"))
+
+        self.assertEqual(page.context["today_guests"], 1)
+        self.assertEqual(page.context["today_entries"], 0)
+
+    def test_a_member_entry_is_not_counted_as_a_guest(self):
+        self._passage_membre()
+
+        page = self.client.get(reverse("access:acces_dashboard"))
+
+        self.assertEqual(page.context["today_guests"], 0)
+        self.assertEqual(page.context["today_entries"], 1)
+
+    def test_both_are_counted_side_by_side(self):
+        self._passage_membre()
+        self._passage_invite()
+
+        page = self.client.get(reverse("access:acces_dashboard"))
+
+        self.assertEqual(page.context["today_entries"], 1)
+        self.assertEqual(page.context["today_guests"], 1)
+
+    def test_a_refused_guest_is_not_counted(self):
+        GuestPass.objects.filter(pk=self.carnet.pk).update(
+            expires_at=timezone.now() - timedelta(days=1)
+        )
+
+        self._passage_invite()
+
+        page = self.client.get(reverse("access:acces_dashboard"))
+        self.assertEqual(page.context["today_guests"], 0)
+
+    def test_each_session_counts_as_a_passage(self):
+        self._passage_invite()
+        self._passage_invite()
+
+        page = self.client.get(reverse("access:acces_dashboard"))
+        self.assertEqual(page.context["today_guests"], 2)
+
+    # --- Le tableau de bord l'affiche -----------------------------------------------
+
+    def test_the_tile_is_on_the_screen(self):
+        page = self.client.get(reverse("access:acces_dashboard"))
+
+        self.assertContains(page, "todayGuests")
+        self.assertContains(page, "Invités aujourd'hui")

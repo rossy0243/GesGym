@@ -37,6 +37,12 @@ class SubscriptionOfferForm(forms.ModelForm):
             "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 
+    def clean_guest_invites_per_month(self):
+        return self.cleaned_data.get("guest_invites_per_month") or 0
+
+    def clean_guest_sessions_per_invite(self):
+        return self.cleaned_data.get("guest_sessions_per_invite") or 1
+
     def clean_name(self):
         name = (self.cleaned_data.get("name") or "").strip()
         if not name:
@@ -60,6 +66,18 @@ class SubscriptionPlanForm(forms.ModelForm):
         label="Offres incluses",
         widget=forms.CheckboxSelectMultiple,
     )
+    guest_invites_per_month = forms.IntegerField(
+        required=False,
+        min_value=0,
+        label="Personnes invitables par mois",
+        widget=forms.NumberInput(attrs={"class": "form-control", "min": 0}),
+    )
+    guest_sessions_per_invite = forms.IntegerField(
+        required=False,
+        min_value=1,
+        label="Seances offertes a chaque invite",
+        widget=forms.NumberInput(attrs={"class": "form-control", "min": 1}),
+    )
 
     def __init__(self, *args, gym=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -80,6 +98,8 @@ class SubscriptionPlanForm(forms.ModelForm):
             'duration_days',
             'price',
             'description',
+            'guest_invites_per_month',
+            'guest_sessions_per_invite',
             'offers',
             'coaching_mode',
             'coaching_level',

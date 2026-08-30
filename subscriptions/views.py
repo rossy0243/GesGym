@@ -207,6 +207,8 @@ def edit_plan(request, plan_id):
             "duration_days": plan.duration_days,
             "price": float(plan.price),
             "description": plan.description or "",
+            "guest_invites_per_month": plan.guest_invites_per_month,
+            "guest_sessions_per_invite": plan.guest_sessions_per_invite,
             "offer_ids": list(plan.offers.values_list("id", flat=True)),
             "coaching_mode": plan.coaching_mode,
             "coaching_level": plan.coaching_level,
