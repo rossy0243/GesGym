@@ -49,11 +49,117 @@
     }
 
     .gradient-text {
-      background: linear-gradient(135deg, #0B0B0B 0%, #8A6D1D 55%, #C9A227 100%);
+      background: linear-gradient(110deg, #0B0B0B 10%, #8A6D1D 45%, #C9A227 60%, #8A6D1D 75%, #0B0B0B 90%);
+      background-size: 250% auto;
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
+      animation: shimmer 6s linear infinite;
     }
+
+    @keyframes shimmer {
+      0% { background-position: 0% 50%; }
+      100% { background-position: -250% 50%; }
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      50% { transform: translate(0, -18px) scale(1.04); }
+    }
+
+    @keyframes floatSlow {
+      0%, 100% { transform: translate(0, 0); }
+      50% { transform: translate(10px, 14px); }
+    }
+
+    @keyframes pulseGlow {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(201, 162, 39, 0.35); }
+      50% { box-shadow: 0 0 0 14px rgba(201, 162, 39, 0); }
+    }
+
+    @keyframes iconPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.14); }
+    }
+
+    @keyframes bounceDown {
+      0%, 100% { transform: translateY(0); opacity: .6; }
+      50% { transform: translateY(8px); opacity: 1; }
+    }
+
+    @keyframes gradientShift {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    /* Revelation au scroll (reutilise le meme mecanisme que script_accueil.js) */
+    .animate-on-scroll {
+      opacity: 0;
+      transition: opacity .8s ease, transform .8s ease;
+    }
+    .animate-on-scroll.animate-fade-up { transform: translateY(40px); }
+    .animate-on-scroll.animate-fade-left { transform: translateX(-40px); }
+    .animate-on-scroll.animate-fade-right { transform: translateX(40px); }
+    .animate-on-scroll.animate-zoom-in { transform: scale(.92); }
+    .animate-on-scroll.visible { opacity: 1; transform: translate(0, 0) scale(1); }
+    .delay-1 { transition-delay: .1s; }
+    .delay-2 { transition-delay: .2s; }
+    .delay-3 { transition-delay: .3s; }
+    .delay-4 { transition-delay: .4s; }
+    .delay-5 { transition-delay: .5s; }
+
+    .float-blob {
+      position: absolute;
+      border-radius: 999px;
+      filter: blur(10px);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .scroll-indicator {
+      position: absolute;
+      bottom: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #8A6D1D;
+      animation: bounceDown 1.8s ease-in-out infinite;
+    }
+
+    /* Boutons : effet de balayage lumineux */
+    .btn-shine {
+      position: relative;
+      overflow: hidden;
+      isolation: isolate;
+    }
+    .btn-shine::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(120deg, transparent 30%, rgba(255,255,255,.35) 50%, transparent 70%);
+      transform: translateX(-120%);
+      transition: transform .7s ease;
+      z-index: -1;
+    }
+    .btn-shine:hover::before { transform: translateX(120%); }
+
+    .btn-pulse { animation: pulseGlow 2.6s ease-in-out infinite; }
+
+    /* Cartes : lift + halo au survol */
+    .soft-card {
+      transition: transform .35s ease, box-shadow .35s ease, border-color .35s ease;
+    }
+    .soft-card:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 22px 40px rgba(201, 162, 39, 0.18);
+      border-color: rgba(201, 162, 39, 0.35);
+    }
+    .soft-card:hover .equip-icon {
+      animation: iconPulse .6s ease;
+      color: #0B0B0B;
+      background: linear-gradient(135deg, #C9A227 0%, #E8C766 100%);
+    }
+    .equip-icon { transition: transform .35s ease, background .35s ease, color .35s ease; }
 
     .hero-premium {
       position: relative;
@@ -208,6 +314,37 @@
       box-shadow: 0 24px 48px rgba(11, 11, 11, 0.28);
     }
 
+    .plan-card.is-featured::before {
+      content: "";
+      position: absolute;
+      inset: -50% -50%;
+      background: conic-gradient(from 0deg, transparent 0deg, rgba(201,162,39,.25) 30deg, transparent 90deg);
+      animation: spin 5s linear infinite;
+      pointer-events: none;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .metric-chip {
+      transition: transform .25s ease, box-shadow .25s ease, background .25s ease;
+    }
+    .metric-chip:hover {
+      transform: translateY(-3px);
+      background: #0B0B0B;
+      color: #fff;
+      box-shadow: 0 14px 26px rgba(11, 11, 11, 0.18);
+    }
+    .metric-chip:hover i { color: #C9A227; }
+
+    header.site-header {
+      transition: box-shadow .3s ease, padding .3s ease;
+    }
+    header.site-header.is-scrolled {
+      box-shadow: 0 12px 30px rgba(11, 11, 11, 0.12);
+    }
+
     .plan-card.is-featured .plan-feature {
       color: rgba(255, 255, 255, 0.78);
     }
@@ -230,7 +367,7 @@
 <body class="antialiased">
 
   <!-- HEADER -->
-  <header class="sticky top-0 z-50 bg-white/85 backdrop-blur-md border-b border-slate-100 shadow-sm">
+  <header class="site-header sticky top-0 z-50 bg-white/85 backdrop-blur-md border-b border-slate-100 shadow-sm">
     <div class="container-premium mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-3">
       <div class="flex items-center gap-2 min-w-0">
         {% if landing_contact.logo_url %}
@@ -271,42 +408,44 @@
 
   <!-- HERO -->
   <section id="accueil" class="hero-premium py-12 lg:py-16">
+    <div class="float-blob animate-on-scroll animate-zoom-in" style="width:280px;height:280px;top:-60px;right:-60px;background:rgba(201,162,39,.22);animation:float 8s ease-in-out infinite;"></div>
+    <div class="float-blob animate-on-scroll animate-zoom-in delay-2" style="width:220px;height:220px;bottom:-40px;left:-40px;background:rgba(11,11,11,.10);animation:floatSlow 10s ease-in-out infinite;"></div>
     <div class="container-premium mx-auto px-6 lg:px-8 relative">
       <div class="grid lg:grid-cols-2 gap-10 items-center">
         <div class="text-center lg:text-left">
-          <span class="section-kicker mb-5">{{ landing_contact.kicker }}</span>
+          <span class="section-kicker mb-5 animate-on-scroll animate-fade-up">{{ landing_contact.kicker }}</span>
 
-          <h1 class="text-4xl md:text-5xl lg:text-6xl font-extrabold leading-tight mb-6 tracking-tight">
+          <h1 class="text-4xl md:text-5xl lg:text-6xl font-extrabold leading-tight mb-6 tracking-tight animate-on-scroll animate-fade-up delay-1">
             <span class="gradient-text">{{ landing_contact.name }}</span><br>
             <span class="text-gray-900">{{ landing_contact.title }}</span>
           </h1>
 
-          <p class="text-lg md:text-xl text-gray-600 mb-8 max-w-2xl mx-auto lg:mx-0 leading-relaxed">
+          <p class="text-lg md:text-xl text-gray-600 mb-8 max-w-2xl mx-auto lg:mx-0 leading-relaxed animate-on-scroll animate-fade-up delay-2">
             {{ landing_contact.intro|linebreaksbr }}
           </p>
 
-          <div class="flex flex-wrap gap-3 justify-center lg:justify-start mb-8">
+          <div class="flex flex-wrap gap-3 justify-center lg:justify-start mb-8 animate-on-scroll animate-fade-up delay-3">
             <span class="metric-chip px-4 py-2 rounded-full text-sm font-semibold text-gray-700"><i class="fas fa-dumbbell text-[#C9A227] mr-1"></i> Musculation</span>
             <span class="metric-chip px-4 py-2 rounded-full text-sm font-semibold text-gray-700"><i class="fas fa-person-running text-[#C9A227] mr-1"></i> Cardio-training</span>
             <span class="metric-chip px-4 py-2 rounded-full text-sm font-semibold text-gray-700"><i class="fas fa-people-group text-[#C9A227] mr-1"></i> Cours collectifs</span>
             <span class="metric-chip px-4 py-2 rounded-full text-sm font-semibold text-gray-700"><i class="fas fa-user-tie text-[#C9A227] mr-1"></i> Coaching personnel</span>
           </div>
 
-          <div class="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-            <a href="#contact-form" class="px-6 py-3.5 bg-[#0B0B0B] text-white font-bold rounded-full hover:bg-[#8A6D1D] transition shadow-lg">
+          <div class="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start animate-on-scroll animate-fade-up delay-4">
+            <a href="#contact-form" class="btn-shine btn-pulse px-6 py-3.5 bg-[#0B0B0B] text-white font-bold rounded-full hover:bg-[#8A6D1D] transition shadow-lg">
               Nous contacter
             </a>
-            <a href="#formules" class="px-6 py-3.5 border-2 border-[#0B0B0B] text-[#0B0B0B] font-bold rounded-full hover:bg-[#0B0B0B] hover:text-white transition">
+            <a href="#formules" class="btn-shine px-6 py-3.5 border-2 border-[#0B0B0B] text-[#0B0B0B] font-bold rounded-full hover:bg-[#0B0B0B] hover:text-white transition">
               Voir nos formules
             </a>
           </div>
 
-          <p class="mt-6 text-sm text-gray-500">
+          <p class="mt-6 text-sm text-gray-500 animate-on-scroll animate-fade-up delay-5">
             Ouvert aux débutants comme aux sportifs confirmés.
           </p>
         </div>
 
-        <div class="relative">
+        <div class="relative animate-on-scroll animate-fade-left delay-2">
           <div class="premium-card rounded-[32px] p-4 lg:p-5">
             <div class="relative rounded-[24px] overflow-hidden">
               <img src="{% if landing_contact.hero_image_url %}{{ landing_contact.hero_image_url }}{% else %}{% static 'images/royal-gym-equipment-2.jpg' %}{% endif %}"
@@ -332,26 +471,29 @@
         </div>
       </div>
     </div>
+    <a href="#services" class="scroll-indicator" aria-label="Découvrir la suite">
+      <i class="fas fa-chevron-down text-2xl"></i>
+    </a>
   </section>
 
   <!-- BANDE STATS -->
   <section class="stat-band py-8">
     <div class="container-premium mx-auto px-6 lg:px-8">
       <div class="grid grid-cols-2 md:grid-cols-4 gap-6 text-center text-white">
-        <div>
-          <i class="fas fa-dumbbell text-[#C9A227] text-2xl mb-2"></i>
+        <div class="animate-on-scroll animate-fade-up">
+          <i class="fas fa-dumbbell text-[#C9A227] text-2xl mb-2" style="display:inline-block;animation:iconPulse 2.4s ease-in-out infinite;"></i>
           <p class="font-bold">Équipements dernière génération</p>
         </div>
-        <div class="md:border-l stat-divider md:pl-6">
-          <i class="fas fa-user-tie text-[#C9A227] text-2xl mb-2"></i>
+        <div class="md:border-l stat-divider md:pl-6 animate-on-scroll animate-fade-up delay-1">
+          <i class="fas fa-user-tie text-[#C9A227] text-2xl mb-2" style="display:inline-block;animation:iconPulse 2.4s .2s ease-in-out infinite;"></i>
           <p class="font-bold">Coachs certifiés</p>
         </div>
-        <div class="md:border-l stat-divider md:pl-6">
-          <i class="fas fa-qrcode text-[#C9A227] text-2xl mb-2"></i>
+        <div class="md:border-l stat-divider md:pl-6 animate-on-scroll animate-fade-up delay-2">
+          <i class="fas fa-qrcode text-[#C9A227] text-2xl mb-2" style="display:inline-block;animation:iconPulse 2.4s .4s ease-in-out infinite;"></i>
           <p class="font-bold">Accès sécurisé par QR code</p>
         </div>
-        <div class="md:border-l stat-divider md:pl-6">
-          <i class="fas fa-crown text-[#C9A227] text-2xl mb-2"></i>
+        <div class="md:border-l stat-divider md:pl-6 animate-on-scroll animate-fade-up delay-3">
+          <i class="fas fa-crown text-[#C9A227] text-2xl mb-2" style="display:inline-block;animation:iconPulse 2.4s .6s ease-in-out infinite;"></i>
           <p class="font-bold">Ambiance premium</p>
         </div>
       </div>
@@ -361,7 +503,7 @@
   <!-- POURQUOI ROYAL GYM -->
   <section class="py-10 lg:py-12 bg-white">
     <div class="container-premium mx-auto px-6 lg:px-8">
-      <div class="max-w-3xl mx-auto text-center mb-8">
+      <div class="max-w-3xl mx-auto text-center mb-8 animate-on-scroll animate-fade-up">
         <span class="section-kicker mb-4">Pourquoi {{ landing_contact.name }}</span>
         <h2 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">
           Une salle pensée pour votre progression
@@ -373,25 +515,25 @@
       </div>
 
       <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div class="soft-card rounded-3xl p-8">
+        <div class="soft-card rounded-3xl p-8 animate-on-scroll animate-fade-up">
           <div class="equip-icon mb-5"><i class="fas fa-crown"></i></div>
           <h3 class="text-xl font-bold mb-3">Équipements premium</h3>
           <p class="text-gray-500">Du matériel adapté à tous les niveaux, entretenu et renouvelé régulièrement.</p>
         </div>
 
-        <div class="soft-card rounded-3xl p-8">
+        <div class="soft-card rounded-3xl p-8 animate-on-scroll animate-fade-up delay-1">
           <div class="equip-icon mb-5"><i class="fas fa-user-tie"></i></div>
           <h3 class="text-xl font-bold mb-3">Coachs qualifiés</h3>
           <p class="text-gray-500">Un accompagnement personnalisé pour progresser en toute sécurité vers vos objectifs.</p>
         </div>
 
-        <div class="soft-card rounded-3xl p-8">
+        <div class="soft-card rounded-3xl p-8 animate-on-scroll animate-fade-up delay-2">
           <div class="equip-icon mb-5"><i class="fas fa-fire"></i></div>
           <h3 class="text-xl font-bold mb-3">Ambiance motivante</h3>
           <p class="text-gray-500">Un cadre premium pensé pour vous donner l'énergie de vous dépasser à chaque séance.</p>
         </div>
 
-        <div class="soft-card rounded-3xl p-8">
+        <div class="soft-card rounded-3xl p-8 animate-on-scroll animate-fade-up delay-3">
           <div class="equip-icon mb-5"><i class="fas fa-users"></i></div>
           <h3 class="text-xl font-bold mb-3">Accessible à tous</h3>
           <p class="text-gray-500">Débutants, sportifs confirmés ou remise en forme : chacun trouve sa place chez nous.</p>
@@ -403,7 +545,7 @@
   <!-- SERVICES -->
   <section id="services" class="py-10 lg:py-12 bg-slate-50">
     <div class="container-premium mx-auto px-6 lg:px-8">
-      <div class="max-w-3xl mx-auto text-center mb-8">
+      <div class="max-w-3xl mx-auto text-center mb-8 animate-on-scroll animate-fade-up">
         <span class="section-kicker mb-4">Nos services</span>
         <h2 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">
           Tout ce qu'il faut pour atteindre vos objectifs
@@ -415,25 +557,25 @@
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div class="soft-card rounded-3xl p-8">
+        <div class="soft-card rounded-3xl p-8 animate-on-scroll animate-fade-up">
           <div class="equip-icon mb-5"><i class="fas fa-dumbbell"></i></div>
           <h3 class="text-xl font-bold mb-3">Musculation</h3>
           <p class="text-gray-500">Charges libres, machines guidées et zone de force pour tous les niveaux.</p>
         </div>
 
-        <div class="soft-card rounded-3xl p-8">
+        <div class="soft-card rounded-3xl p-8 animate-on-scroll animate-fade-up delay-1">
           <div class="equip-icon mb-5"><i class="fas fa-person-running"></i></div>
           <h3 class="text-xl font-bold mb-3">Cardio-training</h3>
           <p class="text-gray-500">Tapis, vélos et rameurs pour améliorer votre endurance et brûler des calories.</p>
         </div>
 
-        <div class="soft-card rounded-3xl p-8">
+        <div class="soft-card rounded-3xl p-8 animate-on-scroll animate-fade-up delay-2">
           <div class="equip-icon mb-5"><i class="fas fa-people-group"></i></div>
           <h3 class="text-xl font-bold mb-3">Cours collectifs</h3>
           <p class="text-gray-500">Des séances en groupe pour progresser dans la bonne humeur et la motivation.</p>
         </div>
 
-        <div class="soft-card rounded-3xl p-8">
+        <div class="soft-card rounded-3xl p-8 animate-on-scroll animate-fade-up delay-3">
           <div class="equip-icon mb-5"><i class="fas fa-user-tie"></i></div>
           <h3 class="text-xl font-bold mb-3">Coaching personnel</h3>
           <p class="text-gray-500">Un programme sur mesure avec un coach dédié à votre progression.</p>
@@ -445,7 +587,7 @@
   <!-- EQUIPEMENTS -->
   <section id="equipements" class="py-10 lg:py-12 bg-white">
     <div class="container-premium mx-auto px-6 lg:px-8">
-      <div class="max-w-3xl mx-auto text-center mb-8">
+      <div class="max-w-3xl mx-auto text-center mb-8 animate-on-scroll animate-fade-up">
         <span class="section-kicker mb-4">Nos équipements</span>
         <h2 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">
           Un plateau complet pour s'entraîner sans limite
@@ -456,7 +598,7 @@
       </div>
 
       <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div class="soft-card rounded-3xl overflow-hidden text-center">
+        <div class="soft-card rounded-3xl overflow-hidden text-center animate-on-scroll animate-zoom-in">
           <img src="{% if landing_contact.image_1_url %}{{ landing_contact.image_1_url }}{% else %}{% static 'images/royal-gym-equipment-1.jpg' %}{% endif %}"
                alt="Zone musculation {{ landing_contact.name }}" class="w-full h-48 object-cover">
           <div class="p-8 pt-6">
@@ -464,7 +606,7 @@
             <p class="text-gray-500">Haltères, barres et machines guidées.</p>
           </div>
         </div>
-        <div class="soft-card rounded-3xl overflow-hidden text-center">
+        <div class="soft-card rounded-3xl overflow-hidden text-center animate-on-scroll animate-zoom-in delay-1">
           <img src="{% if landing_contact.image_2_url %}{{ landing_contact.image_2_url }}{% else %}{% static 'images/royal-gym-equipment-4.jpg' %}{% endif %}"
                alt="Zone cardio {{ landing_contact.name }}" class="w-full h-48 object-cover">
           <div class="p-8 pt-6">
@@ -472,7 +614,7 @@
             <p class="text-gray-500">Tapis de course, vélos et rameurs.</p>
           </div>
         </div>
-        <div class="soft-card rounded-3xl overflow-hidden text-center">
+        <div class="soft-card rounded-3xl overflow-hidden text-center animate-on-scroll animate-zoom-in delay-2">
           <img src="{% if landing_contact.image_3_url %}{{ landing_contact.image_3_url }}{% else %}{% static 'images/royal-gym-equipment-3.jpg' %}{% endif %}"
                alt="Espace fonctionnel {{ landing_contact.name }}" class="w-full h-48 object-cover">
           <div class="p-8 pt-6">
@@ -480,17 +622,17 @@
             <p class="text-gray-500">Cross-training, kettlebells et poids libres.</p>
           </div>
         </div>
-        <div class="soft-card rounded-3xl p-8 text-center">
+        <div class="soft-card rounded-3xl p-8 text-center animate-on-scroll animate-fade-up">
           <div class="equip-icon mb-5 mx-auto"><i class="fas fa-people-group"></i></div>
           <h3 class="font-bold text-lg mb-2">Salle de cours collectifs</h3>
           <p class="text-gray-500">Un espace dédié aux séances en groupe.</p>
         </div>
-        <div class="soft-card rounded-3xl p-8 text-center">
+        <div class="soft-card rounded-3xl p-8 text-center animate-on-scroll animate-fade-up delay-1">
           <div class="equip-icon mb-5 mx-auto"><i class="fas fa-shower"></i></div>
           <h3 class="font-bold text-lg mb-2">Vestiaires &amp; douches</h3>
           <p class="text-gray-500">Un espace propre et confortable après l'effort.</p>
         </div>
-        <div class="soft-card rounded-3xl p-8 text-center">
+        <div class="soft-card rounded-3xl p-8 text-center animate-on-scroll animate-fade-up delay-2">
           <div class="equip-icon mb-5 mx-auto"><i class="fas fa-hand-holding-heart"></i></div>
           <h3 class="font-bold text-lg mb-2">Coin étirement</h3>
           <p class="text-gray-500">Un espace pour récupérer après l'entraînement.</p>
@@ -502,7 +644,7 @@
   <!-- FORMULES -->
   <section id="formules" class="py-10 lg:py-12 bg-slate-50">
     <div class="container-premium mx-auto px-6 lg:px-8">
-      <div class="max-w-3xl mx-auto text-center mb-10">
+      <div class="max-w-3xl mx-auto text-center mb-10 animate-on-scroll animate-fade-up">
         <span class="section-kicker mb-4">Nos formules</span>
         <h2 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">
           Une formule pour chaque objectif
@@ -521,7 +663,7 @@
         organisation a plusieurs salles ne voie pas la meme carte repetee.
         {% endcomment %}
         {% for formule in landing_contact.plans %}
-        <div class="plan-card {% if formule.featured %}is-featured{% else %}soft-card{% endif %} p-7">
+        <div class="plan-card {% if formule.featured %}is-featured{% else %}soft-card{% endif %} p-7 animate-on-scroll animate-fade-up {% cycle '' 'delay-1' 'delay-2' 'delay-3' %}">
           {% if formule.featured %}<span class="plan-badge">Populaire</span>{% endif %}
 
           <h3 class="text-lg font-bold mb-1">{{ formule.name }}</h3>
@@ -563,7 +705,7 @@
   <!-- HORAIRES / LOCALISATION -->
   <section id="horaires" class="py-10 lg:py-12 bg-white">
     <div class="container-premium mx-auto px-6 lg:px-8">
-      <div class="max-w-3xl mx-auto text-center mb-10">
+      <div class="max-w-3xl mx-auto text-center mb-10 animate-on-scroll animate-fade-up">
         <span class="section-kicker mb-4">Horaires &amp; localisation</span>
         <h2 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">
           Retrouvez-nous à {{ landing_contact.city }}
@@ -571,17 +713,17 @@
       </div>
 
       <div class="grid sm:grid-cols-3 gap-6 max-w-4xl mx-auto">
-        <div class="soft-card rounded-2xl p-6 text-center">
+        <div class="soft-card rounded-2xl p-6 text-center animate-on-scroll animate-fade-up">
           <i class="fas fa-location-dot text-[#C9A227] text-2xl mb-3"></i>
           <p class="font-semibold text-gray-900 mb-1">Adresse</p>
           <p class="text-gray-500">{{ landing_contact.address|default:"Contactez-nous pour connaître notre adresse" }}</p>
         </div>
-        <div class="soft-card rounded-2xl p-6 text-center">
+        <div class="soft-card rounded-2xl p-6 text-center animate-on-scroll animate-fade-up delay-1">
           <i class="fas fa-clock text-[#C9A227] text-2xl mb-3"></i>
           <p class="font-semibold text-gray-900 mb-1">Horaires</p>
           <p class="text-gray-500">{{ landing_contact.hours|default:"Contactez-nous pour connaître nos horaires à jour"|linebreaksbr }}</p>
         </div>
-        <div class="soft-card rounded-2xl p-6 text-center">
+        <div class="soft-card rounded-2xl p-6 text-center animate-on-scroll animate-fade-up delay-2">
           <i class="fab fa-whatsapp text-[#C9A227] text-2xl mb-3"></i>
           <p class="font-semibold text-gray-900 mb-1">WhatsApp</p>
           <p class="text-gray-500">{{ landing_contact.phone|default:"Écrivez-nous directement sur WhatsApp" }}</p>
@@ -593,7 +735,7 @@
   <!-- FAQ -->
   <section id="faq" class="py-10 lg:py-12 bg-white">
     <div class="container-premium mx-auto px-6 lg:px-8 max-w-4xl">
-      <div class="text-center mb-8">
+      <div class="text-center mb-8 animate-on-scroll animate-fade-up">
         <span class="section-kicker mb-4">FAQ</span>
         <h2 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">
           Vos questions les plus fréquentes
@@ -606,7 +748,7 @@
         La premiere question est ouverte : le visiteur voit tout de suite que
         la section est depliable.
         {% endcomment %}
-        <div class="faq-item{% if forloop.first %} active{% endif %}">
+        <div class="faq-item{% if forloop.first %} active{% endif %} animate-on-scroll animate-fade-up {% cycle '' 'delay-1' 'delay-2' 'delay-3' 'delay-4' %}">
           <button class="faq-button" type="button">
             <span>{{ entree.question }}</span>
             <i class="fas fa-chevron-down faq-icon"></i>
@@ -625,7 +767,7 @@
   <!-- CTA FINAL -->
   <section class="py-10 lg:py-12">
     <div class="container-premium mx-auto px-6 lg:px-8">
-        <div class="cta-panel rounded-[32px] p-10 md:p-14 text-white text-center">
+        <div class="cta-panel rounded-[32px] p-10 md:p-14 text-white text-center animate-on-scroll animate-zoom-in" style="background-size:200% 200%;animation:gradientShift 8s ease infinite;">
           <h2 class="text-3xl md:text-4xl font-bold mb-4">
             Prêt à commencer votre transformation ?
           </h2>
@@ -633,7 +775,7 @@
             Rejoignez {{ landing_contact.name }} dès aujourd'hui et bénéficiez d'un accompagnement premium pour atteindre vos objectifs.
           </p>
           <div class="flex flex-col sm:flex-row gap-4 justify-center">
-            <a href="#contact-form" class="px-6 py-3.5 border-2 border-white text-white font-bold rounded-full hover:bg-white hover:text-[#0B0B0B] transition">
+            <a href="#contact-form" class="btn-shine btn-pulse px-6 py-3.5 border-2 border-white text-white font-bold rounded-full hover:bg-white hover:text-[#0B0B0B] transition">
               Nous contacter
             </a>
           </div>
@@ -645,7 +787,7 @@
   <section id="contact-form" class="py-10 lg:py-12 bg-slate-50">
     <div class="container-premium mx-auto px-6 lg:px-8">
       <div class="grid gap-8 lg:grid-cols-[0.95fr_1.05fr] items-start">
-        <div>
+        <div class="animate-on-scroll animate-fade-right">
           <span class="section-kicker mb-4">Nous rejoindre</span>
           <h2 class="text-3xl md:text-4xl font-bold mb-5 tracking-tight">
             Parlons de vos objectifs
@@ -663,7 +805,7 @@
           </div>
         </div>
 
-        <div class="premium-card rounded-[32px] p-6 md:p-8">
+        <div class="premium-card rounded-[32px] p-6 md:p-8 animate-on-scroll animate-fade-left">
           {% if contact_sent %}
             <div class="mb-6 rounded-3xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-emerald-800">
               <p class="font-semibold">Votre message a bien été envoyé.</p>
@@ -783,6 +925,15 @@
 
   <script>
     document.addEventListener("DOMContentLoaded", function () {
+      const siteHeader = document.querySelector(".site-header");
+      if (siteHeader) {
+        const toggleHeaderShadow = () => {
+          siteHeader.classList.toggle("is-scrolled", window.scrollY > 12);
+        };
+        toggleHeaderShadow();
+        window.addEventListener("scroll", toggleHeaderShadow, { passive: true });
+      }
+
       const faqItems = document.querySelectorAll(".faq-item");
 
       faqItems.forEach((item) => {
