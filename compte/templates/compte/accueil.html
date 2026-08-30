@@ -432,6 +432,44 @@
       #intro-splash { animation-duration: .3s; animation-delay: .2s; }
       #intro-splash img, #intro-splash .intro-text { animation-duration: .3s; animation-delay: 0s; }
     }
+
+    /* Bouton WhatsApp flottant (desktop/tablette) */
+    .whatsapp-float {
+      position: fixed;
+      right: 22px;
+      bottom: 22px;
+      z-index: 60;
+      width: 58px;
+      height: 58px;
+      border-radius: 999px;
+      background: #25D366;
+      color: #fff;
+      font-size: 1.6rem;
+      box-shadow: 0 12px 28px rgba(37, 211, 102, .4);
+      animation: pulseGlowGreen 2.6s ease-in-out infinite;
+    }
+    .whatsapp-float:hover { background: #1fb858; }
+
+    @keyframes pulseGlowGreen {
+      0%, 100% { box-shadow: 0 12px 28px rgba(37, 211, 102, .4); }
+      50% { box-shadow: 0 12px 28px rgba(37, 211, 102, .4), 0 0 0 10px rgba(37, 211, 102, 0); }
+    }
+
+    /* Barre CTA fixe (mobile uniquement) */
+    .mobile-cta-bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 60;
+      background: #fff;
+      border-top: 1px solid rgba(148, 163, 184, .18);
+      box-shadow: 0 -8px 24px rgba(11, 11, 11, .08);
+      padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+    }
+    @media (max-width: 767px) {
+      body { padding-bottom: 78px; }
+    }
   </style>
 </head>
 <body class="antialiased">
@@ -999,6 +1037,26 @@
       <p class="text-xs text-center text-gray-500">© 2026 SMART IT SOLUTION – Tous droits réservés.</p>
     </div>
   </footer>
+
+  <!-- WHATSAPP FLOTTANT (desktop/tablette) -->
+  <a href="{{ whatsapp_contact_url }}" target="_blank" rel="noopener noreferrer"
+     class="whatsapp-float hidden md:flex items-center justify-center btn-shine"
+     aria-label="Contacter {{ landing_contact.name }} sur WhatsApp">
+    <i class="fab fa-whatsapp"></i>
+  </a>
+
+  <!-- BARRE CTA FIXE (mobile) -->
+  <div class="mobile-cta-bar md:hidden flex items-center gap-2">
+    <a href="{{ whatsapp_contact_url }}" target="_blank" rel="noopener noreferrer"
+       class="flex items-center justify-center w-12 h-12 rounded-full shrink-0"
+       style="background:#25D366;color:#fff;font-size:1.3rem;"
+       aria-label="WhatsApp {{ landing_contact.name }}">
+      <i class="fab fa-whatsapp"></i>
+    </a>
+    <a href="#contact-form" class="flex-1 text-center bg-[#0B0B0B] text-white font-bold py-3 rounded-full">
+      Nous contacter
+    </a>
+  </div>
 
   <script>
     document.addEventListener("DOMContentLoaded", function () {
