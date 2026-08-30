@@ -47,7 +47,7 @@ class OrganizationAdmin(admin.ModelAdmin):
     list_filter = ("subscription_pack", "is_active", "created_at")
     search_fields = ("name", "slug", "email", "phone")
     prepopulated_fields = {"slug": ("name",)}
-    fields = ("name", "slug", "subscription_pack", "logo", "address", "phone", "email", "is_active")
+    fields = ("name", "slug", "subscription_pack", "logo", "address", "phone", "whatsapp_number", "email", "is_active")
     inlines = (OwnerInline, GymInline)
     readonly_fields = ("created_at",)
     actions = ("switch_to_club_pack", "switch_to_premium_pack")
