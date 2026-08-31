@@ -162,6 +162,13 @@ def landing(request):
             ),
             "whatsapp_contact_url": _build_whatsapp_url("", contact["whatsapp_number"]),
             "landing_contact": contact,
+            # Priorite a un vrai lien d'agenda si un jour configure (Google Calendar
+            # ou autre), sinon on propose de demander le planning directement sur
+            # WhatsApp : plus utile qu'un lien externe qui n'existe pas encore.
+            "hero_agenda_url": getattr(settings, "LANDING_AGENDA_URL", "") or _build_whatsapp_url(
+                "Bonjour, je voudrais connaître le planning des cours et les horaires.",
+                contact["whatsapp_number"],
+            ),
             **_build_landing_seo_context(request, contact),
         },
     )

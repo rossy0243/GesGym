@@ -272,6 +272,23 @@
       .hero-video-el { animation: none; }
     }
 
+    .typewriter-cursor {
+      display: inline-block;
+      width: 3px;
+      height: 0.85em;
+      margin-left: 3px;
+      background: #C9A227;
+      animation: cursorBlink .9s step-end infinite;
+      vertical-align: -0.1em;
+    }
+    @keyframes cursorBlink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .typewriter-cursor { display: none; }
+    }
+
     .premium-card {
       background: rgba(255,255,255,0.88);
       backdrop-filter: blur(10px);
@@ -631,7 +648,7 @@
 
           <h1 class="text-4xl md:text-5xl lg:text-6xl font-extrabold leading-tight mb-6 tracking-tight animate-on-scroll animate-fade-up delay-1">
             <span class="gradient-text">{{ landing_contact.name }}</span><br>
-            <span class="text-white">{{ landing_contact.title }}</span>
+            <span id="hero-typewriter" class="text-white">{{ landing_contact.title }}</span><span class="typewriter-cursor" aria-hidden="true"></span>
           </h1>
 
           <p class="text-lg md:text-xl text-gray-200 mb-8 max-w-2xl mx-auto lg:mx-0 leading-relaxed animate-on-scroll animate-fade-up delay-2">
@@ -929,21 +946,38 @@
       </div>
 
       <div class="grid sm:grid-cols-3 gap-6 max-w-4xl mx-auto">
+        {% if landing_contact.address %}
+        <a href="https://www.google.com/maps/search/?api=1&query={{ landing_contact.address|urlencode }}" target="_blank" rel="noopener noreferrer"
+           class="soft-card rounded-2xl p-6 text-center animate-on-scroll animate-fade-up block cursor-pointer">
+        {% else %}
         <div class="soft-card rounded-2xl p-6 text-center animate-on-scroll animate-fade-up">
+        {% endif %}
           <i class="fas fa-location-dot text-[#C9A227] text-2xl mb-3"></i>
           <p class="font-semibold text-gray-900 mb-1">Adresse</p>
           <p class="text-gray-500">{{ landing_contact.address|default:"Contactez-nous pour connaître notre adresse" }}</p>
-        </div>
+        {% if landing_contact.address %}</a>{% else %}</div>{% endif %}
+
+        {% if hero_agenda_url %}
+        <a href="{{ hero_agenda_url }}" target="_blank" rel="noopener noreferrer"
+           class="soft-card rounded-2xl p-6 text-center animate-on-scroll animate-fade-up delay-1 block cursor-pointer">
+        {% else %}
         <div class="soft-card rounded-2xl p-6 text-center animate-on-scroll animate-fade-up delay-1">
+        {% endif %}
           <i class="fas fa-clock text-[#C9A227] text-2xl mb-3"></i>
           <p class="font-semibold text-gray-900 mb-1">Horaires</p>
           <p class="text-gray-500">{{ landing_contact.hours|default:"Contactez-nous pour connaître nos horaires à jour"|linebreaksbr }}</p>
-        </div>
+        {% if hero_agenda_url %}</a>{% else %}</div>{% endif %}
+
+        {% if landing_contact.whatsapp_url %}
+        <a href="{{ landing_contact.whatsapp_url }}" target="_blank" rel="noopener noreferrer"
+           class="soft-card rounded-2xl p-6 text-center animate-on-scroll animate-fade-up delay-2 block cursor-pointer">
+        {% else %}
         <div class="soft-card rounded-2xl p-6 text-center animate-on-scroll animate-fade-up delay-2">
+        {% endif %}
           <i class="fab fa-whatsapp text-[#C9A227] text-2xl mb-3"></i>
           <p class="font-semibold text-gray-900 mb-1">WhatsApp</p>
           <p class="text-gray-500">{{ landing_contact.phone|default:"Écrivez-nous directement sur WhatsApp" }}</p>
-        </div>
+        {% if landing_contact.whatsapp_url %}</a>{% else %}</div>{% endif %}
       </div>
     </div>
   </section>
@@ -1194,5 +1228,53 @@
   </script>
 
   <script src="{% static 'js/script_accueil.js' %}?v=landing-v9-royal-gym"></script>
+  <script>
+  (function () {
+    try {
+      var el = document.getElementById('hero-typewriter');
+      if (!el) return;
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+      var slogans = [
+        el.textContent.trim(),
+        "Sois en sueur maintenant, brille plus tard.",
+        "Ton seul adversaire, c'est toi.",
+        "Chaque repetition te rapproche du sommet."
+      ].filter(function (s) { return s && s.length > 0; });
+
+      if (slogans.length < 2) return;
+
+      var i = 0, charIndex = 0, deleting = false;
+      var TYPE_MS = 45, DELETE_MS = 22, PAUSE_FULL_MS = 1600, PAUSE_EMPTY_MS = 400;
+
+      function tick() {
+        var current = slogans[i];
+        if (!deleting) {
+          charIndex++;
+          el.textContent = current.slice(0, charIndex);
+          if (charIndex >= current.length) {
+            deleting = true;
+            setTimeout(tick, PAUSE_FULL_MS);
+            return;
+          }
+          setTimeout(tick, TYPE_MS);
+        } else {
+          charIndex--;
+          el.textContent = current.slice(0, charIndex);
+          if (charIndex <= 0) {
+            deleting = false;
+            i = (i + 1) % slogans.length;
+            setTimeout(tick, PAUSE_EMPTY_MS);
+            return;
+          }
+          setTimeout(tick, DELETE_MS);
+        }
+      }
+
+      charIndex = slogans[0].length;
+      setTimeout(function () { deleting = true; tick(); }, PAUSE_FULL_MS);
+    } catch (e) {}
+  })();
+  </script>
 </body>
 </html>

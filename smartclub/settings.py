@@ -131,6 +131,7 @@ CANONICAL_HOST = _env("DJANGO_CANONICAL_HOST", "" if DEBUG else "smartclubpro.or
 # smartclub/public_links.py. Laisser vide retombe sur CANONICAL_HOST, puis sur
 # l'adresse de la requete courante.
 PUBLIC_BASE_URL = _env("DJANGO_PUBLIC_BASE_URL", "")
+LANDING_AGENDA_URL = _env("DJANGO_LANDING_AGENDA_URL", "")
 
 # Duree de validite du QR code d'un membre, en jours. Les QR sont imprimes sur
 # les cartes membres : une validite courte rendrait les cartes inutilisables au
