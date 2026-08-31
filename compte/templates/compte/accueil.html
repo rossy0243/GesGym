@@ -38,6 +38,11 @@
   <link rel="stylesheet" href="{% static 'css/style_accueil.css' %}">
 
   <style>
+    html, body {
+      max-width: 100%;
+      overflow-x: hidden;
+    }
+
     body {
       font-family: 'Inter', sans-serif;
       background: #ffffff;
@@ -161,25 +166,110 @@
     }
     .equip-icon { transition: transform .35s ease, background .35s ease, color .35s ease; }
 
-    .hero-premium {
+    /* Hero video cinematique */
+    .hero-video {
       position: relative;
       overflow: hidden;
-      background:
-        radial-gradient(circle at top right, rgba(201, 162, 39, 0.12), transparent 28%),
-        radial-gradient(circle at bottom left, rgba(11, 11, 11, 0.05), transparent 30%),
-        linear-gradient(180deg, #FBF8F0 0%, #ffffff 100%);
+      min-height: 92vh;
+      display: flex;
+      align-items: center;
+      background: #0B0B0B;
     }
 
-    .hero-premium::before {
-      content: "";
+    .hero-video-bg {
       position: absolute;
       inset: 0;
-      background-image:
-        linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
-      background-size: 32px 32px;
-      mask-image: linear-gradient(to bottom, rgba(0,0,0,0.24), transparent 70%);
+      z-index: 0;
+      background-image: url('{% static "images/royal-gym-hero-video-poster.jpg" %}');
+      background-size: cover;
+      background-position: center;
+    }
+
+    .hero-video-el {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      animation: heroKenBurns 24s ease-in-out infinite alternate;
+    }
+
+    @keyframes heroKenBurns {
+      0% { transform: scale(1); }
+      100% { transform: scale(1.09); }
+    }
+
+    .hero-video-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      background:
+        linear-gradient(180deg, rgba(11,11,11,.90) 0%, rgba(11,11,11,.74) 26%, rgba(11,11,11,.58) 52%, rgba(11,11,11,.88) 100%),
+        linear-gradient(90deg, rgba(11,11,11,.55) 0%, rgba(11,11,11,.10) 55%, rgba(11,11,11,.5) 100%);
       pointer-events: none;
+    }
+
+    .hero-video-vignette {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      box-shadow: inset 0 0 180px rgba(0,0,0,.65);
+      pointer-events: none;
+    }
+
+    .hero-live-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: .55rem;
+      padding: .45rem .95rem;
+      border-radius: 999px;
+      background: rgba(201,162,39,.12);
+      border: 1px solid rgba(201,162,39,.45);
+      color: #E8C766;
+      font-size: .72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .09em;
+      -webkit-backdrop-filter: blur(6px);
+      backdrop-filter: blur(6px);
+    }
+
+    .hero-live-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #C9A227;
+      box-shadow: 0 0 0 rgba(201,162,39,.6);
+      animation: pulseGlow 1.6s ease-in-out infinite;
+    }
+
+    .premium-card-glass {
+      background: rgba(255,255,255,.06);
+      -webkit-backdrop-filter: blur(18px);
+      backdrop-filter: blur(18px);
+      border: 1px solid rgba(201,162,39,.28);
+      box-shadow: 0 24px 60px rgba(0,0,0,.5);
+    }
+
+    .stat-glass {
+      background: rgba(255,255,255,.05);
+      border: 1px solid rgba(255,255,255,.10);
+      transition: transform .3s ease, background .3s ease, border-color .3s ease;
+    }
+    .stat-glass:hover {
+      transform: translateY(-4px);
+      background: rgba(201,162,39,.12);
+      border-color: rgba(201,162,39,.4);
+    }
+
+    @media (max-width: 767px) {
+      .hero-video-el { display: none; }
+      .hero-video { min-height: 78vh; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .hero-video-el { animation: none; }
     }
 
     .premium-card {
@@ -522,71 +612,82 @@
   </header>
 
   <!-- HERO -->
-  <section id="accueil" class="hero-premium py-12 lg:py-16">
-    <div class="float-blob animate-on-scroll animate-zoom-in" style="width:280px;height:280px;top:-60px;right:-60px;background:rgba(201,162,39,.22);animation:float 8s ease-in-out infinite;"></div>
-    <div class="float-blob animate-on-scroll animate-zoom-in delay-2" style="width:220px;height:220px;bottom:-40px;left:-40px;background:rgba(11,11,11,.10);animation:floatSlow 10s ease-in-out infinite;"></div>
-    <div class="container-premium mx-auto px-6 lg:px-8 relative">
+  <section id="accueil" class="hero-video py-12 lg:py-16">
+    <div class="hero-video-bg">
+      <video class="hero-video-el" autoplay muted loop playsinline preload="metadata"
+             poster="{% static 'images/royal-gym-hero-video-poster.jpg' %}">
+        <source src="{% static 'videos/royal-gym-hero.webm' %}" type="video/webm">
+        <source src="{% static 'videos/royal-gym-hero.mp4' %}" type="video/mp4">
+      </video>
+    </div>
+    <div class="hero-video-overlay"></div>
+    <div class="hero-video-vignette"></div>
+    <div class="container-premium mx-auto px-6 lg:px-8 relative" style="z-index:2;">
       <div class="grid lg:grid-cols-2 gap-10 items-center">
         <div class="text-center lg:text-left">
-          <span class="section-kicker mb-5 animate-on-scroll animate-fade-up">{{ landing_contact.kicker }}</span>
+          <span class="hero-live-badge mb-5 animate-on-scroll animate-fade-up">
+            <span class="hero-live-dot"></span> En direct de notre salle
+          </span>
 
           <h1 class="text-4xl md:text-5xl lg:text-6xl font-extrabold leading-tight mb-6 tracking-tight animate-on-scroll animate-fade-up delay-1">
             <span class="gradient-text">{{ landing_contact.name }}</span><br>
-            <span class="text-gray-900">{{ landing_contact.title }}</span>
+            <span class="text-white">{{ landing_contact.title }}</span>
           </h1>
 
-          <p class="text-lg md:text-xl text-gray-600 mb-8 max-w-2xl mx-auto lg:mx-0 leading-relaxed animate-on-scroll animate-fade-up delay-2">
+          <p class="text-lg md:text-xl text-gray-200 mb-8 max-w-2xl mx-auto lg:mx-0 leading-relaxed animate-on-scroll animate-fade-up delay-2">
             {{ landing_contact.intro|linebreaksbr }}
           </p>
 
           <div class="flex flex-wrap gap-3 justify-center lg:justify-start mb-8 animate-on-scroll animate-fade-up delay-3">
-            <span class="metric-chip px-4 py-2 rounded-full text-sm font-semibold text-gray-700"><i class="fas fa-dumbbell text-[#C9A227] mr-1"></i> Musculation</span>
-            <span class="metric-chip px-4 py-2 rounded-full text-sm font-semibold text-gray-700"><i class="fas fa-person-running text-[#C9A227] mr-1"></i> Cardio-training</span>
-            <span class="metric-chip px-4 py-2 rounded-full text-sm font-semibold text-gray-700"><i class="fas fa-people-group text-[#C9A227] mr-1"></i> Cours collectifs</span>
-            <span class="metric-chip px-4 py-2 rounded-full text-sm font-semibold text-gray-700"><i class="fas fa-user-tie text-[#C9A227] mr-1"></i> Coaching personnel</span>
+            <span class="metric-chip px-4 py-2 rounded-full text-sm font-semibold" style="background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.14);color:#f1f1ea;"><i class="fas fa-dumbbell text-[#E8C766] mr-1"></i> Musculation</span>
+            <span class="metric-chip px-4 py-2 rounded-full text-sm font-semibold" style="background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.14);color:#f1f1ea;"><i class="fas fa-person-running text-[#E8C766] mr-1"></i> Cardio-training</span>
+            <span class="metric-chip px-4 py-2 rounded-full text-sm font-semibold" style="background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.14);color:#f1f1ea;"><i class="fas fa-people-group text-[#E8C766] mr-1"></i> Cours collectifs</span>
+            <span class="metric-chip px-4 py-2 rounded-full text-sm font-semibold" style="background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.14);color:#f1f1ea;"><i class="fas fa-user-tie text-[#E8C766] mr-1"></i> Coaching personnel</span>
           </div>
 
           <div class="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start animate-on-scroll animate-fade-up delay-4">
-            <a href="#contact-form" class="btn-shine btn-pulse px-6 py-3.5 bg-[#0B0B0B] text-white font-bold rounded-full hover:bg-[#8A6D1D] transition shadow-lg">
-              Nous contacter
+            <a href="{{ landing_contact.join_url|default:'#contact-form' }}" class="btn-shine btn-pulse px-6 py-3.5 bg-[#C9A227] text-[#0B0B0B] font-bold rounded-full hover:bg-[#E8C766] transition shadow-lg">
+              Nous rejoindre
             </a>
-            <a href="#formules" class="btn-shine px-6 py-3.5 border-2 border-[#0B0B0B] text-[#0B0B0B] font-bold rounded-full hover:bg-[#0B0B0B] hover:text-white transition">
+            <a href="#formules" class="btn-shine px-6 py-3.5 border-2 border-white text-white font-bold rounded-full hover:bg-white hover:text-[#0B0B0B] transition">
               Voir nos formules
             </a>
           </div>
 
-          <p class="mt-6 text-sm text-gray-500 animate-on-scroll animate-fade-up delay-5">
+          <p class="mt-6 text-sm text-gray-300 animate-on-scroll animate-fade-up delay-5">
             Ouvert aux débutants comme aux sportifs confirmés.
           </p>
         </div>
 
         <div class="relative animate-on-scroll animate-fade-left delay-2">
-          <div class="premium-card rounded-[32px] p-4 lg:p-5">
-            <div class="relative rounded-[24px] overflow-hidden">
-              <img src="{% if landing_contact.hero_image_url %}{{ landing_contact.hero_image_url }}{% else %}{% static 'images/royal-gym-equipment-2.jpg' %}{% endif %}"
-                   alt="Équipement de musculation {{ landing_contact.name }}" class="w-full h-auto object-cover">
+          <div class="premium-card-glass rounded-[32px] p-6 lg:p-7">
+            <div class="flex items-center gap-3 mb-6">
               <img src="{% if landing_contact.logo_url %}{{ landing_contact.logo_url }}{% else %}{% static 'images/royal-gym-logo.png' %}{% endif %}"
-                   alt="{{ landing_contact.name }}" class="absolute bottom-4 left-4 w-14 h-14 rounded-xl shadow-lg object-cover">
+                   alt="{{ landing_contact.name }}" class="w-14 h-14 rounded-xl shadow-lg object-cover flex-shrink-0">
+              <div>
+                <p class="text-white font-extrabold text-lg leading-tight">{{ landing_contact.name }}</p>
+                <p class="text-[#E8C766] text-sm">Salle premium à {{ landing_contact.city|default:"Kinshasa" }}</p>
+              </div>
             </div>
-            <div class="grid grid-cols-3 gap-3 mt-5">
-              <div class="soft-card rounded-2xl p-4 text-center">
-                <i class="fas fa-user-tie text-[#C9A227] text-xl mb-1"></i>
-                <p class="text-sm font-semibold text-gray-800">Coachs qualifiés</p>
+            <div class="grid grid-cols-1 gap-3">
+              <div class="stat-glass rounded-2xl p-4 flex items-center gap-3">
+                <i class="fas fa-user-tie text-[#C9A227] text-xl"></i>
+                <p class="text-sm font-semibold text-white">Coachs qualifiés</p>
               </div>
-              <div class="soft-card rounded-2xl p-4 text-center">
-                <i class="fas fa-id-card text-[#C9A227] text-xl mb-1"></i>
-                <p class="text-sm font-semibold text-gray-800">Carte membre &amp; QR</p>
+              <div class="stat-glass rounded-2xl p-4 flex items-center gap-3">
+                <i class="fas fa-id-card text-[#C9A227] text-xl"></i>
+                <p class="text-sm font-semibold text-white">Carte membre &amp; QR</p>
               </div>
-              <div class="soft-card rounded-2xl p-4 text-center">
-                <i class="fas fa-clock text-[#C9A227] text-xl mb-1"></i>
-                <p class="text-sm font-semibold text-gray-800">Horaires flexibles</p>
+              <div class="stat-glass rounded-2xl p-4 flex items-center gap-3">
+                <i class="fas fa-clock text-[#C9A227] text-xl"></i>
+                <p class="text-sm font-semibold text-white">Horaires flexibles</p>
               </div>
             </div>
           </div>
         </div>
       </div>
     </div>
-    <a href="#services" class="scroll-indicator" aria-label="Découvrir la suite">
+    <a href="#services" class="scroll-indicator" aria-label="Découvrir la suite" style="z-index:2;">
       <i class="fas fa-chevron-down text-2xl"></i>
     </a>
   </section>

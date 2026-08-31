@@ -47,7 +47,28 @@ class OrganizationAdmin(admin.ModelAdmin):
     list_filter = ("subscription_pack", "is_active", "created_at")
     search_fields = ("name", "slug", "email", "phone")
     prepopulated_fields = {"slug": ("name",)}
-    fields = ("name", "slug", "subscription_pack", "logo", "address", "phone", "whatsapp_number", "email", "is_active")
+    fieldsets = (
+        ("Identite", {"fields": ("name", "slug", "subscription_pack", "logo", "is_active")}),
+        ("Coordonnees", {"fields": ("address", "city", "phone", "whatsapp_number", "email", "opening_hours")}),
+        ("Reseaux sociaux", {"fields": ("facebook_url", "instagram_url", "tiktok_url")}),
+        (
+            "Page vitrine publique",
+            {
+                "fields": (
+                    "landing_kicker",
+                    "landing_title",
+                    "landing_intro",
+                    "footer_services",
+                    "show_public_prices",
+                    "landing_hero_image",
+                    "landing_image_1",
+                    "landing_image_2",
+                    "landing_image_3",
+                ),
+            },
+        ),
+        ("Referencement (SEO)", {"fields": ("seo_description", "seo_keywords")}),
+    )
     inlines = (OwnerInline, GymInline)
     readonly_fields = ("created_at",)
     actions = ("switch_to_club_pack", "switch_to_premium_pack")
