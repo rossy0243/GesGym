@@ -171,6 +171,6 @@ services:
       - key: BREVO_API_KEY
         sync: false
       - key: DJANGO_DEFAULT_FROM_EMAIL
-        value: noreply@royalgym-fitness.com
+        value: contact@royalgym-fitness.com
       - key: DJANGO_SERVER_EMAIL
-        value: noreply@royalgym-fitness.com
+        value: contact@royalgym-fitness.com
