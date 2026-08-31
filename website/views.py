@@ -36,6 +36,34 @@ def _build_whatsapp_url(message, numero=None):
     return f"https://wa.me/{numero}"
 
 
+def _build_join_url(organization):
+    # Le bouton "Nous rejoindre" doit renvoyer vers la vraie pre-inscription
+    # du gym plutot que de se contenter de faire defiler jusqu'au formulaire
+    # de contact, quand un lien actif existe.
+    if organization is None:
+        return ""
+    gym = organization.gyms.filter(is_active=True).first()
+    if gym is None:
+        return ""
+    link = getattr(gym, "member_pre_registration_link", None)
+    if link is None or not link.is_active:
+        return ""
+    return reverse("members:public_pre_registration", args=[link.token])
+
+
+def _pick_premium_plan(plans):
+    # Pour le popup "offre premium" : on met en avant la formule marquee
+    # comme populaire (la plus vendue), sinon la derniere de la liste, qui
+    # correspond a l'engagement le plus long/premium par construction
+    # (landing_plans trie par duration_days croissant).
+    if not plans:
+        return None
+    for plan in plans:
+        if plan.get("featured"):
+            return plan
+    return plans[-1]
+
+
 def _build_contact_whatsapp_message(cleaned_data, nom_organisation="Royal Gym"):
     return (
         f"Bonjour {nom_organisation}, je viens de vous contacter depuis votre site.\n\n"
@@ -169,6 +197,8 @@ def landing(request):
                 "Bonjour, je voudrais connaître le planning des cours et les horaires.",
                 contact["whatsapp_number"],
             ),
+            "join_url": _build_join_url(contact["organization"]),
+            "premium_plan": _pick_premium_plan(contact["plans"]),
             **_build_landing_seo_context(request, contact),
         },
     )

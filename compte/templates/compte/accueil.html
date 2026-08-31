@@ -577,6 +577,111 @@
     @media (max-width: 767px) {
       body { padding-bottom: 78px; }
     }
+
+    /* Popup "offre premium" */
+    #premium-popup-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 9500;
+      background: rgba(5, 5, 5, .72);
+      -webkit-backdrop-filter: blur(6px);
+      backdrop-filter: blur(6px);
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      opacity: 0;
+      transition: opacity .35s ease;
+    }
+    #premium-popup-backdrop.is-visible { opacity: 1; }
+
+    #premium-popup {
+      position: relative;
+      width: 100%;
+      max-width: 440px;
+      max-height: 90vh;
+      overflow-y: auto;
+      border-radius: 28px;
+      padding: 2.25rem 2rem 2rem;
+      background:
+        radial-gradient(circle at top right, rgba(201, 162, 39, .22), transparent 55%),
+        linear-gradient(160deg, #0B0B0B 0%, #171512 55%, #0B0B0B 100%);
+      border: 1px solid rgba(201, 162, 39, .4);
+      box-shadow: 0 30px 80px rgba(0, 0, 0, .6), 0 0 0 1px rgba(201, 162, 39, .08), 0 0 60px rgba(201, 162, 39, .12);
+      transform: scale(.88) translateY(18px);
+      opacity: 0;
+      transition: transform .45s cubic-bezier(.34, 1.56, .64, 1), opacity .4s ease;
+    }
+    #premium-popup-backdrop.is-visible #premium-popup {
+      transform: scale(1) translateY(0);
+      opacity: 1;
+    }
+
+    .premium-popup-close {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      width: 34px;
+      height: 34px;
+      border-radius: 999px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255, 255, 255, .06);
+      color: #C9A227;
+      border: 1px solid rgba(201, 162, 39, .25);
+      cursor: pointer;
+      transition: background .2s ease, transform .2s ease;
+    }
+    .premium-popup-close:hover { background: rgba(201, 162, 39, .18); transform: rotate(90deg); }
+
+    .premium-popup-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: .5rem;
+      padding: .4rem 1rem;
+      border-radius: 999px;
+      background: rgba(201, 162, 39, .12);
+      border: 1px solid rgba(201, 162, 39, .5);
+      color: #E8C766;
+      font-size: .72rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      animation: pulseGlow 2.4s ease-in-out infinite;
+    }
+
+    .premium-popup-sparkle {
+      position: absolute;
+      color: #C9A227;
+      animation: sparkleTwinkle 1.8s ease-in-out infinite;
+      pointer-events: none;
+    }
+    @keyframes sparkleTwinkle {
+      0%, 100% { opacity: .25; transform: scale(.8) rotate(0deg); }
+      50% { opacity: 1; transform: scale(1.15) rotate(15deg); }
+    }
+
+    .premium-popup-feature {
+      display: flex;
+      align-items: flex-start;
+      gap: .65rem;
+      opacity: 0;
+      transform: translateX(-12px);
+      animation: premiumFeatureIn .5s ease forwards;
+    }
+    @keyframes premiumFeatureIn {
+      to { opacity: 1; transform: translateX(0); }
+    }
+    .premium-popup-feature.d1 { animation-delay: .15s; }
+    .premium-popup-feature.d2 { animation-delay: .3s; }
+    .premium-popup-feature.d3 { animation-delay: .45s; }
+    .premium-popup-feature.d4 { animation-delay: .6s; }
+    .premium-popup-feature.d5 { animation-delay: .75s; }
+
+    @media (prefers-reduced-motion: reduce) {
+      #premium-popup, #premium-popup-backdrop, .premium-popup-feature { transition: none; animation: none; }
+    }
   </style>
 </head>
 <body class="antialiased">
@@ -586,6 +691,58 @@
     <img src="{% if landing_contact.logo_url %}{{ landing_contact.logo_url }}{% else %}{% static 'images/royal-gym-logo.png' %}{% endif %}" alt="">
     <span class="intro-text">{{ landing_contact.name }}</span>
     <div class="intro-bar"></div>
+  </div>
+
+  <!-- POPUP OFFRE PREMIUM -->
+  <div id="premium-popup-backdrop" role="dialog" aria-modal="true" aria-labelledby="premium-popup-title">
+    <div id="premium-popup">
+      <i class="fas fa-star premium-popup-sparkle" style="top:20px; left:24px; font-size:.8rem;" aria-hidden="true"></i>
+      <i class="fas fa-star premium-popup-sparkle" style="top:64px; right:38px; font-size:.55rem; animation-delay:.4s;" aria-hidden="true"></i>
+      <i class="fas fa-star premium-popup-sparkle" style="bottom:100px; left:18px; font-size:.65rem; animation-delay:.9s;" aria-hidden="true"></i>
+
+      <button type="button" class="premium-popup-close" id="premium-popup-close" aria-label="Fermer">
+        <i class="fas fa-times"></i>
+      </button>
+
+      <span class="premium-popup-badge mb-5"><i class="fas fa-crown"></i> Offre premium</span>
+
+      <h3 id="premium-popup-title" class="text-2xl font-extrabold text-white mt-4 mb-2 leading-snug">
+        {% if premium_plan %}{{ premium_plan.name }}{% else %}Passez au niveau supérieur{% endif %}
+      </h3>
+      <p class="text-gray-300 text-sm mb-5 leading-relaxed">
+        {% if premium_plan.description %}{{ premium_plan.description }}{% else %}Coaching personnalisé, accès illimité et un suivi pensé pour des résultats réels.{% endif %}
+      </p>
+
+      {% if landing_contact.show_prices and premium_plan.price %}
+      <div class="mb-5 flex items-baseline gap-2">
+        <span class="text-3xl font-extrabold text-[#E8C766]">{{ premium_plan.price|floatformat:0 }}</span>
+        <span class="text-sm font-semibold text-gray-400">USD &middot; {{ premium_plan.duration_label }}</span>
+      </div>
+      {% endif %}
+
+      {% if premium_plan.offers %}
+      <ul class="space-y-3 mb-7">
+        {% for offre in premium_plan.offers %}
+        <li class="premium-popup-feature {% cycle 'd1' 'd2' 'd3' 'd4' 'd5' %}">
+          <i class="fas fa-check-circle text-[#C9A227] mt-0.5"></i>
+          <span class="text-sm text-gray-200">{{ offre }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+
+      <a href="{{ join_url|default:'#formules' }}" class="btn-shine block text-center bg-[#C9A227] text-[#0B0B0B] font-bold py-3.5 rounded-full hover:bg-[#E8C766] transition shadow-lg mb-3">
+        Je rejoins {{ landing_contact.name }}
+      </a>
+      {% if landing_contact.whatsapp_url %}
+      <a href="{{ landing_contact.whatsapp_url }}" target="_blank" rel="noopener noreferrer" class="block text-center text-sm text-gray-300 hover:text-[#E8C766] transition font-semibold">
+        <i class="fab fa-whatsapp mr-1"></i> Discuter avec notre équipe
+      </a>
+      {% endif %}
+      <button type="button" id="premium-popup-later" class="block w-full text-center text-xs text-gray-500 hover:text-gray-300 transition mt-4">
+        Peut-être plus tard
+      </button>
+    </div>
   </div>
 
   <!-- HEADER -->
@@ -616,7 +773,7 @@
         <a href="{% url 'compte:login' %}" class="px-5 py-2.5 text-sm font-semibold text-[#0B0B0B] border-2 border-[#0B0B0B] rounded-full hover:bg-[#0B0B0B] hover:text-white transition-all">
           Espace membre
         </a>
-        <a href="#contact-form" class="px-5 py-2.5 text-sm font-semibold bg-gradient-to-r from-[#C9A227] to-[#8A6D1D] text-white rounded-full shadow-lg hover:shadow-xl transition">
+        <a href="{{ join_url|default:'#contact-form' }}" class="px-5 py-2.5 text-sm font-semibold bg-gradient-to-r from-[#C9A227] to-[#8A6D1D] text-white rounded-full shadow-lg hover:shadow-xl transition">
           Nous rejoindre
         </a>
       </div>
@@ -663,7 +820,7 @@
           </div>
 
           <div class="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start animate-on-scroll animate-fade-up delay-4">
-            <a href="{{ landing_contact.join_url|default:'#contact-form' }}" class="btn-shine btn-pulse px-6 py-3.5 bg-[#C9A227] text-[#0B0B0B] font-bold rounded-full hover:bg-[#E8C766] transition shadow-lg">
+            <a href="{{ join_url|default:'#contact-form' }}" class="btn-shine btn-pulse px-6 py-3.5 bg-[#C9A227] text-[#0B0B0B] font-bold rounded-full hover:bg-[#E8C766] transition shadow-lg">
               Nous rejoindre
             </a>
             <a href="#formules" class="btn-shine px-6 py-3.5 border-2 border-white text-white font-bold rounded-full hover:bg-white hover:text-[#0B0B0B] transition">
@@ -1273,6 +1430,44 @@
 
       charIndex = slogans[0].length;
       setTimeout(function () { deleting = true; tick(); }, PAUSE_FULL_MS);
+    } catch (e) {}
+  })();
+  </script>
+  <script>
+  (function () {
+    try {
+      var backdrop = document.getElementById('premium-popup-backdrop');
+      if (!backdrop) return;
+      var STORAGE_KEY = 'rg-premium-popup-shown';
+
+      function closePopup() {
+        backdrop.classList.remove('is-visible');
+        setTimeout(function () { backdrop.style.display = 'none'; }, 350);
+      }
+
+      function openPopup() {
+        try {
+          if (sessionStorage.getItem(STORAGE_KEY)) return;
+          sessionStorage.setItem(STORAGE_KEY, '1');
+        } catch (e) {}
+        backdrop.style.display = 'flex';
+        setTimeout(function () { backdrop.classList.add('is-visible'); }, 20);
+      }
+
+      document.getElementById('premium-popup-close').addEventListener('click', closePopup);
+      document.getElementById('premium-popup-later').addEventListener('click', closePopup);
+      backdrop.addEventListener('click', function (e) {
+        if (e.target === backdrop) closePopup();
+      });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && backdrop.classList.contains('is-visible')) closePopup();
+      });
+
+      var already = false;
+      try { already = !!sessionStorage.getItem(STORAGE_KEY); } catch (e) {}
+      if (!already) {
+        setTimeout(openPopup, 5500);
+      }
     } catch (e) {}
   })();
   </script>
