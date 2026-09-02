@@ -843,16 +843,24 @@ class PlanCreationFailureTests(TestCase):
         session["current_gym_id"] = self.gym.id
         session.save()
 
-    def _creer(self, nom="Etudiant"):
+    def _creer(self, nom="Etudiant", **extra):
+        # Les champs d'invitation sont envoyes vides, comme le fait le vrai
+        # formulaire. Les omettre laisserait Django appliquer le defaut du
+        # modele et masquerait toute erreur de nettoyage : un champ vide n'est
+        # pas un champ absent.
+        charge = {
+            "name": nom,
+            "duration_days": 30,
+            "price": "60",
+            "description": "Destinee aux etudiants",
+            "is_active": "on",
+            "guest_invites_per_month": "",
+            "guest_sessions_per_invite": "",
+        }
+        charge.update(extra)
         return self.client.post(
             reverse("subscriptions:create_subscription_plan"),
-            {
-                "name": nom,
-                "duration_days": 30,
-                "price": "60",
-                "description": "Destinee aux etudiants",
-                "is_active": "on",
-            },
+            charge,
             HTTP_X_REQUESTED_WITH="XMLHttpRequest",
         )
 
@@ -863,6 +871,23 @@ class PlanCreationFailureTests(TestCase):
         self.assertTrue(
             SubscriptionPlan.objects.filter(gym=self.gym, name="Etudiant").exists()
         )
+
+    def test_empty_invitation_fields_fall_back_to_the_defaults(self):
+        # Le defaut du modele ne s'applique qu'aux champs absents. Envoyes
+        # vides, ils arrivaient a None et la base refusait tout la formule -
+        # en annoncant un nom deja pris, ce qui n'avait rien a voir.
+        self._creer()
+
+        plan = SubscriptionPlan.objects.get(gym=self.gym, name="Etudiant")
+        self.assertEqual(plan.guest_invites_per_month, 0)
+        self.assertEqual(plan.guest_sessions_per_invite, 1)
+
+    def test_invitation_quotas_are_kept_when_given(self):
+        self._creer(guest_invites_per_month="2", guest_sessions_per_invite="3")
+
+        plan = SubscriptionPlan.objects.get(gym=self.gym, name="Etudiant")
+        self.assertEqual(plan.guest_invites_per_month, 2)
+        self.assertEqual(plan.guest_sessions_per_invite, 3)
 
     def test_the_form_catches_the_duplicate_before_the_database(self):
         # La validation doit prendre la main la premiere : c'est elle qui sait

@@ -37,12 +37,6 @@ class SubscriptionOfferForm(forms.ModelForm):
             "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 
-    def clean_guest_invites_per_month(self):
-        return self.cleaned_data.get("guest_invites_per_month") or 0
-
-    def clean_guest_sessions_per_invite(self):
-        return self.cleaned_data.get("guest_sessions_per_invite") or 1
-
     def clean_name(self):
         name = (self.cleaned_data.get("name") or "").strip()
         if not name:
@@ -119,6 +113,16 @@ class SubscriptionPlanForm(forms.ModelForm):
             'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
+
+    # Ces deux champs sont facultatifs a la saisie mais obligatoires en base :
+    # une formule sans invitations n'a rien a declarer, et un champ laisse vide
+    # doit retomber sur le defaut du modele. Sans ces methodes, le formulaire se
+    # declarait valide en portant None, et la base refusait l'enregistrement.
+    def clean_guest_invites_per_month(self):
+        return self.cleaned_data.get("guest_invites_per_month") or 0
+
+    def clean_guest_sessions_per_invite(self):
+        return self.cleaned_data.get("guest_sessions_per_invite") or 1
 
     def clean_name(self):
         name = (self.cleaned_data.get('name') or '').strip()
