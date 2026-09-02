@@ -1,5 +1,7 @@
 from datetime import timedelta
 from pathlib import Path
+from unittest.mock import patch
+
 from decimal import Decimal
 
 from django.conf import settings
@@ -9,7 +11,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from compte.models import User
+from compte.models import User, UserGymRole
 from members.models import Member
 from organizations.models import Gym, GymModule, Module, Organization
 from pos.models import CashRegister, Payment
@@ -804,3 +806,88 @@ class PlanNameCollisionTests(TestCase):
         plan = self._formule()
 
         self.assertTrue(self._formulaire(instance=plan).is_valid())
+
+
+class PlanCreationFailureTests(TestCase):
+    """
+    Ce que la base refuse, et ce qu'on en apprend.
+
+    ``IntegrityError`` couvre toutes les atteintes a l'integrite : un nom en
+    double, mais aussi un champ obligatoire absent. Le rattrapage annoncait un
+    nom en double sans l'avoir verifie, ce qui a envoye chercher une formule
+    qui n'existait pas.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Echec", slug="org-echec"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Echec",
+            slug="gym-echec", subdomain="gym-echec",
+        )
+        module, _ = Module.objects.get_or_create(
+            code="SUBSCRIPTIONS", defaults={"name": "Subscriptions"}
+        )
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=module, defaults={"is_active": True}
+        )
+        self.gerant = User.objects.create_user(
+            username="gerant-echec", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.gerant, gym=self.gym, role="manager", is_active=True
+        )
+        self.client.force_login(self.gerant)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _creer(self, nom="Etudiant"):
+        return self.client.post(
+            reverse("subscriptions:create_subscription_plan"),
+            {
+                "name": nom,
+                "duration_days": 30,
+                "price": "60",
+                "description": "Destinee aux etudiants",
+                "is_active": "on",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+    def test_a_free_name_is_created(self):
+        reponse = self._creer()
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertTrue(
+            SubscriptionPlan.objects.filter(gym=self.gym, name="Etudiant").exists()
+        )
+
+    def test_the_form_catches_the_duplicate_before_the_database(self):
+        # La validation doit prendre la main la premiere : c'est elle qui sait
+        # nommer la formule fautive.
+        self._creer()
+
+        reponse = self._creer()
+
+        self.assertEqual(reponse.status_code, 400)
+        message = reponse.json()["errors"]["name"][0]
+        self.assertIn("porte deja ce nom", message)
+        self.assertNotIn("La base a refuse", message)
+
+    def test_a_database_refusal_is_written_to_the_log(self):
+        # Sans cette trace, une atteinte a l'integrite qui n'a rien a voir avec
+        # le nom continuerait de se faire passer pour un doublon.
+        from django.db import IntegrityError
+
+        with patch.object(
+            SubscriptionPlan, "save", side_effect=IntegrityError("null value in column gym_id")
+        ):
+            with self.assertLogs("subscriptions", level="WARNING") as journal:
+                reponse = self._creer(nom="Inedit")
+
+        self.assertEqual(reponse.status_code, 400)
+        trace = chr(10).join(journal.output)
+        self.assertIn("refusee par la base", trace)
+        self.assertIn("gym_id", trace)

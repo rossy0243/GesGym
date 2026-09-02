@@ -1,5 +1,7 @@
 from datetime import timedelta
 
+import logging
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
@@ -18,6 +20,8 @@ from smartclub.decorators import module_required
 
 from .forms import MemberSubscriptionForm, SubscriptionOfferForm, SubscriptionPlanForm
 from .models import MemberSubscription, SubscriptionOffer, SubscriptionPlan
+
+logger = logging.getLogger("subscriptions")
 
 
 PLAN_MANAGEMENT_ROLES = SUBSCRIPTION_ROLES
@@ -145,7 +149,14 @@ def create_plan(request):
                     plan.name,
                     metadata={"plan_id": plan.id, "price": str(plan.price)},
                 )
-            except IntegrityError:
+            except IntegrityError as exc:
+                logger.warning(
+                    "Creation de formule refusee par la base | salle=%s | "
+                    "nom=%r | cause=%s",
+                    getattr(request.gym, "id", None),
+                    form.cleaned_data.get("name"),
+                    exc,
+                )
                 if _wants_json(request):
                     return JsonResponse(
                         {
@@ -201,7 +212,11 @@ def edit_plan(request, plan_id):
                     metadata={"plan_id": plan.id},
                 )
                 return JsonResponse({"success": True, "message": "Formule modifiee avec succes."})
-            except IntegrityError:
+            except IntegrityError as exc:
+                logger.warning(
+                    "Modification de formule refusee par la base | formule=%s "
+                    "| cause=%s", plan.id, exc,
+                )
                 return JsonResponse(
                     {
                         "success": False,
