@@ -54,7 +54,11 @@ class SubscriptionOfferForm(forms.ModelForm):
                 name__iexact=name,
             ).exclude(pk=self.instance.pk).exists()
             if exists:
-                raise forms.ValidationError("Une offre avec ce nom existe deja dans ce gym.")
+                raise forms.ValidationError(
+                    "Une offre porte deja ce nom. Si vous ne la voyez pas dans "
+                    "la liste, c'est qu'elle est desactivee : modifiez-la et "
+                    "cochez « Activer l'offre »."
+                )
         return name
 
 class SubscriptionPlanForm(forms.ModelForm):
@@ -122,12 +126,26 @@ class SubscriptionPlanForm(forms.ModelForm):
             raise forms.ValidationError("Le nom de la formule est obligatoire.")
 
         if self.gym:
-            exists = SubscriptionPlan.objects.filter(
+            # Supprimer une formule qui a servi la desactive au lieu de
+            # l'effacer : son nom reste pris, mais elle ne saute plus aux yeux.
+            # Le refus doit donc dire laquelle des deux situations on affronte,
+            # sinon on cherche en vain une formule qu'on croit absente.
+            jumelle = SubscriptionPlan.objects.filter(
                 gym=self.gym,
                 name__iexact=name,
-            ).exclude(pk=self.instance.pk).exists()
-            if exists:
-                raise forms.ValidationError("Une formule avec ce nom existe deja dans ce gym.")
+            ).exclude(pk=self.instance.pk).first()
+
+            if jumelle and jumelle.is_active:
+                raise forms.ValidationError(
+                    "Une formule active porte deja ce nom."
+                )
+            if jumelle:
+                raise forms.ValidationError(
+                    "Une formule desactivee porte deja ce nom. Retrouvez-la "
+                    "dans la liste, elle porte le badge « Desactive » : "
+                    "modifiez-la, cochez « Activer la formule », et ajustez son "
+                    "prix au passage. Vous pouvez aussi choisir un autre nom."
+                )
 
         return name
 

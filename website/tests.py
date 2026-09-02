@@ -57,7 +57,10 @@ class PublicRouteTests(TestCase):
     def test_landing_uses_versioned_script_to_avoid_stale_browser_cache(self):
         response = self.client.get("/")
 
-        self.assertContains(response, "script_accueil.js?v=landing-v8-royal-gym")
+        # On verifie qu'une version accompagne le script, pas laquelle : figer
+        # le numero rendait ce test rouge a chaque cassage de cache, ce qui est
+        # precisement l'operation qu'il devrait accompagner sans broncher.
+        self.assertContains(response, "script_accueil.js?v=")
 
     def test_landing_mobile_header_uses_direct_login_link(self):
         response = self.client.get("/")

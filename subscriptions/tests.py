@@ -673,3 +673,110 @@ class SubscriptionRenewalTests(TestCase):
 
         labels = [str(label) for value, label in form.fields["member"].choices if value]
         self.assertNotIn("Fidele Renouv - SUSPENDU", labels)
+
+
+class PlanNameCollisionTests(TestCase):
+    """
+    Le refus doit dire ou chercher.
+
+    Supprimer une formule qui a servi la desactive au lieu de l'effacer : son
+    nom reste pris, mais elle ne saute plus aux yeux. Un message qui se
+    contente de « ce nom existe deja » envoie chercher une formule qu'on croit
+    absente.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Noms", slug="org-noms"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Noms",
+            slug="gym-noms", subdomain="gym-noms",
+        )
+
+    def _formulaire(self, nom="Etudiant", instance=None):
+        return SubscriptionPlanForm(
+            data={
+                "name": nom,
+                "duration_days": 30,
+                "price": "60",
+                "description": "Destinee aux etudiants",
+                "is_active": "on",
+            },
+            instance=instance,
+            gym=self.gym,
+        )
+
+    def _formule(self, nom="Etudiant", active=True):
+        return SubscriptionPlan.objects.create(
+            gym=self.gym, name=nom, duration_days=30, price=50,
+            is_active=active,
+        )
+
+    # --- Ce que dit le refus -------------------------------------------------
+
+    def test_an_active_twin_says_it_is_active(self):
+        self._formule(active=True)
+
+        form = self._formulaire()
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("active", form.errors["name"][0])
+
+    def test_an_archived_twin_says_where_to_look(self):
+        # Le cas qui piege : la formule est invisible dans la liste des
+        # formules utilisables, mais son nom bloque toujours.
+        self._formule(active=False)
+
+        form = self._formulaire()
+
+        self.assertFalse(form.is_valid())
+        message = form.errors["name"][0]
+        self.assertIn("desactivee", message)
+        self.assertIn("Activer la formule", message)
+
+    def test_the_two_messages_differ(self):
+        self._formule(active=True)
+        actif = self._formulaire().errors["name"][0]
+
+        SubscriptionPlan.objects.update(is_active=False)
+        archive = self._formulaire().errors["name"][0]
+
+        self.assertNotEqual(actif, archive)
+
+    # --- La porte de sortie ---------------------------------------------------
+
+    def test_an_archived_plan_can_be_revived_and_repriced(self):
+        # C'est la sortie que le message indique : elle doit exister.
+        archivee = self._formule(active=False)
+
+        form = self._formulaire(instance=archivee)
+
+        self.assertTrue(form.is_valid(), form.errors)
+        plan = form.save()
+        self.assertTrue(plan.is_active)
+        self.assertEqual(plan.price, Decimal("60"))
+
+    # --- Ce qui doit continuer de passer -----------------------------------------
+
+    def test_a_free_name_is_accepted(self):
+        self._formule(nom="Mensuel")
+
+        self.assertTrue(self._formulaire(nom="Etudiant").is_valid())
+
+    def test_the_same_name_in_another_gym_is_free(self):
+        voisine = Gym.objects.create(
+            organization=self.organization, name="Voisine",
+            slug="gym-noms-voisine", subdomain="gym-noms-voisine",
+        )
+        SubscriptionPlan.objects.create(
+            gym=voisine, name="Etudiant", duration_days=30, price=50
+        )
+
+        self.assertTrue(self._formulaire().is_valid())
+
+    def test_editing_a_plan_without_renaming_it_is_allowed(self):
+        # Se heurter a son propre nom serait absurde.
+        plan = self._formule()
+
+        self.assertTrue(self._formulaire(instance=plan).is_valid())

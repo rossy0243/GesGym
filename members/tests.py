@@ -3174,7 +3174,10 @@ class GuestPassLifeTests(TestCase):
 
     def test_a_pass_lasts_thirty_full_days(self):
         # Adosse au mois, un carnet emis le 29 n'aurait dure que deux jours.
-        ecart = self.carnet.expires_at - self.carnet.created_at
+        # En jours entiers : la date de fin est calculee avant l'ecriture en
+        # base, l'horodatage de creation pendant. Les quelques microsecondes
+        # qui les separent faisaient parfois tomber la soustraction a 29.
+        ecart = self.carnet.expires_at.date() - self.carnet.created_at.date()
         self.assertEqual(ecart.days, 30)
 
     def test_a_used_up_pass_is_exhausted(self):
