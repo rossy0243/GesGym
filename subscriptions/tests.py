@@ -1,6 +1,8 @@
 from datetime import timedelta
+from pathlib import Path
 from decimal import Decimal
 
+from django.conf import settings
 from django.contrib.messages import get_messages
 from django.core.exceptions import ValidationError
 from django.test import TestCase
@@ -734,6 +736,28 @@ class PlanNameCollisionTests(TestCase):
         message = form.errors["name"][0]
         self.assertIn("desactivee", message)
         self.assertIn("Activer la formule", message)
+
+    def test_the_message_names_the_blocking_plan(self):
+        # Sans son nom ni son numero, on cherche a l'aveugle une formule qu'on
+        # ne voit pas dans la liste.
+        jumelle = self._formule(nom="Etudiant", active=False)
+
+        message = self._formulaire().errors["name"][0]
+
+        self.assertIn("Etudiant", message)
+        self.assertIn(str(jumelle.id), message)
+
+    def test_the_database_refusal_reads_differently(self):
+        # Les deux chemins - validation du formulaire et contrainte de la base -
+        # disaient exactement la meme phrase : rien ne permettait de savoir
+        # lequel avait refuse, ni donc ou chercher.
+        chemin = Path(settings.BASE_DIR) / "subscriptions" / "views.py"
+        vues = chemin.read_text(encoding="utf-8")
+
+        self.assertIn("La base a refuse ce nom", vues)
+        self.assertNotIn(
+            "Une formule avec ce nom existe deja dans ce gym", vues
+        )
 
     def test_the_two_messages_differ(self):
         self._formule(active=True)

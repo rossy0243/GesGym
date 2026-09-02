@@ -150,11 +150,23 @@ def create_plan(request):
                     return JsonResponse(
                         {
                             "success": False,
-                            "errors": {"name": ["Une formule avec ce nom existe deja dans ce gym."]},
+                            "errors": {"name": [
+                                "La base a refuse ce nom : une formule "
+                                "l'utilise deja dans cette salle. Rechargez la "
+                                "page, elle a peut-etre ete creee entre-temps."
+                            ]},
                         },
                         status=400,
                     )
-                messages.error(request, "Une formule avec ce nom existe deja dans ce gym.")
+                # Formulation distincte de celle du formulaire : les deux
+                # chemins ne disaient pas un mot de difference, et rien ne
+                # permettait de savoir lequel avait refuse.
+                messages.error(
+                    request,
+                    "La base a refuse ce nom : une formule l'utilise deja dans "
+                    "cette salle. Rechargez la page, elle a peut-etre ete creee "
+                    "entre-temps.",
+                )
                 return redirect("subscriptions:subscription_plan_list")
 
             messages.success(request, "Formule creee avec succes.")
@@ -193,7 +205,10 @@ def edit_plan(request, plan_id):
                 return JsonResponse(
                     {
                         "success": False,
-                        "errors": {"name": ["Une formule avec ce nom existe deja dans ce gym."]},
+                        "errors": {"name": [
+                            "La base a refuse ce nom : une autre formule "
+                            "l'utilise deja dans cette salle."
+                        ]},
                     },
                     status=400,
                 )

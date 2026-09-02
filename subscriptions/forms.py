@@ -135,16 +135,23 @@ class SubscriptionPlanForm(forms.ModelForm):
                 name__iexact=name,
             ).exclude(pk=self.instance.pk).first()
 
-            if jumelle and jumelle.is_active:
-                raise forms.ValidationError(
-                    "Une formule active porte deja ce nom."
-                )
             if jumelle:
+                # Le message nomme la formule qui bloque, avec son numero : un
+                # refus qui dit seulement « ce nom existe deja » laisse chercher
+                # a l'aveugle une formule qu'on ne voit pas dans la liste.
+                etat = "active" if jumelle.is_active else "desactivee"
+                suite = (
+                    "Choisissez un autre nom, ou modifiez celle-ci."
+                    if jumelle.is_active
+                    else (
+                        "Retrouvez-la dans la liste, elle porte le badge "
+                        "« Desactive » : modifiez-la, cochez « Activer la "
+                        "formule », et ajustez son prix au passage."
+                    )
+                )
                 raise forms.ValidationError(
-                    "Une formule desactivee porte deja ce nom. Retrouvez-la "
-                    "dans la liste, elle porte le badge « Desactive » : "
-                    "modifiez-la, cochez « Activer la formule », et ajustez son "
-                    "prix au passage. Vous pouvez aussi choisir un autre nom."
+                    f"La formule {etat} « {jumelle.name} » (n° {jumelle.id}) "
+                    f"porte deja ce nom. {suite}"
                 )
 
         return name
