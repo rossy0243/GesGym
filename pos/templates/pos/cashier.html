@@ -431,8 +431,27 @@
                                             {% endif %}
                                         </div>
                                     </div>
+                                {% elif payment.type == "out" %}
+                                    {% comment %}
+                                    Une depense saisie au comptoir n'a ni membre ni produit :
+                                    sans son motif, la ligne ne dit que « Décaissement » et
+                                    personne ne sait plus a quoi l'argent est parti.
+                                    {% endcomment %}
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="material-icons text-secondary" style="font-size:20px;">money_off</span>
+                                        <div>
+                                            <div class="fw-semibold">Décaissement</div>
+                                            {% if payment.description %}
+                                                <small class="text-muted d-block">{{ payment.description }}</small>
+                                            {% endif %}
+                                        </div>
+                                    </div>
                                 {% else %}
-                                    <span class="text-muted">Décaissement</span>
+                                    {% comment %}
+                                    Un encaissement sans membre ni produit reste un encaissement :
+                                    le libeller « Décaissement » inversait le sens du mouvement.
+                                    {% endcomment %}
+                                    <span class="text-muted">Encaissement</span>
                                 {% endif %}
                             </td>
 
@@ -449,7 +468,10 @@
                                     <div class="fw-semibold">{{ payment.get_category_display }}</div>
                                     <small class="text-muted d-block">Sortie liee au module RH</small>
                                 {% elif payment.category %}
-                                    {{ payment.get_category_display }}
+                                    <div class="fw-semibold">{{ payment.get_category_display }}</div>
+                                    {% if payment.type == "out" and payment.description %}
+                                        <small class="text-muted d-block">{{ payment.description }}</small>
+                                    {% endif %}
                                 {% else %}
                                     <span class="text-muted">-</span>
                                 {% endif %}

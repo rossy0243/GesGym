@@ -311,11 +311,18 @@
                                         {% endif %}
                                     </div>
                                 </div>
-                            {% else %}
+                            {% elif p.type == "out" %}
                                 <div class="d-flex align-items-center gap-2">
                                     <span class="material-icons text-secondary" style="font-size:20px;">money_off</span>
-                                    <span>Décaissement</span>
+                                    <div>
+                                        <div class="fw-semibold">Décaissement</div>
+                                        {% if p.description %}
+                                            <small class="text-muted d-block">{{ p.description }}</small>
+                                        {% endif %}
+                                    </div>
                                 </div>
+                            {% else %}
+                                <span class="text-muted">Encaissement</span>
                             {% endif %}
                         </td>
 

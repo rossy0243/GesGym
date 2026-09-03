@@ -13,7 +13,12 @@ from products.models import Product, StockMovement
 from subscriptions.models import MemberSubscription, SubscriptionPlan
 from .models import CashRegister, ExchangeRate, Payment
 from .views import MEMBER_SEARCH_LIMIT
-from .services import record_product_sale, record_subscription_payment
+from .services import (
+    record_expense,
+    record_payment,
+    record_product_sale,
+    record_subscription_payment,
+)
 
 
 class PosAccountingTests(TestCase):
@@ -1293,3 +1298,117 @@ class FutureStartDateTests(TestCase):
 
         self.assertEqual(abonnement.start_date, self.today)
         self.assertEqual(abonnement.end_date, self.today + timedelta(days=30))
+
+
+class DisbursementReasonTests(TestCase):
+    """
+    Le motif d'un decaissement doit se lire dans les listes.
+
+    Il etait saisi au comptoir, stocke, puis affiche pour la maintenance et
+    les salaires - mais une depense ordinaire tombait dans le cas par defaut
+    et n'affichait que le mot « Decaissement ». L'argent sortait sans qu'on
+    sache pourquoi.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Motif", slug="org-motif"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Motif",
+            slug="gym-motif", subdomain="gym-motif",
+        )
+        module, _ = Module.objects.get_or_create(
+            code="POS", defaults={"name": "POS"}
+        )
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=module, defaults={"is_active": True}
+        )
+        self.caissier = User.objects.create_user(
+            username="caissier-motif", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.caissier, gym=self.gym, role="cashier", is_active=True
+        )
+        self.register = CashRegister.objects.create(
+            gym=self.gym,
+            opened_by=self.caissier,
+            opening_amount=Decimal("100000.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+        self.client.force_login(self.caissier)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _decaisser(self, motif="Achat de fournitures"):
+        return record_expense(
+            gym=self.gym,
+            amount=Decimal("5000"),
+            currency="CDF",
+            method="cash",
+            category="expense",
+            description=motif,
+            created_by=self.caissier,
+            source_app="pos",
+            source_model="ManualExpense",
+        )
+
+    # --- Ce qui doit se lire ---------------------------------------------------
+
+    def test_the_cashier_list_shows_the_reason(self):
+        self._decaisser()
+
+        reponse = self.client.get(reverse("pos:cashier_dashboard"))
+
+        self.assertContains(reponse, "Achat de fournitures")
+
+    def test_the_session_detail_shows_the_reason(self):
+        # Le detail d'une session est reserve au gerant : la caissiere tient la
+        # caisse, elle ne relit pas les sessions passees.
+        self._decaisser("Reparation plomberie")
+        gerant = User.objects.create_user(
+            username="gerant-motif", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=gerant, gym=self.gym, role="manager", is_active=True
+        )
+        self.client.force_login(gerant)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+        reponse = self.client.get(
+            reverse("pos:register_detail", args=[self.register.id])
+        )
+
+        self.assertContains(reponse, "Reparation plomberie")
+
+    def test_a_disbursement_without_a_reason_still_reads(self):
+        # Le motif est facultatif cote formulaire : son absence ne doit pas
+        # laisser une ligne muette.
+        self._decaisser(motif="")
+
+        reponse = self.client.get(reverse("pos:cashier_dashboard"))
+
+        self.assertContains(reponse, "Décaissement")
+
+    def test_an_incoming_payment_is_untouched(self):
+        # La colonne Nature d'une entree ne doit pas se mettre a repeter la
+        # description : elle porte deja la formule ou le produit vendu.
+        record_payment(
+            gym=self.gym,
+            register=self.register,
+            amount=Decimal("10000"),
+            currency="CDF",
+            method="cash",
+            transaction_type="in",
+            category="other",
+            description="Ne doit pas apparaitre en nature",
+            created_by=self.caissier,
+        )
+
+        reponse = self.client.get(reverse("pos:cashier_dashboard"))
+        page = reponse.content.decode()
+
+        self.assertEqual(page.count("Ne doit pas apparaitre en nature"), 0)
