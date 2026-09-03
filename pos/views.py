@@ -4,7 +4,7 @@ from decimal import Decimal
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
-from django.db.models import Q
+from django.db.models import Count, Q, Sum
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -496,5 +496,104 @@ def register_detail(request, register_id):
         {
             "register": register,
             "payments": payments,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Registre des decaissements
+# ---------------------------------------------------------------------------
+
+
+# Les trois portes par lesquelles l'argent sort : une depense saisie au
+# comptoir, un salaire verse, une maintenance payee. Les autres categories
+# n'existent qu'en entree.
+CATEGORIES_SORTIE = ("expense", "salary", "maintenance", "other")
+
+
+@login_required
+@role_required(POS_HISTORY_ROLES)
+@module_required("POS")
+def expense_register(request):
+    """
+    Toutes les sorties d'argent de la salle, au meme endroit.
+
+    Elles etaient jusqu'ici dispersees : melees aux encaissements dans la
+    table de la caisse, reparties session par session, et agregees en totaux
+    dans les rapports. Relire les depenses d'un mois demandait de les repErer
+    a l'oeil, une session apres l'autre.
+    """
+    aujourd_hui = timezone.localdate()
+    defaut_debut = aujourd_hui.replace(day=1)
+
+    depuis = (request.GET.get("date_from") or defaut_debut.isoformat()).strip()
+    jusqu_a = (request.GET.get("date_to") or aujourd_hui.isoformat()).strip()
+    categorie = (request.GET.get("category") or "").strip()
+    methode = (request.GET.get("method") or "").strip()
+    recherche = (request.GET.get("search") or "").strip()
+
+    depenses = (
+        Payment.objects.filter(gym=request.gym, type="out")
+        .select_related("created_by", "cash_register")
+        .order_by("-created_at")
+    )
+
+    if depuis:
+        depenses = depenses.filter(created_at__date__gte=depuis)
+    if jusqu_a:
+        depenses = depenses.filter(created_at__date__lte=jusqu_a)
+    if categorie:
+        depenses = depenses.filter(category=categorie)
+    if methode:
+        depenses = depenses.filter(method=methode)
+    if recherche:
+        # Le motif est le seul texte libre d'un decaissement : c'est par lui
+        # qu'on retrouve une depense dont on ne se rappelle que l'objet.
+        depenses = depenses.filter(
+            Q(description__icontains=recherche)
+            | Q(created_by__username__icontains=recherche)
+            | Q(created_by__first_name__icontains=recherche)
+            | Q(created_by__last_name__icontains=recherche)
+        )
+
+    total = depenses.aggregate(total=Sum("amount_cdf"))["total"] or Decimal("0.00")
+
+    # Le detail par categorie repond a la premiere question du gerant : ou est
+    # parti l'argent, avant meme de savoir a qui.
+    par_categorie = [
+        {
+            "code": ligne["category"],
+            "libelle": dict(Payment.CATEGORY_CHOICES).get(
+                ligne["category"], ligne["category"] or "Non classe"
+            ),
+            "nombre": ligne["nombre"],
+            "total": ligne["total"] or Decimal("0.00"),
+        }
+        for ligne in depenses.values("category")
+        .annotate(nombre=Count("id"), total=Sum("amount_cdf"))
+        .order_by("-total")
+    ]
+
+    return render(
+        request,
+        "pos/expense_register.html",
+        {
+            "expenses": depenses[:300],
+            "total_count": depenses.count(),
+            "total_cdf": total,
+            "by_category": par_categorie,
+            "categories": [
+                (code, libelle)
+                for code, libelle in Payment.CATEGORY_CHOICES
+                if code in CATEGORIES_SORTIE
+            ],
+            "methods": Payment.PAYMENT_METHODS,
+            "filtre": {
+                "date_from": depuis,
+                "date_to": jusqu_a,
+                "category": categorie,
+                "method": methode,
+                "search": recherche,
+            },
         },
     )

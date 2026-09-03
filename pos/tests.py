@@ -1412,3 +1412,203 @@ class DisbursementReasonTests(TestCase):
         page = reponse.content.decode()
 
         self.assertEqual(page.count("Ne doit pas apparaitre en nature"), 0)
+
+
+class ExpenseRegisterTests(TestCase):
+    """
+    Le registre des decaissements : toutes les sorties au meme endroit.
+
+    Elles etaient dispersees - melees aux encaissements dans la table de la
+    caisse, reparties session par session, agregees en totaux dans les
+    rapports. Relire les depenses d'un mois demandait de les reperer a l'oeil.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Registre", slug="org-registre"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Registre",
+            slug="gym-registre", subdomain="gym-registre",
+        )
+        self.voisine = Gym.objects.create(
+            organization=self.organization, name="Voisine",
+            slug="gym-registre-voisine", subdomain="gym-registre-voisine",
+        )
+        module, _ = Module.objects.get_or_create(
+            code="POS", defaults={"name": "POS"}
+        )
+        for salle in (self.gym, self.voisine):
+            GymModule.objects.get_or_create(
+                gym=salle, module=module, defaults={"is_active": True}
+            )
+
+        self.gerant = User.objects.create_user(
+            username="gerant-registre", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.gerant, gym=self.gym, role="manager", is_active=True
+        )
+        self.register = CashRegister.objects.create(
+            gym=self.gym, opened_by=self.gerant,
+            opening_amount=Decimal("100000.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+        self._connecter(self.gerant)
+
+    def _connecter(self, utilisateur):
+        self.client.force_login(utilisateur)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _sortie(self, motif="Achat fournitures", categorie="expense",
+                methode="cash", gym=None, montant="5000"):
+        return record_expense(
+            gym=gym or self.gym,
+            amount=Decimal(montant),
+            currency="CDF",
+            method=methode,
+            category=categorie,
+            description=motif,
+            created_by=self.gerant,
+            source_app="pos",
+            source_model="ManualExpense",
+        )
+
+    def _registre(self, **filtres):
+        url = reverse("pos:expense_register")
+        if filtres:
+            url += "?" + "&".join(f"{k}={v}" for k, v in filtres.items())
+        return self.client.get(url)
+
+    # --- Ce que le registre montre ---------------------------------------------
+
+    def test_a_disbursement_appears_with_its_reason(self):
+        self._sortie("Reparation plomberie")
+
+        reponse = self._registre()
+
+        self.assertContains(reponse, "Reparation plomberie")
+
+    def test_an_incoming_payment_never_appears(self):
+        # C'est un registre des sorties : une recette n'y a rien a faire.
+        record_payment(
+            gym=self.gym, register=self.register, amount=Decimal("10000"),
+            currency="CDF", method="cash", transaction_type="in",
+            category="subscription", description="Encaissement abonnement",
+            created_by=self.gerant,
+        )
+
+        reponse = self._registre()
+
+        self.assertNotContains(reponse, "Encaissement abonnement")
+
+    def test_the_total_sums_the_period(self):
+        self._sortie(montant="5000")
+        self._sortie(montant="3000")
+
+        reponse = self._registre()
+
+        self.assertEqual(reponse.context["total_count"], 2)
+        self.assertEqual(reponse.context["total_cdf"], Decimal("8000.00"))
+
+    def test_the_breakdown_says_where_the_money_went(self):
+        self._sortie(categorie="salary", montant="50000")
+        self._sortie(categorie="expense", montant="5000")
+
+        lignes = {l["code"]: l["total"] for l in self._registre().context["by_category"]}
+
+        self.assertEqual(lignes["salary"], Decimal("50000.00"))
+        self.assertEqual(lignes["expense"], Decimal("5000.00"))
+
+    def test_a_neighbouring_gym_stays_out(self):
+        # Une depense ne peut naitre que dans une caisse ouverte : la voisine
+        # doit avoir la sienne pour que le cas soit realiste.
+        CashRegister.objects.create(
+            gym=self.voisine, opened_by=self.gerant,
+            opening_amount=Decimal("50000.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+        self._sortie("Depense de la voisine", gym=self.voisine)
+
+        self.assertNotContains(self._registre(), "Depense de la voisine")
+
+    # --- Les filtres ---------------------------------------------------------------
+
+    def test_filtering_by_category(self):
+        self._sortie("Salaire du gardien", categorie="salary")
+        self._sortie("Achat de savon", categorie="expense")
+
+        reponse = self._registre(category="salary")
+
+        self.assertContains(reponse, "Salaire du gardien")
+        self.assertNotContains(reponse, "Achat de savon")
+
+    def test_filtering_by_method(self):
+        self._sortie("Paye en especes", methode="cash")
+        self._sortie("Paye par virement", methode="bank_transfer")
+
+        reponse = self._registre(method="bank_transfer")
+
+        self.assertContains(reponse, "Paye par virement")
+        self.assertNotContains(reponse, "Paye en especes")
+
+    def test_searching_by_reason(self):
+        # Le motif est le seul texte libre : c'est par lui qu'on retrouve une
+        # depense dont on ne se rappelle que l'objet.
+        self._sortie("Reparation du portail")
+        self._sortie("Achat de savon")
+
+        reponse = self._registre(search="portail")
+
+        self.assertContains(reponse, "Reparation du portail")
+        self.assertNotContains(reponse, "Achat de savon")
+
+    def test_an_old_disbursement_is_outside_the_default_period(self):
+        # Le registre s'ouvre sur le mois courant : une depense de l'an dernier
+        # ne doit pas s'y inviter.
+        ancienne = self._sortie("Depense de l an dernier")
+        Payment.objects.filter(pk=ancienne.pk).update(
+            created_at=timezone.now() - timedelta(days=400)
+        )
+
+        self.assertNotContains(self._registre(), "Depense de l an dernier")
+
+    def test_widening_the_dates_brings_it_back(self):
+        ancienne = self._sortie("Depense de l an dernier")
+        vieille_date = timezone.now() - timedelta(days=400)
+        Payment.objects.filter(pk=ancienne.pk).update(created_at=vieille_date)
+
+        reponse = self._registre(
+            date_from=vieille_date.date().isoformat(),
+            date_to=timezone.localdate().isoformat(),
+        )
+
+        self.assertContains(reponse, "Depense de l an dernier")
+
+    # --- Qui y a droit ---------------------------------------------------------------
+
+    def test_a_cashier_cannot_open_it(self):
+        # La caissiere tient la caisse ; relire les depenses du mois releve de
+        # la gestion.
+        caissiere = User.objects.create_user(
+            username="caisse-registre", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=caissiere, gym=self.gym, role="cashier", is_active=True
+        )
+        self._connecter(caissiere)
+
+        self.assertEqual(self._registre().status_code, 403)
+
+    def test_an_owner_can_open_it(self):
+        proprietaire = User.objects.create_user(
+            username="proprio-registre", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=proprietaire, gym=self.gym, role="owner", is_active=True
+        )
+        self._connecter(proprietaire)
+
+        self.assertEqual(self._registre().status_code, 200)
