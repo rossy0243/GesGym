@@ -15,8 +15,9 @@ from compte.models import User, UserGymRole
 from members.models import Member
 from organizations.models import Gym, GymModule, Module, Organization
 from pos.models import CashRegister, Payment
+from subscriptions import corrections
 from subscriptions.forms import MemberSubscriptionForm, SubscriptionPlanForm
-from subscriptions.models import MemberSubscription, SubscriptionOffer, SubscriptionPlan
+from subscriptions.models import MemberSubscription, SubscriptionCorrection, SubscriptionOffer, SubscriptionPlan
 from subscriptions.views import create_member_subscription
 
 
@@ -916,3 +917,549 @@ class PlanCreationFailureTests(TestCase):
         trace = chr(10).join(journal.output)
         self.assertIn("refusee par la base", trace)
         self.assertIn("gym_id", trace)
+
+
+class SubscriptionCorrectionTests(TestCase):
+    """
+    Reparer une periode mal saisie.
+
+    Une receptionniste a vendu une periode deja terminee : le membre paie et
+    n'a aucun acces. Corriger les dates repare l'acces sans toucher a l'argent.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Correction", slug="org-correction"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Correction",
+            slug="gym-correction", subdomain="gym-correction",
+        )
+        self.plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Mensuel", price=30, duration_days=30
+        )
+        self.member = Member.objects.create(
+            gym=self.gym, first_name="Ada", last_name="Mbala",
+            phone="+243870001111",
+        )
+        self.gerant = User.objects.create_user(
+            username="gerant-correction", password="pass12345"
+        )
+        self.proprietaire = User.objects.create_user(
+            username="proprio-correction", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.gerant, gym=self.gym, role="manager", is_active=True
+        )
+
+        # L'erreur reelle : une periode close le mois dernier.
+        self.faux_debut = timezone.localdate() - timedelta(days=60)
+        self.abonnement = MemberSubscription.objects.create(
+            gym=self.gym, member=self.member, plan=self.plan,
+            start_date=self.faux_debut,
+            end_date=self.faux_debut + timedelta(days=30),
+            is_active=True,
+        )
+
+    def _corriger(self, debut=None, motif="Erreur de saisie a l'accueil", par=None):
+        return corrections.corriger(
+            self.abonnement,
+            debut or timezone.localdate(),
+            motif,
+            par or self.gerant,
+        )
+
+    # --- Ce que la correction repare ---------------------------------------------
+
+    def test_the_member_had_no_access_before(self):
+        self.assertIsNone(self.member.active_subscription)
+
+    def test_correcting_gives_the_access_back(self):
+        self._corriger()
+
+        self.assertIsNotNone(self.member.active_subscription)
+
+    def test_the_end_date_follows_the_plan_duration(self):
+        # Une correction ne doit pas pouvoir allonger discretement un
+        # abonnement : la fin se recalcule, elle ne se saisit pas.
+        debut = timezone.localdate()
+
+        self._corriger(debut=debut)
+
+        self.abonnement.refresh_from_db()
+        self.assertEqual(self.abonnement.end_date, debut + timedelta(days=30))
+
+    def test_the_payment_is_never_touched(self):
+        # C'est la frontiere du dispositif : corriger une periode n'annule pas
+        # une vente. L'argent a bien ete encaisse.
+        avant = Payment.objects.filter(gym=self.gym).count()
+
+        self._corriger()
+
+        self.assertEqual(Payment.objects.filter(gym=self.gym).count(), avant)
+
+    def test_the_previous_period_is_kept(self):
+        self._corriger()
+
+        trace = SubscriptionCorrection.objects.get(subscription=self.abonnement)
+        self.assertEqual(trace.previous_start, self.faux_debut)
+        self.assertEqual(trace.new_start, timezone.localdate())
+
+    def test_the_correction_takes_effect_at_once(self):
+        # Elle n'attend aucune validation : le membre retrouve son acces
+        # sur-le-champ, meme un dimanche.
+        trace = self._corriger()
+
+        self.abonnement.refresh_from_db()
+        self.assertTrue(self.abonnement.is_active)
+        self.assertFalse(trace.is_acknowledged)
+
+    # --- Ce qui est refuse ----------------------------------------------------------
+
+    def test_a_correction_without_a_reason_is_refused(self):
+        with self.assertRaises(ValidationError) as capture:
+            self._corriger(motif="   ")
+
+        self.assertIn("motif", str(capture.exception).lower())
+
+    def test_the_same_date_is_refused(self):
+        with self.assertRaises(ValidationError) as capture:
+            self._corriger(debut=self.faux_debut)
+
+        self.assertIn("rien a corriger", str(capture.exception))
+
+    def test_a_third_correction_is_refused(self):
+        # Deux fois, c'est une faute de frappe. Trois fois, c'est la vente
+        # elle-meme qu'il faut revoir.
+        self._corriger(debut=timezone.localdate())
+        self._corriger(debut=timezone.localdate() - timedelta(days=1))
+
+        with self.assertRaises(ValidationError) as capture:
+            self._corriger(debut=timezone.localdate() - timedelta(days=2))
+
+        self.assertIn("deja ete corrige", str(capture.exception))
+
+    def test_the_remaining_count_is_visible(self):
+        self.assertEqual(corrections.restantes(self.abonnement), 2)
+
+        self._corriger()
+
+        self.assertEqual(corrections.restantes(self.abonnement), 1)
+
+    def test_an_overlapping_period_is_refused(self):
+        # Le membre a rachete depuis : deplacer l'ancienne periode ne doit pas
+        # lui offrir deux abonnements simultanes.
+        MemberSubscription.objects.create(
+            gym=self.gym, member=self.member, plan=self.plan,
+            start_date=timezone.localdate(),
+            end_date=timezone.localdate() + timedelta(days=30),
+            is_active=True,
+        )
+
+        with self.assertRaises(ValidationError) as capture:
+            self._corriger(debut=timezone.localdate() + timedelta(days=5))
+
+        self.assertIn("chevauche", str(capture.exception))
+
+    # --- L'accuse de reception --------------------------------------------------------
+
+    def test_a_managers_correction_waits_to_be_seen(self):
+        self._corriger(par=self.gerant)
+
+        self.assertEqual(corrections.en_attente(self.gym).count(), 1)
+
+    def test_an_owners_own_correction_needs_no_acknowledgement(self):
+        # Il n'a pas a s'accuser reception a lui-meme.
+        corrections.corriger(
+            self.abonnement, timezone.localdate(), "Je corrige moi-meme",
+            self.proprietaire, acquitte=True,
+        )
+
+        self.assertEqual(corrections.en_attente(self.gym).count(), 0)
+
+    def test_acknowledging_clears_the_banner(self):
+        trace = self._corriger()
+
+        corrections.accuser_reception(trace, self.proprietaire)
+
+        self.assertEqual(corrections.en_attente(self.gym).count(), 0)
+        trace.refresh_from_db()
+        self.assertEqual(trace.acknowledged_by, self.proprietaire)
+
+    def test_acknowledging_twice_keeps_the_first_reader(self):
+        trace = self._corriger()
+        corrections.accuser_reception(trace, self.proprietaire)
+        premier = trace.acknowledged_at
+
+        corrections.accuser_reception(trace, self.gerant)
+
+        trace.refresh_from_db()
+        self.assertEqual(trace.acknowledged_at, premier)
+        self.assertEqual(trace.acknowledged_by, self.proprietaire)
+
+    def test_another_gym_correction_stays_out(self):
+        autre = Gym.objects.create(
+            organization=self.organization, name="Voisine",
+            slug="gym-correction-voisine", subdomain="gym-correction-voisine",
+        )
+        self._corriger()
+
+        self.assertEqual(corrections.en_attente(autre).count(), 0)
+
+    # --- L'avertissement a la saisie ---------------------------------------------------
+
+    def test_a_closed_period_is_detected(self):
+        ancien = timezone.localdate() - timedelta(days=60)
+
+        self.assertTrue(corrections.periode_close(ancien, self.plan))
+
+    def test_a_recent_start_is_not_a_closed_period(self):
+        # Saisir la vente d'hier reste legitime : seule une periode deja
+        # terminee doit alerter.
+        recent = timezone.localdate() - timedelta(days=5)
+
+        self.assertFalse(corrections.periode_close(recent, self.plan))
+
+    def test_today_is_never_a_closed_period(self):
+        self.assertFalse(corrections.periode_close(timezone.localdate(), self.plan))
+
+
+class SubscriptionCorrectionViewTests(TestCase):
+    """
+    La correction depuis la fiche du membre.
+
+    Le piege du dispositif : l'abonnement fautif est deja termine, donc
+    invisible partout. Sans l'historique, personne ne pourrait l'atteindre.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Correction Vue", slug="org-correction-vue"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Correction Vue",
+            slug="gym-correction-vue", subdomain="gym-correction-vue",
+        )
+        for code in ("MEMBERS", "SUBSCRIPTIONS"):
+            module, _ = Module.objects.get_or_create(
+                code=code, defaults={"name": code}
+            )
+            GymModule.objects.get_or_create(
+                gym=self.gym, module=module, defaults={"is_active": True}
+            )
+
+        self.plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Mensuel", price=30, duration_days=30
+        )
+        self.member = Member.objects.create(
+            gym=self.gym, first_name="Ada", last_name="Mbala",
+            phone="+243870002222",
+        )
+        self.faux_debut = timezone.localdate() - timedelta(days=60)
+        self.abonnement = MemberSubscription.objects.create(
+            gym=self.gym, member=self.member, plan=self.plan,
+            start_date=self.faux_debut,
+            end_date=self.faux_debut + timedelta(days=30),
+            is_active=True,
+        )
+
+        self.gerant = self._utilisateur("gerant-correction-vue", "manager")
+        self._connecter(self.gerant)
+
+    def _utilisateur(self, nom, role):
+        utilisateur = User.objects.create_user(username=nom, password="pass12345")
+        UserGymRole.objects.create(
+            user=utilisateur, gym=self.gym, role=role, is_active=True
+        )
+        return utilisateur
+
+    def _connecter(self, utilisateur):
+        self.client.force_login(utilisateur)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _fiche(self):
+        return self.client.get(
+            reverse("members:member_detail", args=[self.member.id])
+        ).json()
+
+    def _corriger(self, debut=None, motif="Date saisie a l envers"):
+        return self.client.post(
+            reverse("subscriptions:correct_subscription", args=[self.abonnement.id]),
+            {
+                "start_date": (debut or timezone.localdate()).isoformat(),
+                "reason": motif,
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+    # --- La fiche expose l'abonnement fautif -------------------------------------
+
+    def test_the_expired_subscription_is_invisible_in_the_active_slot(self):
+        # C'est tout le probleme : la fiche ne montre que l'abonnement en
+        # cours, et il n'y en a pas.
+        self.assertIsNone(self._fiche()["start_date"])
+
+    def test_the_history_still_shows_it(self):
+        historique = self._fiche()["subscriptions"]
+
+        self.assertEqual(len(historique), 1)
+        self.assertEqual(historique[0]["id"], self.abonnement.id)
+        self.assertEqual(historique[0]["state"], "Termine")
+
+    def test_a_manager_is_offered_the_correction(self):
+        self.assertTrue(self._fiche()["subscriptions"][0]["can_correct"])
+
+    def test_a_receptionist_is_not_offered_the_correction(self):
+        self._connecter(self._utilisateur("accueil-correction-vue", "reception"))
+
+        self.assertFalse(self._fiche()["subscriptions"][0]["can_correct"])
+
+    def test_a_twice_corrected_subscription_is_no_longer_offered(self):
+        corrections.corriger(
+            self.abonnement, timezone.localdate(), "un", self.gerant
+        )
+        corrections.corriger(
+            self.abonnement, timezone.localdate() - timedelta(days=1),
+            "deux", self.gerant,
+        )
+
+        self.assertFalse(self._fiche()["subscriptions"][0]["can_correct"])
+
+    def test_the_history_carries_the_past_corrections(self):
+        corrections.corriger(
+            self.abonnement, timezone.localdate(), "Erreur d accueil", self.gerant
+        )
+
+        trace = self._fiche()["subscriptions"][0]["corrections"][0]
+        self.assertEqual(trace["reason"], "Erreur d accueil")
+        self.assertIn(self.faux_debut.strftime("%d/%m/%Y"), trace["previous"])
+
+    def test_a_neighbouring_members_subscription_stays_out(self):
+        voisin = Member.objects.create(
+            gym=self.gym, first_name="Bob", last_name="Kasa",
+            phone="+243870003333",
+        )
+        MemberSubscription.objects.create(
+            gym=self.gym, member=voisin, plan=self.plan,
+            start_date=timezone.localdate(),
+            end_date=timezone.localdate() + timedelta(days=30),
+            is_active=True,
+        )
+
+        historique = self._fiche()["subscriptions"]
+        self.assertEqual([ligne["id"] for ligne in historique], [self.abonnement.id])
+
+    # --- La correction elle-meme -------------------------------------------------
+
+    def test_a_manager_can_correct_and_the_member_gets_access_back(self):
+        reponse = self._corriger()
+
+        self.assertTrue(reponse.json()["success"])
+        self.assertIsNotNone(self.member.active_subscription)
+
+    def test_a_cashier_cannot_correct(self):
+        self._connecter(self._utilisateur("caisse-correction-vue", "cashier"))
+
+        self.assertEqual(self._corriger().status_code, 403)
+
+    def test_a_correction_without_a_reason_is_refused(self):
+        reponse = self._corriger(motif="  ")
+
+        self.assertEqual(reponse.status_code, 400)
+        self.assertIn("motif", reponse.json()["error"].lower())
+        self.abonnement.refresh_from_db()
+        self.assertEqual(self.abonnement.start_date, self.faux_debut)
+
+    def test_a_managers_correction_waits_for_the_owner(self):
+        self._corriger()
+
+        self.assertEqual(corrections.en_attente(self.gym).count(), 1)
+
+    def test_an_owners_correction_needs_no_acknowledgement(self):
+        self._connecter(self._utilisateur("proprio-correction-vue", "owner"))
+
+        self._corriger()
+
+        self.assertEqual(corrections.en_attente(self.gym).count(), 0)
+
+    def test_a_neighbouring_gym_subscription_cannot_be_corrected(self):
+        voisine = Gym.objects.create(
+            organization=self.organization, name="Voisine",
+            slug="gym-correction-vue-voisine",
+            subdomain="gym-correction-vue-voisine",
+        )
+        ailleurs = MemberSubscription.objects.create(
+            gym=voisine,
+            member=Member.objects.create(
+                gym=voisine, first_name="Zoe", last_name="Nsimba",
+                phone="+243870004444",
+            ),
+            plan=SubscriptionPlan.objects.create(
+                gym=voisine, name="Mensuel", price=30, duration_days=30
+            ),
+            start_date=self.faux_debut - timedelta(days=200),
+            end_date=self.faux_debut - timedelta(days=170),
+            is_active=True,
+        )
+
+        reponse = self.client.post(
+            reverse("subscriptions:correct_subscription", args=[ailleurs.id]),
+            {"start_date": timezone.localdate().isoformat(), "reason": "x"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(reponse.status_code, 404)
+
+    # --- L'accuse de reception ---------------------------------------------------
+
+    def test_the_owner_can_acknowledge(self):
+        self._corriger()
+        trace = SubscriptionCorrection.objects.get(subscription=self.abonnement)
+        self._connecter(self._utilisateur("proprio-accuse", "owner"))
+
+        reponse = self.client.post(
+            reverse("subscriptions:acknowledge_correction", args=[trace.id]),
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertTrue(reponse.json()["success"])
+        self.assertEqual(corrections.en_attente(self.gym).count(), 0)
+
+    def test_a_manager_cannot_acknowledge(self):
+        # L'accuse de reception est ce qui rend acceptable qu'un gerant touche
+        # a une periode vendue : lui laisser le donner le viderait de son sens.
+        self._corriger()
+        trace = SubscriptionCorrection.objects.get(subscription=self.abonnement)
+
+        reponse = self.client.post(
+            reverse("subscriptions:acknowledge_correction", args=[trace.id]),
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(reponse.status_code, 403)
+        self.assertEqual(corrections.en_attente(self.gym).count(), 1)
+
+
+class SubscriptionCorrectionBannerTests(TestCase):
+    """
+    Le bandeau du proprietaire.
+
+    C'est la contrepartie du dispositif : un gerant peut deplacer une periode
+    vendue, et cela prend effet aussitot. Le proprietaire doit l'apprendre
+    autrement que par une ligne de journal qu'il pourrait ne jamais lire.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Bandeau", slug="org-bandeau"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Bandeau",
+            slug="gym-bandeau", subdomain="gym-bandeau",
+        )
+        module, _ = Module.objects.get_or_create(
+            code="MEMBERS", defaults={"name": "MEMBERS"}
+        )
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=module, defaults={"is_active": True}
+        )
+
+        self.plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Mensuel", price=30, duration_days=30
+        )
+        self.member = Member.objects.create(
+            gym=self.gym, first_name="Ada", last_name="Mbala",
+            phone="+243870006666",
+        )
+        faux_debut = timezone.localdate() - timedelta(days=60)
+        self.abonnement = MemberSubscription.objects.create(
+            gym=self.gym, member=self.member, plan=self.plan,
+            start_date=faux_debut, end_date=faux_debut + timedelta(days=30),
+            is_active=True,
+        )
+        self.gerant = self._utilisateur("gerant-bandeau", "manager")
+        self.proprietaire = self._utilisateur("proprio-bandeau", "owner")
+
+    def _utilisateur(self, nom, role):
+        utilisateur = User.objects.create_user(username=nom, password="pass12345")
+        UserGymRole.objects.create(
+            user=utilisateur, gym=self.gym, role=role, is_active=True
+        )
+        return utilisateur
+
+    def _connecter(self, utilisateur):
+        self.client.force_login(utilisateur)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _page(self):
+        return self.client.get(reverse("members:member_list"))
+
+    def test_the_owner_is_shown_the_correction(self):
+        corrections.corriger(
+            self.abonnement, timezone.localdate(), "Erreur d accueil", self.gerant
+        )
+        self._connecter(self.proprietaire)
+
+        reponse = self._page()
+
+        self.assertContains(reponse, "Erreur d accueil")
+        self.assertEqual(
+            reponse.context["subscription_corrections_banner"]["total"], 1
+        )
+
+    def test_the_manager_who_corrected_sees_no_banner(self):
+        corrections.corriger(
+            self.abonnement, timezone.localdate(), "Erreur d accueil", self.gerant
+        )
+        self._connecter(self.gerant)
+
+        self.assertIsNone(
+            self._page().context["subscription_corrections_banner"]
+        )
+
+    def test_the_banner_goes_once_acknowledged(self):
+        trace = corrections.corriger(
+            self.abonnement, timezone.localdate(), "Erreur d accueil", self.gerant
+        )
+        corrections.accuser_reception(trace, self.proprietaire)
+        self._connecter(self.proprietaire)
+
+        self.assertIsNone(
+            self._page().context["subscription_corrections_banner"]
+        )
+
+    def test_nothing_shows_when_nothing_was_corrected(self):
+        self._connecter(self.proprietaire)
+
+        self.assertIsNone(
+            self._page().context["subscription_corrections_banner"]
+        )
+
+    def test_a_neighbouring_gym_correction_stays_out(self):
+        voisine = Gym.objects.create(
+            organization=self.organization, name="Voisine",
+            slug="gym-bandeau-voisine", subdomain="gym-bandeau-voisine",
+        )
+        GymModule.objects.get_or_create(
+            gym=voisine, module=Module.objects.get(code="MEMBERS"),
+            defaults={"is_active": True},
+        )
+        UserGymRole.objects.create(
+            user=self.proprietaire, gym=voisine, role="owner", is_active=True
+        )
+        corrections.corriger(
+            self.abonnement, timezone.localdate(), "Erreur d accueil", self.gerant
+        )
+
+        self.client.force_login(self.proprietaire)
+        session = self.client.session
+        session["current_gym_id"] = voisine.id
+        session.save()
+
+        self.assertIsNone(
+            self._page().context["subscription_corrections_banner"]
+        )

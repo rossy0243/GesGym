@@ -201,6 +201,7 @@ TEMPLATES = [
                 'smartclub.context_processors.user_owner_check',
                 'smartclub.context_processors.maintenance_alert_processor',
                 'smartclub.context_processors.access_device_health_processor',
+                'smartclub.context_processors.subscription_corrections_processor',
             ],
         },
     },

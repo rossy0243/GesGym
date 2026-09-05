@@ -1003,6 +1003,51 @@ body.members-screen .modal.show .modal-dialog {
         </div>
     </div>
 </div>
+
+<!-- MODAL DE CORRECTION DE PERIODE -->
+<div class="modal fade" id="correctSubscriptionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title d-flex align-items-center gap-2">
+                    <span class="material-icons text-warning" style="font-size:22px;">event_repeat</span>
+                    Corriger la periode
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-3">
+                    Seule la date de debut se saisit : la fin se recalcule sur la duree
+                    de la formule. Le paiement n'est pas touche.
+                </p>
+                <div class="alert alert-light border small">
+                    <div class="fw-semibold" id="correctionPlan">-</div>
+                    <div class="text-muted">Periode actuelle : <span id="correctionCurrent">-</span></div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Nouvelle date de debut</label>
+                    <input type="date" class="form-control" id="correctionStart">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label fw-semibold">Motif</label>
+                    <input type="text" class="form-control" id="correctionReason"
+                           maxlength="255" placeholder="Ex : date saisie a l'envers a l'accueil">
+                    <div class="form-text">
+                        Obligatoire : c'est ce que le proprietaire lira dans son bandeau.
+                    </div>
+                </div>
+                <div class="alert alert-danger d-none" id="correctionError"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-warning" id="correctionSubmit"
+                        onclick="submitSubscriptionCorrection()">
+                    <span class="material-icons me-2" style="font-size:18px;">check</span>Corriger
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -1340,6 +1385,8 @@ body.members-screen .modal.show .modal-dialog {
                     ? data.subscription_offers.join(", ")
                     : "Aucune offre affectee";
 
+                renderSubscriptionHistory(data);
+
                 // === PAIEMENTS ===
                 document.getElementById("viewPrice").innerText = (data.price || 0) + " USD";
 
@@ -1393,6 +1440,123 @@ body.members-screen .modal.show .modal-dialog {
                 alert("Impossible de charger les détails du membre. Veuillez réessayer.");
             });
     }
+
+
+    // === HISTORIQUE DES ABONNEMENTS ===
+    // Un abonnement mal date est deja termine : il ne figure ni dans la fiche,
+    // ni dans les listes, ni dans les acces. Cet historique est le seul endroit
+    // d'ou on peut encore l'atteindre - et donc le corriger.
+    const CORRECTION_URL_MODELE = "{% url 'subscriptions:correct_subscription' 0 %}";
+    let correctionCible = null;
+
+    const ETAT_BADGE = {
+        "En cours": "bg-success",
+        "A venir": "bg-info text-dark",
+        "Termine": "bg-secondary",
+        "Inactif": "bg-light text-muted border"
+    };
+
+    function renderSubscriptionHistory(data) {
+        const bloc = document.getElementById("subscriptionHistory");
+        if (!bloc) { return; }
+
+        const lignes = data.subscriptions || [];
+        if (!lignes.length) {
+            bloc.innerHTML = '<p class="text-muted small mb-0">Aucun abonnement enregistre.</p>';
+            return;
+        }
+
+        bloc.innerHTML = lignes.map(function (abo) {
+            const badge = ETAT_BADGE[abo.state] || "bg-secondary";
+
+            const traces = (abo.corrections || []).map(function (t) {
+                return '<div class="text-muted small fst-italic">'
+                     + '<span class="material-icons" style="font-size:14px;vertical-align:-2px;">history</span> '
+                     + 'Corrige le ' + escapeHtml(t.at)
+                     + (t.by ? ' par ' + escapeHtml(t.by) : '')
+                     + ' - etait du ' + escapeHtml(t.previous)
+                     + ' - ' + escapeHtml(t.reason)
+                     + '</div>';
+            }).join("");
+
+            const bouton = abo.can_correct
+                ? '<button type="button" class="btn btn-sm btn-outline-warning"'
+                  + ' onclick="openSubscriptionCorrection(' + abo.id + ')">'
+                  + '<span class="material-icons me-1" style="font-size:15px;vertical-align:-3px;">event_repeat</span>'
+                  + 'Corriger la periode</button>'
+                : '';
+
+            return '<div class="timeline-item border-start ps-3 pb-3">'
+                 + '<div class="d-flex justify-content-between align-items-start gap-2">'
+                 + '<div>'
+                 + '<div class="fw-semibold">' + escapeHtml(abo.plan)
+                 + ' <span class="badge ' + badge + ' ms-1">' + escapeHtml(abo.state) + '</span></div>'
+                 + '<div class="text-muted small">Du ' + escapeHtml(abo.start_date)
+                 + ' au ' + escapeHtml(abo.end_date) + '</div>'
+                 + traces
+                 + '</div>'
+                 + bouton
+                 + '</div></div>';
+        }).join("");
+    }
+
+    function openSubscriptionCorrection(subscriptionId) {
+        const lignes = (currentMemberData && currentMemberData.subscriptions) || [];
+        correctionCible = lignes.find(function (a) { return a.id === subscriptionId; });
+        if (!correctionCible) { return; }
+
+        document.getElementById("correctionPlan").innerText = correctionCible.plan;
+        document.getElementById("correctionCurrent").innerText =
+            "du " + correctionCible.start_date + " au " + correctionCible.end_date;
+        document.getElementById("correctionStart").value = correctionCible.start_iso;
+        document.getElementById("correctionReason").value = "";
+        const erreur = document.getElementById("correctionError");
+        erreur.classList.add("d-none");
+        erreur.innerText = "";
+
+        // Deux modaux empiles se genent : on ferme la fiche avant d'ouvrir.
+        const fiche = bootstrap.Modal.getInstance(document.getElementById("viewMemberModal"));
+        if (fiche) { fiche.hide(); }
+        new bootstrap.Modal(document.getElementById("correctSubscriptionModal")).show();
+    }
+
+    function submitSubscriptionCorrection() {
+        if (!correctionCible) { return; }
+
+        const erreur = document.getElementById("correctionError");
+        const bouton = document.getElementById("correctionSubmit");
+        erreur.classList.add("d-none");
+        bouton.disabled = true;
+
+        const corps = new FormData();
+        corps.append("start_date", document.getElementById("correctionStart").value);
+        corps.append("reason", document.getElementById("correctionReason").value);
+
+        fetch(CORRECTION_URL_MODELE.replace("/0/", "/" + correctionCible.id + "/"), {
+            method: "POST",
+            headers: {
+                "X-CSRFToken": document.querySelector("[name=csrfmiddlewaretoken]").value,
+                "X-Requested-With": "XMLHttpRequest"
+            },
+            body: corps
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (donnees) {
+                if (donnees.success) {
+                    window.location.reload();
+                    return;
+                }
+                erreur.innerText = donnees.error || "La correction a ete refusee.";
+                erreur.classList.remove("d-none");
+                bouton.disabled = false;
+            })
+            .catch(function () {
+                erreur.innerText = "La correction n'a pas pu etre envoyee.";
+                erreur.classList.remove("d-none");
+                bouton.disabled = false;
+            });
+    }
+
 
     function updateStatusButton() {
         const btn = document.getElementById("statusToggleBtn");

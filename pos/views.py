@@ -211,6 +211,9 @@ def cashier_dashboard(request):
                     method=method,
                     start_date=start_date,
                     auto_renew=request.POST.get("auto_renew") == "on",
+                    confirm_closed_period=(
+                        request.POST.get("confirm_closed_period") == "on"
+                    ),
                     created_by=request.user,
                 )
                 log_sensitive_action(

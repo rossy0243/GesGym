@@ -246,3 +246,34 @@ def access_device_health_processor(request):
         return {"device_offline_banner": None}
 
     return {"device_offline_banner": resume_hors_ligne(gym)}
+
+
+def subscription_corrections_processor(request):
+    """
+    Impose au proprietaire les corrections de periode qu'il n'a pas encore vues.
+
+    Un gerant peut corriger une periode vendue, et cela prend effet aussitot.
+    La contrepartie est que le proprietaire en soit informe - non par une ligne
+    de journal qu'il pourrait ne jamais lire, mais par un bandeau qui ne
+    disparait que lorsqu'il declare l'avoir vue.
+    """
+    from smartclub.access_control import SETTINGS_ORGANIZATION_ROLES
+    from subscriptions import corrections
+
+    gym = getattr(request, "gym", None)
+    if not request.user.is_authenticated or gym is None:
+        return {"subscription_corrections_banner": None}
+
+    if not has_role(request, SETTINGS_ORGANIZATION_ROLES):
+        return {"subscription_corrections_banner": None}
+
+    attente = list(corrections.en_attente(gym)[:5])
+    if not attente:
+        return {"subscription_corrections_banner": None}
+
+    return {
+        "subscription_corrections_banner": {
+            "total": corrections.en_attente(gym).count(),
+            "corrections": attente,
+        }
+    }

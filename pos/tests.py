@@ -188,7 +188,9 @@ class PosAccountingTests(TestCase):
             opening_amount=Decimal("0.00"),
             exchange_rate=Decimal("2800.00"),
         )
-        start_date = date(2026, 4, 17)
+        # Une date relative, et non figee : posee dans le passe, elle finirait
+        # par designer une periode deja close, que la caisse refuse desormais.
+        start_date = timezone.localdate() + timedelta(days=3)
 
         subscription, payment = record_subscription_payment(
             gym=self.gym_a,
@@ -201,7 +203,7 @@ class PosAccountingTests(TestCase):
         )
 
         self.assertEqual(subscription.start_date, start_date)
-        self.assertEqual(subscription.end_date, date(2026, 5, 17))
+        self.assertEqual(subscription.end_date, start_date + timedelta(days=30))
         self.assertTrue(subscription.auto_renew)
         self.assertEqual(payment.subscription_id, subscription.id)
         self.assertEqual(payment.category, "subscription")
@@ -1612,3 +1614,158 @@ class ExpenseRegisterTests(TestCase):
         self._connecter(proprietaire)
 
         self.assertEqual(self._registre().status_code, 200)
+
+
+class ClosedPeriodSaleTests(TestCase):
+    """
+    Vendre une periode deja terminee.
+
+    L'incident d'origine : une date de debut anterieure, une periode close le
+    jour meme de la vente. Le membre paie et n'a aucun acces, et rien ne l'a
+    signale.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Periode", slug="org-periode"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Periode",
+            slug="gym-periode", subdomain="gym-periode",
+        )
+        self.caissiere = User.objects.create_user(
+            username="caisse-periode", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.caissiere, gym=self.gym, role="cashier", is_active=True
+        )
+        CashRegister.objects.create(
+            gym=self.gym, opened_by=self.caissiere,
+            opening_amount=Decimal("100000.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+        self.plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Mensuel", price=30, duration_days=30
+        )
+        self.member = Member.objects.create(
+            gym=self.gym, first_name="Ada", last_name="Mbala",
+            phone="+243870005555",
+        )
+
+    def _vendre(self, debut, confirme=False):
+        return record_subscription_payment(
+            gym=self.gym,
+            member=self.member,
+            plan=self.plan,
+            currency="USD",
+            method="cash",
+            start_date=debut,
+            confirm_closed_period=confirme,
+            created_by=self.caissiere,
+        )
+
+    def test_a_closed_period_is_refused_without_confirmation(self):
+        with self.assertRaises(ValidationError) as capture:
+            self._vendre(timezone.localdate() - timedelta(days=60))
+
+        self.assertIn("aucun acces", str(capture.exception))
+
+    def test_the_refusal_says_when_the_period_ended(self):
+        debut = timezone.localdate() - timedelta(days=60)
+
+        with self.assertRaises(ValidationError) as capture:
+            self._vendre(debut)
+
+        fin = debut + timedelta(days=30)
+        self.assertIn(fin.strftime("%d/%m/%Y"), str(capture.exception))
+
+    def test_nothing_is_recorded_when_refused(self):
+        # Le refus doit etre total : ni abonnement fantome, ni recette.
+        with self.assertRaises(ValidationError):
+            self._vendre(timezone.localdate() - timedelta(days=60))
+
+        self.assertEqual(MemberSubscription.objects.filter(gym=self.gym).count(), 0)
+        self.assertEqual(Payment.objects.filter(gym=self.gym).count(), 0)
+
+    def test_confirming_lets_the_regularisation_through(self):
+        # Regulariser une vente ancienne reste legitime : on fait assumer, on
+        # n'interdit pas.
+        abonnement, _ = self._vendre(
+            timezone.localdate() - timedelta(days=60), confirme=True
+        )
+
+        self.assertIsNotNone(abonnement.pk)
+
+    def test_a_recent_past_date_passes_without_a_word(self):
+        # Interdire toutes les dates passees a deja casse le renouvellement
+        # anticipe dans ce projet : seule la periode close doit alerter.
+        abonnement, _ = self._vendre(timezone.localdate() - timedelta(days=5))
+
+        self.assertIsNotNone(abonnement.pk)
+
+    def test_today_passes_without_a_word(self):
+        abonnement, _ = self._vendre(timezone.localdate())
+
+        self.assertIsNotNone(abonnement.pk)
+
+    def test_a_future_date_passes_without_a_word(self):
+        abonnement, _ = self._vendre(timezone.localdate() + timedelta(days=10))
+
+        self.assertIsNotNone(abonnement.pk)
+
+    def test_the_cashier_screen_refuses_it_too(self):
+        self.client.force_login(self.caissiere)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+        module, _ = Module.objects.get_or_create(code="POS", defaults={"name": "POS"})
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=module, defaults={"is_active": True}
+        )
+
+        self.client.post(
+            reverse("pos:cashier_dashboard"),
+            {
+                "action": "record_payment",
+                "sale_type": "subscription",
+                "member": self.member.id,
+                "plan": self.plan.id,
+                "currency": "USD",
+                "method": "cash",
+                "start_date": (
+                    timezone.localdate() - timedelta(days=60)
+                ).isoformat(),
+            },
+            follow=True,
+        )
+
+        self.assertEqual(MemberSubscription.objects.filter(gym=self.gym).count(), 0)
+
+    def test_the_cashier_screen_accepts_a_confirmed_regularisation(self):
+        self.client.force_login(self.caissiere)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+        module, _ = Module.objects.get_or_create(code="POS", defaults={"name": "POS"})
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=module, defaults={"is_active": True}
+        )
+
+        self.client.post(
+            reverse("pos:cashier_dashboard"),
+            {
+                "action": "record_payment",
+                "sale_type": "subscription",
+                "member": self.member.id,
+                "plan": self.plan.id,
+                "currency": "USD",
+                "method": "cash",
+                "start_date": (
+                    timezone.localdate() - timedelta(days=60)
+                ).isoformat(),
+                "confirm_closed_period": "on",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(MemberSubscription.objects.filter(gym=self.gym).count(), 1)

@@ -1,7 +1,8 @@
 # Roadmap correction d'abonnement - reparer une periode mal saisie
 
-Cadrage arrete le 3 septembre 2026, apres un retour du client. Rien n'est
-encore code.
+Cadrage arrete le 3 septembre 2026, apres un retour du client.
+**Construit et livre le 5 septembre 2026** - ce document reste la reference
+de ce qui a ete tranche, et de ce qui a ete volontairement laisse dehors.
 
 ## L'incident
 
@@ -56,6 +57,8 @@ moment de la saisie. C'est ce cas precis, et lui seul, qu'il faut attraper.
 | Reparation | Corriger les dates sur place ; la fin se recalcule sur la duree de la formule |
 | L'argent | Jamais touche par une correction |
 | Qui corrige | Le proprietaire et le gerant |
+| Nombre de corrections | Deux au maximum par abonnement |
+| Prise d'effet | Immediate : la correction n'attend aucune validation |
 | **Contrepartie** | **Toute correction reste affichee au proprietaire jusqu'a ce qu'il en accuse reception** |
 
 ## L'accusé de reception, cle du dispositif
@@ -111,22 +114,50 @@ proprietaire veut pouvoir relire.
 4. la nouvelle periode ne doit chevaucher aucun autre abonnement du membre -
    la regle existe deja dans `MemberSubscription.clean()` ;
 5. **le paiement n'est pas touche** ;
-6. si l'auteur n'est pas le proprietaire, la correction attend son accuse de
-   reception.
+6. deux corrections au maximum par abonnement ;
+7. si l'auteur n'est pas le proprietaire, la correction s'affiche chez lui
+   jusqu'a accuse de reception - sans jamais retarder sa prise d'effet.
 
-## Ce qu'il reste a decider
+## Deux points tranches apres coup
 
-- **Le nombre de corrections par abonnement.** Faut-il en limiter le nombre ?
-  Une periode corrigee trois fois signale autre chose qu'une faute de frappe.
-- **La visibilite cote gerant.** Doit-il voir que sa correction attend encore
-  l'accuse de reception du proprietaire ?
+- **Deux corrections au maximum par abonnement.** Une periode corrigee trois
+  fois ne raconte plus une faute de frappe : au-dela, c'est le geste lui-meme
+  qu'il faut examiner, pas la date.
+- **La correction du gerant prend effet immediatement.** Elle n'attend aucune
+  validation : le membre retrouve son acces sur-le-champ. L'accuse de reception
+  informe le proprietaire, il ne l'autorise pas. C'est ce qui distingue ce
+  dispositif d'un circuit d'approbation, et ce qui le rend utilisable un
+  dimanche.
 
 ## Fichiers concernes
 
 | Fichier | Role |
 | --- | --- |
-| `pos/services.py` | l'avertissement sur une periode deja close |
+| `pos/services.py` | le refus d'une periode close, leve par la confirmation |
+| `pos/templates/pos/cashier.html` | l'avertissement vivant a la caisse |
 | `subscriptions/models.py` | `SubscriptionCorrection` |
-| `subscriptions/views.py` | l'ecran de correction, l'accuse de reception |
+| `subscriptions/corrections.py` | le geste lui-meme, hors de toute vue |
+| `subscriptions/views.py` | la correction, l'accuse de reception |
+| `subscriptions/forms.py` | la case de confirmation a la vente |
+| `members/views.py` | `_subscription_history`, qui rend l'abonnement atteignable |
+| `members/templates/members/member_list.html` | l'historique et le bouton de correction |
 | `smartclub/context_processors.py` | le bandeau, a cote de celui des lecteurs |
 | `templates/base.html` | l'affichage du bandeau |
+
+## Ce que la construction a revele
+
+**L'abonnement fautif etait hors d'atteinte.** La fiche du membre n'affichait
+que `member.active_subscription`, filtre sur `start_date <= aujourd'hui <=
+end_date`. Un abonnement mal date est deja termine : il n'apparaissait ni dans
+la fiche, ni dans les listes, ni dans les acces. Aucun ecran n'y menait.
+
+**L'onglet << Historique des abonnements >> existait mais restait vide** : le
+`<div id="subscriptionHistory">` n'etait alimente par rien dans l'application
+reelle - seule la maquette statique `templates/clients.html` le remplissait.
+C'est desormais lui qui porte tous les abonnements du membre, et c'est de la
+que part la correction.
+
+**L'avertissement se calcule sur la fin reelle, pas sur `periode_close()`.**
+Un renouvellement anticipe reporte les jours restants : la fin peut tomber loin
+dans le futur alors meme que `debut + duree` est deja passe. Le service
+compare donc la date de fin qu'il s'apprete a ecrire.

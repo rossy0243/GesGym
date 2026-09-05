@@ -396,3 +396,78 @@ class SubscriptionRequest(models.Model):
 
     def __str__(self):
         return f"{self.member} - {self.plan} - {self.get_status_display()}"
+
+
+class SubscriptionCorrection(models.Model):
+    """
+    Trace d'une periode d'abonnement corrigee apres coup.
+
+    Une receptionniste peut vendre une periode deja terminee : le membre paie
+    et n'a aucun acces. Corriger les dates repare l'acces sans toucher a
+    l'argent - la recette, elle, a bien eu lieu.
+
+    Une table a part plutot que des champs sur l'abonnement : une periode peut
+    etre corrigee deux fois, et l'historique de ces gestes est precisement ce
+    que le proprietaire veut pouvoir relire.
+    """
+
+    # Au-dela, une periode corrigee ne raconte plus une faute de frappe : c'est
+    # le geste lui-meme qu'il faut examiner, pas la date.
+    MAXIMUM_PAR_ABONNEMENT = 2
+
+    gym = models.ForeignKey(
+        Gym,
+        on_delete=models.CASCADE,
+        related_name="subscription_corrections",
+        db_index=True,
+    )
+    subscription = models.ForeignKey(
+        "subscriptions.MemberSubscription",
+        on_delete=models.CASCADE,
+        related_name="corrections",
+    )
+
+    previous_start = models.DateField(verbose_name="Ancien debut")
+    previous_end = models.DateField(verbose_name="Ancienne fin")
+    new_start = models.DateField(verbose_name="Nouveau debut")
+    new_end = models.DateField(verbose_name="Nouvelle fin")
+
+    reason = models.CharField(
+        max_length=255,
+        verbose_name="Motif",
+        help_text="Ce que le proprietaire lira dans son bandeau.",
+    )
+
+    corrected_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="subscription_corrections_made",
+    )
+    corrected_at = models.DateTimeField(auto_now_add=True)
+
+    # Vides tant que le proprietaire n'a pas declare avoir vu. La correction,
+    # elle, a deja pris effet : cet accuse informe, il n'autorise pas.
+    acknowledged_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="subscription_corrections_seen",
+    )
+    acknowledged_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Correction d'abonnement"
+        verbose_name_plural = "Corrections d'abonnement"
+        ordering = ["-corrected_at"]
+        indexes = [
+            models.Index(fields=["gym", "acknowledged_at"]),
+        ]
+
+    def __str__(self):
+        return f"Correction de {self.subscription} le {self.corrected_at:%d/%m/%Y}"
+
+    @property
+    def is_acknowledged(self):
+        return self.acknowledged_at is not None

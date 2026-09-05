@@ -158,6 +158,47 @@
                     </a>
                 </div>
                 {% endif %}
+                {% if subscription_corrections_banner %}
+                {% comment %}
+                Un gerant a corrige une periode vendue. Le geste a deja pris
+                effet ; ce bandeau ne demande pas d'autorisation, il informe -
+                et ne disparait que lorsque le proprietaire declare avoir vu.
+                {% endcomment %}
+                <div class="alert alert-warning d-flex align-items-start gap-3 mb-4" role="alert">
+                    <span class="material-icons">edit_calendar</span>
+                    <div class="flex-grow-1">
+                        <div class="fw-semibold">
+                            {% if subscription_corrections_banner.total == 1 %}
+                            Une periode d'abonnement a ete corrigee
+                            {% else %}
+                            {{ subscription_corrections_banner.total }} periodes d'abonnement ont ete corrigees
+                            {% endif %}
+                        </div>
+                        {% for correction in subscription_corrections_banner.corrections %}
+                            <div class="small mt-2 d-flex flex-wrap align-items-center gap-2">
+                                <span>
+                                    <strong>{{ correction.subscription.member.first_name }}
+                                    {{ correction.subscription.member.last_name }}</strong> :
+                                    du {{ correction.previous_start|date:"d/m/Y" }} au {{ correction.previous_end|date:"d/m/Y" }}
+                                    &rarr;
+                                    du {{ correction.new_start|date:"d/m/Y" }} au {{ correction.new_end|date:"d/m/Y" }}
+                                    &middot; {{ correction.reason }}
+                                    &middot; par {{ correction.corrected_by.get_full_name|default:correction.corrected_by.username }}
+                                </span>
+                                <form method="post"
+                                      action="{% url 'subscriptions:acknowledge_correction' correction.id %}"
+                                      class="d-inline">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-sm btn-outline-dark">
+                                        J'ai vu
+                                    </button>
+                                </form>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
                 {% if device_offline_banner %}
                 {% comment %}
                 Une panne franche se voit : la porte ne s'ouvre plus, quelqu'un

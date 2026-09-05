@@ -8,18 +8,24 @@ from django.core.exceptions import ValidationError
 from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Q
-from django.http import JsonResponse
+from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_POST
 
 from core.audit import log_sensitive_action
 from pos.services import record_subscription_payment
-from smartclub.access_control import SUBSCRIPTION_ROLES, has_role
+from smartclub.access_control import (
+    SETTINGS_ORGANIZATION_ROLES,
+    SUBSCRIPTION_ROLES,
+    has_role,
+)
 from smartclub.decorators import module_required
 
+from . import corrections
 from .forms import MemberSubscriptionForm, SubscriptionOfferForm, SubscriptionPlanForm
-from .models import MemberSubscription, SubscriptionOffer, SubscriptionPlan
+from .models import MemberSubscription, SubscriptionCorrection, SubscriptionOffer, SubscriptionPlan
 
 logger = logging.getLogger("subscriptions")
 
@@ -359,6 +365,10 @@ def edit_offer(request, offer_id):
 def create_subscription(request):
     _require_gym_role(request, SUBSCRIPTION_MANAGEMENT_ROLES)
 
+    # La case de confirmation n'apparait qu'une fois le refus tombe : la
+    # proposer d'emblee inviterait a la cocher sans lire.
+    periode_close = False
+
     if request.method == "POST":
         form = MemberSubscriptionForm(request.POST, gym=request.gym)
         if form.is_valid():
@@ -378,9 +388,13 @@ def create_subscription(request):
                     method=payment_method,
                     start_date=start_date,
                     auto_renew=auto_renew,
+                    confirm_closed_period=form.cleaned_data.get(
+                        "confirm_closed_period", False
+                    ),
                     created_by=request.user,
                 )
             except ValidationError as exc:
+                periode_close = getattr(exc, "code", None) == "periode_close"
                 form.add_error(None, exc.messages[0] if getattr(exc, "messages", None) else str(exc))
             else:
                 log_sensitive_action(
@@ -430,4 +444,102 @@ def create_subscription(request):
     else:
         form = MemberSubscriptionForm(gym=request.gym)
 
-    return render(request, "subscriptions/create_subscription.html", {"form": form})
+    return render(
+        request,
+        "subscriptions/create_subscription.html",
+        {"form": form, "periode_close": periode_close},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Correction de la periode d'un abonnement
+# ---------------------------------------------------------------------------
+
+
+@login_required
+@module_required("SUBSCRIPTIONS")
+@require_POST
+def correct_subscription(request, subscription_id):
+    """
+    Repose la periode d'un abonnement mal date.
+
+    Le membre a paye : l'argent ne bouge pas, seule la periode se deplace. La
+    correction prend effet aussitot - le membre retrouve son acces sans
+    attendre que quiconque valide.
+    """
+    _require_gym_role(request, PLAN_MANAGEMENT_ROLES)
+
+    abonnement = get_object_or_404(
+        MemberSubscription, id=subscription_id, gym=request.gym
+    )
+
+    debut = parse_date((request.POST.get("start_date") or "").strip())
+    motif = request.POST.get("reason") or ""
+
+    # Le proprietaire n'a pas a s'accuser reception a lui-meme.
+    est_proprietaire = has_role(request, SETTINGS_ORGANIZATION_ROLES)
+
+    try:
+        trace = corrections.corriger(
+            abonnement, debut, motif, request.user, acquitte=est_proprietaire
+        )
+    except ValidationError as exc:
+        message = exc.messages[0]
+        if _wants_json(request):
+            return JsonResponse({"success": False, "error": message}, status=400)
+        messages.error(request, message)
+        return redirect(request.META.get("HTTP_REFERER", "members:member_list"))
+
+    log_sensitive_action(
+        request,
+        "subscription.period_corrected",
+        "MemberSubscription",
+        f"{abonnement.member.first_name} {abonnement.member.last_name}",
+        metadata={
+            "subscription_id": abonnement.id,
+            "avant": f"{trace.previous_start} -> {trace.previous_end}",
+            "apres": f"{trace.new_start} -> {trace.new_end}",
+            "motif": trace.reason,
+        },
+    )
+
+    reussite = (
+        f"Periode corrigee : du {trace.new_start:%d/%m/%Y} au "
+        f"{trace.new_end:%d/%m/%Y}."
+    )
+    if _wants_json(request):
+        return JsonResponse({"success": True, "message": reussite})
+
+    messages.success(request, reussite)
+    return redirect(request.META.get("HTTP_REFERER", "members:member_list"))
+
+
+@login_required
+@module_required("SUBSCRIPTIONS")
+@require_POST
+def acknowledge_correction(request, correction_id):
+    """
+    Le proprietaire declare avoir vu une correction.
+
+    Elle quitte alors son bandeau. Rien d'autre ne change : la correction avait
+    deja pris effet, cet accuse informe, il n'autorise pas.
+    """
+    if not has_role(request, SETTINGS_ORGANIZATION_ROLES):
+        return HttpResponseForbidden("Acces reserve au proprietaire")
+
+    correction = get_object_or_404(
+        SubscriptionCorrection, id=correction_id, gym=request.gym
+    )
+    corrections.accuser_reception(correction, request.user)
+
+    log_sensitive_action(
+        request,
+        "subscription.correction_acknowledged",
+        "SubscriptionCorrection",
+        str(correction.subscription.member),
+        metadata={"correction_id": correction.id},
+    )
+
+    if _wants_json(request):
+        return JsonResponse({"success": True})
+    return redirect(request.META.get("HTTP_REFERER", "core:dashboard_redirect"))

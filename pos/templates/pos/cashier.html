@@ -683,6 +683,7 @@
                                    Number() le lit comme NaN : le montant reste vide. {% endcomment %}
                                 <option value="{{ p.id }}"
                                         data-price="{{ p.price|unlocalize }}"
+                                        data-duration="{{ p.duration_days }}"
                                         data-currency="USD">
                                     {{ p.name }} - {{ p.price }} USD ({{ p.duration_days }} jours)
                                 </option>
@@ -699,6 +700,24 @@
                                    class="form-control"
                                    value="{{ today_iso }}"
                                    required>
+                        </div>
+                        <div class="col-12 mb-3 d-none" id="closedPeriodWarning">
+                            <div class="alert alert-warning mb-0 py-2">
+                                <div class="small">
+                                    <span class="material-icons" style="font-size:16px;vertical-align:-3px;">warning</span>
+                                    Cette periode se termine le <strong id="closedPeriodEnd">-</strong> :
+                                    le membre n'aura aucun acces.
+                                </div>
+                                <div class="form-check mt-2">
+                                    <input type="checkbox"
+                                           name="confirm_closed_period"
+                                           id="confirmClosedPeriod"
+                                           class="form-check-input">
+                                    <label class="form-check-label small" for="confirmClosedPeriod">
+                                        Je confirme : il s'agit d'une regularisation.
+                                    </label>
+                                </div>
+                            </div>
                         </div>
                         <div class="col-md-6 mb-3 d-flex align-items-end">
                             <div class="form-check mb-2">
@@ -1058,6 +1077,41 @@ document.addEventListener('DOMContentLoaded', function () {
         updateSaleSections();
         refreshPaymentAmount();
     });
+
+    // Une periode deja close est presque toujours une faute de saisie : le
+    // membre paie et n'a aucun acces. On l'annonce avant d'encaisser plutot
+    // que de le decouvrir des semaines plus tard.
+    function refreshClosedPeriodWarning() {
+        const bloc = document.getElementById('closedPeriodWarning');
+        if (!bloc || !planSelect || !subscriptionStartDate) { return; }
+
+        const option = planSelect.options[planSelect.selectedIndex];
+        const duree = Number(option?.dataset.duration);
+        const debut = subscriptionStartDate.value;
+
+        if (!duree || !debut) {
+            bloc.classList.add('d-none');
+            return;
+        }
+
+        const fin = new Date(debut + 'T00:00:00');
+        fin.setDate(fin.getDate() + duree);
+        const aujourdhui = new Date();
+        aujourdhui.setHours(0, 0, 0, 0);
+
+        if (fin < aujourdhui) {
+            document.getElementById('closedPeriodEnd').innerText =
+                fin.toLocaleDateString('fr-FR');
+            bloc.classList.remove('d-none');
+        } else {
+            bloc.classList.add('d-none');
+            document.getElementById('confirmClosedPeriod').checked = false;
+        }
+    }
+
+    planSelect?.addEventListener('change', refreshClosedPeriodWarning);
+    subscriptionStartDate?.addEventListener('change', refreshClosedPeriodWarning);
+
     planSelect?.addEventListener('change', refreshPaymentAmount);
     productSelect?.addEventListener('change', refreshPaymentAmount);
     quantityInput?.addEventListener('input', refreshPaymentAmount);

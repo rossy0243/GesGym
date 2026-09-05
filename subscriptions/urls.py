@@ -3,6 +3,8 @@ from django.urls import path
 from .views import (
     create_offer,
     create_plan,
+    acknowledge_correction,
+    correct_subscription,
     create_subscription,
     delete_plan,
     edit_offer,
@@ -20,4 +22,6 @@ urlpatterns = [
     path('subscription-offers/create/', create_offer, name='create_subscription_offer'),
     path('subscription-offers/edit/<int:offer_id>/', edit_offer, name='edit_subscription_offer'),
     path('subscriptions/create/', create_subscription, name='create_subscription'),
+    path('subscriptions/<int:subscription_id>/corriger/', correct_subscription, name='correct_subscription'),
+    path('corrections/<int:correction_id>/vue/', acknowledge_correction, name='acknowledge_correction'),
 ]

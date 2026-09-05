@@ -95,6 +95,7 @@ def record_subscription_payment(
     method,
     start_date=None,
     auto_renew=False,
+    confirm_closed_period=False,
     created_by=None,
 ):
     if member.gym_id != gym.id:
@@ -149,6 +150,22 @@ def record_subscription_payment(
     absorbe = en_cours if (en_cours and start <= en_cours.end_date) else None
     carried_over_days = (absorbe.end_date - start).days if absorbe else 0
     end = start + timedelta(days=plan.duration_days + carried_over_days)
+
+    # Une periode deja terminee au moment de la vente est presque toujours une
+    # faute de saisie : le membre paie et n'a aucun acces, sans que rien ne le
+    # signale. On ne la refuse pas - regulariser une vente ancienne est
+    # legitime - mais elle doit etre assumee.
+    #
+    # Seule la periode close alerte : une date passee est souvent normale, et
+    # interdire toutes les dates passees a deja casse le renouvellement
+    # anticipe dans ce projet.
+    if end < today and not confirm_closed_period:
+        raise ValidationError(
+            f"Cette periode s'est terminee le {end:%d/%m/%Y} : le membre "
+            "n'aura aucun acces. Cochez la confirmation s'il s'agit d'une "
+            "regularisation.",
+            code="periode_close",
+        )
 
     amount_usd = _money(plan.price)
     amount = amount_usd if currency == "USD" else _money(amount_usd * register.exchange_rate)

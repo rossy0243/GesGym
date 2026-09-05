@@ -211,6 +211,15 @@ class MemberSubscriptionForm(forms.ModelForm):
         label="Devise",
     )
 
+    # Une periode deja close est presque toujours une erreur de saisie, mais
+    # regulariser une vente ancienne reste legitime : on la fait assumer
+    # plutot que de l'interdire.
+    confirm_closed_period = forms.BooleanField(
+        required=False,
+        label="Periode deja terminee : je confirme cette regularisation",
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
+    )
+
     def __init__(self, *args, gym=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.gym = gym

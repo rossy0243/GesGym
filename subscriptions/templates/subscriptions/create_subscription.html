@@ -40,6 +40,17 @@
                         {{ form.start_date.errors }}
                     </div>
 
+                    {% if periode_close %}
+                    <div class="alert alert-warning py-2">
+                        <div class="form-check mb-0">
+                            {{ form.confirm_closed_period }}
+                            <label class="form-check-label small" for="{{ form.confirm_closed_period.id_for_label }}">
+                                {{ form.confirm_closed_period.label }}
+                            </label>
+                        </div>
+                    </div>
+                    {% endif %}
+
                     <div class="form-check mb-4">
                         {{ form.auto_renew }}
                         <label class="form-check-label" for="{{ form.auto_renew.id_for_label }}">Renouvellement automatique</label>

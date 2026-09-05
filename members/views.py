@@ -38,6 +38,7 @@ from smartclub.access_control import (
     MEMBER_ROLES,
     MEMBER_STATUS_ROLES,
     MEMBER_WRITE_ROLES,
+    SUBSCRIPTION_ROLES,
     has_role,
 )
 from smartclub.public_links import build_public_url
@@ -47,6 +48,7 @@ from .models import GuestPass, Member, MemberGoal, MemberPreRegistration, Member
 from notifications.models import Notification
 from organizations.models import Organization
 from pos.models import Payment
+from subscriptions import corrections as subscription_corrections
 from subscriptions.models import MemberSubscription, SubscriptionPlan, SubscriptionRequest
 
 
@@ -2061,6 +2063,67 @@ def edit_member(request, member_id):
     return JsonResponse(data)
 
 
+def _subscription_history(request, member):
+    """
+    Tous les abonnements du membre, pas seulement celui en cours.
+
+    Un abonnement mal date est deja termine : il n'apparait ni dans la fiche,
+    ni dans les listes, ni dans les acces. C'est pourtant lui qu'il faut
+    pouvoir corriger - sans cet historique, il serait hors d'atteinte.
+    """
+    aujourd_hui = timezone.localdate()
+    peut_corriger = has_role(request, SUBSCRIPTION_ROLES)
+    historique = []
+
+    abonnements = (
+        member.subscriptions.select_related("plan")
+        .prefetch_related("corrections__corrected_by")
+        .order_by("-start_date", "-id")
+    )
+
+    for abonnement in abonnements:
+        if not abonnement.is_active:
+            etat = "Inactif"
+        elif abonnement.start_date > aujourd_hui:
+            etat = "A venir"
+        elif abonnement.end_date < aujourd_hui:
+            etat = "Termine"
+        else:
+            etat = "En cours"
+
+        traces = []
+        for trace in sorted(abonnement.corrections.all(), key=lambda t: t.corrected_at):
+            auteur = trace.corrected_by
+            traces.append({
+                "previous": (
+                    f"{trace.previous_start:%d/%m/%Y} - {trace.previous_end:%d/%m/%Y}"
+                ),
+                "reason": trace.reason,
+                "by": (auteur.get_full_name() or auteur.username) if auteur else "",
+                "at": timezone.localtime(trace.corrected_at).strftime("%d/%m/%Y"),
+            })
+
+        historique.append({
+            "id": abonnement.id,
+            "plan": abonnement.plan.name if abonnement.plan else "Formule supprimee",
+            "start_date": abonnement.start_date.strftime("%d/%m/%Y"),
+            "end_date": abonnement.end_date.strftime("%d/%m/%Y"),
+            "start_iso": abonnement.start_date.isoformat(),
+            "state": etat,
+            "is_current": etat == "En cours",
+            # Une formule supprimee n'a plus de duree : la fin ne peut plus se
+            # recalculer, donc la correction n'est pas proposee.
+            "can_correct": (
+                peut_corriger
+                and abonnement.plan is not None
+                and subscription_corrections.restantes(abonnement) > 0
+            ),
+            "corrections": traces,
+        })
+
+    return historique
+
+
 #DETAIL D'UN MEMBRE
 @login_required
 def member_detail(request, member_id):
@@ -2149,6 +2212,7 @@ def member_detail(request, member_id):
             offer.name for offer in subscription.plan.active_offers
         ] if subscription and subscription.plan else [],
 
+        "subscriptions": _subscription_history(request, member),
         "payments": payments_data,
         "access_logs": access_data,
     }
