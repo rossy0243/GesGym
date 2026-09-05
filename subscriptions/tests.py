@@ -1463,3 +1463,153 @@ class SubscriptionCorrectionBannerTests(TestCase):
         self.assertIsNone(
             self._page().context["subscription_corrections_banner"]
         )
+
+
+class GuestInvitationVisibilityTests(TestCase):
+    """
+    Le droit d'inviter, annonce comme une offre.
+
+    Il se parametre sur la formule et non dans la table des offres : il
+    n'apparaissait donc nulle part ou l'on lit ce qu'une formule comprend.
+    Vendu sans etre annonce, il passait inapercu.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Invitation Vue", slug="org-invitation-vue"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Invitation Vue",
+            slug="gym-invitation-vue", subdomain="gym-invitation-vue",
+        )
+        for code in ("MEMBERS", "SUBSCRIPTIONS"):
+            module, _ = Module.objects.get_or_create(
+                code=code, defaults={"name": code}
+            )
+            GymModule.objects.get_or_create(
+                gym=self.gym, module=module, defaults={"is_active": True}
+            )
+
+        self.plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Premium", price=50, duration_days=30,
+            guest_invites_per_month=1, guest_sessions_per_invite=1,
+        )
+        self.sans_invitation = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Basique", price=20, duration_days=30,
+        )
+        self.gerant = User.objects.create_user(
+            username="gerant-invitation-vue", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.gerant, gym=self.gym, role="manager", is_active=True
+        )
+        self.client.force_login(self.gerant)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    # --- Le libelle ------------------------------------------------------------
+
+    def test_a_plan_without_invitations_says_nothing(self):
+        # A zero, la formule n'offre rien : elle ne doit rien annoncer.
+        self.assertEqual(self.sans_invitation.guest_invitation_label, "")
+
+    def test_one_guest_and_one_session_is_said_in_the_singular(self):
+        self.assertEqual(
+            self.plan.guest_invitation_label,
+            "Invitation : 1 invite / 30 jours (1 seance)",
+        )
+
+    def test_several_guests_and_sessions_are_said_in_the_plural(self):
+        self.plan.guest_invites_per_month = 3
+        self.plan.guest_sessions_per_invite = 2
+
+        self.assertEqual(
+            self.plan.guest_invitation_label,
+            "Invitation : 3 invites / 30 jours (2 seances)",
+        )
+
+    def test_the_window_is_thirty_days_not_a_calendar_month(self):
+        # Un abonnement pris le 29 ne doit pas donner deux jours de droit.
+        self.assertIn("30 jours", self.plan.guest_invitation_label)
+
+    # --- La liste des avantages ------------------------------------------------
+
+    def test_the_invitation_joins_the_offers(self):
+        self.plan.offers.add(
+            SubscriptionOffer.objects.create(
+                gym=self.gym, name="Sauna", is_active=True
+            )
+        )
+
+        self.assertEqual(
+            self.plan.advantage_labels,
+            ["Sauna", "Invitation : 1 invite / 30 jours (1 seance)"],
+        )
+
+    def test_a_plan_without_offers_still_announces_its_invitation(self):
+        self.assertEqual(
+            self.plan.advantage_labels,
+            ["Invitation : 1 invite / 30 jours (1 seance)"],
+        )
+
+    def test_an_inactive_offer_stays_out(self):
+        self.plan.offers.add(
+            SubscriptionOffer.objects.create(
+                gym=self.gym, name="Sauna", is_active=False
+            )
+        )
+
+        self.assertNotIn("Sauna", self.plan.advantage_labels)
+
+    def test_a_plan_with_neither_announces_nothing(self):
+        self.assertEqual(self.sans_invitation.advantage_labels, [])
+
+    # --- Les ecrans ------------------------------------------------------------
+
+    def test_the_plan_list_shows_it(self):
+        reponse = self.client.get(reverse("subscriptions:subscription_plan_list"))
+
+        self.assertContains(reponse, "Invitation : 1 invite / 30 jours (1 seance)")
+
+    def test_the_cashier_screen_flags_the_plan(self):
+        module, _ = Module.objects.get_or_create(code="POS", defaults={"name": "POS"})
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=module, defaults={"is_active": True}
+        )
+
+        reponse = self.client.get(reverse("pos:cashier_dashboard"))
+
+        self.assertContains(reponse, "invitation incluse")
+
+    def test_the_member_sheet_lists_it_among_the_offers(self):
+        member = Member.objects.create(
+            gym=self.gym, first_name="Ada", last_name="Mbala",
+            phone="+243870007777",
+        )
+        MemberSubscription.objects.create(
+            gym=self.gym, member=member, plan=self.plan,
+            start_date=timezone.localdate(),
+            end_date=timezone.localdate() + timedelta(days=30),
+            is_active=True,
+        )
+
+        fiche = self.client.get(
+            reverse("members:member_detail", args=[member.id])
+        ).json()
+
+        self.assertIn(
+            "Invitation : 1 invite / 30 jours (1 seance)",
+            fiche["subscription_offers"],
+        )
+
+    def test_the_public_pricing_announces_it(self):
+        from website.branding import landing_plans
+
+        formules = {f["name"]: f for f in landing_plans(self.organization)}
+
+        self.assertIn(
+            "Invitation : 1 invite / 30 jours (1 seance)",
+            formules["Premium"]["offers"],
+        )
+        self.assertEqual(formules["Basique"]["offers"], [])

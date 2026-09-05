@@ -224,13 +224,20 @@ body.subscription-plan-screen #addFormuleModal .modal-dialog {
                                 <strong>{{ plan.active_offers|length }}</strong>
                             </div>
 
-                            {% if plan.active_offers %}
+                            {% if plan.advantage_labels %}
                             <div class="mb-3">
-                                <div class="text-muted small mb-2">Offres incluses</div>
+                                <div class="text-muted small mb-2">Avantages inclus</div>
                                 <div class="d-flex flex-wrap gap-2">
                                     {% for offer in plan.active_offers %}
                                         <span class="badge bg-light-primary text-primary">{{ offer.name }}</span>
                                     {% endfor %}
+                                    {% comment %} Le droit d'inviter se parametre sur la formule, pas
+                                       dans les offres : sans ce badge il ne se voyait nulle part. {% endcomment %}
+                                    {% if plan.guest_invitation_label %}
+                                        <span class="badge bg-light-warning text-warning">
+                                            {{ plan.guest_invitation_label }}
+                                        </span>
+                                    {% endif %}
                                 </div>
                             </div>
                             {% endif %}

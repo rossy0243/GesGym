@@ -648,6 +648,20 @@ class MemberPortalTests(TestCase):
             fetch_redirect_response=False,
         )
 
+    def test_member_portal_announces_the_invitation_right(self):
+        # Le droit d'inviter se parametre sur la formule et non dans les
+        # offres : sans cette ligne, le membre ignorait qu'il l'avait paye.
+        self.plan.guest_invites_per_month = 1
+        self.plan.guest_sessions_per_invite = 2
+        self.plan.save(
+            update_fields=["guest_invites_per_month", "guest_sessions_per_invite"]
+        )
+        self.client.force_login(self.member.user)
+
+        response = self.client.get(reverse("members:member_portal") + "?tab=plans")
+
+        self.assertContains(response, "Invitation : 1 invite / 30 jours (2 seances)")
+
     def test_member_portal_shows_identity_card_and_subscription(self):
         offer = SubscriptionOffer.objects.create(
             gym=self.gym,

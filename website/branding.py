@@ -263,7 +263,7 @@ def landing_plans(organization):
             "description": (formule.description or "").strip(),
             "duration_label": duree_lisible(formule.duration_days),
             "price": formule.price,
-            "offers": [offre.name for offre in formule.active_offers],
+            "offers": formule.advantage_labels,
             "featured": formule.id == meilleure,
         }
 

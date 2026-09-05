@@ -338,6 +338,7 @@ def _subscription_payload(subscription):
                 }
                 for offer in plan.active_offers
             ] if plan else [],
+            "guest_invitation": plan.guest_invitation_label if plan else "",
         },
     }
 
@@ -402,6 +403,7 @@ def _plan_payload(plan, current_plan_id, pending_plan_ids, top_plan_sales_count)
             }
             for offer in plan.active_offers
         ],
+        "guest_invitation": plan.guest_invitation_label,
     }
 
 
@@ -2208,9 +2210,12 @@ def member_detail(request, member_id):
         "start_date": subscription.start_date.strftime("%d/%m/%Y") if subscription else None,
         "expiration_date": member.expiration_date.strftime("%d/%m/%Y") if member.expiration_date else None,
         "price": subscription.plan.price if subscription else 0,
-        "subscription_offers": [
-            offer.name for offer in subscription.plan.active_offers
-        ] if subscription and subscription.plan else [],
+        # Les avantages, et non les seules offres : le droit d'inviter fait
+        # partie de ce qui a ete vendu au membre.
+        "subscription_offers": (
+            subscription.plan.advantage_labels
+            if subscription and subscription.plan else []
+        ),
 
         "subscriptions": _subscription_history(request, member),
         "payments": payments_data,

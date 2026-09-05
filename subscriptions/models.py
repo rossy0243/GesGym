@@ -172,6 +172,38 @@ class SubscriptionPlan(models.Model):
     def active_offers(self):
         return self.offers.filter(is_active=True).order_by("name")
 
+    @property
+    def guest_invitation_label(self):
+        """
+        Le droit d'inviter, dit comme une offre.
+
+        Il se parametre sur la formule et non dans la table des offres : il
+        n'apparaissait donc nulle part ou l'on lit ce qu'une formule comprend.
+        Vendu sans etre annonce, il passait inapercu.
+        """
+        if not self.guest_invites_per_month:
+            return ""
+
+        personnes = (
+            "1 invite" if self.guest_invites_per_month == 1
+            else f"{self.guest_invites_per_month} invites"
+        )
+        # La tranche est de 30 jours, pas d'un mois calendaire : un abonnement
+        # pris le 29 ne doit pas donner deux jours de droit d'invitation.
+        passages = (
+            "1 seance" if self.guest_sessions_per_invite == 1
+            else f"{self.guest_sessions_per_invite} seances"
+        )
+        return f"Invitation : {personnes} / 30 jours ({passages})"
+
+    @property
+    def advantage_labels(self):
+        """Tout ce que la formule comprend : ses offres, et le droit d'inviter."""
+        libelles = [offer.name for offer in self.active_offers]
+        if self.guest_invitation_label:
+            libelles.append(self.guest_invitation_label)
+        return libelles
+
     def coaching_rights_payload(self):
         return {
             "mode": self.coaching_mode,

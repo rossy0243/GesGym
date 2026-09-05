@@ -685,7 +685,7 @@
                                         data-price="{{ p.price|unlocalize }}"
                                         data-duration="{{ p.duration_days }}"
                                         data-currency="USD">
-                                    {{ p.name }} - {{ p.price }} USD ({{ p.duration_days }} jours)
+                                    {{ p.name }} - {{ p.price }} USD ({{ p.duration_days }} jours){% if p.guest_invitation_label %} - invitation incluse{% endif %}
                                 </option>
                             {% endfor %}
                         </select>

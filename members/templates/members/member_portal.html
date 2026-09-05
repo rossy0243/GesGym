@@ -974,10 +974,10 @@
                                 {% endif %}
                                 <ul class="plan-benefits" aria-label="Avantages de la formule">
                                     <li>{{ plan.duration_days }} jours d'acces</li>
-                                    {% for offer in plan.active_offers %}
-                                        <li>{{ offer.name }}</li>
+                                    {% for avantage in plan.advantage_labels %}
+                                        <li>{{ avantage }}</li>
                                     {% endfor %}
-                                    {% if not plan.active_offers %}
+                                    {% if not plan.advantage_labels %}
                                         <li>Aucun avantage specifique parametre</li>
                                     {% endif %}
                                 </ul>
