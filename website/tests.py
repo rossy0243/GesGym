@@ -264,6 +264,21 @@ class LandingFooterTests(TestCase):
         self.assertNotContains(response, "contact@royalgym.example")
         self.assertNotContains(response, "+243 00 000 0000")
 
+    def test_the_footer_credits_the_developer_with_its_numbers(self):
+        pied = self._pied_de_page(self.client.get("/"))
+
+        self.assertIn("SMART IT SOLUTION", pied)
+        self.assertIn("+243 821886995", pied)
+        self.assertIn("+243 979710633", pied)
+
+    def test_the_developer_gives_no_address_or_email(self):
+        # Les coordonnees de la salle sont juste au-dessus dans le meme pied
+        # de page : une seconde adresse s'y disputerait la lecture.
+        pied = self._pied_de_page(self.client.get("/"))
+
+        self.assertNotIn("route de Matadi", pied)
+        self.assertNotIn("smartitsolution.cd", pied)
+
     def test_the_footer_lists_the_declared_services(self):
         response = self.client.get("/")
         pied = self._pied_de_page(response)
