@@ -4936,6 +4936,17 @@ class HeaderSearchTests(TestCase):
 
         self.assertContains(reponse, "Rechercher un membre")
 
+    def test_the_header_stays_on_one_line(self):
+        # Une premiere version laissait l'en-tete passer a la ligne : le
+        # selecteur de salle descendait et la pastille de notification se
+        # retrouvait coupee. La recherche retrecit, l'en-tete ne s'enroule pas.
+        self._connecter("manager")
+
+        page = self.client.get(reverse("members:member_list")).content.decode("utf-8")
+
+        self.assertIn('class="header-right ms-auto d-flex align-items-center gap-3"', page)
+        self.assertNotIn("header-right ms-auto d-flex align-items-center flex-wrap", page)
+
     def test_it_leads_to_the_member_list(self):
         self._connecter("manager")
 
@@ -5059,6 +5070,43 @@ class SemanticColourTests(TestCase):
 
     def test_the_key_figures_are_set_apart(self):
         self.assertContains(self._page(), "chiffre-cle")
+
+    def _palette(self):
+        return (
+            Path(settings.BASE_DIR) / "static" / "css" / "palette.css"
+        ).read_text(encoding="utf-8")
+
+    def _bloc_racine(self):
+        """Le bloc :root seul - le mode sombre redefinit les memes variables."""
+        palette = self._palette()
+        debut = palette.index(":root {")
+        return palette[debut:palette.index("}", debut)]
+
+    def test_the_brand_gold_matches_the_logo(self):
+        # L'or du logo est clair et metallique. Celui du theme etait beaucoup
+        # plus fonce : ce n'etait pas la marque du client. On lit le bloc
+        # :root et non le fichier entier, sinon la ligne du mode sombre - qui
+        # porte deja cette valeur - suffirait a faire passer le test.
+        self.assertIn("--royal-or: #C9A227;", self._bloc_racine())
+
+    def test_the_readable_gold_is_darker_than_the_logo(self):
+        # Sur fond blanc, l'or du logo tombe a 2,3:1 de contraste. Ce qui se
+        # lit prend donc le meme or, assombri.
+        self.assertIn("--royal-or-texte: #8A6D1D;", self._bloc_racine())
+        self.assertIn(".ton-strategique { color: var(--royal-or-texte)", self._palette())
+
+    def test_the_live_templates_no_longer_hardcode_the_gold(self):
+        # Il etait recopie a la main : changer la teinte demandait de les
+        # retrouver tous. Les couleurs des graphiques restent en dur - un
+        # canvas ne lit pas les variables CSS.
+        racine = Path(settings.BASE_DIR)
+        for chemin in (
+            "templates/include/header.html",
+            "templates/include/navigation.html",
+            "core/templates/core/select_gym.html",
+        ):
+            with self.subTest(chemin=chemin):
+                self.assertNotIn("#8A6D1D", (racine / chemin).read_text(encoding="utf-8"))
 
     def test_the_palette_is_loaded_after_the_theme(self):
         # Chargee avant, elle perdrait contre le theme et le mode sombre.

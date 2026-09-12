@@ -24,9 +24,15 @@
  */
 
 :root {
-    --royal-or: #8A6D1D;
-    --royal-or-vif: #C9A227;
-    --royal-or-voile: rgba(138, 109, 29, 0.10);
+    /* L'or du logo Royal Gym : metallique et clair. Il porte les filets, les
+       bordures et les aplats - tout ce qui n'a pas a etre lu. */
+    --royal-or: #C9A227;
+    /* Le meme or, assombri, pour ce qui se lit. Sur fond blanc, #C9A227 tombe
+       a 2,3:1 de contraste - sous le seuil ou un texte reste lisible. Celui-ci
+       tient 4,6:1. Ce n'est pas une autre couleur de marque : c'est la meme,
+       rendue lisible. */
+    --royal-or-texte: #8A6D1D;
+    --royal-or-voile: rgba(201, 162, 39, 0.12);
     --royal-noir: #0B0B0B;
 
     --ton-normal: #17c666;
@@ -40,8 +46,11 @@
 /* En mode sombre, l'or fonce devient illisible sur fond noir et le neutre
    doit s'eclaircir au lieu de s'assombrir. */
 html.app-skin-dark {
+    /* Sur fond noir - celui du logo - l'or clair se lit sans etre assombri :
+       les deux variables se rejoignent. */
     --royal-or: #C9A227;
-    --royal-or-voile: rgba(201, 162, 39, 0.14);
+    --royal-or-texte: #C9A227;
+    --royal-or-voile: rgba(201, 162, 39, 0.16);
     --ton-neutre: #cbd5e1;
     --chiffre-cle: #f1f5f9;
 }
@@ -52,7 +61,7 @@ html.app-skin-dark {
 .ton-attention { color: var(--ton-attention) !important; }
 .ton-urgent { color: var(--ton-urgent) !important; }
 .ton-neutre { color: var(--ton-neutre) !important; }
-.ton-strategique { color: var(--royal-or) !important; }
+.ton-strategique { color: var(--royal-or-texte) !important; }
 
 /* ========== Les chiffres principaux ========== */
 
@@ -82,7 +91,7 @@ html.app-skin-dark {
 }
 
 .bloc-royal .card-header .card-title .material-icons {
-    color: var(--royal-or);
+    color: var(--royal-or-texte);
 }
 
 /* La carte du bloc en cours de lecture se detache du fond. */
@@ -92,26 +101,41 @@ html.app-skin-dark {
 
 /* ========== La recherche de l'en-tete ========== */
 
+/*
+ * Elle partage sa ligne avec le selecteur de salle, les notifications et le
+ * compte. Lui donner une largeur minimale faisait passer l'en-tete a la ligne
+ * et coupait l'alerte de notification : elle doit donc etre la premiere a
+ * retrecir, et la premiere a disparaitre quand la place manque.
+ */
 .recherche-membre {
-    min-width: 220px;
+    flex: 0 1 220px;
+    min-width: 0;
+    max-width: 220px;
 }
 
 .recherche-membre .form-control {
+    height: 38px;
     border-radius: 999px 0 0 999px;
 }
 
 .recherche-membre .btn {
+    height: 38px;
+    padding-inline: .65rem;
     border-radius: 0 999px 999px 0;
 }
 
-@media (max-width: 991.98px) {
-    /* Sur tablette, la recherche prend la largeur disponible plutot que de
-       pousser le reste de l'en-tete hors de l'ecran. */
+@media (max-width: 1399.98px) {
     .recherche-membre {
-        min-width: 0;
-        flex: 1 1 100%;
-        order: 10;
-        margin-top: .5rem;
+        flex-basis: 165px;
+        max-width: 165px;
+    }
+}
+
+@media (max-width: 991.98px) {
+    /* La liste des membres porte sa propre recherche : mieux vaut la retirer
+       de l'en-tete que d'y ecraser le selecteur de salle. */
+    .recherche-membre {
+        display: none;
     }
 }
 
