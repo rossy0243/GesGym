@@ -284,3 +284,36 @@ def subscription_corrections_processor(request):
             "corrections": attente,
         }
     }
+
+
+def register_acknowledgements_processor(request):
+    """
+    Impose au proprietaire les clôtures de gerant qu'il n'a pas encore vues.
+
+    Un gerant n'ouvre une caisse qu'en depannage : lui demander une
+    contre-signature bloquerait le poste. En echange, le proprietaire en est
+    informe - non par une ligne d'historique qu'il pourrait ne jamais lire,
+    mais par un bandeau qui ne part que lorsqu'il declare avoir vu.
+    """
+    from pos.validation import a_acquitter
+    from smartclub.access_control import SETTINGS_ORGANIZATION_ROLES
+
+    gym = getattr(request, "gym", None)
+    if not request.user.is_authenticated or gym is None:
+        return {"register_acknowledgements_banner": None}
+
+    # has_role plutot que request.is_owner : un compte "owner" pose sur la
+    # salle est proprietaire partout ailleurs dans l'application.
+    if not has_role(request, SETTINGS_ORGANIZATION_ROLES):
+        return {"register_acknowledgements_banner": None}
+
+    attente = a_acquitter(gym)
+    if not attente:
+        return {"register_acknowledgements_banner": None}
+
+    return {
+        "register_acknowledgements_banner": {
+            "total": len(attente),
+            "registres": attente[:5],
+        }
+    }

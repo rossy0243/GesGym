@@ -42,6 +42,7 @@ from .forms import (
 from members.models import Member
 from organizations.models import Gym, GymModule, LandingFaq
 from pos.models import CashRegister, Payment
+from pos.validation import CONTRESIGNATURE
 from subscriptions.models import MemberSubscription
 from .accounting_reports import (
     accounting_filename,
@@ -358,7 +359,7 @@ def _tableau_de_caisse(gym, today):
             ecart += session.difference
         if not session.is_closed and session.opened_at.date() < today:
             oubliee_depuis_hier += 1
-        if session.needs_validation:
+        if session.validation_regime == CONTRESIGNATURE and not session.is_validated:
             a_contre_signer += 1
 
         rangs.append({
@@ -488,7 +489,9 @@ def _alertes_urgentes(caisse, refus_repetes, expirations_48h, machines_hs,
 
     if caisse["a_contre_signer"]:
         # Une clôture que personne d'autre n'a regardee n'est pas encore un
-        # controle : elle attend une seconde signature.
+        # controle : elle attend une seconde signature. Celles d'un gerant
+        # remontent au proprietaire par son bandeau, pas ici : les compter
+        # deux fois lui ferait chercher un geste deja demande ailleurs.
         alertes.append({
             "ton": "attention",
             "titre": f'{caisse["a_contre_signer"]} clôture a contre-signer',

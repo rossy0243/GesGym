@@ -80,6 +80,7 @@ from .accounting_reports import (
 )
 from .views import _get_period_window
 from organizations.models import Gym, GymModule, Module, Organization, SensitiveActivityLog
+from pos import validation
 from pos.services import record_payment
 from pos.models import CashRegister, ExchangeRate, Payment
 
@@ -5776,3 +5777,300 @@ class SearchResultDestinationTests(TestCase):
         )
 
         self.assertEqual(reponse.context["sections"], [])
+
+
+class RegisterValidationRegimeTests(TestCase):
+    """
+    Qui doit verifier quoi.
+
+    Le proprietaire ne rend de comptes a personne. Le gerant n'ouvre une caisse
+    qu'en depannage : le proprietaire en est informe, sans que le poste soit
+    bloque. Tous les autres restent contre-signes par un tiers.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Regime", slug="org-regime"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Regime",
+            slug="gym-regime", subdomain="gym-regime",
+        )
+        for code in ("MEMBERS", "POS"):
+            module, _ = Module.objects.get_or_create(
+                code=code, defaults={"name": code}
+            )
+            GymModule.objects.get_or_create(
+                gym=self.gym, module=module, defaults={"is_active": True}
+            )
+        self.caissiere = self._role("caisse-regime", "cashier")
+        self.gerant = self._role("gerant-regime", "manager")
+        self.second_gerant = self._role("gerant2-regime", "manager")
+        # Le proprietaire par le chemin du middleware : il possede
+        # l'organisation, et n'a aucun role pose sur la salle.
+        self.proprietaire = User.objects.create_user(
+            username="proprio-regime", password="pass12345"
+        )
+        self.proprietaire.owned_organization = self.organization
+        self.proprietaire.save(update_fields=["owned_organization"])
+        # Et le proprietaire par l'autre chemin : un role "owner" sur la salle.
+        self.proprietaire_role = self._role("proprio2-regime", "owner")
+
+    def _role(self, nom, role):
+        utilisateur = User.objects.create_user(username=nom, password="pass12345")
+        UserGymRole.objects.create(
+            user=utilisateur, gym=self.gym, role=role, is_active=True
+        )
+        return utilisateur
+
+    def _connecter(self, utilisateur):
+        self.client.force_login(utilisateur)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _caisse(self, ouverte_par, fermee_par, ecart="0.00"):
+        registre = CashRegister.objects.create(
+            gym=self.gym, opened_by=ouverte_par,
+            opening_amount=Decimal("100000.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+        registre.closing_amount = Decimal("100000.00") + Decimal(ecart)
+        registre.difference = Decimal(ecart)
+        registre.closed_by = fermee_par
+        registre.closed_at = timezone.now()
+        registre.is_closed = True
+        registre.save()
+        return registre
+
+    def _signer(self, registre, motif=""):
+        return self.client.post(
+            reverse("pos:validate_register", args=[registre.id]),
+            {"validation_note": motif} if motif else {},
+            follow=True,
+        )
+
+    # --- Les trois regimes ---------------------------------------------------------
+
+    def test_an_owners_closing_needs_nothing(self):
+        registre = self._caisse(self.proprietaire, self.proprietaire)
+
+        self.assertEqual(registre.validation_regime, validation.AUCUN)
+        self.assertFalse(registre.needs_validation)
+
+    def test_an_owner_by_gym_role_also_needs_nothing(self):
+        # Les deux facons d'etre proprietaire donnent le meme resultat : une
+        # seule reconnue, la regle dependrait de la creation du compte.
+        registre = self._caisse(self.proprietaire_role, self.proprietaire_role)
+
+        self.assertEqual(registre.validation_regime, validation.AUCUN)
+
+    def test_a_managers_own_closing_only_needs_to_be_seen(self):
+        registre = self._caisse(self.gerant, self.gerant)
+
+        self.assertEqual(registre.validation_regime, validation.ACQUITTEMENT)
+
+    def test_a_cashiers_closing_still_needs_a_countersignature(self):
+        registre = self._caisse(self.caissiere, self.caissiere)
+
+        self.assertEqual(registre.validation_regime, validation.CONTRESIGNATURE)
+
+    def test_a_manager_closing_someone_elses_drawer_is_countersigned(self):
+        # Ce n'est pas son depannage habituel : l'argent a ete compte par une
+        # seule personne sur la caisse d'une autre.
+        registre = self._caisse(self.caissiere, self.gerant)
+
+        self.assertEqual(registre.validation_regime, validation.CONTRESIGNATURE)
+
+    def test_an_open_register_awaits_nothing(self):
+        registre = CashRegister.objects.create(
+            gym=self.gym, opened_by=self.caissiere,
+            opening_amount=Decimal("100000.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+
+        self.assertEqual(registre.validation_regime, validation.AUCUN)
+
+    def test_a_deleted_account_falls_back_to_a_countersignature(self):
+        # Personne ne peut plus repondre de ce comptage : un tiers doit le
+        # reprendre a son compte.
+        registre = self._caisse(self.caissiere, self.gerant)
+        CashRegister.objects.filter(pk=registre.pk).update(closed_by=None)
+        registre.refresh_from_db()
+
+        self.assertEqual(registre.validation_regime, validation.CONTRESIGNATURE)
+
+    # --- Qui peut signer quoi --------------------------------------------------------
+
+    def test_only_the_owner_acknowledges_a_managers_closing(self):
+        registre = self._caisse(self.gerant, self.gerant)
+        self._connecter(self.second_gerant)
+
+        self._signer(registre)
+
+        registre.refresh_from_db()
+        self.assertFalse(registre.is_validated)
+
+    def test_the_owner_acknowledges_a_managers_closing(self):
+        registre = self._caisse(self.gerant, self.gerant)
+        self._connecter(self.proprietaire)
+
+        self._signer(registre)
+
+        registre.refresh_from_db()
+        self.assertTrue(registre.is_validated)
+        self.assertEqual(registre.validated_by, self.proprietaire)
+
+    def test_a_manager_cannot_acknowledge_their_own_closing(self):
+        registre = self._caisse(self.gerant, self.gerant)
+        self._connecter(self.gerant)
+
+        self._signer(registre)
+
+        registre.refresh_from_db()
+        self.assertFalse(registre.is_validated)
+
+    def test_an_owners_closing_cannot_be_signed_at_all(self):
+        # Il n'y a rien a signer : proposer le geste laisserait croire qu'il
+        # manquait quelque chose.
+        registre = self._caisse(self.proprietaire, self.proprietaire)
+        self._connecter(self.gerant)
+
+        self._signer(registre)
+
+        registre.refresh_from_db()
+        self.assertFalse(registre.is_validated)
+
+    def test_a_second_manager_countersigns_a_cashiers_closing(self):
+        registre = self._caisse(self.caissiere, self.caissiere)
+        self._connecter(self.gerant)
+
+        self._signer(registre)
+
+        registre.refresh_from_db()
+        self.assertTrue(registre.is_validated)
+
+    # --- L'ecart, quel que soit l'auteur ------------------------------------------------
+
+    def test_a_managers_variance_still_needs_an_explanation(self):
+        # Un ecart non explique ne vaut rien, quel que soit celui qui a compte
+        # - et un gerant manie souvent des sommes plus importantes.
+        registre = self._caisse(self.gerant, self.gerant, ecart="-5000.00")
+        self._connecter(self.proprietaire)
+
+        self._signer(registre)
+
+        registre.refresh_from_db()
+        self.assertFalse(registre.is_validated)
+
+    def test_with_an_explanation_the_owner_can_acknowledge(self):
+        registre = self._caisse(self.gerant, self.gerant, ecart="-5000.00")
+        self._connecter(self.proprietaire)
+
+        self._signer(registre, motif="Avance sur salaire non saisie")
+
+        registre.refresh_from_db()
+        self.assertTrue(registre.is_validated)
+        self.assertEqual(registre.validation_note, "Avance sur salaire non saisie")
+
+    def test_a_balanced_managers_closing_is_seen_in_one_click(self):
+        registre = self._caisse(self.gerant, self.gerant)
+        self._connecter(self.proprietaire)
+
+        self._signer(registre)
+
+        registre.refresh_from_db()
+        self.assertTrue(registre.is_validated)
+
+    # --- Le bandeau du proprietaire -------------------------------------------------------
+
+    def test_the_owner_is_shown_a_managers_closing(self):
+        self._caisse(self.gerant, self.gerant)
+        self._connecter(self.proprietaire)
+
+        reponse = self.client.get(reverse("members:member_list"))
+
+        self.assertEqual(
+            reponse.context["register_acknowledgements_banner"]["total"], 1
+        )
+
+    def test_the_banner_goes_once_seen(self):
+        registre = self._caisse(self.gerant, self.gerant)
+        self._connecter(self.proprietaire)
+        self._signer(registre)
+
+        reponse = self.client.get(reverse("members:member_list"))
+
+        self.assertIsNone(reponse.context["register_acknowledgements_banner"])
+
+    def test_a_cashiers_closing_does_not_reach_the_banner(self):
+        # Elle se contre-signe dans l'historique : la faire remonter au
+        # proprietaire lui demanderait un geste qui ne lui revient pas.
+        self._caisse(self.caissiere, self.caissiere)
+        self._connecter(self.proprietaire)
+
+        reponse = self.client.get(reverse("members:member_list"))
+
+        self.assertIsNone(reponse.context["register_acknowledgements_banner"])
+
+    def test_a_manager_sees_no_banner(self):
+        self._caisse(self.gerant, self.gerant)
+        self._connecter(self.second_gerant)
+
+        reponse = self.client.get(reverse("members:member_list"))
+
+        self.assertIsNone(reponse.context["register_acknowledgements_banner"])
+
+    def test_a_neighbouring_gym_stays_out_of_the_banner(self):
+        voisine = Gym.objects.create(
+            organization=self.organization, name="Voisine",
+            slug="gym-regime-voisine", subdomain="gym-regime-voisine",
+        )
+        module = Module.objects.get(code="MEMBERS")
+        GymModule.objects.get_or_create(
+            gym=voisine, module=module, defaults={"is_active": True}
+        )
+        self._caisse(self.gerant, self.gerant)
+
+        self.client.force_login(self.proprietaire)
+        session = self.client.session
+        session["current_gym_id"] = voisine.id
+        session.save()
+
+        reponse = self.client.get(reverse("members:member_list"))
+
+        self.assertIsNone(reponse.context["register_acknowledgements_banner"])
+
+    # --- L'alerte du tableau de bord ----------------------------------------------------
+
+    def test_a_managers_closing_is_not_counted_twice(self):
+        # Elle remonte par le bandeau : la compter aussi dans les alertes
+        # ferait chercher un geste deja demande ailleurs.
+        self._caisse(self.gerant, self.gerant)
+        self._connecter(self.proprietaire)
+
+        alertes = self.client.get(
+            reverse("core:gym_dashboard", args=[self.gym.id])
+        ).context["alertes_urgentes"]
+
+        self.assertFalse(any("contre-signer" in a["titre"] for a in alertes))
+
+    def test_a_cashiers_closing_is_counted_in_the_alerts(self):
+        self._caisse(self.caissiere, self.caissiere)
+        self._connecter(self.proprietaire)
+
+        alertes = self.client.get(
+            reverse("core:gym_dashboard", args=[self.gym.id])
+        ).context["alertes_urgentes"]
+
+        self.assertTrue(any("contre-signer" in a["titre"] for a in alertes))
+
+    def test_an_owners_closing_raises_no_alert(self):
+        self._caisse(self.proprietaire, self.proprietaire)
+        self._connecter(self.proprietaire)
+
+        alertes = self.client.get(
+            reverse("core:gym_dashboard", args=[self.gym.id])
+        ).context["alertes_urgentes"]
+
+        self.assertFalse(any("contre-signer" in a["titre"] for a in alertes))

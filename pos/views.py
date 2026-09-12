@@ -18,6 +18,7 @@ from smartclub.decorators import module_required, role_required
 from core.audit import log_sensitive_action
 
 from .models import CashRegister, ExchangeRate, Payment
+from . import validation
 from .services import record_expense, record_product_sale, record_subscription_payment
 
 
@@ -623,34 +624,27 @@ def validate_register(request, register_id):
         CashRegister, id=register_id, gym=request.gym, is_closed=True
     )
 
-    if registre.is_validated:
-        messages.info(
-            request,
-            f"Cette clôture a deja ete validee le "
-            f"{timezone.localtime(registre.validated_at):%d/%m/%Y a %H:%M}.",
-        )
-        return redirect("pos:register_history")
+    retour = request.POST.get("next") or "pos:register_history"
 
-    if registre.closed_by_id == request.user.id:
-        messages.error(
-            request,
-            "Vous avez clôture cette caisse : la validation revient a "
-            "quelqu'un d'autre.",
-        )
-        return redirect("pos:register_history")
+    autorise, raison = validation.peut_signer(registre, request.user)
+    if not autorise:
+        messages.error(request, raison)
+        return _retour_validation(request, retour)
 
     motif = (request.POST.get("validation_note") or "").strip()
-    # Un ecart valide sans explication ne vaut rien : dans six mois, personne
-    # ne saura s'il s'agissait d'un rendu de monnaie ou d'autre chose. Une
-    # caisse juste, elle, se valide d'un clic.
-    if registre.difference and not motif:
+    # Un ecart signe sans explication ne vaut rien : dans six mois, personne ne
+    # saura s'il s'agissait d'un rendu de monnaie ou d'autre chose. Une caisse
+    # juste, elle, se signe d'un clic - et cela vaut pour le gerant comme pour
+    # le caissier.
+    if validation.motif_requis(registre) and not motif:
         messages.error(
             request,
             "Cette caisse presente un ecart : indiquez ce qui l'explique "
-            "avant de valider.",
+            "avant de signer.",
         )
-        return redirect("pos:register_history")
+        return _retour_validation(request, retour)
 
+    besoin = validation.regime(registre)
     registre.validated_by = request.user
     registre.validated_at = timezone.now()
     registre.validation_note = motif
@@ -667,13 +661,27 @@ def validate_register(request, register_id):
             "closed_by": (
                 registre.closed_by.username if registre.closed_by else ""
             ),
+            "regime": besoin,
             "difference": str(registre.difference or 0),
             "note": motif,
         },
     )
 
+    geste = "signalee comme vue" if besoin == validation.ACQUITTEMENT else "validee"
     messages.success(
         request,
-        f"Clôture du {timezone.localtime(registre.closed_at):%d/%m/%Y} validee.",
+        f"Clôture du {timezone.localtime(registre.closed_at):%d/%m/%Y} {geste}.",
     )
-    return redirect("pos:register_history")
+    return _retour_validation(request, retour)
+
+
+def _retour_validation(request, retour):
+    """
+    La ou l'utilisateur etait.
+
+    Le bandeau du proprietaire s'affiche sur tous les ecrans : le renvoyer a
+    l'historique des caisses l'arracherait a ce qu'il faisait.
+    """
+    if retour.startswith("/"):
+        return redirect(retour)
+    return redirect(retour)

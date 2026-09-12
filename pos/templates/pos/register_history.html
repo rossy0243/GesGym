@@ -363,7 +363,7 @@
                                 <span class="text-muted">-</span>
                             {% elif r.is_validated %}
                                 <span class="badge bg-success-subtle text-success border px-3 py-2"
-                                      title="Contre-signee apres la clôture">Validee</span>
+                                      title="Verifiee apres la clôture">{% if r.validation_regime == "acquittement" %}Vue{% else %}Validee{% endif %}</span>
                                 <div class="small text-muted mt-1">
                                     {{ r.validated_by.get_full_name|default:r.validated_by.username }}
                                     - {{ r.validated_at|date:"d/m H:i" }}
@@ -371,9 +371,16 @@
                                 {% if r.validation_note %}
                                     <div class="small text-muted fst-italic">{{ r.validation_note }}</div>
                                 {% endif %}
-                            {% elif r.closed_by_id == request.user.id %}
+                            {% elif r.validation_regime == "aucun" %}
+                                {% comment %} Le proprietaire ne rend de comptes a
+                                   personne : sa clôture est close. {% endcomment %}
+                                <span class="text-muted small">Aucune verification requise</span>
+                            {% elif r.validation_regime == "acquittement" and not request.is_owner %}
                                 <span class="badge bg-warning-subtle text-warning border px-3 py-2"
-                                      title="Vous avez clôture cette caisse : la validation revient a quelqu'un d'autre.">A contre-signer</span>
+                                      title="Clôture faite par un gerant : seul le proprietaire peut declarer l'avoir vue.">Signalee au proprietaire</span>
+                            {% elif r.validation_regime == "contresignature" and r.closed_by_id == request.user.id %}
+                                <span class="badge bg-warning-subtle text-warning border px-3 py-2"
+                                      title="Vous avez clôture cette caisse : la verification revient a quelqu'un d'autre.">A contre-signer</span>
                             {% else %}
                                 <form method="post" action="{% url 'pos:validate_register' r.id %}"
                                       class="d-inline-block text-start" style="min-width:180px;">
@@ -387,7 +394,7 @@
                                     {% endif %}
                                     <button type="submit" class="btn btn-sm btn-outline-success w-100">
                                         <span class="material-icons" style="font-size:16px;vertical-align:-3px;">how_to_reg</span>
-                                        Valider
+                                        {% if r.validation_regime == "acquittement" %}J'ai vu{% else %}Valider{% endif %}
                                     </button>
                                 </form>
                             {% endif %}

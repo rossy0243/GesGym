@@ -161,6 +161,56 @@
                     </a>
                 </div>
                 {% endif %}
+                {% if register_acknowledgements_banner %}
+                {% comment %}
+                Un gerant n'ouvre une caisse qu'en depannage : lui demander une
+                contre-signature bloquerait le poste. En echange, le proprietaire
+                en est informe ici, et le bandeau ne part que lorsqu'il declare
+                avoir vu. Un ecart, lui, ne se signe jamais sans explication.
+                {% endcomment %}
+                <div class="alert alert-warning d-flex align-items-start gap-3 mb-4" role="alert">
+                    <span class="material-icons">point_of_sale</span>
+                    <div class="flex-grow-1">
+                        <div class="fw-semibold">
+                            {% if register_acknowledgements_banner.total == 1 %}
+                            Une caisse a ete clôturee par un gerant
+                            {% else %}
+                            {{ register_acknowledgements_banner.total }} caisses ont ete clôturees par un gerant
+                            {% endif %}
+                        </div>
+                        {% for registre in register_acknowledgements_banner.registres %}
+                            <div class="small mt-2 d-flex flex-wrap align-items-center gap-2">
+                                <span>
+                                    <strong>{{ registre.closed_by.get_full_name|default:registre.closed_by.username }}</strong>
+                                    &middot; {{ registre.session_code }}
+                                    &middot; clôturee le {{ registre.closed_at|date:"d/m/Y H:i" }}
+                                    &middot; compte {{ registre.closing_amount|floatformat:0 }} CDF
+                                    {% if registre.difference %}
+                                        &middot; <strong class="ton-urgent">ecart {{ registre.difference|floatformat:0 }} CDF</strong>
+                                    {% else %}
+                                        &middot; sans ecart
+                                    {% endif %}
+                                </span>
+                                <form method="post"
+                                      action="{% url 'pos:validate_register' registre.id %}"
+                                      class="d-inline-flex align-items-center gap-1">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                    {% if registre.difference %}
+                                        <input type="text" name="validation_note" class="form-control form-control-sm"
+                                               maxlength="255" required style="min-width:220px;"
+                                               placeholder="Ce qui explique l'ecart">
+                                    {% endif %}
+                                    <button type="submit" class="btn btn-sm btn-outline-dark">
+                                        J'ai vu
+                                    </button>
+                                </form>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
                 {% if subscription_corrections_banner %}
                 {% comment %}
                 Un gerant a corrige une periode vendue. Le geste a deja pris

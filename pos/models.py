@@ -131,8 +131,22 @@ class CashRegister(models.Model):
 
     @property
     def needs_validation(self):
-        """Clôturee mais pas encore contre-signee."""
-        return self.is_closed and not self.is_validated
+        """
+        Clôturee et attendant encore un geste.
+
+        Ce que ce geste est - un acquittement du proprietaire ou une
+        contre-signature par un tiers - depend de la place de celui qui a
+        compte le tiroir. La regle vit dans ``pos.validation``.
+        """
+        from .validation import en_attente
+
+        return en_attente(self)
+
+    @property
+    def validation_regime(self):
+        from .validation import regime
+
+        return regime(self)
 
     @property
     def was_force_closed(self):
