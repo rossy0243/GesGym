@@ -379,6 +379,115 @@ def _nom_utilisateur(utilisateur):
     return utilisateur.get_full_name() or utilisateur.username
 
 
+
+def _refus_repetes(gym, today, seuil=3):
+    """
+    Les personnes a qui la porte s'est fermee plusieurs fois aujourd'hui.
+
+    Un refus isole n'est pas une anomalie : un abonnement echu se presente, la
+    porte reste fermee, le dispositif fonctionne. Trois refus sur la meme
+    personne dans la journee racontent autre chose - un abonnement expire que
+    personne ne lui a signale, ou quelqu'un qui insiste.
+
+    Compter les refus du jour et crier au-dela d'un seuil aurait sonne tous
+    les soirs dans une salle frequentee, et jamais dans une salle calme. Ce
+    qui se repete est anormal partout.
+    """
+    lignes = (
+        AccessLog.objects.filter(
+            gym=gym,
+            check_in_time__date=today,
+            access_granted=False,
+            member__isnull=False,
+        )
+        .values("member_id", "member__first_name", "member__last_name")
+        .annotate(tentatives=Count("id"))
+        .filter(tentatives__gte=seuil)
+        .order_by("-tentatives")
+    )
+    return [
+        {
+            "member_id": ligne["member_id"],
+            "nom": (
+                f'{ligne["member__first_name"]} {ligne["member__last_name"]}'.strip()
+                or "Membre sans nom"
+            ),
+            "tentatives": ligne["tentatives"],
+        }
+        for ligne in lignes
+    ]
+
+
+def _alertes_urgentes(caisse, refus_repetes, expirations_48h, machines_hs,
+                      stock_epuise, stock_bas):
+    """
+    Ce qui demande un geste aujourd'hui, et rien d'autre.
+
+    Une alerte qui sonne tous les jours ne se lit plus. Les echeances a sept
+    jours restent donc dans le bloc Membres : seules les 48 heures arrivent
+    ici, parce que c'est la que le coup de telephone change encore quelque
+    chose.
+    """
+    alertes = []
+
+    if caisse["oubliee_depuis_hier"]:
+        alertes.append({
+            "ton": "danger",
+            "titre": f'{caisse["oubliee_depuis_hier"]} caisse non clôturee',
+            "detail": "Ouverte la veille : son solde theorique court toujours.",
+            "url": reverse("pos:register_history"),
+        })
+
+    if caisse["a_un_ecart"]:
+        alertes.append({
+            "ton": "danger",
+            "titre": "Ecart de caisse",
+            "detail": "Le montant compte ne correspond pas au solde theorique.",
+            "url": reverse("pos:register_history"),
+        })
+
+    for personne in refus_repetes:
+        alertes.append({
+            "ton": "warning",
+            "titre": f'{personne["nom"]} refuse {personne["tentatives"]} fois',
+            "detail": "Abonnement echu, ou quelqu'un qui insiste.",
+            "url": reverse("access:acces_dashboard"),
+        })
+
+    if expirations_48h:
+        alertes.append({
+            "ton": "warning",
+            "titre": f"{expirations_48h} abonnement(s) a echeance sous 48 h",
+            "detail": "Passe ce delai, le membre trouvera porte close.",
+            "url": f'{reverse("members:member_list")}?status=expiring&expiring_days=2',
+        })
+
+    if machines_hs:
+        alertes.append({
+            "ton": "warning",
+            "titre": f"{machines_hs} machine(s) en panne",
+            "detail": "Le parc rend moins que ce que les membres attendent.",
+            "url": reverse("machines:list"),
+        })
+
+    if stock_epuise:
+        alertes.append({
+            "ton": "danger",
+            "titre": f"{stock_epuise} produit(s) en rupture",
+            "detail": "Plus rien a vendre au comptoir.",
+            "url": reverse("products:list"),
+        })
+    elif stock_bas:
+        alertes.append({
+            "ton": "warning",
+            "titre": f"{stock_bas} produit(s) sous le seuil",
+            "detail": "A reapprovisionner avant la rupture.",
+            "url": reverse("products:list"),
+        })
+
+    return alertes
+
+
 def _get_period_window(period_key, reference_date):
     period_key = period_key if period_key in PERIOD_LABELS else "month"
 
@@ -1603,6 +1712,8 @@ def gym_dashboard(request, gym_id):
             end_date__lte=today + timedelta(days=days),
         ).count()
 
+    # 48 h : le dernier moment ou un appel change encore quelque chose.
+    expiry_2_days = _expiring_within(2)
     expiry_7_days = _expiring_within(7)
     expiry_3_days = _expiring_within(3)
     expiry_1_day = _expiring_within(1)
@@ -1890,6 +2001,19 @@ def gym_dashboard(request, gym_id):
 
         coaching_kpis = build_coaching_kpis(gym, period_data)
 
+    tableau_de_caisse = _tableau_de_caisse(gym, today)
+    refus_repetes = _refus_repetes(gym, today)
+    # Les alertes arrivent en dernier : elles lisent la caisse, les acces, le
+    # parc et le stock, et ne peuvent donc se calculer qu'apres eux.
+    alertes_urgentes = _alertes_urgentes(
+        tableau_de_caisse,
+        refus_repetes,
+        expiry_2_days,
+        machine_kpis["machines_broken"],
+        product_kpis["out_of_stock_count"],
+        product_kpis["low_stock_count"],
+    )
+
     total_maintenance_cost = machine_kpis["total_maintenance_cost"]
     total_revenue = monthly_revenue
 
@@ -1938,7 +2062,10 @@ def gym_dashboard(request, gym_id):
         "period_revenue": period_revenue,
         "today_checkins": today_checkins,
         "today_unique_visitors": today_unique_visitors,
-        "caisse": _tableau_de_caisse(gym, today),
+        "caisse": tableau_de_caisse,
+        "refus_repetes": refus_repetes,
+        "expiry_2_days": expiry_2_days,
+        "alertes_urgentes": alertes_urgentes,
         "visits_period": visits_period,
         "denied_period": denied_period,
         "denied_today": denied_today,

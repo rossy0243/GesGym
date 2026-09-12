@@ -189,95 +189,30 @@
 </div>
 
 <div class="main-content">
-    <div class="row g-3 mb-4">
+    <div class="row g-3 mb-3">
         <div class="col-12">
-            <div class="dashboard-context-card">
-                <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3">
-                    <div>
-                        <div class="fs-12 text-uppercase text-muted fw-semibold">Vue active</div>
-                        <h4 class="mb-2">{% if context_view == "analytics" %}Pilotage analytique{% else %}Vue operationnelle du gym{% endif %}</h4>
-                        <div class="text-muted">Les chiffres et alertes ci-dessous sont limites a la salle active et a la periode selectionnee.</div>
+            <div class="dashboard-context-card py-2">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <strong>{% if context_view == "analytics" %}Pilotage analytique{% else %}Vue operationnelle{% endif %}</strong>
+                        <span class="dashboard-context-chip">
+                            <span class="material-icons fs-6">storefront</span>
+                            {{ gym.name }}
+                        </span>
+                        <span class="dashboard-context-chip">
+                            <span class="material-icons fs-6">calendar_month</span>
+                            {{ period_label }} - {{ period_range_label }}
+                        </span>
                     </div>
                     {% if request.gym %}
                     <a href="{% url 'core:gym_dashboard' gym_id=request.gym.id %}?{% if context_view == "analytics" %}view=dashboard{% else %}view=analytics{% endif %}&period={{ selected_period }}" class="btn btn-outline-primary btn-sm">
-                        {% if context_view == "analytics" %}Revenir a la vue d'ensemble{% else %}Basculer vers la vue analytique{% endif %}
+                        {% if context_view == "analytics" %}Revenir a la vue d'ensemble{% else %}Vue analytique{% endif %}
                     </a>
                     {% endif %}
                 </div>
-                <div class="dashboard-context-card__meta">
-                    <span class="dashboard-context-chip">
-                        <span class="material-icons fs-6">storefront</span>
-                        {{ gym.name }}
-                    </span>
-                    <span class="dashboard-context-chip">
-                        <span class="material-icons fs-6">calendar_month</span>
-                        {{ period_label }}
-                    </span>
-                    <span class="dashboard-context-chip">
-                        <span class="material-icons fs-6">schedule</span>
-                        {{ period_range_label }}
-                    </span>
-                </div>
             </div>
         </div>
     </div>
-
-    {% if context_view != "analytics" %}
-    <div class="row g-3 mb-4">
-        {% if module_members and can_members %}
-        <div class="col-xl-3 col-md-6">
-            <div class="card dashboard-action-card">
-                <div class="card-body">
-                    <span class="dashboard-action-icon material-icons">person_add</span>
-                    <div class="dashboard-action-copy">
-                        <a href="{% url 'members:create_member' %}">Nouveau membre</a>
-                        <p>Enregistrer rapidement une inscription complete.</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        {% endif %}
-        {% if module_subscriptions and can_subscriptions %}
-        <div class="col-xl-3 col-md-6">
-            <div class="card dashboard-action-card">
-                <div class="card-body">
-                    <span class="dashboard-action-icon material-icons">card_membership</span>
-                    <div class="dashboard-action-copy">
-                        <a href="{% url 'subscriptions:create_subscription' %}">Nouvel abonnement</a>
-                        <p>Activer ou renouveler un abonnement sans detour.</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        {% endif %}
-        {% if module_pos and can_pos %}
-        <div class="col-xl-3 col-md-6">
-            <div class="card dashboard-action-card">
-                <div class="card-body">
-                    <span class="dashboard-action-icon material-icons">point_of_sale</span>
-                    <div class="dashboard-action-copy">
-                        <a href="{% url 'pos:cashier_dashboard' %}">Ouvrir la caisse</a>
-                        <p>Acceder au point de vente et aux paiements du jour.</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        {% endif %}
-        {% if module_access and can_access %}
-        <div class="col-xl-3 col-md-6">
-            <div class="card dashboard-action-card">
-                <div class="card-body">
-                    <span class="dashboard-action-icon material-icons">qr_code_scanner</span>
-                    <div class="dashboard-action-copy">
-                        <a href="{% url 'access:acces_dashboard' %}?section=scan">Scanner un acces</a>
-                        <p>Lancer le flux d'entree sans repasser par plusieurs ecrans.</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        {% endif %}
-    </div>
-    {% endif %}
 
     {% if context_view != "analytics" %}
     {% comment %} La caisse d'abord : c'est ce que le proprietaire vient
@@ -392,70 +327,178 @@
         </div>
     </div>
     {% endif %}
-
     {% if context_view != "analytics" %}
-    <div class="row g-3 mb-4">
-        <div class="col-xxl-2 col-md-4 col-sm-6">
+    <div class="row g-3 mb-3">
+        <div class="col-xl-3 col-md-6">
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted"
-                          title="Chaque passage compte une fois. Un retour le meme jour n'est pas recompte.">Passages aujourd'hui</span>
-                    <h3 class="mb-2 fw-bold">{{ today_checkins }}</h3>
-                    <div class="fs-12 text-muted"
-                         title="Personnes differentes : membres et invites. Une ouverture manuelle n'identifie personne et n'est pas comptee ici.">{{ today_unique_visitors }} personne{{ today_unique_visitors|pluralize }} - refuses: {{ denied_today }}</div>
+                          title="Chaque passage compte une fois. Un retour le meme jour n'est pas recompte. Ce n'est pas le nombre de personnes presentes en ce moment : aucune sortie n'est enregistree.">Passages aujourd'hui</span>
+                    <h3 class="mb-0 fw-bold">{{ today_checkins }}</h3>
+                    <div class="fs-12 text-muted">Refuses : {{ denied_today }}</div>
                 </div>
             </div>
         </div>
-        <div class="col-xxl-2 col-md-4 col-sm-6">
+        <div class="col-xl-3 col-md-6">
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted"
-                          title="Encaissements du jour, convertis en CDF. Les decaissements n'y figurent pas.">Revenu du jour</span>
-                    <h3 class="mb-2 fw-bold">{{ daily_revenue|montant }} CDF</h3>
-                    <div class="fs-12 text-muted">Mois en cours: {{ monthly_revenue|montant }} CDF</div>
+                          title="Personnes differentes entrees aujourd'hui : membres et invites. Une ouverture manuelle n'identifie personne et n'est pas comptee ici.">Personnes differentes</span>
+                    <h3 class="mb-0 fw-bold">{{ today_unique_visitors }}</h3>
+                    <div class="fs-12 text-muted">sur {{ today_checkins }} passage{{ today_checkins|pluralize }}</div>
                 </div>
             </div>
         </div>
-        <div class="col-xxl-2 col-md-4 col-sm-6">
-            <div class="card stretch stretch-full stat-card">
-                <div class="card-body">
-                    <span class="fs-12 fw-medium text-muted">Paiements en attente</span>
-                    <h3 class="mb-2 fw-bold">{{ pending_count }}</h3>
-                    <div class="fs-12 text-muted">{{ pending_total|montant }} CDF a regulariser</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-xxl-2 col-md-4 col-sm-6">
+        <div class="col-xl-3 col-md-6">
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted"
-                          title="Abonnements en cours dont la fin tombe dans les 15 jours.">Abonnements a risque</span>
-                    <h3 class="mb-2 fw-bold">{{ expiry_soon }}</h3>
-                    <div class="fs-12 text-muted"
-                         title="Paliers cumulatifs : un abonnement qui expire demain est aussi compte dans J-3 et J-7. Ce sont des echeances de plus en plus proches, pas des groupes separes.">dont J-7: {{ expiry_7_days }} - dont J-3: {{ expiry_3_days }}</div>
+                          title="Creneau horaire ou les passages sont les plus nombreux sur la periode selectionnee.">Heure de pointe</span>
+                    <h3 class="mb-0 fw-bold">{% if peak_hour.has_data %}{{ peak_hour.label }}{% else %}-{% endif %}</h3>
+                    <div class="fs-12 text-muted">{% if peak_hour.has_data %}{{ peak_hour.count }} passage{{ peak_hour.count|pluralize }}{% else %}Pas encore de donnees{% endif %}</div>
                 </div>
             </div>
         </div>
-        <div class="col-xxl-2 col-md-4 col-sm-6">
+        <div class="col-xl-3 col-md-6">
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
-                    <span class="fs-12 fw-medium text-muted">Disponibilite machines</span>
-                    <h3 class="mb-2 fw-bold">{{ availability_rate|default:0 }}%</h3>
-                    <div class="fs-12 text-muted">{{ machines_ok|default:0 }} OK sur {{ total_machines|default:0 }}</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-xxl-2 col-md-4 col-sm-6">
-            <div class="card stretch stretch-full stat-card">
-                <div class="card-body">
-                    <span class="fs-12 fw-medium text-muted">Coaching actif</span>
-                    <h3 class="mb-2 fw-bold">{{ assigned_members_count|default:0 }}</h3>
-                    <div class="fs-12 text-muted">{{ active_coaches|default:0 }} coach(s) actif(s)</div>
+                    <span class="fs-12 fw-medium text-muted"
+                          title="Disponibilite du parc : machines en service sur le total.">Machines en service</span>
+                    <h3 class="mb-0 fw-bold {% if machines_broken %}text-warning{% endif %}">{{ machines_ok|default:0 }} / {{ total_machines|default:0 }}</h3>
+                    <div class="fs-12 text-muted">{{ availability_rate|default:0 }}% disponible</div>
                 </div>
             </div>
         </div>
     </div>
     {% endif %}
+
+    {% if context_view != "analytics" %}
+    <div class="row g-3 mb-3">
+        <div class="col-xl-3 col-md-6">
+            <div class="card stretch stretch-full stat-card">
+                <div class="card-body">
+                    <span class="fs-12 fw-medium text-muted"
+                          title="Membres au statut actif dont un abonnement couvre la date du jour. C'est une photographie d'aujourd'hui, pas un cumul de la periode : un nouveau membre pas encore abonne n'y figure pas.">Abonnements actifs</span>
+                    <h3 class="mb-0 fw-bold">{{ active_members }}</h3>
+                    <div class="fs-12 text-muted">{{ active_member_rate }}% du portefeuille</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="card stretch stretch-full stat-card">
+                <div class="card-body">
+                    <span class="fs-12 fw-medium text-muted"
+                          title="Fiches membres creees pendant la periode, abonnees ou non.">Nouveaux membres</span>
+                    <h3 class="mb-0 fw-bold">{{ new_members_period }}</h3>
+                    <div class="fs-11 text-muted">{{ new_members_trend.basis }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <a class="card stretch stretch-full stat-card text-decoration-none text-body"
+               href="{% url 'members:member_list' %}?status=expiring&expiring_days=7">
+                <div class="card-body">
+                    <span class="fs-12 fw-medium text-muted"
+                          title="Abonnements en cours dont la fin tombe dans les 7 jours. Cliquez pour la liste a rappeler, du plus urgent au moins urgent.">Expirent sous 7 jours</span>
+                    <h3 class="mb-0 fw-bold {% if expiry_7_days %}text-warning{% endif %}">{{ expiry_7_days }}</h3>
+                    <div class="fs-12 text-muted">dont {{ expiry_2_days }} sous 48 h</div>
+                </div>
+            </a>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="card stretch stretch-full stat-card">
+                <div class="card-body">
+                    <span class="fs-12 fw-medium text-muted"
+                          title="Paiements enregistres mais non encaisses : ce qui reste a regulariser.">Impayes</span>
+                    <h3 class="mb-0 fw-bold {% if pending_count %}text-warning{% endif %}">{{ pending_count }}</h3>
+                    <div class="fs-12 text-muted">{{ pending_total|montant }} CDF a regulariser</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if context_view != "analytics" %}
+    {% comment %} Une alerte qui sonne tous les jours ne se lit plus : seules les
+       48 heures arrivent ici, les echeances a sept jours restent dans le bloc
+       Membres. {% endcomment %}
+    <div class="row g-3 mb-3">
+        <div class="col-12">
+            <div class="card stretch stretch-full">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                    <h5 class="card-title mb-0 d-flex align-items-center gap-2">
+                        <span class="material-icons" style="font-size:20px;">notifications_active</span>
+                        Alertes urgentes
+                    </h5>
+                    {% if alertes_urgentes %}
+                        <span class="badge bg-danger">{{ alertes_urgentes|length }}</span>
+                    {% else %}
+                        <span class="badge bg-success">Rien a signaler</span>
+                    {% endif %}
+                </div>
+                {% if alertes_urgentes %}
+                <div class="card-body">
+                    <div class="row g-2">
+                        {% for alerte in alertes_urgentes %}
+                        <div class="col-xl-6">
+                            <a href="{{ alerte.url }}"
+                               class="d-flex align-items-start gap-2 text-decoration-none text-body border-start border-3 border-{{ alerte.ton }} ps-3 py-2">
+                                <span class="material-icons text-{{ alerte.ton }}" style="font-size:18px;">{% if alerte.ton == "danger" %}error{% else %}warning{% endif %}</span>
+                                <span>
+                                    <strong class="d-block">{{ alerte.titre }}</strong>
+                                    <span class="fs-12 text-muted">{{ alerte.detail }}</span>
+                                </span>
+                            </a>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if context_view != "analytics" %}
+    {% comment %} Cinq gestes, une ligne. Les quatre grandes cartes d'avant
+       poussaient le reste sous la ligne de flottaison. {% endcomment %}
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="card stretch stretch-full">
+                <div class="card-body d-flex flex-wrap gap-2">
+                    {% if module_members and can_members %}
+                    <a href="{% url 'members:create_member' %}" class="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-1">
+                        <span class="material-icons" style="font-size:16px;">person_add</span>Inscrire un membre
+                    </a>
+                    {% endif %}
+                    {% if module_subscriptions and can_subscriptions %}
+                    <a href="{% url 'subscriptions:create_subscription' %}" class="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-1">
+                        <span class="material-icons" style="font-size:16px;">card_membership</span>Vendre un abonnement
+                    </a>
+                    {% endif %}
+                    {% if module_pos and can_pos %}
+                    <a href="{% url 'pos:cashier_dashboard' %}" class="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-1">
+                        <span class="material-icons" style="font-size:16px;">point_of_sale</span>Encaisser
+                    </a>
+                    <a href="{% url 'pos:cashier_dashboard' %}?ouvrir=decaissement" class="btn btn-outline-danger btn-sm d-inline-flex align-items-center gap-1">
+                        <span class="material-icons" style="font-size:16px;">remove_circle</span>Enregistrer une depense
+                    </a>
+                    {% endif %}
+                    {% if module_access and can_access %}
+                    <a href="{% url 'access:acces_dashboard' %}?section=scan" class="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-1">
+                        <span class="material-icons" style="font-size:16px;">qr_code_scanner</span>Scanner un acces
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% comment %} Ces rangees s'affichaient dans les deux vues et allongeaient
+       la vue d'ensemble de dix cartes. Renouvellements, moyenne journaliere,
+       visiteurs uniques et revenus de periode relevent de l'analyse. {% endcomment %}
+    {% if context_view == "analytics" %}
     <div class="row g-3 mb-4">
         <div class="col-xxl-2 col-md-4 col-sm-6">
             <div class="card stretch stretch-full stat-card">
@@ -571,48 +614,10 @@
         </div>
     </div>
 
+    {% endif %}
     {% if context_view != "analytics" %}
     <div class="row g-3 mb-4">
-        <div class="col-xl-4">
-            <div class="card stretch stretch-full">
-                <div class="card-header">
-                    <h5 class="card-title">Alertes membres</h5>
-                </div>
-                <div class="card-body">
-                    <div class="vstack gap-3">
-                        <a class="d-flex justify-content-between text-decoration-none text-body expiry-link"
-                           href="{% url 'members:member_list' %}?status=expiring&expiring_days=7"
-                           title="Voir la liste des membres a rappeler, du plus urgent au moins urgent">
-                            <span>Expire dans 7 jours <span class="material-icons align-middle" style="font-size:14px;">call</span></span>
-                            <strong>{{ expiry_7_days }}</strong>
-                        </a>
-                        <a class="d-flex justify-content-between text-decoration-none text-body expiry-link"
-                           href="{% url 'members:member_list' %}?status=expiring&expiring_days=3"
-                           title="Voir la liste des membres a rappeler, du plus urgent au moins urgent">
-                            <span>Expire dans 3 jours <span class="material-icons align-middle" style="font-size:14px;">call</span></span>
-                            <strong>{{ expiry_3_days }}</strong>
-                        </a>
-                        <a class="d-flex justify-content-between text-decoration-none text-body expiry-link"
-                           href="{% url 'members:member_list' %}?status=expiring&expiring_days=1"
-                           title="Voir la liste des membres a rappeler, du plus urgent au moins urgent">
-                            <span>Expire demain <span class="material-icons align-middle" style="font-size:14px;">call</span></span>
-                            <strong>{{ expiry_1_day }}</strong>
-                        </a>
-                        <a class="d-flex justify-content-between text-decoration-none text-body expiry-link"
-                           href="{% url 'members:member_list' %}?status=expiring&expiring_days=15"
-                           title="Voir la liste des membres a rappeler, du plus urgent au moins urgent">
-                            <span>Expire sous 15 jours <span class="material-icons align-middle" style="font-size:14px;">call</span></span>
-                            <strong>{{ expiry_soon }}</strong>
-                        </a>
-                        <div class="d-flex justify-content-between">
-                            <span>Paiements en attente</span>
-                            <strong>{{ pending_count }} / {{ pending_total|montant }} CDF</strong>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-xl-4">
+        <div class="col-xl-6">
             <div class="card stretch stretch-full">
                 <div class="card-header">
                     <h5 class="card-title">Derniers acces</h5>
@@ -651,7 +656,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-xl-4">
+        <div class="col-xl-6">
             <div class="card stretch stretch-full">
                 <div class="card-header">
                     <h5 class="card-title">Derniers paiements</h5>
@@ -837,6 +842,11 @@
                     <h5 class="card-title">Alertes membres</h5>
                 </div>
                 <div class="card-body">
+                    {% comment %} Ces paliers se recouvrent volontairement : un abonnement
+                       qui expire demain expire aussi sous 7 jours. Sans cette mention ils
+                       se lisent comme des groupes separes, et on croit compter quatre
+                       personnes la ou il n'y en a qu'une. {% endcomment %}
+                    <div class="fs-11 text-muted mb-2">Paliers cumulatifs : une meme personne figure dans chaque palier plus large.</div>
                     <div class="vstack gap-3">
                         <a class="d-flex justify-content-between text-decoration-none text-body expiry-link"
                            href="{% url 'members:member_list' %}?status=expiring&expiring_days=7"

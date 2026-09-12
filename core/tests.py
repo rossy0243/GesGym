@@ -3877,10 +3877,16 @@ class DashboardHonestyTests(TestCase):
 
         self.assertEqual(page.count("Derniers paiements"), 1)
 
-    def test_the_month_revenue_is_stated_once(self):
+    def test_the_month_revenue_left_the_overview(self):
+        # Il s'affichait deux fois. La question du proprietaire est "combien
+        # avons-nous encaisse aujourd'hui" : le bloc caisse y repond, et le
+        # cumul du mois releve de l'analyse.
+        self.assertNotContains(self._vue(), "Mois en cours")
+
+    def test_todays_takings_are_stated_once(self):
         page = self._vue().content.decode("utf-8")
 
-        self.assertEqual(page.count("Mois en cours"), 1)
+        self.assertEqual(page.count("Encaissements"), 1)
 
     def test_the_duplicate_kpi_card_is_gone(self):
         # Elle ne contenait que des chiffres deja affiches au-dessus.
@@ -4035,14 +4041,22 @@ class DashboardHonestyTests(TestCase):
 
     def test_the_cumulative_thresholds_say_they_are_cumulative(self):
         # Un abonnement qui expire demain est compte dans J-3, J-7 et sous 15
-        # jours : c'est voulu, mais rien ne le disait.
-        self.assertContains(self._vue(), "Paliers cumulatifs")
+        # jours : c'est voulu, mais rien ne le disait. Les quatre paliers ont
+        # rejoint la vue analytique ; l'explication les y a suivis.
+        self.assertContains(self._vue(analytique=True), "Paliers cumulatifs")
+
+    def test_the_overview_states_the_inclusion_in_words(self):
+        # La vue d'ensemble ne montre qu'un palier et son sous-ensemble : le
+        # mot "dont" dit l'inclusion sans qu'il faille l'expliquer.
+        self.assertContains(self._vue(), "dont")
 
     def test_the_active_member_definition_is_within_reach(self):
         self.assertContains(self._vue(), "photographie d'aujourd'hui")
 
     def test_the_daily_average_explains_its_divisor(self):
-        self.assertContains(self._vue(), "jours deja ecoules")
+        # La carte est passee en vue analytique avec les autres KPI de
+        # periode ; sa definition ne l'a pas quittee.
+        self.assertContains(self._vue(analytique=True), "jours deja ecoules")
 
 
 class MontantFilterTests(SimpleTestCase):
@@ -4497,3 +4511,295 @@ class PaymentOperationColumnTests(TestCase):
 
         self.assertContains(page, "Especes")
         self.assertNotContains(page, ">Cash<")
+
+
+class DashboardLayoutTests(TestCase):
+    """
+    La vue d'ensemble, reduite aux cinq blocs du client.
+
+    Caisse, activite, membres, alertes, actions - dans cet ordre, et rien
+    d'autre avant la ligne de flottaison. Le reste releve de l'analyse.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Disposition", slug="org-disposition"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Disposition",
+            slug="gym-disposition", subdomain="gym-disposition",
+        )
+        for code in ("MEMBERS", "SUBSCRIPTIONS", "POS", "ACCESS", "MACHINES", "PRODUCTS"):
+            module, _ = Module.objects.get_or_create(
+                code=code, defaults={"name": code}
+            )
+            GymModule.objects.get_or_create(
+                gym=self.gym, module=module, defaults={"is_active": True}
+            )
+        self.gerant = User.objects.create_user(
+            username="gerant-disposition", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.gerant, gym=self.gym, role="manager", is_active=True
+        )
+        self.client.force_login(self.gerant)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _vue(self, analytique=False):
+        url = reverse("core:gym_dashboard", args=[self.gym.id])
+        if analytique:
+            url += "?view=analytics"
+        return self.client.get(url)
+
+    # --- Les cinq blocs, dans l'ordre --------------------------------------------
+
+    def test_the_five_blocks_are_present(self):
+        page = self._vue()
+
+        for titre in ("Caisse du jour", "Passages aujourd'hui",
+                      "Abonnements actifs", "Alertes urgentes",
+                      "Inscrire un membre"):
+            with self.subTest(titre=titre):
+                self.assertContains(page, titre)
+
+    def test_they_come_in_the_order_he_asked_for(self):
+        page = self._vue().content.decode("utf-8")
+
+        positions = [
+            page.index("Caisse du jour"),
+            page.index("Passages aujourd'hui"),
+            page.index("Abonnements actifs"),
+            page.index("Alertes urgentes"),
+            page.index("Inscrire un membre"),
+        ]
+
+        self.assertEqual(positions, sorted(positions))
+
+    def test_the_peak_hour_came_back_to_the_overview(self):
+        # Elle etait partie en analytique a la passe 1 : il la veut en haut.
+        self.assertContains(self._vue(), "Heure de pointe")
+
+    def test_recording_an_expense_is_one_of_the_quick_actions(self):
+        self.assertContains(self._vue(), "Enregistrer une depense")
+
+    # --- Ce qui quitte la vue d'ensemble -----------------------------------------
+
+    def test_the_shared_kpi_rows_moved_to_analytics(self):
+        page = self._vue()
+
+        self.assertNotContains(page, "Renouvellements")
+        self.assertNotContains(page, "Moyenne journalière")
+
+    def test_they_are_still_there_in_analytics(self):
+        page = self._vue(analytique=True)
+
+        self.assertContains(page, "Renouvellements")
+        self.assertContains(page, "Moyenne journalière")
+
+    def test_the_superseded_member_alerts_card_is_gone(self):
+        # Ses paliers vivent dans le bloc Membres, ses impayes aussi.
+        self.assertNotContains(self._vue(), "Alertes membres")
+
+    def test_the_expiry_thresholds_are_stated_once(self):
+        page = self._vue().content.decode("utf-8")
+
+        self.assertEqual(page.count("Expirent sous 7 jours"), 1)
+
+
+class DashboardUrgentAlertTests(TestCase):
+    """
+    Les alertes urgentes.
+
+    Une alerte qui sonne tous les jours ne se lit plus : n'arrive ici que ce
+    qui demande un geste aujourd'hui.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Alerte", slug="org-alerte"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Alerte",
+            slug="gym-alerte", subdomain="gym-alerte",
+        )
+        for code in ("MEMBERS", "POS", "ACCESS", "MACHINES", "PRODUCTS"):
+            module, _ = Module.objects.get_or_create(
+                code=code, defaults={"name": code}
+            )
+            GymModule.objects.get_or_create(
+                gym=self.gym, module=module, defaults={"is_active": True}
+            )
+        self.plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Mensuel", price=30, duration_days=30
+        )
+        self.gerant = User.objects.create_user(
+            username="gerant-alerte", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.gerant, gym=self.gym, role="manager", is_active=True
+        )
+        self.client.force_login(self.gerant)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _membre(self, prenom="Ada"):
+        return Member.objects.create(
+            gym=self.gym, first_name=prenom, last_name="Mbala",
+            phone=f"+24387{Member.objects.count():07d}", status="active",
+        )
+
+    def _alertes(self):
+        return self.client.get(
+            reverse("core:gym_dashboard", args=[self.gym.id])
+        ).context["alertes_urgentes"]
+
+    # --- Rien a signaler ----------------------------------------------------------
+
+    def test_a_quiet_day_raises_nothing(self):
+        self.assertEqual(self._alertes(), [])
+
+    def test_a_quiet_day_says_so(self):
+        self.assertContains(
+            self.client.get(reverse("core:gym_dashboard", args=[self.gym.id])),
+            "Rien a signaler",
+        )
+
+    # --- La caisse -----------------------------------------------------------------
+
+    def test_a_register_left_open_since_yesterday_raises_an_alert(self):
+        registre = CashRegister.objects.create(
+            gym=self.gym, opened_by=self.gerant,
+            opening_amount=Decimal("100000.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+        CashRegister.objects.filter(pk=registre.pk).update(
+            opened_at=timezone.now() - timedelta(days=1)
+        )
+
+        titres = [alerte["titre"] for alerte in self._alertes()]
+
+        self.assertTrue(any("non clôturee" in titre for titre in titres))
+
+    def test_a_register_opened_today_raises_nothing(self):
+        CashRegister.objects.create(
+            gym=self.gym, opened_by=self.gerant,
+            opening_amount=Decimal("100000.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+
+        self.assertEqual(self._alertes(), [])
+
+    # --- Les refus repetes -----------------------------------------------------------
+
+    def test_a_single_refusal_is_not_an_anomaly(self):
+        # Un abonnement echu se presente, la porte reste fermee : le
+        # dispositif fonctionne.
+        membre = self._membre()
+        AccessLog.objects.create(gym=self.gym, member=membre, access_granted=False)
+
+        self.assertEqual(self._alertes(), [])
+
+    def test_three_refusals_on_the_same_person_are(self):
+        membre = self._membre()
+        for _ in range(3):
+            AccessLog.objects.create(
+                gym=self.gym, member=membre, access_granted=False
+            )
+
+        titres = [alerte["titre"] for alerte in self._alertes()]
+
+        self.assertTrue(any("Ada" in titre for titre in titres))
+
+    def test_refusals_spread_over_several_people_are_not(self):
+        # Trois personnes refusees une fois chacune, c'est une journee
+        # ordinaire dans une salle ou des abonnements expirent.
+        for prenom in ("Ada", "Bob", "Zoe"):
+            AccessLog.objects.create(
+                gym=self.gym, member=self._membre(prenom), access_granted=False
+            )
+
+        self.assertEqual(self._alertes(), [])
+
+    def test_yesterdays_refusals_do_not_count(self):
+        membre = self._membre()
+        for _ in range(3):
+            log = AccessLog.objects.create(
+                gym=self.gym, member=membre, access_granted=False
+            )
+            AccessLog.objects.filter(pk=log.pk).update(
+                check_in_time=timezone.now() - timedelta(days=1)
+            )
+
+        self.assertEqual(self._alertes(), [])
+
+    def test_a_granted_passage_is_not_a_refusal(self):
+        membre = self._membre()
+        for _ in range(3):
+            AccessLog.objects.create(
+                gym=self.gym, member=membre, access_granted=True
+            )
+
+        self.assertEqual(self._alertes(), [])
+
+    # --- Les echeances ------------------------------------------------------------------
+
+    def test_an_expiry_within_48_hours_is_urgent(self):
+        MemberSubscription.objects.create(
+            gym=self.gym, member=self._membre(), plan=self.plan,
+            start_date=timezone.localdate() - timedelta(days=29),
+            end_date=timezone.localdate() + timedelta(days=1),
+            is_active=True,
+        )
+
+        titres = [alerte["titre"] for alerte in self._alertes()]
+
+        self.assertTrue(any("48 h" in titre for titre in titres))
+
+    def test_an_expiry_in_five_days_is_not_urgent(self):
+        # Elle figure dans le bloc Membres : une alerte qui sonne tous les
+        # jours ne se lit plus.
+        MemberSubscription.objects.create(
+            gym=self.gym, member=self._membre(), plan=self.plan,
+            start_date=timezone.localdate() - timedelta(days=25),
+            end_date=timezone.localdate() + timedelta(days=5),
+            is_active=True,
+        )
+
+        self.assertEqual(self._alertes(), [])
+
+    # --- Le parc et le stock ----------------------------------------------------------------
+
+    def test_a_broken_machine_is_raised(self):
+        Machine.objects.create(
+            gym=self.gym, name="Tapis A", status=Machine.STATUS_BROKEN,
+        )
+
+        titres = [alerte["titre"] for alerte in self._alertes()]
+
+        self.assertTrue(any("panne" in titre for titre in titres))
+
+    def test_a_working_machine_is_not(self):
+        Machine.objects.create(gym=self.gym, name="Tapis A", status=Machine.STATUS_OK)
+
+        self.assertEqual(self._alertes(), [])
+
+    # --- Le cloisonnement -----------------------------------------------------------------
+
+    def test_a_neighbouring_gym_raises_nothing_here(self):
+        voisine = Gym.objects.create(
+            organization=self.organization, name="Voisine",
+            slug="gym-alerte-voisine", subdomain="gym-alerte-voisine",
+        )
+        membre = Member.objects.create(
+            gym=voisine, first_name="Zoe", last_name="Ailleurs",
+            phone="+243879999999", status="active",
+        )
+        for _ in range(3):
+            AccessLog.objects.create(
+                gym=voisine, member=membre, access_granted=False
+            )
+
+        self.assertEqual(self._alertes(), [])

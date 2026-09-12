@@ -1364,4 +1364,20 @@ document.addEventListener("DOMContentLoaded", function () {
 })();
 </script>
 
+
+<script>
+// Le tableau de bord propose "Enregistrer une depense" : le lien arrive ici
+// avec ?ouvrir=decaissement, sinon le caissier devrait retrouver le bouton
+// lui-meme une fois la page chargee.
+document.addEventListener("DOMContentLoaded", function () {
+    const demande = new URLSearchParams(window.location.search).get("ouvrir");
+    if (demande !== "decaissement") { return; }
+
+    const modal = document.getElementById("withdrawModal");
+    if (modal && window.bootstrap) {
+        new bootstrap.Modal(modal).show();
+    }
+});
+</script>
+
 {% endblock %}
