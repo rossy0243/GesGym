@@ -15,6 +15,7 @@ from .models import CashRegister, ExchangeRate, Payment
 from .views import MEMBER_SEARCH_LIMIT
 from .services import (
     record_expense,
+    record_expense_refund,
     record_payment,
     record_product_sale,
     record_subscription_payment,
@@ -1769,3 +1770,126 @@ class ClosedPeriodSaleTests(TestCase):
         )
 
         self.assertEqual(MemberSubscription.objects.filter(gym=self.gym).count(), 1)
+
+
+class ExpenseRegisterNetTests(TestCase):
+    """
+    Le total du registre, retours deduits.
+
+    Une sortie de 50 000 dont 20 000 sont revenus a coute 30 000. La ligne
+    garde son brut - ces billets sont bien sortis - mais le total qui
+    l'ignorerait surestimerait les depenses du mois.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Net", slug="org-net"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Net",
+            slug="gym-net", subdomain="gym-net",
+        )
+        module, _ = Module.objects.get_or_create(code="POS", defaults={"name": "POS"})
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=module, defaults={"is_active": True}
+        )
+        self.gerant = User.objects.create_user(
+            username="gerant-net", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.gerant, gym=self.gym, role="manager", is_active=True
+        )
+        self.registre = CashRegister.objects.create(
+            gym=self.gym, opened_by=self.gerant,
+            opening_amount=Decimal("500000.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+        self.client.force_login(self.gerant)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _sortie(self, motif, montant, categorie="expense"):
+        return record_expense(
+            gym=self.gym, amount=Decimal(montant), currency="CDF",
+            method="cash", category=categorie, description=motif,
+            created_by=self.gerant, source_app="pos",
+            source_model="ManualExpense",
+        )
+
+    def _rendre(self, depense, montant):
+        return record_expense_refund(
+            gym=self.gym, expense=depense, amount=Decimal(montant),
+            currency="CDF", created_by=self.gerant,
+        )
+
+    def _registre(self):
+        return self.client.get(reverse("pos:expense_register")).context
+
+    def test_the_total_deducts_what_came_back(self):
+        depense = self._sortie("Plomberie", "50000")
+        self._rendre(depense, "20000")
+
+        self.assertEqual(self._registre()["total_cdf"], Decimal("30000.00"))
+
+    def test_the_gross_is_still_available(self):
+        # Ces 50 000 sont bien sortis du tiroir : un controle veut le voir.
+        depense = self._sortie("Plomberie", "50000")
+        self._rendre(depense, "20000")
+
+        contexte = self._registre()
+        self.assertEqual(contexte["total_brut_cdf"], Decimal("50000.00"))
+        self.assertEqual(contexte["total_rendu_cdf"], Decimal("20000.00"))
+
+    def test_two_expenses_of_the_same_amount_both_count(self):
+        # Une somme sur valeurs distinctes en aurait efface une.
+        self._sortie("Savon", "5000")
+        self._sortie("Eponges", "5000")
+
+        self.assertEqual(self._registre()["total_cdf"], Decimal("10000.00"))
+
+    def test_an_expense_with_two_returns_is_not_counted_twice(self):
+        # La jointure sur les retours duplique la depense : sans precaution,
+        # le brut doublerait.
+        depense = self._sortie("Plomberie", "50000")
+        self._rendre(depense, "10000")
+        self._rendre(depense, "5000")
+
+        contexte = self._registre()
+        self.assertEqual(contexte["total_brut_cdf"], Decimal("50000.00"))
+        self.assertEqual(contexte["total_cdf"], Decimal("35000.00"))
+
+    def test_the_breakdown_by_category_is_also_net(self):
+        salaire = self._sortie("Salaire gardien", "80000", categorie="salary")
+        self._sortie("Savon", "5000")
+        self._rendre(salaire, "30000")
+
+        lignes = {l["code"]: l["total"] for l in self._registre()["by_category"]}
+
+        self.assertEqual(lignes["salary"], Decimal("50000.00"))
+        self.assertEqual(lignes["expense"], Decimal("5000.00"))
+
+    def test_a_return_is_not_listed_as_an_expense(self):
+        # C'est une entree : elle n'a rien a faire dans un registre de sorties.
+        depense = self._sortie("Plomberie", "50000")
+        self._rendre(depense, "20000")
+
+        self.assertEqual(self._registre()["total_count"], 1)
+
+    def test_the_page_shows_what_came_back(self):
+        depense = self._sortie("Plomberie", "50000")
+        self._rendre(depense, "20000")
+
+        reponse = self.client.get(reverse("pos:expense_register"))
+
+        self.assertContains(reponse, "20000 CDF rendus")
+        self.assertContains(reponse, "net 30000 CDF")
+
+    def test_a_fully_returned_expense_offers_no_more_returns(self):
+        depense = self._sortie("Plomberie", "50000")
+        self._rendre(depense, "50000")
+
+        reponse = self.client.get(reverse("pos:expense_register"))
+
+        self.assertContains(reponse, "rendu")
+        self.assertEqual(self._registre()["total_cdf"], Decimal("0.00"))

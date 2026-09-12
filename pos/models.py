@@ -237,6 +237,33 @@ class CashRegister(models.Model):
         return self.session_code or f"Register {self.id}"
     
 
+class PaymentQuerySet(models.QuerySet):
+    """Les lectures qui distinguent l'argent gagne de l'argent revenu."""
+
+    def recettes(self):
+        """
+        Ce que la salle a reellement encaisse.
+
+        Ecarte les retours de decaissement et les apports : ils remplissent le
+        tiroir sans rien rapporter. Tout calcul de chiffre d'affaires passe
+        par ici - une lecture qui filtrerait ``type="in"`` a la main
+        recompterait cet argent.
+        """
+        return self.filter(type="in", status="success").exclude(
+            category__in=Payment.CATEGORIES_HORS_RECETTE
+        )
+
+    def sorties(self):
+        """Les decaissements, retours non deduits."""
+        return self.filter(type="out", status="success")
+
+    def retours(self):
+        """Les sommes revenues dans le tiroir apres un decaissement."""
+        return self.filter(
+            type="in", status="success", category="expense_refund"
+        )
+
+
 class Payment(models.Model):
 
     # Ces libelles s'affichent tels quels dans la caisse, le tableau de bord et
@@ -267,8 +294,22 @@ class Payment(models.Model):
         ("salary", "Salaire"),
         ("maintenance", "Maintenance"),
         ("expense", "Depense"),
+        ("expense_refund", "Retour de decaissement"),
+        ("cash_injection", "Apport en caisse"),
         ("other", "Autre"),
     )
+
+    # De l'argent qui entre dans le tiroir sans que la salle l'ait gagne.
+    #
+    # C'est la distinction qui fait tout tenir. Un billet de 20 000 rapporte
+    # d'une course qui n'a pas eu lieu augmente bien la caisse, mais ce n'est
+    # pas une recette : le compter comme telle gonflerait le chiffre d'affaires
+    # d'argent jamais gagne, et ferait apparaitre une depense de 50 000 suivie
+    # d'une recette de 50 000 la ou il ne s'est rien passe.
+    #
+    # Toute lecture du chiffre d'affaires passe par ``Payment.objects.recettes``
+    # et ecarte ces categories. C'est le seul endroit ou la regle est ecrite.
+    CATEGORIES_HORS_RECETTE = frozenset({"expense_refund", "cash_injection"})
 
     gym = models.ForeignKey(
         Gym,
@@ -283,6 +324,21 @@ class Payment(models.Model):
         null=True,
         blank=True,
         related_name="payments"
+    )
+
+    # La sortie que ce mouvement rend, en tout ou en partie.
+    #
+    # On ne corrige pas la depense d'origine : ces 50 000 sont reellement
+    # sortis du tiroir a 10 h, et 20 000 y sont revenus a 16 h. Reecrire le
+    # montant d'origine ferait mentir un comptage intermediaire deja
+    # contre-signe. La sortie reste, le retour s'y rattache.
+    refund_of = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="refunds",
+        verbose_name="Retour sur ce decaissement",
     )
 
     member = models.ForeignKey(
@@ -352,6 +408,8 @@ class Payment(models.Model):
         default="other",
         db_index=True
     )
+
+    objects = PaymentQuerySet.as_manager()
 
     transaction_id = models.CharField(
         max_length=200,
@@ -466,6 +524,36 @@ class Payment(models.Model):
         self.full_clean()
         super().save(*args, **kwargs)
         
+    @property
+    def montant_rendu(self):
+        """Ce qui est revenu dans le tiroir apres cette sortie."""
+        if self.type != "out":
+            return Decimal("0.00")
+        return self.refunds.filter(status="success").aggregate(
+            total=Sum("amount_cdf")
+        )["total"] or Decimal("0.00")
+
+    @property
+    def montant_net(self):
+        """
+        Ce que la salle a reellement depense.
+
+        Une sortie de 50 000 dont 20 000 sont revenus a coute 30 000. C'est ce
+        chiffre-la qui compte dans un registre de depenses.
+        """
+        if self.type != "out":
+            return self.amount_cdf
+        return self.amount_cdf - self.montant_rendu
+
+    @property
+    def reste_a_rendre(self):
+        """Le plafond d'un nouveau retour : on ne rend pas plus qu'on n'a pris."""
+        return max(self.montant_net, Decimal("0.00"))
+
+    @property
+    def est_rendu(self):
+        return self.type == "out" and self.montant_rendu > 0
+
     def __str__(self):
         return f"{self.amount} - {self.gym}"
     

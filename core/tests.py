@@ -10,6 +10,7 @@ from unittest.mock import patch
 from zipfile import ZipFile
 
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.http import QueryDict
 from django.conf import settings
@@ -81,7 +82,12 @@ from .accounting_reports import (
 from .views import _get_period_window
 from organizations.models import Gym, GymModule, Module, Organization, SensitiveActivityLog
 from pos import validation
-from pos.services import record_payment
+from pos.services import (
+    record_cash_injection,
+    record_expense,
+    record_expense_refund,
+    record_payment,
+)
 from pos.models import CashRegister, ExchangeRate, Payment
 
 
@@ -6167,3 +6173,384 @@ class IndicatorHelpTests(TestCase):
 
         self.assertIn(".aide::after", palette)
         self.assertIn("aide-bulle", palette)
+
+
+class CashReturnTests(TestCase):
+    """
+    L'argent qui revient dans le tiroir.
+
+    Une course qui n'a pas eu lieu, un reste non depense, un renfort de fonds :
+    trois facons de remplir la caisse sans que la salle ait rien gagne. Tout le
+    dispositif tient a cette distinction.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Retour", slug="org-retour"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Retour",
+            slug="gym-retour", subdomain="gym-retour",
+        )
+        for code in ("MEMBERS", "POS"):
+            module, _ = Module.objects.get_or_create(
+                code=code, defaults={"name": code}
+            )
+            GymModule.objects.get_or_create(
+                gym=self.gym, module=module, defaults={"is_active": True}
+            )
+        self.caissiere = self._utilisateur("caisse-retour", "cashier")
+        self.gerant = self._utilisateur("gerant-retour", "manager")
+        self.registre = CashRegister.objects.create(
+            gym=self.gym, opened_by=self.caissiere,
+            opening_amount=Decimal("100000.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+
+    def _utilisateur(self, nom, role):
+        utilisateur = User.objects.create_user(username=nom, password="pass12345")
+        UserGymRole.objects.create(
+            user=utilisateur, gym=self.gym, role=role, is_active=True
+        )
+        return utilisateur
+
+    def _connecter(self, utilisateur):
+        self.client.force_login(utilisateur)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _depense(self, montant="50000", motif="Plomberie"):
+        return record_expense(
+            gym=self.gym, amount=Decimal(montant), currency="CDF",
+            method="cash", category="expense", description=motif,
+            created_by=self.caissiere, source_app="pos",
+            source_model="ManualExpense",
+        )
+
+    def _rendre(self, depense, montant):
+        return record_expense_refund(
+            gym=self.gym, expense=depense, amount=Decimal(montant),
+            currency="CDF", created_by=self.caissiere,
+        )
+
+    # --- Le tiroir -------------------------------------------------------------------
+
+    def test_a_return_fills_the_drawer_back(self):
+        depense = self._depense("50000")
+        self.registre.refresh_from_db()
+        avant = self.registre.expected_total()
+
+        self._rendre(depense, "20000")
+
+        self.registre.refresh_from_db()
+        self.assertEqual(self.registre.expected_total(), avant + Decimal("20000.00"))
+
+    def test_an_injection_fills_the_drawer_too(self):
+        avant = self.registre.expected_total()
+
+        record_cash_injection(
+            gym=self.gym, amount=Decimal("200000"), currency="CDF",
+            description="Renfort de fonds", created_by=self.gerant,
+        )
+
+        self.registre.refresh_from_db()
+        self.assertEqual(
+            self.registre.expected_total(), avant + Decimal("200000.00")
+        )
+
+    # --- Mais ce n'est pas une recette -------------------------------------------------
+
+    def test_a_return_is_never_revenue(self):
+        # Le piege du dispositif : 50 000 sortis puis rendus afficheraient
+        # +50 000 de recette et -50 000 de depense la ou il ne s'est rien passe.
+        depense = self._depense("50000")
+
+        self._rendre(depense, "50000")
+
+        self.assertEqual(
+            Payment.objects.filter(gym=self.gym).recettes().count(), 0
+        )
+
+    def test_an_injection_is_never_revenue(self):
+        record_cash_injection(
+            gym=self.gym, amount=Decimal("200000"), currency="CDF",
+            description="Renfort de fonds", created_by=self.gerant,
+        )
+
+        self.assertEqual(
+            Payment.objects.filter(gym=self.gym).recettes().count(), 0
+        )
+
+    def test_a_real_sale_is_still_revenue(self):
+        record_payment(
+            gym=self.gym, register=self.registre, amount=Decimal("30000"),
+            currency="CDF", method="cash", transaction_type="in",
+            category="subscription", description="Abonnement",
+            created_by=self.caissiere,
+        )
+
+        self.assertEqual(
+            Payment.objects.filter(gym=self.gym).recettes().count(), 1
+        )
+
+    def test_the_dashboard_revenue_ignores_a_return(self):
+        depense = self._depense("50000")
+        self._rendre(depense, "50000")
+        self._connecter(self.gerant)
+
+        contexte = self.client.get(
+            reverse("core:gym_dashboard", args=[self.gym.id])
+        ).context
+
+        self.assertEqual(contexte["daily_revenue"], 0)
+
+    def test_the_register_block_separates_the_three(self):
+        record_payment(
+            gym=self.gym, register=self.registre, amount=Decimal("30000"),
+            currency="CDF", method="cash", transaction_type="in",
+            category="subscription", description="Abonnement",
+            created_by=self.caissiere,
+        )
+        depense = self._depense("50000")
+        self._rendre(depense, "20000")
+        record_cash_injection(
+            gym=self.gym, amount=Decimal("10000"), currency="CDF",
+            description="Renfort", created_by=self.gerant,
+        )
+        self._connecter(self.gerant)
+
+        caisse = self.client.get(
+            reverse("core:gym_dashboard", args=[self.gym.id])
+        ).context["caisse"]
+
+        self.assertEqual(caisse["encaissements"], Decimal("30000.00"))
+        self.assertEqual(caisse["retours"], Decimal("20000.00"))
+        self.assertEqual(caisse["apports"], Decimal("10000.00"))
+        # La depense reelle : 50 000 sortis, 20 000 revenus.
+        self.assertEqual(caisse["decaissements"], Decimal("30000.00"))
+
+    def test_the_block_still_reconciles_with_the_drawer(self):
+        # ouverture + encaisse + apports - depense reelle = solde theorique.
+        record_payment(
+            gym=self.gym, register=self.registre, amount=Decimal("30000"),
+            currency="CDF", method="cash", transaction_type="in",
+            category="subscription", description="Abonnement",
+            created_by=self.caissiere,
+        )
+        depense = self._depense("50000")
+        self._rendre(depense, "20000")
+        record_cash_injection(
+            gym=self.gym, amount=Decimal("10000"), currency="CDF",
+            description="Renfort", created_by=self.gerant,
+        )
+        self._connecter(self.gerant)
+
+        caisse = self.client.get(
+            reverse("core:gym_dashboard", args=[self.gym.id])
+        ).context["caisse"]
+
+        attendu = (
+            Decimal("100000.00")
+            + caisse["encaissements"]
+            + caisse["apports"]
+            - caisse["decaissements"]
+        )
+        self.assertEqual(caisse["solde_theorique"], attendu)
+
+    # --- Ce que la depense devient ------------------------------------------------------
+
+    def test_the_original_disbursement_is_left_untouched(self):
+        # Ces 50 000 sont bien sortis du tiroir : un comptage intermediaire
+        # deja contre-signe les retrouverait.
+        depense = self._depense("50000")
+
+        self._rendre(depense, "20000")
+
+        depense.refresh_from_db()
+        self.assertEqual(depense.amount_cdf, Decimal("50000.00"))
+
+    def test_the_net_says_what_it_really_cost(self):
+        depense = self._depense("50000")
+
+        self._rendre(depense, "20000")
+
+        self.assertEqual(depense.montant_rendu, Decimal("20000.00"))
+        self.assertEqual(depense.montant_net, Decimal("30000.00"))
+
+    def test_several_partial_returns_add_up(self):
+        depense = self._depense("50000")
+
+        self._rendre(depense, "20000")
+        self._rendre(depense, "5000")
+
+        self.assertEqual(depense.montant_net, Decimal("25000.00"))
+
+    def test_the_return_is_linked_to_its_disbursement(self):
+        depense = self._depense("50000")
+
+        retour = self._rendre(depense, "20000")
+
+        self.assertEqual(retour.refund_of, depense)
+
+    # --- Ce qui est refuse ------------------------------------------------------------------
+
+    def test_returning_more_than_was_taken_is_refused(self):
+        # Au-dela, ce n'est plus un retour : c'est un apport, et il ne se
+        # justifie pas de la meme facon.
+        depense = self._depense("50000")
+
+        with self.assertRaises(ValidationError) as capture:
+            self._rendre(depense, "60000")
+
+        self.assertIn("apport en caisse", str(capture.exception))
+
+    def test_returning_more_than_what_is_left_is_refused(self):
+        depense = self._depense("50000")
+        self._rendre(depense, "40000")
+
+        with self.assertRaises(ValidationError):
+            self._rendre(depense, "20000")
+
+    def test_a_zero_return_is_refused(self):
+        depense = self._depense("50000")
+
+        with self.assertRaises(ValidationError):
+            self._rendre(depense, "0")
+
+    def test_an_incoming_payment_cannot_be_returned(self):
+        recette = record_payment(
+            gym=self.gym, register=self.registre, amount=Decimal("30000"),
+            currency="CDF", method="cash", transaction_type="in",
+            category="subscription", description="Abonnement",
+            created_by=self.caissiere,
+        )
+
+        with self.assertRaises(ValidationError) as capture:
+            self._rendre(recette, "10000")
+
+        self.assertIn("sorti de la caisse", str(capture.exception))
+
+    def test_a_neighbouring_gym_disbursement_cannot_be_returned(self):
+        voisine = Gym.objects.create(
+            organization=self.organization, name="Voisine",
+            slug="gym-retour-voisine", subdomain="gym-retour-voisine",
+        )
+        CashRegister.objects.create(
+            gym=voisine, opened_by=self.gerant,
+            opening_amount=Decimal("0.00"), exchange_rate=Decimal("2800.00"),
+        )
+        ailleurs = record_expense(
+            gym=voisine, amount=Decimal("10000"), currency="CDF",
+            method="cash", category="expense", description="Ailleurs",
+            created_by=self.gerant, source_app="pos",
+            source_model="ManualExpense",
+        )
+
+        with self.assertRaises(ValidationError):
+            self._rendre(ailleurs, "5000")
+
+    def test_an_injection_without_a_reason_is_refused(self):
+        # Un apport augmente ce que le caissier devra retrouver dans le
+        # tiroir : sans motif, l'ecart serait inexplicable.
+        with self.assertRaises(ValidationError) as capture:
+            record_cash_injection(
+                gym=self.gym, amount=Decimal("50000"), currency="CDF",
+                description="  ", created_by=self.gerant,
+            )
+
+        self.assertIn("motif", str(capture.exception).lower())
+
+    # --- La caisse d'hier ---------------------------------------------------------------------
+
+    def test_a_return_lands_in_todays_register(self):
+        # L'argent arrive physiquement aujourd'hui : la clôture d'hier avait
+        # ete comptee correctement, on n'y touche pas.
+        depense = self._depense("50000")
+        ancienne = self.registre
+        ancienne.closing_amount = ancienne.expected_total()
+        ancienne.difference = Decimal("0.00")
+        ancienne.closed_by = self.gerant
+        ancienne.closed_at = timezone.now()
+        ancienne.is_closed = True
+        ancienne.save()
+        nouvelle = CashRegister.objects.create(
+            gym=self.gym, opened_by=self.caissiere,
+            opening_amount=Decimal("0.00"), exchange_rate=Decimal("2800.00"),
+        )
+
+        retour = self._rendre(depense, "20000")
+
+        self.assertEqual(retour.cash_register, nouvelle)
+        ancienne.refresh_from_db()
+        self.assertEqual(ancienne.difference, Decimal("0.00"))
+
+    # --- Qui a le droit --------------------------------------------------------------------------
+
+    def test_a_cashier_can_return_money(self):
+        depense = self._depense("50000")
+        self._connecter(self.caissiere)
+
+        self.client.post(
+            reverse("pos:refund_expense", args=[depense.id]),
+            {"amount": "20000", "currency": "CDF"},
+        )
+
+        self.assertEqual(depense.montant_rendu, Decimal("20000.00"))
+
+    def test_a_cashier_cannot_inject_money(self):
+        # Faire entrer de l'argent neuf augmente le solde theorique attendu :
+        # cela releve de la gestion.
+        self._connecter(self.caissiere)
+
+        reponse = self.client.post(
+            reverse("pos:inject_cash"),
+            {"amount": "50000", "currency": "CDF", "description": "Renfort"},
+        )
+
+        self.assertEqual(reponse.status_code, 403)
+
+    def test_a_manager_injects_into_the_open_drawer(self):
+        # Un gerant n'a pas de caisse a lui : l'argent va dans celle qui est
+        # ouverte. Sans cela, l'apport echouait faute de session.
+        apport = record_cash_injection(
+            gym=self.gym, amount=Decimal("50000"), currency="CDF",
+            description="Renfort de fonds", created_by=self.gerant,
+        )
+
+        self.assertEqual(apport.cash_register, self.registre)
+
+    def test_with_two_drawers_open_the_choice_is_asked(self):
+        # Personne ne peut deviner dans quel tiroir les billets sont entres :
+        # en tirer un au hasard fausserait deux comptages.
+        CashRegister.objects.create(
+            gym=self.gym, opened_by=self._utilisateur("caisse2-retour", "cashier"),
+            opening_amount=Decimal("0.00"), exchange_rate=Decimal("2800.00"),
+        )
+
+        with self.assertRaises(ValidationError) as capture:
+            record_cash_injection(
+                gym=self.gym, amount=Decimal("50000"), currency="CDF",
+                description="Renfort", created_by=self.gerant,
+            )
+
+        self.assertIn("Plusieurs caisses", str(capture.exception))
+
+    def test_a_manager_can_inject_money(self):
+        CashRegister.objects.create(
+            gym=self.gym, opened_by=self.gerant,
+            opening_amount=Decimal("0.00"), exchange_rate=Decimal("2800.00"),
+        )
+        self._connecter(self.gerant)
+
+        self.client.post(
+            reverse("pos:inject_cash"),
+            {"amount": "50000", "currency": "CDF", "description": "Renfort"},
+        )
+
+        self.assertEqual(
+            Payment.objects.filter(
+                gym=self.gym, category="cash_injection"
+            ).count(),
+            1,
+        )

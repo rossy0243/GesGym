@@ -148,6 +148,7 @@
                         <th>Mode</th>
                         <th>Saisi par</th>
                         <th>Session</th>
+                        <th class="text-end">Rendre</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -171,7 +172,15 @@
                             </td>
                             <td class="text-end">
                                 <div class="montant-sortie">&minus;{{ depense.amount }} {{ depense.currency }}</div>
-                                <small class="text-muted">{{ depense.amount_cdf }} CDF comptable</small>
+                                {% if depense.est_rendu %}
+                                    {% comment %} La sortie d'origine n'est pas corrigee : elle a bien
+                                       eu lieu. On montre ce qui est revenu, et ce que la depense a
+                                       reellement coute. {% endcomment %}
+                                    <small class="d-block text-success">{{ depense.montant_rendu|floatformat:0 }} CDF rendus</small>
+                                    <small class="d-block text-muted">net {{ depense.montant_net|floatformat:0 }} CDF</small>
+                                {% else %}
+                                    <small class="text-muted">{{ depense.amount_cdf }} CDF comptable</small>
+                                {% endif %}
                             </td>
                             <td>{{ depense.get_method_display }}</td>
                             <td>
@@ -179,6 +188,26 @@
                                     {{ depense.created_by.get_full_name|default:depense.created_by.username }}
                                 {% else %}
                                     <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                {% if depense.reste_a_rendre > 0 %}
+                                <form method="post" action="{% url 'pos:refund_expense' depense.id %}"
+                                      class="d-inline-flex gap-1 justify-content-end">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="currency" value="CDF">
+                                    <input type="number" name="amount" step="0.01" min="0.01"
+                                           max="{{ depense.reste_a_rendre|stringformat:'.2f' }}"
+                                           class="form-control form-control-sm" style="width:110px;"
+                                           placeholder="{{ depense.reste_a_rendre|floatformat:0 }}"
+                                           aria-label="Montant a remettre en caisse" required>
+                                    <button type="submit" class="btn btn-sm btn-outline-success"
+                                            title="Remettre cet argent dans la caisse ouverte">
+                                        <span class="material-icons" style="font-size:16px;vertical-align:-3px;">undo</span>
+                                    </button>
+                                </form>
+                                {% else %}
+                                    <span class="text-muted small">rendu</span>
                                 {% endif %}
                             </td>
                             <td>

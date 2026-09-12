@@ -38,6 +38,34 @@ def get_open_register(gym, user=None):
     return register
 
 
+def _caisse_cible(gym, utilisateur):
+    """
+    La caisse dans laquelle cet argent va physiquement entrer.
+
+    Celui qui tient un tiroir y remet ce qu'il n'a pas depense. Mais un gerant
+    qui apporte des fonds n'a pas de caisse a lui : l'argent va dans celle qui
+    est ouverte. Quand plusieurs le sont, personne ne peut deviner laquelle -
+    on demande alors de choisir plutot que d'en tirer une au hasard.
+    """
+    sienne = CashRegister.objects.filter(
+        gym=gym, is_closed=False, opened_by=utilisateur
+    ).first()
+    if sienne is not None:
+        return sienne
+
+    ouvertes = list(CashRegister.objects.filter(gym=gym, is_closed=False)[:2])
+    if not ouvertes:
+        raise ValidationError(
+            "Aucune caisse ouverte. Ouvrez une session avant tout mouvement."
+        )
+    if len(ouvertes) > 1:
+        raise ValidationError(
+            "Plusieurs caisses sont ouvertes : precisez celle qui recoit "
+            "l'argent."
+        )
+    return ouvertes[0]
+
+
 def record_payment(
     *,
     gym,
@@ -57,6 +85,7 @@ def record_payment(
     source_model="",
     source_id=None,
     status="success",
+    refund_of=None,
 ):
     register = register or get_open_register(gym, created_by)
     if register.gym_id != gym.id:
@@ -67,6 +96,7 @@ def record_payment(
     return Payment.objects.create(
         gym=gym,
         cash_register=register,
+        refund_of=refund_of,
         member=member,
         subscription=subscription,
         product=product,
@@ -310,4 +340,116 @@ def record_expense(
         source_app=source_app,
         source_model=source_model,
         source_id=source_id,
+    )
+
+
+def record_expense_refund(
+    *,
+    gym,
+    expense,
+    amount,
+    currency,
+    method="cash",
+    description="",
+    created_by=None,
+):
+    """
+    Remet dans le tiroir l'argent d'un decaissement qui n'a pas abouti.
+
+    La course n'a pas eu lieu, ou elle a coute moins cher que prevu. La sortie
+    d'origine n'est pas corrigee : elle a bien eu lieu, et un comptage
+    intermediaire deja contre-signe la retrouverait. Le retour s'y rattache.
+
+    Ce mouvement remplit la caisse **sans etre une recette** : la salle n'a
+    rien gagne, elle recupere ce qu'elle avait avance.
+    """
+    if expense.gym_id != gym.id:
+        raise ValidationError("Ce decaissement n'appartient pas a ce gym.")
+    if expense.type != "out":
+        raise ValidationError("On ne rend que de l'argent sorti de la caisse.")
+    if expense.status != "success":
+        raise ValidationError("Ce decaissement n'a pas abouti.")
+
+    amount = _money(amount)
+    if amount <= 0:
+        raise ValidationError("Le montant rendu doit etre superieur a zero.")
+
+    register = _caisse_cible(gym, created_by)
+
+    montant_cdf = (
+        amount if currency == "CDF" else _money(amount * register.exchange_rate)
+    )
+    reste = expense.reste_a_rendre
+    # On ne rend pas plus qu'on n'a pris : au-dela, ce n'est plus un retour,
+    # c'est un apport - et il ne se justifie pas de la meme facon.
+    if montant_cdf > reste:
+        raise ValidationError(
+            f"Ce decaissement de {expense.amount_cdf:.0f} CDF n'a plus que "
+            f"{reste:.0f} CDF a rendre. Pour ajouter de l'argent au-dela, "
+            "utilisez un apport en caisse."
+        )
+
+    motif = (description or "").strip() or (
+        f'Retour sur : {expense.description or "decaissement"}'
+    )
+
+    return record_payment(
+        gym=gym,
+        register=register,
+        amount=amount,
+        currency=currency,
+        method=method,
+        transaction_type="in",
+        category="expense_refund",
+        description=motif,
+        created_by=created_by,
+        source_app="pos",
+        source_model="ExpenseRefund",
+        source_id=expense.id,
+        refund_of=expense,
+    )
+
+
+def record_cash_injection(
+    *,
+    gym,
+    amount,
+    currency,
+    method="cash",
+    description="",
+    created_by=None,
+):
+    """
+    Fait entrer de l'argent neuf dans la caisse.
+
+    Un renfort de fonds en cours de journee, quand le tiroir ne suffit plus a
+    rendre la monnaie. Ce n'est ni une vente ni un retour : la salle n'a rien
+    gagne, elle a mis de l'argent dedans. Le solde theorique augmente donc, et
+    le chiffre d'affaires ne bouge pas.
+    """
+    amount = _money(amount)
+    if amount <= 0:
+        raise ValidationError("Le montant apporte doit etre superieur a zero.")
+
+    motif = (description or "").strip()
+    if not motif:
+        raise ValidationError(
+            "Le motif est obligatoire : un apport augmente le montant que le "
+            "caissier devra retrouver dans le tiroir."
+        )
+
+    register = _caisse_cible(gym, created_by)
+
+    return record_payment(
+        gym=gym,
+        register=register,
+        amount=amount,
+        currency=currency,
+        method=method,
+        transaction_type="in",
+        category="cash_injection",
+        description=motif,
+        created_by=created_by,
+        source_app="pos",
+        source_model="CashInjection",
     )

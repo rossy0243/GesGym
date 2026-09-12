@@ -63,6 +63,15 @@
                     Décaissement
                 </button>
 
+                {% if can_pos_history %}
+                <button class="btn btn-outline-success d-flex align-items-center gap-1"
+                        data-bs-toggle="modal"
+                        data-bs-target="#injectModal">
+                    <span class="material-icons" style="font-size:18px;">add_circle</span>
+                    Apport
+                </button>
+                {% endif %}
+
                 <a href="{% url 'pos:close_register' register.id %}"
                    class="btn btn-outline-danger d-flex align-items-center gap-1"
                    onclick="return confirm('Passer a la cloture de caisse ? Vous allez compter les especes et arreter la session.');">
@@ -817,6 +826,58 @@
         </div>
     </div>
 </div>
+
+{% if can_pos_history %}
+<!-- MODAL APPORT EN CAISSE -->
+{% comment %} Un renfort de fonds quand le tiroir ne suffit plus a rendre la
+   monnaie. Ce n'est pas une recette : la salle n'a rien gagne, elle a mis de
+   l'argent dedans. {% endcomment %}
+<div class="modal fade" id="injectModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{% url 'pos:inject_cash' %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2">
+                        <span class="material-icons">add_circle</span>
+                        Apport en caisse
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small">
+                        De l'argent que vous ajoutez au tiroir. Il augmente le solde
+                        que le caissier devra retrouver a la clôture, et n'entre pas
+                        dans le chiffre d'affaires.
+                    </p>
+                    <div class="row g-2 mb-3">
+                        <div class="col-8">
+                            <label class="form-label" for="injectAmount">Montant</label>
+                            <input type="number" step="0.01" min="0.01" name="amount"
+                                   id="injectAmount" class="form-control" required>
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label" for="injectCurrency">Devise</label>
+                            <select name="currency" id="injectCurrency" class="form-select">
+                                <option value="CDF">CDF</option>
+                                <option value="USD">USD</option>
+                            </select>
+                        </div>
+                    </div>
+                    <label class="form-label" for="injectReason">Motif</label>
+                    <input type="text" name="description" id="injectReason" class="form-control"
+                           maxlength="255" required
+                           placeholder="Ex : renfort de fonds pour la monnaie">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-success">Ajouter en caisse</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <!-- MODAL DECAISSEMENT -->
 <div class="modal fade" id="withdrawModal" tabindex="-1">

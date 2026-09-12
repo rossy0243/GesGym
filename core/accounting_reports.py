@@ -268,6 +268,10 @@ def build_register_summaries(gym, start_date, end_date):
     rows = []
 
     for register in registers:
+        # Ce bloc reconcilie un tiroir, il ne mesure pas une recette :
+        # ouverture + entrees - sorties doit retomber sur le montant compte.
+        # Les retours de decaissement et les apports y comptent donc, alors
+        # que le chiffre d'affaires les ecarte. Ne pas "corriger" ce filtre.
         period_payments = register.payments.filter(
             gym=gym,
             status="success",
@@ -515,9 +519,7 @@ def build_subscription_rows(gym, period_data):
 
     for subscription in subscriptions:
         amount_cdf = money(
-            subscription.payments.filter(
-                status="success",
-                type="in",
+            subscription.payments.recettes().filter(
                 created_at__date__range=(period_data["start_date"], period_data["end_date"]),
             ).aggregate(total=Sum("amount_cdf"))["total"]
         )
@@ -558,6 +560,8 @@ def build_register_rows(gym, period_data):
     )
 
     for register in registers:
+        # Meme raison qu'au-dessus : on reconcilie le tiroir, tout ce qui y
+        # entre compte.
         period_payments = register.payments.filter(
             gym=gym,
             status="success",

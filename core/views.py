@@ -42,6 +42,14 @@ from .forms import (
 from members.models import Member
 from organizations.models import Gym, GymModule, LandingFaq
 from pos.models import CashRegister, Payment
+
+# Un abonnement compte ce que ses paiements ont rapporte. Les retours de
+# decaissement et les apports remplissent le tiroir sans rien rapporter : ils
+# n'ont rien a faire dans le revenu d'une formule.
+RECETTE = Q(
+    payments__status="success",
+    payments__type="in",
+) & ~Q(payments__category__in=Payment.CATEGORIES_HORS_RECETTE)
 from pos.validation import CONTRESIGNATURE
 from subscriptions.models import MemberSubscription
 from .accounting_reports import (
@@ -282,6 +290,8 @@ def _tableau_de_caisse(gym, today):
             "sessions": [],
             "ouvertes": 0,
             "a_contre_signer": 0,
+            "retours": zero,
+            "apports": zero,
             "motifs": [],
             "autres_sorties": 0,
             "encaissements": zero,
@@ -298,21 +308,30 @@ def _tableau_de_caisse(gym, today):
     ventilation = {}
     lignes = (
         Payment.objects.filter(cash_register__in=sessions, gym=gym, status="success")
-        .values("cash_register_id", "type", "method")
+        .values("cash_register_id", "type", "method", "category")
         .annotate(total=Sum("amount_cdf"))
     )
     for ligne in lignes:
         ventilation.setdefault(ligne["cash_register_id"], {})[
-            (ligne["type"], ligne["method"])
+            (ligne["type"], ligne["method"], ligne["category"])
         ] = ligne["total"] or zero
 
-    def _somme(session_id, sens, methode=None):
+    def _somme(session_id, sens, methode=None, categories=None, hors=None):
+        """
+        Les mouvements d'une session, filtres par sens, methode et nature.
+
+        ``hors`` sert au chiffre encaisse : les retours de decaissement et les
+        apports remplissent bien le tiroir, mais la salle ne les a pas gagnes.
+        """
         mouvements = ventilation.get(session_id, {})
         return sum(
             (
                 total
-                for (type_, method), total in mouvements.items()
-                if type_ == sens and (methode is None or method == methode)
+                for (type_, method, categorie), total in mouvements.items()
+                if type_ == sens
+                and (methode is None or method == methode)
+                and (categories is None or categorie in categories)
+                and (hors is None or categorie not in hors)
             ),
             zero,
         )
@@ -322,12 +341,15 @@ def _tableau_de_caisse(gym, today):
     # lisant le chiffre. On montre les plus grosses sorties, celles qui
     # expliquent l'essentiel du total.
     sorties = Payment.objects.filter(
-        cash_register__in=sessions, gym=gym, status="success", type="out"
-    )
+        cash_register__in=sessions, gym=gym
+    ).sorties().prefetch_related("refunds")
     motifs = [
         {
             "motif": (sortie.description or "").strip() or "Sans motif",
-            "montant": sortie.amount_cdf,
+            # Le net : une sortie de 50 000 dont 20 000 sont revenus n'a coute
+            # que 30 000, et c'est ce chiffre qu'on veut lire.
+            "montant": sortie.montant_net,
+            "rendu": sortie.montant_rendu,
         }
         for sortie in sorties.order_by("-amount_cdf")[:MOTIFS_AFFICHES]
     ]
@@ -336,13 +358,23 @@ def _tableau_de_caisse(gym, today):
     libelles = dict(Payment.PAYMENT_METHODS)
     totaux_methode = {code: zero for code in libelles}
     encaissements = decaissements = solde_theorique = ecart = zero
+    total_retours = total_apports = zero
     oubliee_depuis_hier = 0
     a_contre_signer = 0
     rangs = []
 
+    hors_recette = Payment.CATEGORIES_HORS_RECETTE
+
     for session in sessions:
-        entrees = _somme(session.id, "in")
-        sorties = _somme(session.id, "out")
+        # Encaisse : ce que la salle a gagne. Les retours et les apports sont
+        # comptes a part - les melanger ici ferait passer de l'argent rendu
+        # pour une recette.
+        entrees = _somme(session.id, "in", hors=hors_recette)
+        retours = _somme(session.id, "in", categories={"expense_refund"})
+        apports = _somme(session.id, "in", categories={"cash_injection"})
+        # Depense reellement : une sortie de 50 000 dont 20 000 sont revenus a
+        # coute 30 000.
+        sorties = _somme(session.id, "out") - retours
         especes_entrees = _somme(session.id, "in", CashRegister.CASH_METHOD)
         especes_sorties = _somme(session.id, "out", CashRegister.CASH_METHOD)
         # Seules les especes transitent par le tiroir : c'est deja la regle de
@@ -350,10 +382,14 @@ def _tableau_de_caisse(gym, today):
         attendu = session.opening_amount + especes_entrees - especes_sorties
 
         for code in libelles:
-            totaux_methode[code] += _somme(session.id, "in", code)
+            totaux_methode[code] += _somme(
+                session.id, "in", code, hors=hors_recette
+            )
 
         encaissements += entrees
         decaissements += sorties
+        total_retours += retours
+        total_apports += apports
         solde_theorique += attendu
         if session.is_closed and session.difference is not None:
             ecart += session.difference
@@ -395,6 +431,8 @@ def _tableau_de_caisse(gym, today):
         "ouvertes": sum(1 for rang in rangs if not rang["est_fermee"]),
         "encaissements": encaissements,
         "decaissements": decaissements,
+        "retours": total_retours,
+        "apports": total_apports,
         "solde_theorique": solde_theorique,
         "ecart": ecart,
         "a_un_ecart": ecart != zero,
@@ -1842,11 +1880,7 @@ def gym_dashboard(request, gym_id):
     sales_labels = []
     sales_values = []
     if user_role in DASHBOARD_SALES_ROLES:
-        successful_incoming_payments = Payment.objects.filter(
-            gym=gym,
-            status="success",
-            type="in",
-        )
+        successful_incoming_payments = Payment.objects.filter(gym=gym).recettes()
         daily_revenue = successful_incoming_payments.filter(
             created_at__date=today
         ).aggregate(total=Sum("amount_cdf"))["total"] or 0
@@ -2189,11 +2223,8 @@ def _legacy_reports_dashboard(request):
     # CA du jour
     # =========================
     payments_today = Payment.objects.filter(
-        gym=gym,
-        created_at__date=today,
-        status="success",
-        type="in",
-    )
+        gym=gym, created_at__date=today
+    ).recettes()
 
     daily_revenue = payments_today.aggregate(
         total=Sum("amount_cdf")
@@ -2252,9 +2283,7 @@ def _legacy_reports_dashboard(request):
         gym=gym,
         created_at__year=current_year,
         created_at__month=current_month,
-        status="success",
-        type="in",
-    )
+    ).recettes()
 
     monthly_revenue = payments_month.aggregate(
         total=Sum("amount_cdf")
@@ -2296,18 +2325,13 @@ def _legacy_reports_dashboard(request):
             "plan__name"
         ).annotate(
             subscriptions=Count("id", distinct=True),
-            revenue=Sum(
-                "payments__amount_cdf",
-                filter=Q(payments__status="success", payments__type="in")
-            )
+            revenue=Sum("payments__amount_cdf", filter=RECETTE)
         ).order_by("-revenue")
     
     monthly_sales = Payment.objects.filter(
         gym=gym,
         created_at__year=current_year,
-        status="success",
-        type="in",
-        ).annotate(
+        ).recettes().annotate(
             month=ExtractMonth("created_at")
         ).values("month").annotate(
             total=Sum("amount_cdf")
@@ -2378,7 +2402,7 @@ def reports_dashboard(request):
         created_at__date__range=(period_data["start_date"], period_data["end_date"]),
         status="success",
     )
-    incoming_period = payments_period.filter(type="in")
+    incoming_period = payments_period.recettes()
 
     daily_revenue = incoming_period.aggregate(total=Sum("amount_cdf"))["total"] or 0
     daily_transactions = payments_period.count()
@@ -2423,10 +2447,7 @@ def reports_dashboard(request):
         start_date__range=(period_data["start_date"], period_data["end_date"]),
     ).values("plan__name").annotate(
         subscriptions=Count("id", distinct=True),
-        revenue=Sum(
-            "payments__amount_cdf",
-            filter=Q(payments__status="success", payments__type="in"),
-        ),
+        revenue=Sum("payments__amount_cdf", filter=RECETTE),
     ).order_by("-revenue")
 
     monthly_sales = incoming_period.annotate(

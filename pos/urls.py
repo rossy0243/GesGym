@@ -9,6 +9,8 @@ urlpatterns = [
     path("close-register/<int:register_id>/", views.close_register, name="close_register"),
     path("register-history/", views.register_history, name="register_history"),
     path("decaissements/", views.expense_register, name="expense_register"),
+    path("decaissements/<int:payment_id>/rendre/", views.refund_expense, name="refund_expense"),
+    path("apport/", views.inject_cash, name="inject_cash"),
     path("register-detail/<int:register_id>/", views.register_detail, name="register_detail"),
     path("register-validate/<int:register_id>/", views.validate_register, name="validate_register"),
 ]

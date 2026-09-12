@@ -19,7 +19,13 @@ from core.audit import log_sensitive_action
 
 from .models import CashRegister, ExchangeRate, Payment
 from . import validation
-from .services import record_expense, record_product_sale, record_subscription_payment
+from .services import (
+    record_cash_injection,
+    record_expense,
+    record_expense_refund,
+    record_product_sale,
+    record_subscription_payment,
+)
 
 
 def _media_url(request, file_field, fallback=""):
@@ -561,10 +567,31 @@ def expense_register(request):
             | Q(created_by__last_name__icontains=recherche)
         )
 
-    total = depenses.aggregate(total=Sum("amount_cdf"))["total"] or Decimal("0.00")
+    # Ce que la salle a reellement depense : une sortie de 50 000 dont 20 000
+    # sont revenus a coute 30 000. Le brut resterait lisible ligne a ligne,
+    # mais un total qui l'ignore surestime les depenses du mois.
+    brut = depenses.aggregate(total=Sum("amount_cdf"))["total"] or Decimal("0.00")
+    rendu_total = Payment.objects.filter(
+        gym=request.gym, refund_of__in=depenses, status="success"
+    ).aggregate(total=Sum("amount_cdf"))["total"] or Decimal("0.00")
+    total = brut - rendu_total
 
     # Le detail par categorie repond a la premiere question du gerant : ou est
     # parti l'argent, avant meme de savoir a qui.
+    # Deux passes plutot qu'une jointure : additionner les depenses et leurs
+    # retours dans la meme requete duplique chaque depense autant de fois
+    # qu'elle a de retours, et gonfle le brut. Sum(distinct=True) ne sauve
+    # rien - il additionnerait les montants *distincts*, effacant deux
+    # depenses de meme valeur.
+    rendu_par_categorie = {
+        ligne["refund_of__category"]: ligne["total"] or Decimal("0.00")
+        for ligne in Payment.objects.filter(
+            gym=request.gym, refund_of__in=depenses, status="success"
+        )
+        .values("refund_of__category")
+        .annotate(total=Sum("amount_cdf"))
+    }
+
     par_categorie = [
         {
             "code": ligne["category"],
@@ -572,7 +599,8 @@ def expense_register(request):
                 ligne["category"], ligne["category"] or "Non classe"
             ),
             "nombre": ligne["nombre"],
-            "total": ligne["total"] or Decimal("0.00"),
+            "total": (ligne["total"] or Decimal("0.00"))
+            - rendu_par_categorie.get(ligne["category"], Decimal("0.00")),
         }
         for ligne in depenses.values("category")
         .annotate(nombre=Count("id"), total=Sum("amount_cdf"))
@@ -586,6 +614,8 @@ def expense_register(request):
             "expenses": depenses[:300],
             "total_count": depenses.count(),
             "total_cdf": total,
+            "total_brut_cdf": brut,
+            "total_rendu_cdf": rendu_total,
             "by_category": par_categorie,
             "categories": [
                 (code, libelle)
@@ -685,3 +715,105 @@ def _retour_validation(request, retour):
     if retour.startswith("/"):
         return redirect(retour)
     return redirect(retour)
+
+
+@login_required
+@role_required(POS_CASHIER_ROLES)
+@module_required("POS")
+@require_POST
+def refund_expense(request, payment_id):
+    """
+    Remet dans la caisse l'argent d'un decaissement qui n'a pas abouti.
+
+    C'est le geste de celui qui tient le tiroir : il est parti avec 50 000, la
+    course a coute 30 000, il rend 20 000. Le decaissement d'origine n'est pas
+    touche - il a bien eu lieu.
+    """
+    depense = get_object_or_404(
+        Payment, id=payment_id, gym=request.gym, type="out"
+    )
+
+    try:
+        montant = _to_decimal(request.POST.get("amount"), "Montant")
+        devise = request.POST.get("currency", "CDF")
+        if devise not in {"USD", "CDF"}:
+            raise ValidationError("Devise invalide.")
+
+        retour = record_expense_refund(
+            gym=request.gym,
+            expense=depense,
+            amount=montant,
+            currency=devise,
+            description=request.POST.get("description") or "",
+            created_by=request.user,
+        )
+    except ValidationError as exc:
+        messages.error(request, _validation_message(exc))
+        return redirect("pos:expense_register")
+
+    log_sensitive_action(
+        request,
+        "pos.expense_refunded",
+        "Payment",
+        depense.description or f"decaissement-{depense.id}",
+        metadata={
+            "decaissement_id": depense.id,
+            "montant_rendu": str(retour.amount_cdf),
+            "reste_a_rendre": str(depense.reste_a_rendre),
+        },
+    )
+
+    messages.success(
+        request,
+        f"{retour.amount_cdf:.0f} CDF remis en caisse. Cette depense revient a "
+        f"{depense.montant_net:.0f} CDF.",
+    )
+    return redirect("pos:expense_register")
+
+
+@login_required
+@role_required(POS_HISTORY_ROLES)
+@module_required("POS")
+@require_POST
+def inject_cash(request):
+    """
+    Fait entrer de l'argent neuf dans la caisse.
+
+    Un renfort de fonds quand le tiroir ne suffit plus a rendre la monnaie.
+    Reserve au gerant et au proprietaire : cet argent augmente le montant que
+    le caissier devra retrouver a la clôture, et engage la salle.
+    """
+    try:
+        montant = _to_decimal(request.POST.get("amount"), "Montant")
+        devise = request.POST.get("currency", "CDF")
+        if devise not in {"USD", "CDF"}:
+            raise ValidationError("Devise invalide.")
+
+        apport = record_cash_injection(
+            gym=request.gym,
+            amount=montant,
+            currency=devise,
+            description=request.POST.get("description") or "",
+            created_by=request.user,
+        )
+    except ValidationError as exc:
+        messages.error(request, _validation_message(exc))
+        return redirect("pos:cashier_dashboard")
+
+    log_sensitive_action(
+        request,
+        "pos.cash_injected",
+        "CashRegister",
+        apport.cash_register.session_code if apport.cash_register else "",
+        metadata={
+            "montant": str(apport.amount_cdf),
+            "motif": apport.description,
+        },
+    )
+
+    messages.success(
+        request,
+        f"{apport.amount_cdf:.0f} CDF ajoutes en caisse. Le solde theorique "
+        "augmente d'autant.",
+    )
+    return redirect("pos:cashier_dashboard")
