@@ -114,7 +114,13 @@ class MachinesTenantTests(TestCase):
         self.assertNotContains(response, "999 CDF")
 
     def test_general_dashboard_includes_scoped_machine_kpis(self):
-        response = self.client.get(reverse("core:gym_dashboard", args=[self.gym_a.id]))
+        # Les KPI machines ont quitte la vue d'ensemble - la rubrique Machines
+        # les porte deja - mais restent dans la vue analytique. Ce test veille
+        # sur le cloisonnement par salle, pas sur l'emplacement de la carte.
+        response = self.client.get(
+            reverse("core:gym_dashboard", args=[self.gym_a.id]),
+            {"view": "analytics"},
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "KPI machines")

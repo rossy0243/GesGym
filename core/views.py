@@ -221,6 +221,30 @@ def _build_report_chart_data(accounting_report):
     }
 
 
+def _personnes_distinctes(passages):
+    """
+    Combien de personnes differentes derriere ces passages.
+
+    Un passage d'invite n'a pas de membre, une ouverture manuelle n'a ni l'un
+    ni l'autre. Compter ``member_id`` sans les ecarter rangeait toutes ces
+    lignes sous un meme visiteur nul : dix ouvertures manuelles comptaient
+    pour une personne.
+    """
+    membres = (
+        passages.filter(member__isnull=False)
+        .values("member_id")
+        .distinct()
+        .count()
+    )
+    invites = (
+        passages.filter(guest_pass__isnull=False)
+        .values("guest_pass_id")
+        .distinct()
+        .count()
+    )
+    return membres + invites
+
+
 def _get_period_window(period_key, reference_date):
     period_key = period_key if period_key in PERIOD_LABELS else "month"
 
@@ -283,12 +307,25 @@ def _build_trend(current_value, previous_value):
         badge_class = "secondary"
         prefix = ""
 
+    # Sans base, "+100 %" ne distingue pas un doublement d'un depart de zero :
+    # le pourcentage vaut exactement 100 dans les deux cas, parce que 100 est
+    # la valeur de repli quand la periode precedente est vide.
+    if not previous_value and current_value:
+        display = "nouveau"
+        basis = "Rien sur la periode precedente"
+    else:
+        display = f"{prefix}{percent:.1f}%"
+        basis = f"Periode precedente : {previous_value}"
+
     return {
         "delta": delta,
         "percent": percent,
+        "current": current_value,
+        "previous": previous_value,
+        "basis": basis,
         "direction": direction,
         "badge_class": badge_class,
-        "display": f"{prefix}{percent:.1f}%",
+        "display": display,
     }
 
 
@@ -1449,23 +1486,48 @@ def gym_dashboard(request, gym_id):
     # membre ressorti puis revenu compterait double.
     visits_period = access_period_qs.filter(access_granted=True, is_return=False).count()
     visits_previous = access_previous_qs.filter(access_granted=True, is_return=False).count()
-    unique_visitors_period = access_period_qs.filter(
-        access_granted=True, is_return=False
-    ).values("member_id").distinct().count()
+    # Une ouverture manuelle n'a ni membre ni invitation. Compter member_id
+    # sans l'exclure regroupait toutes ces lignes sous un seul "visiteur"
+    # fantome : on ne compte donc que les passages ou l'on sait qui entre.
+    passages_period_qs = access_period_qs.filter(access_granted=True, is_return=False)
+    unique_visitors_period = _personnes_distinctes(passages_period_qs)
     denied_period = access_period_qs.filter(access_granted=False).count()
-    today_checkins = AccessLog.objects.filter(
+    passages_today_qs = AccessLog.objects.filter(
         gym=gym,
         check_in_time__date=today,
         access_granted=True,
         is_return=False,
-    ).count()
+    )
+    today_checkins = passages_today_qs.count()
+    today_unique_visitors = _personnes_distinctes(passages_today_qs)
     denied_today = AccessLog.objects.filter(
         gym=gym,
         check_in_time__date=today,
         access_granted=False,
     ).count()
-    engagement_rate = round((unique_visitors_period / active_members) * 100, 1) if active_members else 0
-    average_daily_visits = round(visits_period / period_data["days"], 1) if period_data["days"] else 0
+    # Assiduite : meme population au numerateur et au denominateur. L'ancien
+    # "engagement" divisait les visiteurs de la periode - membres expires et
+    # invites compris - par les membres actifs du jour. Deux populations
+    # differentes, deux dates differentes : il pouvait depasser 100 %, et
+    # c'est ce qu'il faisait.
+    active_members_seen = members_qs.filter(
+        status="active",
+        subscriptions__in=active_subscriptions_qs,
+        access_logs__check_in_time__date__range=(
+            period_data["start_date"], period_data["end_date"]
+        ),
+        access_logs__access_granted=True,
+        access_logs__is_return=False,
+    ).distinct().count()
+    attendance_rate = (
+        round((active_members_seen / active_members) * 100, 1) if active_members else 0
+    )
+
+    # La moyenne porte sur les jours ecoules, pas sur la periode entiere : au
+    # 11 septembre, diviser par 30 compte 19 jours qui n'ont pas eu lieu.
+    elapsed_end = min(period_data["end_date"], today)
+    elapsed_days = max((elapsed_end - period_data["start_date"]).days + 1, 1)
+    average_daily_visits = round(visits_period / elapsed_days, 1)
     peak_hour = _build_peak_hour(access_period_qs)
     attendance_rows = _build_attendance_rows(gym, period_data)
     week_labels = [row["label"] for row in attendance_rows]
@@ -1727,8 +1789,10 @@ def gym_dashboard(request, gym_id):
         "renewals_period": renewals_period,
         "expirations_period": expirations_period,
         "unique_visitors_period": unique_visitors_period,
-        "engagement_rate": engagement_rate,
+        "active_members_seen": active_members_seen,
+        "attendance_rate": attendance_rate,
         "average_daily_visits": average_daily_visits,
+        "elapsed_days": elapsed_days,
         "peak_hour": peak_hour,
         "new_members_trend": new_members_trend,
         "renewals_trend": renewals_trend,
@@ -1739,6 +1803,7 @@ def gym_dashboard(request, gym_id):
         "monthly_revenue": monthly_revenue,
         "period_revenue": period_revenue,
         "today_checkins": today_checkins,
+        "today_unique_visitors": today_unique_visitors,
         "visits_period": visits_period,
         "denied_period": denied_period,
         "denied_today": denied_today,

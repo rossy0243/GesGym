@@ -350,9 +350,12 @@ class AccountingReportExportTests(TestCase):
         for _ in range(5):
             self._create_access_log_at(self.gym_b, self.member_b, 20)
 
+        # L'heure de pointe releve de l'analyse, pas de l'urgence du jour :
+        # elle a quitte la vue d'ensemble avec le reste des graphiques. Ce que
+        # ce test garde, c'est le cloisonnement par salle.
         response = self.client.get(
             reverse("core:gym_dashboard", args=[self.gym_a.id]),
-            {"period": "day"},
+            {"period": "day", "view": "analytics"},
         )
 
         self.assertEqual(response.status_code, 200)
@@ -3786,3 +3789,255 @@ class ServerLogFilterTests(SimpleTestCase):
         )
         self.assertIn("doit_journaliser", configuration)
         self.assertIn("logger_class", configuration)
+
+
+class DashboardHonestyTests(TestCase):
+    """
+    Les chiffres du tableau de bord, apres le retour du client.
+
+    Il ne demandait pas des indicateurs de plus : il demandait que ceux
+    affiches veuillent dire quelque chose, et qu'ils n'apparaissent qu'une
+    fois.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Tableau", slug="org-tableau"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Tableau",
+            slug="gym-tableau", subdomain="gym-tableau",
+        )
+        for code in ("MEMBERS", "SUBSCRIPTIONS", "POS", "ACCESS", "MACHINES", "COACHING"):
+            module, _ = Module.objects.get_or_create(
+                code=code, defaults={"name": code}
+            )
+            GymModule.objects.get_or_create(
+                gym=self.gym, module=module, defaults={"is_active": True}
+            )
+
+        self.plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Mensuel", price=30, duration_days=30
+        )
+        self.gerant = User.objects.create_user(
+            username="gerant-tableau", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.gerant, gym=self.gym, role="manager", is_active=True
+        )
+        self.client.force_login(self.gerant)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    # --- Fabriques ---------------------------------------------------------------
+
+    def _membre(self, prenom, abonne=True):
+        membre = Member.objects.create(
+            gym=self.gym, first_name=prenom, last_name="Tableau",
+            phone=f"+24387{Member.objects.count():07d}", status="active",
+        )
+        if abonne:
+            MemberSubscription.objects.create(
+                gym=self.gym, member=membre, plan=self.plan,
+                start_date=timezone.localdate() - timedelta(days=1),
+                end_date=timezone.localdate() + timedelta(days=29),
+                is_active=True,
+            )
+        return membre
+
+    def _passage(self, membre=None, jour=None, is_return=False, accorde=True):
+        log = AccessLog.objects.create(
+            gym=self.gym, member=membre, access_granted=accorde,
+            is_return=is_return,
+        )
+        if jour is not None:
+            AccessLog.objects.filter(pk=log.pk).update(check_in_time=jour)
+        return log
+
+    def _vue(self, analytique=False):
+        url = reverse("core:gym_dashboard", args=[self.gym.id])
+        if analytique:
+            url += "?view=analytics"
+        return self.client.get(url)
+
+    # --- Chaque information une seule fois ---------------------------------------
+
+    def test_the_overview_shows_the_recent_accesses_once(self):
+        # Le bloc de queue avait perdu sa garde de vue : il s'affichait dans
+        # les deux vues, et le proprietaire lisait tout deux fois.
+        page = self._vue().content.decode("utf-8")
+
+        self.assertEqual(page.count("Derniers acc"), 1)
+
+    def test_the_overview_shows_the_recent_payments_once(self):
+        page = self._vue().content.decode("utf-8")
+
+        self.assertEqual(page.count("Derniers paiements"), 1)
+
+    def test_the_month_revenue_is_stated_once(self):
+        page = self._vue().content.decode("utf-8")
+
+        self.assertEqual(page.count("Mois en cours"), 1)
+
+    def test_the_duplicate_kpi_card_is_gone(self):
+        # Elle ne contenait que des chiffres deja affiches au-dessus.
+        self.assertNotContains(self._vue(), "Lecture KPI")
+        self.assertNotContains(self._vue(analytique=True), "Lecture KPI")
+
+    # --- Ce qui quitte la vue d'ensemble ------------------------------------------
+
+    def test_machine_and_coaching_charts_leave_the_overview(self):
+        # Leurs rubriques les portent deja : les garder ici allongeait la page
+        # sans rien apprendre.
+        page = self._vue()
+
+        self.assertNotContains(page, "KPI machines")
+        self.assertNotContains(page, "KPI coaching")
+
+    def test_they_remain_in_the_analytics_view(self):
+        page = self._vue(analytique=True)
+
+        self.assertContains(page, "KPI machines")
+        self.assertContains(page, "KPI coaching")
+
+    # --- La moyenne journaliere ----------------------------------------------------
+
+    def test_the_daily_average_divides_by_the_elapsed_days(self):
+        # Au 11 du mois, diviser par 30 compterait 19 jours qui n'ont pas eu
+        # lieu. C'est ce que le client avait repere.
+        aujourd_hui = timezone.localdate()
+        membre = self._membre("Ada")
+        for _ in range(10):
+            self._passage(membre)
+
+        contexte = self._vue().context
+        ecoules = (aujourd_hui - aujourd_hui.replace(day=1)).days + 1
+
+        self.assertEqual(contexte["elapsed_days"], ecoules)
+        self.assertEqual(contexte["average_daily_visits"], round(10 / ecoules, 1))
+
+    def test_the_elapsed_days_never_exceed_the_period(self):
+        contexte = self._vue().context
+
+        self.assertLessEqual(contexte["elapsed_days"], contexte["period_days"])
+
+    def test_a_single_day_period_divides_by_one(self):
+        membre = self._membre("Ada")
+        self._passage(membre)
+
+        url = reverse("core:gym_dashboard", args=[self.gym.id]) + "?period=day"
+        contexte = self.client.get(url).context
+
+        self.assertEqual(contexte["elapsed_days"], 1)
+        self.assertEqual(contexte["average_daily_visits"], 1.0)
+
+    # --- L'assiduite remplace l'engagement -----------------------------------------
+
+    def test_the_attendance_rate_never_exceeds_one_hundred(self):
+        # L'ancien "engagement" affichait 180 % : il divisait les visiteurs de
+        # la periode par les membres actifs du jour, deux populations
+        # differentes.
+        actif = self._membre("Ada")
+        expire = Member.objects.create(
+            gym=self.gym, first_name="Bob", last_name="Expire",
+            phone="+243870999999", status="active",
+        )
+        for _ in range(4):
+            self._passage(actif)
+        self._passage(expire)
+
+        contexte = self._vue().context
+
+        self.assertLessEqual(contexte["attendance_rate"], 100)
+
+    def test_the_attendance_rate_counts_active_members_who_came(self):
+        venu = self._membre("Ada")
+        self._membre("Bob")
+        self._passage(venu)
+
+        contexte = self._vue().context
+
+        self.assertEqual(contexte["active_members_seen"], 1)
+        self.assertEqual(contexte["attendance_rate"], 50.0)
+
+    def test_a_member_who_came_twice_counts_once(self):
+        venu = self._membre("Ada")
+        self._passage(venu)
+        self._passage(venu)
+
+        self.assertEqual(self._vue().context["active_members_seen"], 1)
+
+    def test_the_old_engagement_rate_is_gone(self):
+        self.assertNotContains(self._vue(), "Engagement ")
+
+    # --- Passages contre personnes ---------------------------------------------------
+
+    def test_passages_and_people_are_counted_separately(self):
+        # "15 entrees pour 5 membres actifs" : le mot entrees ne disait pas
+        # s'il s'agissait de passages ou de personnes.
+        ada = self._membre("Ada")
+        bob = self._membre("Bob")
+        self._passage(ada)
+        self._passage(bob)
+        self._passage(ada, is_return=True)
+
+        contexte = self._vue().context
+
+        # Le retour du meme jour n'est pas un passage de plus.
+        self.assertEqual(contexte["today_checkins"], 2)
+        self.assertEqual(contexte["today_unique_visitors"], 2)
+
+    def test_a_manual_opening_is_a_passage_but_nobody(self):
+        # Elle n'a ni membre ni invitation : la compter comme une personne
+        # rangeait toutes les ouvertures manuelles sous un seul visiteur.
+        self._passage(membre=None)
+        self._passage(membre=None)
+
+        contexte = self._vue().context
+
+        self.assertEqual(contexte["today_checkins"], 2)
+        self.assertEqual(contexte["today_unique_visitors"], 0)
+
+    def test_the_page_says_how_many_people(self):
+        ada = self._membre("Ada")
+        self._passage(ada)
+
+        self.assertContains(self._vue(), "Passages aujourd'hui")
+
+    # --- La base de comparaison --------------------------------------------------------
+
+    def test_a_trend_from_nothing_says_new_rather_than_a_hundred_percent(self):
+        # "+100 %" est la valeur de repli quand la periode precedente est
+        # vide : elle ne se distinguait pas d'un doublement.
+        self._membre("Ada")
+
+        contexte = self._vue().context
+
+        self.assertEqual(contexte["new_members_trend"]["display"], "nouveau")
+        self.assertIn("Rien", contexte["new_members_trend"]["basis"])
+
+    def test_every_trend_carries_its_comparison_base(self):
+        contexte = self._vue().context
+
+        for cle in ("new_members_trend", "renewals_trend", "expirations_trend",
+                    "visits_trend", "revenue_trend"):
+            with self.subTest(cle=cle):
+                self.assertIn("basis", contexte[cle])
+                self.assertTrue(contexte[cle]["basis"])
+
+    def test_the_base_is_shown_on_the_page(self):
+        self.assertContains(self._vue(), "Periode precedente")
+
+    # --- Les definitions ------------------------------------------------------------------
+
+    def test_the_cumulative_thresholds_say_they_are_cumulative(self):
+        # Un abonnement qui expire demain est compte dans J-3, J-7 et sous 15
+        # jours : c'est voulu, mais rien ne le disait.
+        self.assertContains(self._vue(), "Paliers cumulatifs")
+
+    def test_the_active_member_definition_is_within_reach(self):
+        self.assertContains(self._vue(), "photographie d'aujourd'hui")
+
+    def test_the_daily_average_explains_its_divisor(self):
+        self.assertContains(self._vue(), "jours deja ecoules")

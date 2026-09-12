@@ -286,7 +286,13 @@ class CoachingTenantTests(TestCase):
 
     def test_general_dashboard_includes_scoped_coaching_kpis(self):
         self.coach_a.members.add(self.member_a)
-        response = self.client.get(reverse("core:gym_dashboard", args=[self.gym_a.id]))
+        # Les KPI coaching ont quitte la vue d'ensemble - la rubrique Coaching
+        # les porte deja - mais restent dans la vue analytique. Ce test veille
+        # sur le cloisonnement par salle, pas sur l'emplacement de la carte.
+        response = self.client.get(
+            reverse("core:gym_dashboard", args=[self.gym_a.id]),
+            {"view": "analytics"},
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "KPI coaching")

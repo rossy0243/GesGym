@@ -283,16 +283,19 @@
         <div class="col-xxl-2 col-md-4 col-sm-6">
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
-                    <span class="fs-12 fw-medium text-muted">Entrees aujourd'hui</span>
+                    <span class="fs-12 fw-medium text-muted"
+                          title="Chaque passage compte une fois. Un retour le meme jour n'est pas recompte.">Passages aujourd'hui</span>
                     <h3 class="mb-2 fw-bold">{{ today_checkins }}</h3>
-                    <div class="fs-12 text-muted">Refuses aujourd'hui: {{ denied_today }}</div>
+                    <div class="fs-12 text-muted"
+                         title="Personnes differentes : membres et invites. Une ouverture manuelle n'identifie personne et n'est pas comptee ici.">{{ today_unique_visitors }} personne{{ today_unique_visitors|pluralize }} - refuses: {{ denied_today }}</div>
                 </div>
             </div>
         </div>
         <div class="col-xxl-2 col-md-4 col-sm-6">
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
-                    <span class="fs-12 fw-medium text-muted">Revenu du jour</span>
+                    <span class="fs-12 fw-medium text-muted"
+                          title="Encaissements du jour, convertis en CDF. Les decaissements n'y figurent pas.">Revenu du jour</span>
                     <h3 class="mb-2 fw-bold">{{ daily_revenue|floatformat:0 }} CDF</h3>
                     <div class="fs-12 text-muted">Mois en cours: {{ monthly_revenue|floatformat:0 }} CDF</div>
                 </div>
@@ -310,9 +313,11 @@
         <div class="col-xxl-2 col-md-4 col-sm-6">
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
-                    <span class="fs-12 fw-medium text-muted">Abonnements a risque</span>
+                    <span class="fs-12 fw-medium text-muted"
+                          title="Abonnements en cours dont la fin tombe dans les 15 jours.">Abonnements a risque</span>
                     <h3 class="mb-2 fw-bold">{{ expiry_soon }}</h3>
-                    <div class="fs-12 text-muted">J-7: {{ expiry_7_days }} | J-3: {{ expiry_3_days }}</div>
+                    <div class="fs-12 text-muted"
+                         title="Paliers cumulatifs : un abonnement qui expire demain est aussi compte dans J-3 et J-7. Ce sont des echeances de plus en plus proches, pas des groupes separes.">dont J-7: {{ expiry_7_days }} - dont J-3: {{ expiry_3_days }}</div>
                 </div>
             </div>
         </div>
@@ -340,7 +345,8 @@
         <div class="col-xxl-2 col-md-4 col-sm-6">
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
-                    <span class="fs-12 fw-medium text-muted">Membres actifs</span>
+                    <span class="fs-12 fw-medium text-muted"
+                          title="Membres au statut actif dont un abonnement couvre la date du jour. C'est une photographie d'aujourd'hui, pas un cumul de la periode : un nouveau membre pas encore abonne n'y figure pas.">Membres actifs</span>
                     <h3 class="mb-2 fw-bold">{{ active_members }}</h3>
                     <div class="fs-12 text-muted">{{ active_member_rate }}% du portefeuille</div>
                 </div>
@@ -349,45 +355,60 @@
         <div class="col-xxl-2 col-md-4 col-sm-6">
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
-                    <span class="fs-12 fw-medium text-muted">Nouveaux membres</span>
+                    <span class="fs-12 fw-medium text-muted"
+                          title="Fiches membres creees pendant la periode, abonnees ou non.">Nouveaux membres</span>
                     <h3 class="mb-2 fw-bold">{{ new_members_period }}</h3>
-                    <span class="badge bg-soft-{{ new_members_trend.badge_class }} text-{{ new_members_trend.badge_class }}">{{ new_members_trend.display }}</span>
+                    <span class="badge bg-soft-{{ new_members_trend.badge_class }} text-{{ new_members_trend.badge_class }}"
+                          title="{{ new_members_trend.basis }}">{{ new_members_trend.display }}</span>
+                    <div class="fs-11 text-muted mt-1">{{ new_members_trend.basis }}</div>
                 </div>
             </div>
         </div>
         <div class="col-xxl-2 col-md-4 col-sm-6">
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
-                    <span class="fs-12 fw-medium text-muted">Renouvellements</span>
+                    <span class="fs-12 fw-medium text-muted"
+                          title="Abonnements demarres pendant la periode par un membre qui en avait deja eu un auparavant.">Renouvellements</span>
                     <h3 class="mb-2 fw-bold">{{ renewals_period }}</h3>
-                    <span class="badge bg-soft-{{ renewals_trend.badge_class }} text-{{ renewals_trend.badge_class }}">{{ renewals_trend.display }}</span>
+                    <span class="badge bg-soft-{{ renewals_trend.badge_class }} text-{{ renewals_trend.badge_class }}"
+                          title="{{ renewals_trend.basis }}">{{ renewals_trend.display }}</span>
+                    <div class="fs-11 text-muted mt-1">{{ renewals_trend.basis }}</div>
                 </div>
             </div>
         </div>
         <div class="col-xxl-2 col-md-4 col-sm-6">
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
-                    <span class="fs-12 fw-medium text-muted">Expirations {{ period_label_lower }}</span>
+                    <span class="fs-12 fw-medium text-muted"
+                          title="Abonnements dont la date de fin tombe dans la periode.">Expirations {{ period_label_lower }}</span>
                     <h3 class="mb-2 fw-bold">{{ expirations_period }}</h3>
-                    <span class="badge bg-soft-{{ expirations_trend.badge_class }} text-{{ expirations_trend.badge_class }}">{{ expirations_trend.display }}</span>
+                    <span class="badge bg-soft-{{ expirations_trend.badge_class }} text-{{ expirations_trend.badge_class }}"
+                          title="{{ expirations_trend.basis }}">{{ expirations_trend.display }}</span>
+                    <div class="fs-11 text-muted mt-1">{{ expirations_trend.basis }}</div>
                 </div>
             </div>
         </div>
         <div class="col-xxl-2 col-md-4 col-sm-6">
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
-                    <span class="fs-12 fw-medium text-muted">Visites {{ period_label_lower }}</span>
+                    <span class="fs-12 fw-medium text-muted"
+                          title="Passages accordes pendant la periode, retours du meme jour exclus.">Visites {{ period_label_lower }}</span>
                     <h3 class="mb-2 fw-bold">{{ visits_period }}</h3>
-                    <span class="badge bg-soft-{{ visits_trend.badge_class }} text-{{ visits_trend.badge_class }}">{{ visits_trend.display }}</span>
+                    <span class="badge bg-soft-{{ visits_trend.badge_class }} text-{{ visits_trend.badge_class }}"
+                          title="{{ visits_trend.basis }}">{{ visits_trend.display }}</span>
+                    <div class="fs-11 text-muted mt-1">{{ visits_trend.basis }}</div>
                 </div>
             </div>
         </div>
         <div class="col-xxl-2 col-md-4 col-sm-6">
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
-                    <span class="fs-12 fw-medium text-muted">Revenus {{ period_label_lower }}</span>
+                    <span class="fs-12 fw-medium text-muted"
+                          title="Encaissements de la periode, convertis en CDF.">Revenus {{ period_label_lower }}</span>
                     <h3 class="mb-2 fw-bold">{{ period_revenue|floatformat:0 }} CDF</h3>
-                    <span class="badge bg-soft-{{ revenue_trend.badge_class }} text-{{ revenue_trend.badge_class }}">{{ revenue_trend.display }}</span>
+                    <span class="badge bg-soft-{{ revenue_trend.badge_class }} text-{{ revenue_trend.badge_class }}"
+                          title="{{ revenue_trend.basis }}">{{ revenue_trend.display }}</span>
+                    <div class="fs-11 text-muted mt-1">{{ revenue_trend.basis }}</div>
                 </div>
             </div>
         </div>
@@ -406,18 +427,21 @@
         <div class="col-lg-3 col-md-6">
             <div class="card stretch stretch-full">
                 <div class="card-body">
-                    <div class="fs-12 text-muted">Visiteurs uniques</div>
+                    <div class="fs-12 text-muted"
+                         title="Personnes differentes entrees pendant la periode : membres et invites. Les ouvertures manuelles, qui n'identifient personne, en sont exclues.">Visiteurs uniques</div>
                     <div class="fs-3 fw-bold">{{ unique_visitors_period }}</div>
-                    <div class="fs-12 text-muted">Engagement {{ engagement_rate }}%</div>
+                    <div class="fs-12 text-muted"
+                         title="Part des membres actifs venus au moins une fois pendant la periode. Meme population au numerateur et au denominateur : ce taux ne peut pas depasser 100 %.">Assiduite {{ attendance_rate }}% - {{ active_members_seen }} actif{{ active_members_seen|pluralize }} sur {{ active_members }} venu{{ active_members_seen|pluralize }}</div>
                 </div>
             </div>
         </div>
         <div class="col-lg-3 col-md-6">
             <div class="card stretch stretch-full">
                 <div class="card-body">
-                    <div class="fs-12 text-muted">Moyenne journalière</div>
+                    <div class="fs-12 text-muted"
+                         title="Visites de la periode divisees par les jours deja ecoules, et non par la periode entiere : au 11 du mois, diviser par 30 compterait 19 jours qui n'ont pas eu lieu.">Moyenne journalière</div>
                     <div class="fs-3 fw-bold">{{ average_daily_visits }}</div>
-                    <div class="fs-12 text-muted">visites sur {{ period_days }} jour{{ period_days|pluralize }}</div>
+                    <div class="fs-12 text-muted">visites sur {{ elapsed_days }} jour{{ elapsed_days|pluralize }} ecoule{{ elapsed_days|pluralize }}</div>
                 </div>
             </div>
         </div>
@@ -785,6 +809,11 @@
     </div>
     {% endif %}
 
+    {% comment %} Ce bloc a perdu sa garde de vue quand la vue analytique a ete
+       separee de la vue d'ensemble : il s'affichait dans les deux, et le
+       proprietaire y lisait une deuxieme fois ses derniers acces et ses
+       derniers paiements. Il appartient a l'analyse. {% endcomment %}
+    {% if context_view == "analytics" %}
     <div class="row g-3 mb-4">
         <div class="col-xl-4">
             <div class="card stretch stretch-full">
@@ -970,41 +999,6 @@
                 </div>
             </div>
         </div>
-        <div class="col-xl-4">
-            <div class="card stretch stretch-full">
-                <div class="card-header">
-                    <h5 class="card-title">Lecture KPI members</h5>
-                </div>
-                <div class="card-body">
-                    <div class="vstack gap-3">
-                        <div class="d-flex justify-content-between">
-                            <span>Nouveaux inscrits ce mois</span>
-                            <strong>{{ new_members_month }}</strong>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <span>Entrées aujourd'hui</span>
-                            <strong>{{ today_checkins }}</strong>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <span>Heure de pointe</span>
-                            <strong>{{ peak_hour.label }}</strong>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <span>Abonnements actifs</span>
-                            <strong>{{ total_subscriptions }}</strong>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <span>Revenu du mois</span>
-                            <strong>{{ monthly_revenue|floatformat:0 }} CDF</strong>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <span>Taille du vivier actif</span>
-                            <strong>{{ active_members }} membres</strong>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
     </div>
 
     <div class="row g-3 mt-1">
@@ -1065,6 +1059,7 @@
             </div>
         </div>
     </div>
+    {% endif %}
 </div>
 {% endblock %}
 
