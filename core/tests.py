@@ -5598,3 +5598,181 @@ class GlobalSearchTests(TestCase):
         ).content.decode("utf-8")
 
         self.assertIn(reverse("core:global_search"), page)
+
+
+class SearchResultDestinationTests(TestCase):
+    """
+    Ou mene un resultat.
+
+    Renvoyer vers la liste complete obligeait a recommencer la recherche sur
+    place : on avait trouve la personne, et il fallait la retrouver.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Destination", slug="org-destination"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Destination",
+            slug="gym-destination", subdomain="gym-destination",
+        )
+        for code in ("MEMBERS", "SUBSCRIPTIONS", "POS"):
+            module, _ = Module.objects.get_or_create(
+                code=code, defaults={"name": code}
+            )
+            GymModule.objects.get_or_create(
+                gym=self.gym, module=module, defaults={"is_active": True}
+            )
+        self.plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Premium", price=50, duration_days=30
+        )
+        self.membre = Member.objects.create(
+            gym=self.gym, first_name="Ada", last_name="Mbala",
+            phone="+243870661122",
+        )
+        MemberSubscription.objects.create(
+            gym=self.gym, member=self.membre, plan=self.plan,
+            start_date=timezone.localdate(),
+            end_date=timezone.localdate() + timedelta(days=30),
+            is_active=True,
+        )
+        self.gerant = User.objects.create_user(
+            username="gerant-destination", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.gerant, gym=self.gym, role="manager", is_active=True
+        )
+        self.registre = CashRegister.objects.create(
+            gym=self.gym, opened_by=self.gerant,
+            opening_amount=Decimal("100000.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+        self.depense = record_payment(
+            gym=self.gym, register=self.registre, amount=Decimal("30000"),
+            currency="CDF", method="cash", transaction_type="out",
+            category="expense", description="Reparation du portail",
+            created_by=self.gerant,
+        )
+        self.client.force_login(self.gerant)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _sections(self, requete, **extra):
+        parametres = {"q": requete}
+        parametres.update(extra)
+        return {
+            section["titre"]: section
+            for section in self.client.get(
+                reverse("core:global_search"), parametres
+            ).context["sections"]
+        }
+
+    # --- Le membre ------------------------------------------------------------------
+
+    def test_a_member_result_opens_the_member_sheet(self):
+        lien = self._sections("Ada")["Membres"]["lignes"][0]["url"]
+
+        self.assertIn(f"membre={self.membre.id}", lien)
+
+    def test_the_list_behind_is_reduced_to_that_person(self):
+        # La fiche s'ouvre par-dessus une liste d'une seule ligne, et non sur
+        # le fichier entier.
+        lien = self._sections("Ada")["Membres"]["lignes"][0]["url"]
+
+        self.assertIn("search=", lien)
+
+    def test_the_member_sheet_really_opens_from_the_url(self):
+        lien = self._sections("Ada")["Membres"]["lignes"][0]["url"]
+
+        page = self.client.get(lien).content.decode("utf-8")
+
+        self.assertIn('URLSearchParams(window.location.search).get("membre")', page)
+        self.assertIn("Ada", page)
+
+    # --- L'abonnement ------------------------------------------------------------------
+
+    def test_a_subscription_result_opens_its_members_sheet(self):
+        # L'onglet Abonnement est celui qui s'affiche par defaut : l'historique
+        # complet y est deja.
+        lien = self._sections("Premium")["Abonnements"]["lignes"][0]["url"]
+
+        self.assertIn(f"membre={self.membre.id}", lien)
+
+    # --- Le paiement --------------------------------------------------------------------
+
+    def test_a_payment_result_opens_its_register_session(self):
+        lien = self._sections("portail")["Paiements"]["lignes"][0]["url"]
+
+        self.assertEqual(
+            lien, reverse("pos:register_detail", args=[self.registre.id])
+        )
+
+    def test_that_session_really_shows_the_payment(self):
+        lien = self._sections("portail")["Paiements"]["lignes"][0]["url"]
+
+        self.assertContains(self.client.get(lien), "Reparation du portail")
+
+    def test_a_payment_without_a_session_falls_back_to_a_filtered_history(self):
+        Payment.objects.filter(pk=self.depense.pk).update(cash_register=None)
+
+        lien = self._sections("portail")["Paiements"]["lignes"][0]["url"]
+
+        self.assertIn(reverse("pos:register_history"), lien)
+        self.assertIn("search=portail", lien)
+
+    # --- Le depliement ----------------------------------------------------------------
+
+    def test_seeing_them_all_keeps_the_query(self):
+        # Renvoyer vers une liste generale ferait perdre la recherche en
+        # chemin : on deplie sur place.
+        lien = self._sections("Ada")["Membres"]["tout_voir"]
+
+        self.assertIn(reverse("core:global_search"), lien)
+        self.assertIn("q=Ada", lien)
+        self.assertIn("section=membres", lien)
+
+    def test_expanding_shows_only_that_section(self):
+        sections = self._sections("Ada", section="membres")
+
+        self.assertEqual(list(sections), ["Membres"])
+
+    def test_expanding_lifts_the_limit(self):
+        for index in range(12):
+            Member.objects.create(
+                gym=self.gym, first_name="Ada", last_name=f"Numero{index}",
+                phone=f"+2438706{index:05d}",
+            )
+
+        court = self._sections("Ada")["Membres"]
+        long = self._sections("Ada", section="membres")["Membres"]
+
+        self.assertEqual(len(court["lignes"]), 8)
+        self.assertEqual(len(long["lignes"]), 13)
+
+    def test_an_unknown_section_shows_nothing_rather_than_everything(self):
+        # Un parametre fantaisiste ne doit pas rouvrir les trois rubriques a
+        # qui n'y a pas droit.
+        reponse = self.client.get(
+            reverse("core:global_search"), {"q": "Ada", "section": "n-importe-quoi"}
+        )
+
+        self.assertEqual(reponse.context["sections"], [])
+
+    def test_a_receptionist_cannot_expand_the_payments(self):
+        accueil = User.objects.create_user(
+            username="accueil-destination", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=accueil, gym=self.gym, role="reception", is_active=True
+        )
+        self.client.force_login(accueil)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+        reponse = self.client.get(
+            reverse("core:global_search"), {"q": "portail", "section": "paiements"}
+        )
+
+        self.assertEqual(reponse.context["sections"], [])

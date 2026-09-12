@@ -2749,6 +2749,9 @@ def _fichier_a_telecharger(contenu, nom, type_mime):
 # pour que les trois sections tiennent sur un ecran.
 RESULTATS_PAR_SECTION = 8
 
+# Quand on deplie une seule section, on peut en montrer davantage.
+RESULTATS_DEPLIES = 50
+
 
 def _montant_recherche(texte):
     """
@@ -2772,18 +2775,34 @@ def global_search(request):
     Chaque section n'apparait qu'a qui a le droit de la lire : une
     receptionniste voit les membres, pas les paiements. Les droits ne se
     relachent pas parce qu'on est passe par la recherche.
+
+    ``section`` deplie une rubrique sans quitter la page : renvoyer vers une
+    liste generale ferait perdre la recherche en chemin.
     """
     requete = (request.GET.get("q") or request.GET.get("search") or "").strip()
+    depliee = (request.GET.get("section") or "").strip()
     gym = getattr(request, "gym", None)
+
+    fabriques = []
+    if has_role(request, MEMBER_ROLES):
+        fabriques.append(("membres", _recherche_membres))
+    if has_role(request, SUBSCRIPTION_ROLES):
+        fabriques.append(("abonnements", _recherche_abonnements))
+    if has_role(request, POS_HISTORY_ROLES):
+        fabriques.append(("paiements", _recherche_paiements))
 
     sections = []
     if gym and requete:
-        if has_role(request, MEMBER_ROLES):
-            sections.append(_recherche_membres(gym, requete))
-        if has_role(request, SUBSCRIPTION_ROLES):
-            sections.append(_recherche_abonnements(gym, requete))
-        if has_role(request, POS_HISTORY_ROLES):
-            sections.append(_recherche_paiements(gym, requete))
+        for cle, fabrique in fabriques:
+            if depliee and cle != depliee:
+                continue
+            limite = RESULTATS_DEPLIES if cle == depliee else RESULTATS_PAR_SECTION
+            section = fabrique(gym, requete, limite)
+            section["cle"] = cle
+            section["tout_voir"] = (
+                f'{reverse("core:global_search")}?q={quote(requete)}&section={cle}'
+            )
+            sections.append(section)
 
     return render(
         request,
@@ -2791,12 +2810,28 @@ def global_search(request):
         {
             "requete": requete,
             "sections": sections,
+            "section_depliee": depliee,
             "total": sum(section["total"] for section in sections),
         },
     )
 
 
-def _recherche_membres(gym, requete):
+def _url_fiche_membre(membre):
+    """
+    La fiche du membre, ouverte.
+
+    Renvoyer vers la liste complete obligeait a recommencer la recherche sur
+    place. Le parametre ouvre la fiche, et le filtre laisse derriere elle une
+    liste reduite a cette personne.
+    """
+    reference = membre.phone or f"{membre.first_name} {membre.last_name}".strip()
+    return (
+        f'{reverse("members:member_list")}'
+        f"?search={quote(reference)}&membre={membre.id}"
+    )
+
+
+def _recherche_membres(gym, requete, limite):
     trouves = Member.objects.filter(gym=gym).filter(
         Q(first_name__icontains=requete)
         | Q(last_name__icontains=requete)
@@ -2809,19 +2844,18 @@ def _recherche_membres(gym, requete):
         "titre": "Membres",
         "icone": "group",
         "total": trouves.count(),
-        "tout_voir": f'{reverse("members:member_list")}?search={quote(requete)}',
         "lignes": [
             {
                 "titre": f"{membre.first_name} {membre.last_name}".strip() or membre.phone,
                 "detail": membre.phone or membre.email or "",
-                "url": reverse("members:member_list"),
+                "url": _url_fiche_membre(membre),
             }
-            for membre in trouves[:RESULTATS_PAR_SECTION]
+            for membre in trouves[:limite]
         ],
     }
 
 
-def _recherche_abonnements(gym, requete):
+def _recherche_abonnements(gym, requete, limite):
     trouves = MemberSubscription.objects.filter(gym=gym).filter(
         Q(member__first_name__icontains=requete)
         | Q(member__last_name__icontains=requete)
@@ -2833,7 +2867,6 @@ def _recherche_abonnements(gym, requete):
         "titre": "Abonnements",
         "icone": "card_membership",
         "total": trouves.count(),
-        "tout_voir": reverse("members:member_list"),
         "lignes": [
             {
                 "titre": (
@@ -2844,14 +2877,16 @@ def _recherche_abonnements(gym, requete):
                     f"du {abonnement.start_date:%d/%m/%Y} au "
                     f"{abonnement.end_date:%d/%m/%Y}"
                 ),
-                "url": reverse("members:member_list"),
+                # La fiche s'ouvre sur son onglet Abonnement, ou l'historique
+                # complet du membre est deja affiche.
+                "url": _url_fiche_membre(abonnement.member),
             }
-            for abonnement in trouves[:RESULTATS_PAR_SECTION]
+            for abonnement in trouves[:limite]
         ],
     }
 
 
-def _recherche_paiements(gym, requete):
+def _recherche_paiements(gym, requete, limite):
     criteres = (
         Q(member__first_name__icontains=requete)
         | Q(member__last_name__icontains=requete)
@@ -2871,26 +2906,33 @@ def _recherche_paiements(gym, requete):
     )
 
     lignes = []
-    for paiement in trouves[:RESULTATS_PAR_SECTION]:
+    for paiement in trouves[:limite]:
         if paiement.type == "out":
             qui = "Decaissement"
         elif paiement.member:
             qui = f"{paiement.member.first_name} {paiement.member.last_name}".strip()
         else:
             qui = "Vente au comptoir"
+
+        # La session de caisse, quand il y en a une : elle montre la ligne
+        # elle-meme, au milieu des autres mouvements du meme tiroir.
+        if paiement.cash_register_id:
+            url = reverse("pos:register_detail", args=[paiement.cash_register_id])
+        else:
+            url = f'{reverse("pos:register_history")}?search={quote(requete)}'
+
         lignes.append({
             "titre": f"{qui} - {paiement.amount_cdf:.0f} CDF",
             "detail": (
                 f'{paiement.description or "Sans motif"} - '
                 f'{localtime(paiement.created_at):%d/%m/%Y %H:%M}'
             ),
-            "url": reverse("pos:register_history"),
+            "url": url,
         })
 
     return {
         "titre": "Paiements",
         "icone": "payments",
         "total": trouves.count(),
-        "tout_voir": reverse("pos:register_history"),
         "lignes": lignes,
     }

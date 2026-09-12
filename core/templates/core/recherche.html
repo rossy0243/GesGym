@@ -50,12 +50,21 @@
             </div>
         </div>
     {% else %}
+        {% if section_depliee %}
+        <div class="mb-3">
+            <a href="{% url 'core:global_search' %}?q={{ requete|urlencode }}" class="btn btn-sm btn-light">
+                <span class="material-icons" style="font-size:16px;vertical-align:-3px;">arrow_back</span>
+                Revenir aux trois rubriques
+            </a>
+        </div>
+        {% endif %}
+
         <div class="row g-3">
             {% comment %} Une section par type, et seulement celles que le role
                autorise a lire : une receptionniste voit les membres, pas les
                paiements. {% endcomment %}
             {% for section in sections %}
-            <div class="col-xl-4">
+            <div class="{% if section_depliee %}col-12{% else %}col-xl-4{% endif %}">
                 <div class="card stretch stretch-full">
                     <div class="card-header d-flex align-items-center justify-content-between">
                         <h5 class="card-title mb-0 d-flex align-items-center gap-2">
@@ -75,6 +84,8 @@
                                 {% endfor %}
                             </div>
                             {% if section.total > section.lignes|length %}
+                            {% comment %} On deplie sur place : renvoyer vers une liste
+                               generale ferait perdre la recherche en chemin. {% endcomment %}
                             <a href="{{ section.tout_voir }}" class="btn btn-sm btn-light mt-3">
                                 Voir les {{ section.total }}
                             </a>

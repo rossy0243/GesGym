@@ -1298,6 +1298,15 @@ body.members-screen .modal.show .modal-dialog {
         });
     }
 
+    // La recherche globale renvoie ici avec ?membre=<id> : sans cela, elle
+    // ramenait sur la liste et il fallait retrouver la personne a l'oeil.
+    document.addEventListener("DOMContentLoaded", function () {
+        const demande = new URLSearchParams(window.location.search).get("membre");
+        if (demande) {
+            openMemberModal(Number(demande));
+        }
+    });
+
     function openMemberModal(memberId) {
         fetch(`/members/${memberId}/`)
             .then(response => {
