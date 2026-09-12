@@ -143,3 +143,64 @@ html.app-skin-dark {
 
 .bord-urgent { border-color: var(--ton-urgent) !important; }
 .bord-attention { border-color: var(--ton-attention) !important; }
+
+/* ========== Les definitions d'indicateurs ========== */
+
+/*
+ * Un indicateur ne se comprend pas tout seul : "membres actifs" ne dit pas
+ * qu'il s'agit d'une photographie du jour. La definition etait la, portee par
+ * l'attribut `title` du navigateur - mais rien ne l'annoncait, elle mettait
+ * une seconde a paraitre, et elle n'existait pas du tout sur un ecran
+ * tactile. Le repere ci-dessous dit qu'il y a quelque chose a lire ; le
+ * javascript de base.html la rend atteignable au doigt.
+ */
+.aide {
+    cursor: help;
+}
+
+.aide::after {
+    content: "?";
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 13px;
+    height: 13px;
+    margin-left: 5px;
+    vertical-align: 1px;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1;
+    opacity: .55;
+}
+
+.aide:hover::after,
+.aide:focus-visible::after {
+    opacity: 1;
+    color: var(--royal-or-texte);
+    border-color: var(--royal-or-texte);
+}
+
+.aide:focus-visible {
+    outline: 2px solid var(--royal-or);
+    outline-offset: 2px;
+    border-radius: 3px;
+}
+
+/* La bulle elle-meme : celle du theme est trop pale pour un texte long. */
+.tooltip.aide-bulle .tooltip-inner {
+    max-width: 300px;
+    padding: 9px 12px;
+    text-align: left;
+    font-size: 12px;
+    line-height: 1.5;
+    background: #14120C;
+    color: #F3EFE3;
+    border-left: 3px solid var(--royal-or);
+}
+
+.tooltip.aide-bulle .tooltip-arrow::before {
+    border-top-color: #14120C;
+    border-bottom-color: #14120C;
+}

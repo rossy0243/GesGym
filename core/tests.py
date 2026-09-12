@@ -6074,3 +6074,96 @@ class RegisterValidationRegimeTests(TestCase):
         ).context["alertes_urgentes"]
 
         self.assertFalse(any("contre-signer" in a["titre"] for a in alertes))
+
+
+class IndicatorHelpTests(TestCase):
+    """
+    Les definitions d'indicateurs.
+
+    Le texte etait la, porte par l'attribut `title` du navigateur. Mais rien
+    n'annoncait sa presence, il mettait une seconde a paraitre au survol, et
+    sur un ecran tactile il n'existait pas du tout - or la salle travaille sur
+    tablette.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Aide", slug="org-aide"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Aide",
+            slug="gym-aide", subdomain="gym-aide",
+        )
+        for code in ("MEMBERS", "POS", "ACCESS"):
+            module, _ = Module.objects.get_or_create(
+                code=code, defaults={"name": code}
+            )
+            GymModule.objects.get_or_create(
+                gym=self.gym, module=module, defaults={"is_active": True}
+            )
+        self.gerant = User.objects.create_user(
+            username="gerant-aide", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.gerant, gym=self.gym, role="manager", is_active=True
+        )
+        self.client.force_login(self.gerant)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _page(self):
+        return self.client.get(reverse("core:gym_dashboard", args=[self.gym.id]))
+
+    # --- Le texte est toujours la -------------------------------------------------
+
+    def test_the_definitions_are_still_carried(self):
+        page = self._page()
+
+        self.assertContains(page, "photographie d'aujourd'hui")
+        self.assertContains(page, "n'est pas recompte")
+        self.assertContains(page, "jamais passes entre ses mains")
+
+    # --- Elles se signalent ---------------------------------------------------------
+
+    def test_a_label_that_carries_a_definition_is_marked(self):
+        # Sans repere, personne ne devine qu'il y a quelque chose a lire.
+        self.assertContains(self._page(), 'text-muted aide"')
+
+    def test_every_written_definition_is_marked(self):
+        # Une seule oubliee, et l'indicateur reste muet.
+        page = self._page().content.decode("utf-8")
+
+        definitions = page.count('title="Membres au statut actif')
+        marquees = page.count('aide"\n')
+
+        self.assertTrue(definitions >= 1)
+        self.assertTrue(marquees >= 10, f"{marquees} definitions marquees")
+
+    def test_a_calculated_title_is_left_alone(self):
+        # La base de comparaison d'une tendance est deja ecrite sous le badge :
+        # un second repere ne ferait que du bruit.
+        page = self._page().content.decode("utf-8")
+
+        self.assertIn("Periode precedente", page)
+        self.assertNotIn('class="badge bg-soft-secondary text-secondary aide"', page)
+
+    # --- Elles s'ouvrent au doigt ------------------------------------------------------
+
+    def test_the_page_turns_them_into_reachable_tooltips(self):
+        # L'attribut title du navigateur n'existe pas sur un ecran tactile :
+        # c'est l'infobulle de Bootstrap, declenchee aussi au focus, qui le
+        # remplace.
+        page = self._page().content.decode("utf-8")
+
+        self.assertIn(".aide[title]", page)
+        self.assertIn('trigger: "hover focus"', page)
+        self.assertIn('setAttribute("tabindex", "0")', page)
+
+    def test_the_marker_is_styled_by_the_palette(self):
+        palette = (
+            Path(settings.BASE_DIR) / "static" / "css" / "palette.css"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn(".aide::after", palette)
+        self.assertIn("aide-bulle", palette)

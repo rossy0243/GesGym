@@ -315,5 +315,27 @@
     {% block extra_js %}
     {% endblock %}
     <script src="{% static 'js/nav-toggle.js' %}?v=20260419"></script>
+
+    <script>
+    // Les definitions d'indicateurs. L'attribut `title` du navigateur ne
+    // s'ouvre qu'au survol : sur tablette, il n'existe pas. On le confie a
+    // l'infobulle de Bootstrap, declenchee au survol *et* au focus - un
+    // element focalisable s'active par une simple tape.
+    document.addEventListener("DOMContentLoaded", function () {
+        if (!window.bootstrap || !window.bootstrap.Tooltip) { return; }
+
+        document.querySelectorAll(".aide[title]").forEach(function (element) {
+            if (!element.hasAttribute("tabindex")) {
+                element.setAttribute("tabindex", "0");
+            }
+            new bootstrap.Tooltip(element, {
+                trigger: "hover focus",
+                placement: "top",
+                customClass: "aide-bulle",
+                container: "body",
+            });
+        });
+    });
+    </script>
 </body>
 </html>

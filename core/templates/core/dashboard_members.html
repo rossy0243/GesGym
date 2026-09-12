@@ -241,22 +241,22 @@
                 <div class="card-body">
                     <div class="row g-3">
                         <div class="col-lg-3 col-6">
-                            <div class="fs-12 text-muted"
+                            <div class="fs-12 text-muted aide"
                                  title="Tout ce qui est entre aujourd'hui, toutes methodes confondues.">Encaissements</div>
                             <div class="chiffre-cle ton-normal">{{ caisse.encaissements|montant }} CDF</div>
                         </div>
                         <div class="col-lg-3 col-6">
-                            <div class="fs-12 text-muted"
+                            <div class="fs-12 text-muted aide"
                                  title="Sorties de caisse : depenses, salaires, avances.">Decaissements</div>
                             <div class="chiffre-cle ton-neutre">{{ caisse.decaissements|montant }} CDF</div>
                         </div>
                         <div class="col-lg-3 col-6">
-                            <div class="fs-12 text-muted"
+                            <div class="fs-12 text-muted aide"
                                  title="Ce que le caissier doit trouver dans le tiroir : fonds d'ouverture, plus les especes encaissees, moins les especes sorties. Le mobile money et les virements n'y figurent pas - ces billets ne sont jamais passes entre ses mains.">Solde theorique</div>
                             <div class="chiffre-cle {% if caisse.solde_theorique < 0 %}ton-urgent{% else %}ton-strategique{% endif %}">{{ caisse.solde_theorique|montant }} CDF</div>
                         </div>
                         <div class="col-lg-3 col-6">
-                            <div class="fs-12 text-muted"
+                            <div class="fs-12 text-muted aide"
                                  title="Difference entre le montant compte a la clôture et le solde theorique. Excedent en positif, deficit en negatif.">Ecart de caisse</div>
                             <div class="chiffre-cle {% if caisse.a_un_ecart %}ton-urgent{% else %}ton-normal{% endif %}">{{ caisse.ecart|montant_signe }} CDF</div>
                         </div>
@@ -352,7 +352,7 @@
         <div class="col-xl-3 col-md-6">
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
-                    <span class="fs-12 fw-medium text-muted"
+                    <span class="fs-12 fw-medium text-muted aide"
                           title="Chaque passage compte une fois. Un retour le meme jour n'est pas recompte. Ce n'est pas le nombre de personnes presentes en ce moment : aucune sortie n'est enregistree.">Passages aujourd'hui</span>
                     <div class="chiffre-cle">{{ today_checkins }}</div>
                     <div class="fs-12 text-muted">Refuses : {{ denied_today }}</div>
@@ -362,7 +362,7 @@
         <div class="col-xl-3 col-md-6">
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
-                    <span class="fs-12 fw-medium text-muted"
+                    <span class="fs-12 fw-medium text-muted aide"
                           title="Personnes differentes entrees aujourd'hui : membres et invites. Une ouverture manuelle n'identifie personne et n'est pas comptee ici.">Personnes differentes</span>
                     <div class="chiffre-cle">{{ today_unique_visitors }}</div>
                     <div class="fs-12 text-muted">sur {{ today_checkins }} passage{{ today_checkins|pluralize }}</div>
@@ -372,7 +372,7 @@
         <div class="col-xl-3 col-md-6">
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
-                    <span class="fs-12 fw-medium text-muted"
+                    <span class="fs-12 fw-medium text-muted aide"
                           title="Creneau horaire ou les passages sont les plus nombreux sur la periode selectionnee.">Heure de pointe</span>
                     <div class="chiffre-cle ton-strategique">{% if peak_hour.has_data %}{{ peak_hour.label }}{% else %}-{% endif %}</div>
                     <div class="fs-12 text-muted">{% if peak_hour.has_data %}{{ peak_hour.count }} passage{{ peak_hour.count|pluralize }}{% else %}Pas encore de donnees{% endif %}</div>
@@ -382,7 +382,7 @@
         <div class="col-xl-3 col-md-6">
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
-                    <span class="fs-12 fw-medium text-muted"
+                    <span class="fs-12 fw-medium text-muted aide"
                           title="Disponibilite du parc : machines en service sur le total.">Machines en service</span>
                     <div class="chiffre-cle {% if machines_broken %}ton-attention{% else %}ton-normal{% endif %}">{{ machines_ok|default:0 }} / {{ total_machines|default:0 }}</div>
                     <div class="fs-12 text-muted">{{ availability_rate|default:0 }}% disponible</div>
@@ -397,7 +397,7 @@
         <div class="col-xl-3 col-md-6">
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
-                    <span class="fs-12 fw-medium text-muted"
+                    <span class="fs-12 fw-medium text-muted aide"
                           title="Membres au statut actif dont un abonnement couvre la date du jour. C'est une photographie d'aujourd'hui, pas un cumul de la periode : un nouveau membre pas encore abonne n'y figure pas.">Abonnements actifs</span>
                     <div class="chiffre-cle ton-normal">{{ active_members }}</div>
                     <div class="fs-12 text-muted">{{ active_member_rate }}% du portefeuille</div>
@@ -407,7 +407,7 @@
         <div class="col-xl-3 col-md-6">
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
-                    <span class="fs-12 fw-medium text-muted"
+                    <span class="fs-12 fw-medium text-muted aide"
                           title="Fiches membres creees pendant la periode, abonnees ou non.">Nouveaux membres</span>
                     <div class="chiffre-cle">{{ new_members_period }}</div>
                     <div class="fs-11 text-muted">{{ new_members_trend.basis }}</div>
@@ -418,7 +418,7 @@
             <a class="card stretch stretch-full stat-card text-decoration-none text-body"
                href="{% url 'members:member_list' %}?status=expiring&expiring_days=7">
                 <div class="card-body">
-                    <span class="fs-12 fw-medium text-muted"
+                    <span class="fs-12 fw-medium text-muted aide"
                           title="Abonnements en cours dont la fin tombe dans les 7 jours. Cliquez pour la liste a rappeler, du plus urgent au moins urgent.">Expirent sous 7 jours</span>
                     <div class="chiffre-cle {% if expiry_7_days %}ton-attention{% endif %}">{{ expiry_7_days }}</div>
                     <div class="fs-12 text-muted">dont {{ expiry_2_days }} sous 48 h</div>
@@ -428,7 +428,7 @@
         <div class="col-xl-3 col-md-6">
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
-                    <span class="fs-12 fw-medium text-muted"
+                    <span class="fs-12 fw-medium text-muted aide"
                           title="Paiements enregistres mais non encaisses : ce qui reste a regulariser.">Impayes</span>
                     <div class="chiffre-cle {% if pending_count %}ton-attention{% endif %}">{{ pending_count }}</div>
                     <div class="fs-12 text-muted">{{ pending_total|montant }} CDF a regulariser</div>
@@ -523,7 +523,7 @@
         <div class="col-xxl-2 col-md-4 col-sm-6">
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
-                    <span class="fs-12 fw-medium text-muted"
+                    <span class="fs-12 fw-medium text-muted aide"
                           title="Membres au statut actif dont un abonnement couvre la date du jour. C'est une photographie d'aujourd'hui, pas un cumul de la periode : un nouveau membre pas encore abonne n'y figure pas.">Membres actifs</span>
                     <h3 class="mb-2 fw-bold">{{ active_members }}</h3>
                     <div class="fs-12 text-muted">{{ active_member_rate }}% du portefeuille</div>
@@ -533,7 +533,7 @@
         <div class="col-xxl-2 col-md-4 col-sm-6">
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
-                    <span class="fs-12 fw-medium text-muted"
+                    <span class="fs-12 fw-medium text-muted aide"
                           title="Fiches membres creees pendant la periode, abonnees ou non.">Nouveaux membres</span>
                     <h3 class="mb-2 fw-bold">{{ new_members_period }}</h3>
                     <span class="badge bg-soft-{{ new_members_trend.badge_class }} text-{{ new_members_trend.badge_class }}"
@@ -545,7 +545,7 @@
         <div class="col-xxl-2 col-md-4 col-sm-6">
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
-                    <span class="fs-12 fw-medium text-muted"
+                    <span class="fs-12 fw-medium text-muted aide"
                           title="Abonnements demarres pendant la periode par un membre qui en avait deja eu un auparavant.">Renouvellements</span>
                     <h3 class="mb-2 fw-bold">{{ renewals_period }}</h3>
                     <span class="badge bg-soft-{{ renewals_trend.badge_class }} text-{{ renewals_trend.badge_class }}"
@@ -557,7 +557,7 @@
         <div class="col-xxl-2 col-md-4 col-sm-6">
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
-                    <span class="fs-12 fw-medium text-muted"
+                    <span class="fs-12 fw-medium text-muted aide"
                           title="Abonnements dont la date de fin tombe dans la periode.">Expirations {{ period_label_lower }}</span>
                     <h3 class="mb-2 fw-bold">{{ expirations_period }}</h3>
                     <span class="badge bg-soft-{{ expirations_trend.badge_class }} text-{{ expirations_trend.badge_class }}"
@@ -569,7 +569,7 @@
         <div class="col-xxl-2 col-md-4 col-sm-6">
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
-                    <span class="fs-12 fw-medium text-muted"
+                    <span class="fs-12 fw-medium text-muted aide"
                           title="Passages accordes pendant la periode, retours du meme jour exclus.">Visites {{ period_label_lower }}</span>
                     <h3 class="mb-2 fw-bold">{{ visits_period }}</h3>
                     <span class="badge bg-soft-{{ visits_trend.badge_class }} text-{{ visits_trend.badge_class }}"
@@ -581,7 +581,7 @@
         <div class="col-xxl-2 col-md-4 col-sm-6">
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
-                    <span class="fs-12 fw-medium text-muted"
+                    <span class="fs-12 fw-medium text-muted aide"
                           title="Encaissements de la periode, convertis en CDF.">Revenus {{ period_label_lower }}</span>
                     <h3 class="mb-2 fw-bold">{{ period_revenue|montant }} CDF</h3>
                     <span class="badge bg-soft-{{ revenue_trend.badge_class }} text-{{ revenue_trend.badge_class }}"
@@ -605,10 +605,10 @@
         <div class="col-lg-3 col-md-6">
             <div class="card stretch stretch-full">
                 <div class="card-body">
-                    <div class="fs-12 text-muted"
+                    <div class="fs-12 text-muted aide"
                          title="Personnes differentes entrees pendant la periode : membres et invites. Les ouvertures manuelles, qui n'identifient personne, en sont exclues.">Visiteurs uniques</div>
                     <div class="fs-3 fw-bold">{{ unique_visitors_period }}</div>
-                    <div class="fs-12 text-muted"
+                    <div class="fs-12 text-muted aide"
                          title="Part des membres actifs venus au moins une fois pendant la periode. Meme population au numerateur et au denominateur : ce taux ne peut pas depasser 100 %.">Assiduite {{ attendance_rate }}% - {{ active_members_seen }} actif{{ active_members_seen|pluralize }} sur {{ active_members }} venu{{ active_members_seen|pluralize }}</div>
                 </div>
             </div>
@@ -616,7 +616,7 @@
         <div class="col-lg-3 col-md-6">
             <div class="card stretch stretch-full">
                 <div class="card-body">
-                    <div class="fs-12 text-muted"
+                    <div class="fs-12 text-muted aide"
                          title="Visites de la periode divisees par les jours deja ecoules, et non par la periode entiere : au 11 du mois, diviser par 30 compterait 19 jours qui n'ont pas eu lieu.">Moyenne journalière</div>
                     <div class="fs-3 fw-bold">{{ average_daily_visits }}</div>
                     <div class="fs-12 text-muted">visites sur {{ elapsed_days }} jour{{ elapsed_days|pluralize }} ecoule{{ elapsed_days|pluralize }}</div>
