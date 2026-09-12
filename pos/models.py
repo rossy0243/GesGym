@@ -197,9 +197,12 @@ class CashRegister(models.Model):
 
 class Payment(models.Model):
 
+    # Ces libelles s'affichent tels quels dans la caisse, le tableau de bord et
+    # les exports comptables : ils doivent etre lisibles par un gerant, pas par
+    # un developpeur.
     PAYMENT_METHODS = (
-        ("cash", "Cash"),
-        ("card", "Card"),
+        ("cash", "Especes"),
+        ("card", "Carte bancaire"),
         ("mobile_money", "Mobile Money"),
         ("bank_transfer", "Virement bancaire"),
         ("check", "Cheque"),

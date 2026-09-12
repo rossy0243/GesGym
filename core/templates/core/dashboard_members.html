@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load formats %}
 
 {% block page_titre %}{% if context_view == "analytics" %}Analytics membres{% else %}Tableau de bord{% endif %}{% endblock %}
 
@@ -279,6 +280,120 @@
     {% endif %}
 
     {% if context_view != "analytics" %}
+    {% comment %} La caisse d'abord : c'est ce que le proprietaire vient
+       verifier. Le systeme autorise une session ouverte par utilisateur,
+       donc le total de la salle, puis qui tient quoi. {% endcomment %}
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="card stretch stretch-full">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                    <h5 class="card-title mb-0 d-flex align-items-center gap-2">
+                        <span class="material-icons" style="font-size:20px;color:#8A6D1D;">point_of_sale</span>
+                        Caisse du jour
+                    </h5>
+                    <div class="d-flex align-items-center gap-2">
+                        {% if caisse.oubliee_depuis_hier %}
+                            <span class="badge bg-danger"
+                                  title="Caisse ouverte la veille et jamais clôturee : son solde theorique court toujours.">{{ caisse.oubliee_depuis_hier }} non clôturee{{ caisse.oubliee_depuis_hier|pluralize }}</span>
+                        {% endif %}
+                        {% if caisse.ouvertes %}
+                            <span class="badge bg-success">{{ caisse.ouvertes }} ouverte{{ caisse.ouvertes|pluralize }}</span>
+                        {% else %}
+                            <span class="badge bg-secondary">Aucune caisse ouverte</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-lg-3 col-6">
+                            <div class="fs-12 text-muted"
+                                 title="Tout ce qui est entre aujourd'hui, toutes methodes confondues.">Encaissements</div>
+                            <div class="fs-3 fw-bold text-success">{{ caisse.encaissements|montant }} CDF</div>
+                        </div>
+                        <div class="col-lg-3 col-6">
+                            <div class="fs-12 text-muted"
+                                 title="Sorties de caisse : depenses, salaires, avances.">Decaissements</div>
+                            <div class="fs-3 fw-bold text-danger">{{ caisse.decaissements|montant }} CDF</div>
+                        </div>
+                        <div class="col-lg-3 col-6">
+                            <div class="fs-12 text-muted"
+                                 title="Ce que le caissier doit trouver dans le tiroir : fonds d'ouverture, plus les especes encaissees, moins les especes sorties. Le mobile money et les virements n'y figurent pas - ces billets ne sont jamais passes entre ses mains.">Solde theorique</div>
+                            <div class="fs-3 fw-bold {% if caisse.solde_theorique < 0 %}text-danger{% endif %}">{{ caisse.solde_theorique|montant }} CDF</div>
+                        </div>
+                        <div class="col-lg-3 col-6">
+                            <div class="fs-12 text-muted"
+                                 title="Difference entre le montant compte a la clôture et le solde theorique. Excedent en positif, deficit en negatif.">Ecart de caisse</div>
+                            <div class="fs-3 fw-bold {% if caisse.a_un_ecart %}text-danger{% else %}text-success{% endif %}">{{ caisse.ecart|montant_signe }} CDF</div>
+                        </div>
+                    </div>
+
+                    {% if caisse.par_methode %}
+                    <div class="d-flex flex-wrap gap-3 mt-3 fs-12 text-muted">
+                        {% for ligne in caisse.par_methode %}
+                            <span><strong>{{ ligne.label }}</strong> : {{ ligne.total|montant }} CDF</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+
+                {% if caisse.sessions %}
+                <div class="card-body pt-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Session</th>
+                                    <th>Responsable</th>
+                                    <th>Ouverte</th>
+                                    <th class="text-end">Fonds</th>
+                                    <th class="text-end">Theorique</th>
+                                    <th class="text-end">Compte</th>
+                                    <th class="text-end">Ecart</th>
+                                    <th>Clôture</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for session in caisse.sessions %}
+                                <tr>
+                                    <td class="fs-12">{{ session.code }}</td>
+                                    <td>{{ session.responsable }}</td>
+                                    <td class="fs-12">{{ session.ouverte_a|date:"d/m H:i" }}</td>
+                                    <td class="text-end">{{ session.fonds_ouverture|montant }}</td>
+                                    <td class="text-end {% if session.tresorerie_negative %}text-danger fw-semibold{% endif %}">{{ session.solde_theorique|montant }}</td>
+                                    <td class="text-end">{% if session.est_compte %}{{ session.solde_compte|montant }}{% else %}-{% endif %}</td>
+                                    <td class="text-end">
+                                        {% if session.ecart_connu %}
+                                            <span class="{% if session.ecart %}text-danger fw-semibold{% else %}text-success{% endif %}">{{ session.ecart|montant_signe }}</span>
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td class="fs-12">
+                                        {% if session.est_fermee %}
+                                            {{ session.fermee_a|date:"d/m H:i" }} - {{ session.fermee_par }}
+                                            {% if session.cloture_forcee %}
+                                                <span class="badge bg-warning text-dark"
+                                                      title="Clôturee par quelqu'un d'autre que son titulaire.">forcee</span>
+                                            {% endif %}
+                                        {% elif session.oubliee %}
+                                            <span class="badge bg-danger">ouverte depuis hier</span>
+                                        {% else %}
+                                            <span class="badge bg-success">en cours</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if context_view != "analytics" %}
     <div class="row g-3 mb-4">
         <div class="col-xxl-2 col-md-4 col-sm-6">
             <div class="card stretch stretch-full stat-card">
@@ -296,8 +411,8 @@
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted"
                           title="Encaissements du jour, convertis en CDF. Les decaissements n'y figurent pas.">Revenu du jour</span>
-                    <h3 class="mb-2 fw-bold">{{ daily_revenue|floatformat:0 }} CDF</h3>
-                    <div class="fs-12 text-muted">Mois en cours: {{ monthly_revenue|floatformat:0 }} CDF</div>
+                    <h3 class="mb-2 fw-bold">{{ daily_revenue|montant }} CDF</h3>
+                    <div class="fs-12 text-muted">Mois en cours: {{ monthly_revenue|montant }} CDF</div>
                 </div>
             </div>
         </div>
@@ -306,7 +421,7 @@
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted">Paiements en attente</span>
                     <h3 class="mb-2 fw-bold">{{ pending_count }}</h3>
-                    <div class="fs-12 text-muted">{{ pending_total|floatformat:0 }} CDF a regulariser</div>
+                    <div class="fs-12 text-muted">{{ pending_total|montant }} CDF a regulariser</div>
                 </div>
             </div>
         </div>
@@ -405,7 +520,7 @@
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted"
                           title="Encaissements de la periode, convertis en CDF.">Revenus {{ period_label_lower }}</span>
-                    <h3 class="mb-2 fw-bold">{{ period_revenue|floatformat:0 }} CDF</h3>
+                    <h3 class="mb-2 fw-bold">{{ period_revenue|montant }} CDF</h3>
                     <span class="badge bg-soft-{{ revenue_trend.badge_class }} text-{{ revenue_trend.badge_class }}"
                           title="{{ revenue_trend.basis }}">{{ revenue_trend.display }}</span>
                     <div class="fs-11 text-muted mt-1">{{ revenue_trend.basis }}</div>
@@ -491,7 +606,7 @@
                         </a>
                         <div class="d-flex justify-content-between">
                             <span>Paiements en attente</span>
-                            <strong>{{ pending_count }} / {{ pending_total|floatformat:0 }} CDF</strong>
+                            <strong>{{ pending_count }} / {{ pending_total|montant }} CDF</strong>
                         </div>
                     </div>
                 </div>
@@ -546,8 +661,8 @@
                         <table class="table table-hover mb-0">
                             <thead>
                                 <tr>
-                                    <th>Membre</th>
-                                    <th>Montant</th>
+                                    <th>Operation</th>
+                                    <th class="text-end">Montant</th>
                                     <th>Methode</th>
                                     <th>Date</th>
                                 </tr>
@@ -555,8 +670,24 @@
                             <tbody>
                                 {% for payment in recent_payments %}
                                 <tr>
-                                    <td>{% if payment.member %}{{ payment.member.first_name }} {{ payment.member.last_name }}{% else %}Decaissement{% endif %}</td>
-                                    <td>{{ payment.amount_cdf|floatformat:0 }} CDF</td>
+                                    {% comment %} Un decaissement n'a pas de membre - mais une vente
+                                       au comptoir non plus. Se fier a l'absence de membre
+                                       etiquetait les ventes sans client comme des sorties de
+                                       caisse : c'est le sens du mouvement qui tranche. {% endcomment %}
+                                    <td>
+                                        {% if payment.type == "out" %}
+                                            <span class="text-danger fw-semibold">Decaissement</span>
+                                            {% if payment.description %}<div class="fs-11 text-muted">{{ payment.description }}</div>{% endif %}
+                                        {% elif payment.member %}
+                                            {{ payment.member.first_name }} {{ payment.member.last_name }}
+                                        {% else %}
+                                            Vente au comptoir
+                                            {% if payment.description %}<div class="fs-11 text-muted">{{ payment.description }}</div>{% endif %}
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end {% if payment.type == "out" %}text-danger{% else %}text-success{% endif %}">
+                                        {% if payment.type == "out" %}-{% endif %}{{ payment.amount_cdf|montant }} CDF
+                                    </td>
                                     <td>{{ payment.get_method_display }}</td>
                                     <td>{{ payment.created_at|date:"d/m H:i" }}</td>
                                 </tr>
@@ -579,7 +710,7 @@
         <div class="col-xxl-2 col-md-4 col-sm-6">
             <div class="analytics-kpi-card">
                 <div class="analytics-kpi-card__label">Revenus periode</div>
-                <div class="analytics-kpi-card__value">{{ period_revenue|floatformat:0 }} CDF</div>
+                <div class="analytics-kpi-card__value">{{ period_revenue|montant }} CDF</div>
                 <div class="analytics-kpi-card__meta">{{ revenue_trend.display }} vs periode precedente</div>
             </div>
         </div>
@@ -733,7 +864,7 @@
                         </a>
                         <div class="d-flex justify-content-between">
                             <span>Paiements en attente</span>
-                            <strong>{{ pending_count }} / {{ pending_total|floatformat:0 }} CDF</strong>
+                            <strong>{{ pending_count }} / {{ pending_total|montant }} CDF</strong>
                         </div>
                     </div>
                 </div>
@@ -943,8 +1074,8 @@
                         <table class="table table-hover mb-0">
                             <thead>
                                 <tr>
-                                    <th>Membre</th>
-                                    <th>Montant</th>
+                                    <th>Operation</th>
+                                    <th class="text-end">Montant</th>
                                     <th>Methode</th>
                                     <th>Date</th>
                                 </tr>
@@ -952,8 +1083,24 @@
                             <tbody>
                                 {% for payment in recent_payments %}
                                 <tr>
-                                    <td>{% if payment.member %}{{ payment.member.first_name }} {{ payment.member.last_name }}{% else %}Décaissement{% endif %}</td>
-                                    <td>{{ payment.amount_cdf|floatformat:0 }} CDF</td>
+                                    {% comment %} Un decaissement n'a pas de membre - mais une vente
+                                       au comptoir non plus. Se fier a l'absence de membre
+                                       etiquetait les ventes sans client comme des sorties de
+                                       caisse : c'est le sens du mouvement qui tranche. {% endcomment %}
+                                    <td>
+                                        {% if payment.type == "out" %}
+                                            <span class="text-danger fw-semibold">Decaissement</span>
+                                            {% if payment.description %}<div class="fs-11 text-muted">{{ payment.description }}</div>{% endif %}
+                                        {% elif payment.member %}
+                                            {{ payment.member.first_name }} {{ payment.member.last_name }}
+                                        {% else %}
+                                            Vente au comptoir
+                                            {% if payment.description %}<div class="fs-11 text-muted">{{ payment.description }}</div>{% endif %}
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end {% if payment.type == "out" %}text-danger{% else %}text-success{% endif %}">
+                                        {% if payment.type == "out" %}-{% endif %}{{ payment.amount_cdf|montant }} CDF
+                                    </td>
                                     <td>{{ payment.get_method_display }}</td>
                                     <td>{{ payment.created_at|date:"d/m H:i" }}</td>
                                 </tr>

@@ -23,6 +23,7 @@ from coaching.models import Coach, CoachingFeedback, CoachingFollowUp, GroupCoac
 from compte.models import User
 from compte.models import UserGymRole
 from core import marketing_qr
+from core.templatetags.formats import montant, montant_signe
 from core.log_filtering import doit_journaliser
 from core.forms import INTERNAL_ROLE_CHOICES, InternalEmployeeForm
 from members.models import GuestPass, Member, MemberPreRegistration, MemberPreRegistrationLink
@@ -79,6 +80,7 @@ from .accounting_reports import (
 )
 from .views import _get_period_window
 from organizations.models import Gym, GymModule, Module, Organization, SensitiveActivityLog
+from pos.services import record_payment
 from pos.models import CashRegister, ExchangeRate, Payment
 
 
@@ -4041,3 +4043,457 @@ class DashboardHonestyTests(TestCase):
 
     def test_the_daily_average_explains_its_divisor(self):
         self.assertContains(self._vue(), "jours deja ecoules")
+
+
+class MontantFilterTests(SimpleTestCase):
+    """
+    Le groupement des milliers.
+
+    "1599739 CDF" oblige l'oeil a compter les chiffres pour savoir s'il s'agit
+    d'un million ou de cent mille. En francs congolais, ou les sommes
+    courantes depassent le million, c'est la difference entre un chiffre qu'on
+    verifie et un chiffre qu'on croit.
+    """
+
+    def test_a_million_is_grouped(self):
+        self.assertEqual(montant(1599739), "1\u00a0599\u00a0739")
+
+    def test_the_separator_is_unbreakable(self):
+        # Un montant coupe en fin de ligne se lit comme deux nombres.
+        self.assertIn("\u00a0", montant(1599739))
+        self.assertNotIn(" ", montant(1599739).replace("\u00a0", ""))
+
+    def test_small_numbers_are_left_alone(self):
+        self.assertEqual(montant(999), "999")
+
+    def test_zero_stays_zero(self):
+        self.assertEqual(montant(0), "0")
+
+    def test_a_negative_amount_keeps_its_sign(self):
+        self.assertEqual(montant(-5000), "-5\u00a0000")
+
+    def test_decimals_are_shown_when_asked(self):
+        self.assertEqual(montant("12.5", 2), "12,50")
+
+    def test_an_unreadable_value_is_shown_rather_than_hidden(self):
+        # Mieux vaut un affichage brut qu'un montant disparu.
+        self.assertEqual(montant("abc"), "abc")
+
+    def test_an_empty_value_reads_as_zero(self):
+        self.assertEqual(montant(None), "0")
+
+    def test_an_incoming_amount_carries_its_plus(self):
+        self.assertEqual(montant_signe(12000), "+12\u00a0000")
+
+    def test_an_outgoing_amount_keeps_its_minus(self):
+        self.assertEqual(montant_signe(-12000), "-12\u00a0000")
+
+    def test_zero_carries_no_sign(self):
+        # Un ecart nul n'est ni un excedent ni un deficit.
+        self.assertEqual(montant_signe(0), "0")
+
+
+class DashboardRegisterBlockTests(TestCase):
+    """
+    La caisse en tete du tableau de bord.
+
+    Le proprietaire y vient pour une question : combien est entre, combien est
+    sorti, et le compte est-il bon. Le logiciel savait tout cela sans jamais
+    le montrer.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Caisse", slug="org-caisse"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Caisse",
+            slug="gym-caisse", subdomain="gym-caisse",
+        )
+        self.voisine = Gym.objects.create(
+            organization=self.organization, name="Voisine",
+            slug="gym-caisse-voisine", subdomain="gym-caisse-voisine",
+        )
+        for code in ("MEMBERS", "POS"):
+            module, _ = Module.objects.get_or_create(
+                code=code, defaults={"name": code}
+            )
+            for salle in (self.gym, self.voisine):
+                GymModule.objects.get_or_create(
+                    gym=salle, module=module, defaults={"is_active": True}
+                )
+
+        self.gerant = User.objects.create_user(
+            username="gerant-caisse", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.gerant, gym=self.gym, role="manager", is_active=True
+        )
+        self.caissiere = User.objects.create_user(
+            username="ada-caisse", password="pass12345", first_name="Ada",
+            last_name="Mbala",
+        )
+        UserGymRole.objects.create(
+            user=self.caissiere, gym=self.gym, role="cashier", is_active=True
+        )
+        self.client.force_login(self.gerant)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    # --- Fabriques ---------------------------------------------------------------
+
+    def _caisse(self, par=None, fonds="100000", gym=None):
+        return CashRegister.objects.create(
+            gym=gym or self.gym,
+            opened_by=par or self.caissiere,
+            opening_amount=Decimal(fonds),
+            exchange_rate=Decimal("2800.00"),
+        )
+
+    def _mouvement(self, caisse, montant_cdf, sens="in", methode="cash",
+                   motif="Abonnement"):
+        return record_payment(
+            gym=caisse.gym,
+            register=caisse,
+            amount=Decimal(montant_cdf),
+            currency="CDF",
+            method=methode,
+            transaction_type=sens,
+            category="subscription" if sens == "in" else "expense",
+            description=motif,
+            created_by=self.caissiere,
+        )
+
+    def _caisse_du_tableau(self):
+        return self.client.get(
+            reverse("core:gym_dashboard", args=[self.gym.id])
+        ).context["caisse"]
+
+    # --- Le statut ------------------------------------------------------------------
+
+    def test_no_register_says_so_plainly(self):
+        self.assertContains(
+            self.client.get(reverse("core:gym_dashboard", args=[self.gym.id])),
+            "Aucune caisse ouverte",
+        )
+
+    def test_an_open_register_names_its_holder(self):
+        self._caisse()
+
+        caisse = self._caisse_du_tableau()
+
+        self.assertEqual(caisse["ouvertes"], 1)
+        self.assertEqual(caisse["sessions"][0]["responsable"], "Ada Mbala")
+
+    def test_the_opening_float_and_hour_are_shown(self):
+        registre = self._caisse(fonds="150000")
+
+        ligne = self._caisse_du_tableau()["sessions"][0]
+
+        self.assertEqual(ligne["fonds_ouverture"], Decimal("150000.00"))
+        self.assertEqual(ligne["ouverte_a"], registre.opened_at)
+
+    def test_a_deleted_account_does_not_break_the_line(self):
+        # opened_by est efface quand un compte disparait : la caisse, elle,
+        # reste dans les comptes.
+        registre = self._caisse()
+        CashRegister.objects.filter(pk=registre.pk).update(opened_by=None)
+
+        self.assertEqual(
+            self._caisse_du_tableau()["sessions"][0]["responsable"],
+            "Compte supprime",
+        )
+
+    # --- Les totaux --------------------------------------------------------------------
+
+    def test_the_entries_and_exits_are_totalled(self):
+        registre = self._caisse()
+        self._mouvement(registre, "50000")
+        self._mouvement(registre, "20000")
+        self._mouvement(registre, "8000", sens="out", motif="Achat de savon")
+
+        caisse = self._caisse_du_tableau()
+
+        self.assertEqual(caisse["encaissements"], Decimal("70000.00"))
+        self.assertEqual(caisse["decaissements"], Decimal("8000.00"))
+
+    def test_the_expected_balance_is_the_drawer_not_the_revenue(self):
+        # Fonds d'ouverture, plus les especes entrees, moins les especes
+        # sorties.
+        registre = self._caisse(fonds="100000")
+        self._mouvement(registre, "50000")
+        self._mouvement(registre, "8000", sens="out")
+
+        self.assertEqual(
+            self._caisse_du_tableau()["solde_theorique"], Decimal("142000.00")
+        )
+
+    def test_mobile_money_never_enters_the_drawer(self):
+        # Ces billets ne sont jamais passes entre les mains du caissier : les
+        # compter lui reprocherait un ecart sur de l'argent qu'il n'a pas.
+        registre = self._caisse(fonds="100000")
+        self._mouvement(registre, "50000", methode="mobile_money")
+
+        caisse = self._caisse_du_tableau()
+
+        self.assertEqual(caisse["encaissements"], Decimal("50000.00"))
+        self.assertEqual(caisse["solde_theorique"], Decimal("100000.00"))
+
+    def test_the_methods_are_broken_down(self):
+        registre = self._caisse()
+        self._mouvement(registre, "50000", methode="cash")
+        self._mouvement(registre, "30000", methode="mobile_money")
+
+        lignes = {
+            ligne["code"]: ligne["total"]
+            for ligne in self._caisse_du_tableau()["par_methode"]
+        }
+
+        self.assertEqual(lignes["cash"], Decimal("50000.00"))
+        self.assertEqual(lignes["mobile_money"], Decimal("30000.00"))
+
+    def test_an_unused_method_is_not_listed(self):
+        registre = self._caisse()
+        self._mouvement(registre, "50000", methode="cash")
+
+        codes = [
+            ligne["code"] for ligne in self._caisse_du_tableau()["par_methode"]
+        ]
+
+        self.assertNotIn("check", codes)
+
+    # --- Plusieurs caissiers ------------------------------------------------------------
+
+    def test_two_cashiers_make_two_lines(self):
+        # Le systeme autorise une caisse ouverte par utilisateur : "le caissier
+        # connecte" n'existe pas au singulier.
+        autre = User.objects.create_user(
+            username="bob-caisse", password="pass12345", first_name="Bob",
+            last_name="Kasa",
+        )
+        UserGymRole.objects.create(
+            user=autre, gym=self.gym, role="cashier", is_active=True
+        )
+        self._caisse(fonds="100000")
+        self._caisse(par=autre, fonds="50000")
+
+        caisse = self._caisse_du_tableau()
+
+        self.assertEqual(len(caisse["sessions"]), 2)
+        self.assertEqual(caisse["ouvertes"], 2)
+        self.assertEqual(caisse["solde_theorique"], Decimal("150000.00"))
+
+    def test_a_neighbouring_gym_register_stays_out(self):
+        self._caisse(gym=self.voisine, fonds="999999")
+
+        caisse = self._caisse_du_tableau()
+
+        self.assertEqual(caisse["sessions"], [])
+        self.assertEqual(caisse["solde_theorique"], Decimal("0.00"))
+
+    # --- Les anomalies --------------------------------------------------------------------
+
+    def test_a_register_left_open_since_yesterday_is_flagged(self):
+        registre = self._caisse()
+        CashRegister.objects.filter(pk=registre.pk).update(
+            opened_at=timezone.now() - timedelta(days=1)
+        )
+
+        caisse = self._caisse_du_tableau()
+
+        self.assertEqual(caisse["oubliee_depuis_hier"], 1)
+        self.assertTrue(caisse["sessions"][0]["oubliee"])
+
+    def test_a_register_opened_today_is_not_flagged(self):
+        self._caisse()
+
+        self.assertEqual(self._caisse_du_tableau()["oubliee_depuis_hier"], 0)
+
+    def test_a_closed_register_shows_its_variance(self):
+        registre = self._caisse(fonds="100000")
+        self._mouvement(registre, "50000")
+        registre.closing_amount = Decimal("148000.00")
+        registre.difference = Decimal("-2000.00")
+        registre.closed_by = self.caissiere
+        registre.closed_at = timezone.now()
+        registre.is_closed = True
+        registre.save()
+
+        caisse = self._caisse_du_tableau()
+
+        self.assertEqual(caisse["ecart"], Decimal("-2000.00"))
+        self.assertTrue(caisse["a_un_ecart"])
+        self.assertTrue(caisse["sessions"][0]["est_compte"])
+
+    def test_a_balanced_closing_is_not_an_anomaly(self):
+        registre = self._caisse(fonds="100000")
+        registre.closing_amount = Decimal("100000.00")
+        registre.difference = Decimal("0.00")
+        registre.closed_by = self.caissiere
+        registre.closed_at = timezone.now()
+        registre.is_closed = True
+        registre.save()
+
+        self.assertFalse(self._caisse_du_tableau()["a_un_ecart"])
+
+    def test_a_forced_closing_is_visible(self):
+        # Un gerant qui debloque un poste abandonne n'est pas une faute, mais
+        # cela doit se voir.
+        registre = self._caisse(fonds="100000")
+        registre.closing_amount = Decimal("100000.00")
+        registre.difference = Decimal("0.00")
+        registre.closed_by = self.gerant
+        registre.closed_at = timezone.now()
+        registre.is_closed = True
+        registre.save()
+
+        self.assertTrue(self._caisse_du_tableau()["sessions"][0]["cloture_forcee"])
+
+    def test_a_register_closed_yesterday_is_out_of_todays_view(self):
+        registre = self._caisse(fonds="100000")
+        registre.closing_amount = Decimal("100000.00")
+        registre.difference = Decimal("0.00")
+        registre.closed_by = self.caissiere
+        registre.is_closed = True
+        registre.save()
+        CashRegister.objects.filter(pk=registre.pk).update(
+            closed_at=timezone.now() - timedelta(days=1)
+        )
+
+        self.assertEqual(self._caisse_du_tableau()["sessions"], [])
+
+    def test_a_negative_drawer_is_flagged(self):
+        registre = self._caisse(fonds="1000")
+        self._mouvement(registre, "5000", sens="out")
+
+        self.assertTrue(
+            self._caisse_du_tableau()["sessions"][0]["tresorerie_negative"]
+        )
+
+    # --- Ce que la page montre ---------------------------------------------------------------
+
+    def test_the_amounts_are_grouped_on_the_page(self):
+        registre = self._caisse(fonds="0")
+        self._mouvement(registre, "1599739")
+
+        page = self.client.get(reverse("core:gym_dashboard", args=[self.gym.id]))
+
+        self.assertContains(page, GROUPE)
+        # Et nulle part un montant affiche sans ses milliers. On vise le
+        # nombre suivi de sa devise : les donnees des graphiques portent le
+        # nombre brut, et c'est normal - le javascript en a besoin.
+        self.assertNotContains(page, "1599739 CDF")
+
+
+# Le bloc caisse affiche le total des "Decaissements" : chercher la sous-chaine
+# nue ferait passer n'importe quel test. C'est la ligne qui compte.
+# Le montant groupe attendu, separateur insecable compris.
+GROUPE = "1" + chr(0xA0) + "599" + chr(0xA0) + "739"
+
+MARQUEUR_DECAISSEMENT = '<span class="text-danger fw-semibold">Decaissement</span>'
+
+
+class PaymentOperationColumnTests(TestCase):
+    """
+    La colonne des dernieres operations.
+
+    Les decaissements s'affichaient sous l'entete "Membre" - et, plus grave,
+    le gabarit les reconnaissait a l'absence de membre. Une vente au comptoir
+    n'a pas de membre non plus : elle etait etiquetee decaissement.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Operation", slug="org-operation"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Operation",
+            slug="gym-operation", subdomain="gym-operation",
+        )
+        for code in ("MEMBERS", "POS"):
+            module, _ = Module.objects.get_or_create(
+                code=code, defaults={"name": code}
+            )
+            GymModule.objects.get_or_create(
+                gym=self.gym, module=module, defaults={"is_active": True}
+            )
+        self.gerant = User.objects.create_user(
+            username="gerant-operation", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.gerant, gym=self.gym, role="manager", is_active=True
+        )
+        self.registre = CashRegister.objects.create(
+            gym=self.gym, opened_by=self.gerant,
+            opening_amount=Decimal("100000.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+        self.client.force_login(self.gerant)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _page(self):
+        return self.client.get(reverse("core:gym_dashboard", args=[self.gym.id]))
+
+    def test_the_column_is_no_longer_called_member(self):
+        self.assertContains(self._page(), "<th>Operation</th>", html=False)
+
+    def test_a_disbursement_shows_its_reason(self):
+        record_payment(
+            gym=self.gym, register=self.registre, amount=Decimal("8000"),
+            currency="CDF", method="cash", transaction_type="out",
+            category="expense", description="Reparation du portail",
+            created_by=self.gerant,
+        )
+
+        page = self._page()
+
+        self.assertContains(page, "Reparation du portail")
+        self.assertContains(page, MARQUEUR_DECAISSEMENT)
+
+    def test_a_counter_sale_is_not_labelled_a_disbursement(self):
+        # C'etait le vrai defaut : le gabarit se fiait a l'absence de membre.
+        record_payment(
+            gym=self.gym, register=self.registre, amount=Decimal("5000"),
+            currency="CDF", method="cash", transaction_type="in",
+            category="product", description="Bouteille d eau",
+            created_by=self.gerant,
+        )
+
+        page = self._page()
+
+        self.assertContains(page, "Vente au comptoir")
+        # Pas "Decaissement" tout court : le bloc caisse affiche le total des
+        # "Decaissements", et la sous-chaine suffirait a faire passer le test.
+        self.assertNotContains(page, MARQUEUR_DECAISSEMENT)
+
+    def test_a_member_payment_still_shows_the_member(self):
+        membre = Member.objects.create(
+            gym=self.gym, first_name="Ada", last_name="Mbala",
+            phone="+243870112233",
+        )
+        record_payment(
+            gym=self.gym, register=self.registre, member=membre,
+            amount=Decimal("30000"), currency="CDF", method="cash",
+            transaction_type="in", category="subscription",
+            description="Abonnement mensuel", created_by=self.gerant,
+        )
+
+        page = self._page()
+
+        self.assertContains(page, "Ada")
+        self.assertNotContains(page, MARQUEUR_DECAISSEMENT)
+
+    def test_the_english_method_labels_are_gone(self):
+        record_payment(
+            gym=self.gym, register=self.registre, amount=Decimal("5000"),
+            currency="CDF", method="cash", transaction_type="in",
+            category="product", description="Bouteille", created_by=self.gerant,
+        )
+
+        page = self._page()
+
+        self.assertContains(page, "Especes")
+        self.assertNotContains(page, ">Cash<")

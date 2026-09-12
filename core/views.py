@@ -13,6 +13,7 @@ from django.utils.timezone import now
 from datetime import timedelta
 import calendar
 import json
+from decimal import Decimal
 from access.models import AccessLog
 from smartclub.decorators import role_required
 from core import marketing_qr
@@ -39,7 +40,7 @@ from .forms import (
 )
 from members.models import Member
 from organizations.models import Gym, GymModule, LandingFaq
-from pos.models import Payment
+from pos.models import CashRegister, Payment
 from subscriptions.models import MemberSubscription
 from .accounting_reports import (
     accounting_filename,
@@ -243,6 +244,139 @@ def _personnes_distinctes(passages):
         .count()
     )
     return membres + invites
+
+
+def _tableau_de_caisse(gym, today):
+    """
+    L'etat de la caisse aujourd'hui, salle d'abord puis caissier par caissier.
+
+    Le systeme autorise une session ouverte **par utilisateur** : trois
+    caissiers font trois caisses simultanees. "Le caissier connecte" n'existe
+    donc pas au singulier, et un total de salle sans le detail ne dirait pas
+    qui tient quoi.
+
+    Une session ouverte hier et jamais clôturee compte parmi celles du jour :
+    c'est precisement l'anomalie qu'il faut voir en haut de l'ecran, pas une
+    ligne a exclure parce que sa date d'ouverture est passee.
+    """
+    sessions = list(
+        CashRegister.objects.filter(gym=gym)
+        .filter(Q(is_closed=False) | Q(closed_at__date=today))
+        .select_related("opened_by", "closed_by")
+        .order_by("-opened_at")
+    )
+
+    zero = Decimal("0.00")
+    if not sessions:
+        return {
+            "sessions": [],
+            "ouvertes": 0,
+            "encaissements": zero,
+            "decaissements": zero,
+            "solde_theorique": zero,
+            "ecart": zero,
+            "a_un_ecart": False,
+            "oubliee_depuis_hier": 0,
+            "par_methode": [],
+        }
+
+    # Une seule requete pour toutes les ventilations : appeler expected_total()
+    # session par session en aurait declenche deux par caisse.
+    ventilation = {}
+    lignes = (
+        Payment.objects.filter(cash_register__in=sessions, gym=gym, status="success")
+        .values("cash_register_id", "type", "method")
+        .annotate(total=Sum("amount_cdf"))
+    )
+    for ligne in lignes:
+        ventilation.setdefault(ligne["cash_register_id"], {})[
+            (ligne["type"], ligne["method"])
+        ] = ligne["total"] or zero
+
+    def _somme(session_id, sens, methode=None):
+        mouvements = ventilation.get(session_id, {})
+        return sum(
+            (
+                total
+                for (type_, method), total in mouvements.items()
+                if type_ == sens and (methode is None or method == methode)
+            ),
+            zero,
+        )
+
+    libelles = dict(Payment.PAYMENT_METHODS)
+    totaux_methode = {code: zero for code in libelles}
+    encaissements = decaissements = solde_theorique = ecart = zero
+    oubliee_depuis_hier = 0
+    rangs = []
+
+    for session in sessions:
+        entrees = _somme(session.id, "in")
+        sorties = _somme(session.id, "out")
+        especes_entrees = _somme(session.id, "in", CashRegister.CASH_METHOD)
+        especes_sorties = _somme(session.id, "out", CashRegister.CASH_METHOD)
+        # Seules les especes transitent par le tiroir : c'est deja la regle de
+        # expected_total(), et la refaire ici garde le meme sens.
+        attendu = session.opening_amount + especes_entrees - especes_sorties
+
+        for code in libelles:
+            totaux_methode[code] += _somme(session.id, "in", code)
+
+        encaissements += entrees
+        decaissements += sorties
+        solde_theorique += attendu
+        if session.is_closed and session.difference is not None:
+            ecart += session.difference
+        if not session.is_closed and session.opened_at.date() < today:
+            oubliee_depuis_hier += 1
+
+        rangs.append({
+            "id": session.id,
+            "code": session.session_code or f"Caisse {session.id}",
+            "responsable": _nom_utilisateur(session.opened_by),
+            "ouverte_a": session.opened_at,
+            "fonds_ouverture": session.opening_amount,
+            "encaissements": entrees,
+            "decaissements": sorties,
+            "solde_theorique": attendu,
+            "solde_compte": session.closing_amount,
+            # Un booleen plutot qu'un test "is not None" dans le gabarit : un
+            # montant compte a zero est une information, pas une absence.
+            "est_compte": session.closing_amount is not None,
+            "ecart": session.difference,
+            "ecart_connu": session.difference is not None,
+            "est_fermee": session.is_closed,
+            "fermee_a": session.closed_at,
+            "fermee_par": _nom_utilisateur(session.closed_by),
+            # Une caisse fermee par quelqu'un d'autre que son titulaire n'est
+            # pas anormale - un gerant debloque un poste abandonne - mais elle
+            # doit se voir.
+            "cloture_forcee": session.was_force_closed,
+            "oubliee": not session.is_closed and session.opened_at.date() < today,
+            "tresorerie_negative": attendu < 0,
+        })
+
+    return {
+        "sessions": rangs,
+        "ouvertes": sum(1 for rang in rangs if not rang["est_fermee"]),
+        "encaissements": encaissements,
+        "decaissements": decaissements,
+        "solde_theorique": solde_theorique,
+        "ecart": ecart,
+        "a_un_ecart": ecart != zero,
+        "oubliee_depuis_hier": oubliee_depuis_hier,
+        "par_methode": [
+            {"code": code, "label": libelle, "total": totaux_methode[code]}
+            for code, libelle in libelles.items()
+            if totaux_methode[code]
+        ],
+    }
+
+
+def _nom_utilisateur(utilisateur):
+    if not utilisateur:
+        return "Compte supprime"
+    return utilisateur.get_full_name() or utilisateur.username
 
 
 def _get_period_window(period_key, reference_date):
@@ -1804,6 +1938,7 @@ def gym_dashboard(request, gym_id):
         "period_revenue": period_revenue,
         "today_checkins": today_checkins,
         "today_unique_visitors": today_unique_visitors,
+        "caisse": _tableau_de_caisse(gym, today),
         "visits_period": visits_period,
         "denied_period": denied_period,
         "denied_today": denied_today,
