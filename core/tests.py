@@ -4405,7 +4405,9 @@ class DashboardRegisterBlockTests(TestCase):
 # Le montant groupe attendu, separateur insecable compris.
 GROUPE = "1" + chr(0xA0) + "599" + chr(0xA0) + "739"
 
-MARQUEUR_DECAISSEMENT = '<span class="text-danger fw-semibold">Decaissement</span>'
+# Le ton est neutre, pas rouge : une sortie d'argent ordinaire n'est pas une
+# anomalie, et le rouge est reserve a ce qui appelle un geste aujourd'hui.
+MARQUEUR_DECAISSEMENT = '<span class="ton-neutre fw-semibold">Decaissement</span>'
 
 
 class PaymentOperationColumnTests(TestCase):
@@ -4803,3 +4805,264 @@ class DashboardUrgentAlertTests(TestCase):
             )
 
         self.assertEqual(self._alertes(), [])
+
+
+class BrandIdentityTests(TestCase):
+    """
+    La marque dans la barre laterale.
+
+    Le client voyait "Royal Gym" ecrit deux fois, l'un sous l'autre, et croyait
+    a un defaut de maquette. C'est que l'organisation et la salle portent le
+    meme nom chez lui.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Royal Gym", slug="org-marque"
+        )
+        self.gerant = User.objects.create_user(
+            username="gerant-marque", password="pass12345"
+        )
+
+    def _connecter(self, gym):
+        UserGymRole.objects.get_or_create(
+            user=self.gerant, gym=gym, defaults={"role": "manager", "is_active": True}
+        )
+        self.client.force_login(self.gerant)
+        session = self.client.session
+        session["current_gym_id"] = gym.id
+        session.save()
+
+    def _marque(self, gym):
+        self._connecter(gym)
+        module, _ = Module.objects.get_or_create(
+            code="MEMBERS", defaults={"name": "MEMBERS"}
+        )
+        GymModule.objects.get_or_create(
+            gym=gym, module=module, defaults={"is_active": True}
+        )
+        return self.client.get(reverse("members:member_list")).context
+
+    def test_a_gym_named_like_its_organization_is_not_repeated(self):
+        gym = Gym.objects.create(
+            organization=self.organization, name="Royal Gym",
+            slug="gym-marque", subdomain="gym-marque",
+        )
+
+        contexte = self._marque(gym)
+
+        self.assertEqual(contexte["organization_brand_name"], "Royal Gym")
+        self.assertEqual(contexte["organization_brand_gym_name"], "")
+
+    def test_the_comparison_ignores_case_and_spacing(self):
+        gym = Gym.objects.create(
+            organization=self.organization, name="  royal gym ",
+            slug="gym-marque-casse", subdomain="gym-marque-casse",
+        )
+
+        self.assertEqual(self._marque(gym)["organization_brand_gym_name"], "")
+
+    def test_a_gym_with_its_own_name_is_still_shown(self):
+        # Une organisation a plusieurs salles : c'est precisement le cas ou la
+        # seconde ligne sert a quelque chose.
+        gym = Gym.objects.create(
+            organization=self.organization, name="Royal Gym Gombe",
+            slug="gym-marque-gombe", subdomain="gym-marque-gombe",
+        )
+
+        self.assertEqual(
+            self._marque(gym)["organization_brand_gym_name"], "Royal Gym Gombe"
+        )
+
+    def test_the_initials_keep_both_names(self):
+        # Ce sont elles qui distinguent les salles quand le menu est replie.
+        gym = Gym.objects.create(
+            organization=self.organization, name="Royal Gym",
+            slug="gym-marque-initiales", subdomain="gym-marque-initiales",
+        )
+
+        self.assertEqual(self._marque(gym)["organization_brand_initials"], "RR")
+
+
+class HeaderSearchTests(TestCase):
+    """
+    Retrouver un membre depuis n'importe quel ecran.
+
+    La liste des membres sait deja chercher : l'en-tete lui passe la main
+    plutot que d'ouvrir un second point d'entree a securiser.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Recherche", slug="org-recherche"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Recherche",
+            slug="gym-recherche", subdomain="gym-recherche",
+        )
+        for code in ("MEMBERS", "POS"):
+            module, _ = Module.objects.get_or_create(
+                code=code, defaults={"name": code}
+            )
+            GymModule.objects.get_or_create(
+                gym=self.gym, module=module, defaults={"is_active": True}
+            )
+        Member.objects.create(
+            gym=self.gym, first_name="Ada", last_name="Mbala",
+            phone="+243870334455",
+        )
+        Member.objects.create(
+            gym=self.gym, first_name="Bob", last_name="Kasa",
+            phone="+243870556677",
+        )
+
+    def _connecter(self, role):
+        utilisateur = User.objects.create_user(
+            username=f"{role}-recherche", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=utilisateur, gym=self.gym, role=role, is_active=True
+        )
+        self.client.force_login(utilisateur)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+        return utilisateur
+
+    def test_the_search_box_is_in_the_header(self):
+        self._connecter("manager")
+
+        reponse = self.client.get(reverse("members:member_list"))
+
+        self.assertContains(reponse, "Rechercher un membre")
+
+    def test_it_leads_to_the_member_list(self):
+        self._connecter("manager")
+
+        reponse = self.client.get(reverse("members:member_list"), {"search": "Ada"})
+
+        self.assertContains(reponse, "Ada")
+        self.assertNotContains(reponse, "Kasa")
+
+    def test_it_also_finds_a_phone_number(self):
+        self._connecter("manager")
+
+        reponse = self.client.get(
+            reverse("members:member_list"), {"search": "556677"}
+        )
+
+        self.assertContains(reponse, "Kasa")
+
+    def test_a_cashier_who_cannot_see_members_gets_no_box(self):
+        # Le champ mene a la liste des membres : l'afficher a qui ne peut pas
+        # l'ouvrir promettrait une porte fermee.
+        self._connecter("cashier")
+
+        reponse = self.client.get(reverse("pos:cashier_dashboard"))
+
+        self.assertNotContains(reponse, "Rechercher un membre")
+
+
+class SemanticColourTests(TestCase):
+    """
+    Les couleurs disent quelque chose.
+
+    Vert normal, orange a surveiller, rouge anomalie urgente, or information
+    strategique. Un decaissement ordinaire etait affiche en rouge : le rouge
+    devenait banal, et les vraies alertes s'y noyaient.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Couleur", slug="org-couleur"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Couleur",
+            slug="gym-couleur", subdomain="gym-couleur",
+        )
+        for code in ("MEMBERS", "POS", "ACCESS", "MACHINES", "PRODUCTS"):
+            module, _ = Module.objects.get_or_create(
+                code=code, defaults={"name": code}
+            )
+            GymModule.objects.get_or_create(
+                gym=self.gym, module=module, defaults={"is_active": True}
+            )
+        self.gerant = User.objects.create_user(
+            username="gerant-couleur", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.gerant, gym=self.gym, role="manager", is_active=True
+        )
+        self.registre = CashRegister.objects.create(
+            gym=self.gym, opened_by=self.gerant,
+            opening_amount=Decimal("100000.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+        self.client.force_login(self.gerant)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _page(self):
+        return self.client.get(reverse("core:gym_dashboard", args=[self.gym.id]))
+
+    def test_an_ordinary_disbursement_is_not_painted_as_an_anomaly(self):
+        record_payment(
+            gym=self.gym, register=self.registre, amount=Decimal("8000"),
+            currency="CDF", method="cash", transaction_type="out",
+            category="expense", description="Achat de savon",
+            created_by=self.gerant,
+        )
+
+        page = self._page().content.decode("utf-8")
+
+        self.assertIn("ton-neutre", page)
+        # Et surtout pas le ton d'urgence : la journee est ordinaire, une
+        # depense de savon n'appelle aucun geste. Verifier la seule presence du
+        # neutre laissait passer une ligne repeinte en rouge.
+        self.assertNotIn("ton-urgent", page)
+
+    def test_a_quiet_day_shows_no_urgent_tone(self):
+        page = self._page().content.decode("utf-8")
+
+        self.assertNotIn("ton-urgent", page)
+
+    def test_a_register_left_open_since_yesterday_turns_urgent(self):
+        CashRegister.objects.filter(pk=self.registre.pk).update(
+            opened_at=timezone.now() - timedelta(days=1)
+        )
+
+        page = self._page().content.decode("utf-8")
+
+        self.assertIn("bord-urgent", page)
+
+    def test_a_broken_machine_asks_for_attention_not_urgency(self):
+        Machine.objects.create(
+            gym=self.gym, name="Tapis A", status=Machine.STATUS_BROKEN
+        )
+
+        page = self._page().content.decode("utf-8")
+
+        self.assertIn("bord-attention", page)
+        self.assertNotIn("bord-urgent", page)
+
+    def test_the_view_names_the_meaning_not_the_colour(self):
+        # La feuille de style decide de la teinte, et elle seule.
+        CashRegister.objects.filter(pk=self.registre.pk).update(
+            opened_at=timezone.now() - timedelta(days=1)
+        )
+
+        tons = {alerte["ton"] for alerte in self._page().context["alertes_urgentes"]}
+
+        self.assertTrue(tons)
+        self.assertTrue(tons <= {"urgent", "attention"}, tons)
+
+    def test_the_key_figures_are_set_apart(self):
+        self.assertContains(self._page(), "chiffre-cle")
+
+    def test_the_palette_is_loaded_after_the_theme(self):
+        # Chargee avant, elle perdrait contre le theme et le mode sombre.
+        page = self._page().content.decode("utf-8")
+
+        self.assertLess(page.index("theme.min.css"), page.index("palette.css"))
+        self.assertLess(page.index("dark-mode-pages.css"), page.index("palette.css"))

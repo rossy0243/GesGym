@@ -220,10 +220,10 @@
        donc le total de la salle, puis qui tient quoi. {% endcomment %}
     <div class="row g-3 mb-4">
         <div class="col-12">
-            <div class="card stretch stretch-full">
+            <div class="card stretch stretch-full bloc-royal">
                 <div class="card-header d-flex align-items-center justify-content-between">
                     <h5 class="card-title mb-0 d-flex align-items-center gap-2">
-                        <span class="material-icons" style="font-size:20px;color:#8A6D1D;">point_of_sale</span>
+                        <span class="material-icons" style="font-size:20px;">point_of_sale</span>
                         Caisse du jour
                     </h5>
                     <div class="d-flex align-items-center gap-2">
@@ -243,22 +243,22 @@
                         <div class="col-lg-3 col-6">
                             <div class="fs-12 text-muted"
                                  title="Tout ce qui est entre aujourd'hui, toutes methodes confondues.">Encaissements</div>
-                            <div class="fs-3 fw-bold text-success">{{ caisse.encaissements|montant }} CDF</div>
+                            <div class="chiffre-cle ton-normal">{{ caisse.encaissements|montant }} CDF</div>
                         </div>
                         <div class="col-lg-3 col-6">
                             <div class="fs-12 text-muted"
                                  title="Sorties de caisse : depenses, salaires, avances.">Decaissements</div>
-                            <div class="fs-3 fw-bold text-danger">{{ caisse.decaissements|montant }} CDF</div>
+                            <div class="chiffre-cle ton-neutre">{{ caisse.decaissements|montant }} CDF</div>
                         </div>
                         <div class="col-lg-3 col-6">
                             <div class="fs-12 text-muted"
                                  title="Ce que le caissier doit trouver dans le tiroir : fonds d'ouverture, plus les especes encaissees, moins les especes sorties. Le mobile money et les virements n'y figurent pas - ces billets ne sont jamais passes entre ses mains.">Solde theorique</div>
-                            <div class="fs-3 fw-bold {% if caisse.solde_theorique < 0 %}text-danger{% endif %}">{{ caisse.solde_theorique|montant }} CDF</div>
+                            <div class="chiffre-cle {% if caisse.solde_theorique < 0 %}ton-urgent{% else %}ton-strategique{% endif %}">{{ caisse.solde_theorique|montant }} CDF</div>
                         </div>
                         <div class="col-lg-3 col-6">
                             <div class="fs-12 text-muted"
                                  title="Difference entre le montant compte a la clôture et le solde theorique. Excedent en positif, deficit en negatif.">Ecart de caisse</div>
-                            <div class="fs-3 fw-bold {% if caisse.a_un_ecart %}text-danger{% else %}text-success{% endif %}">{{ caisse.ecart|montant_signe }} CDF</div>
+                            <div class="chiffre-cle {% if caisse.a_un_ecart %}ton-urgent{% else %}ton-normal{% endif %}">{{ caisse.ecart|montant_signe }} CDF</div>
                         </div>
                     </div>
 
@@ -294,11 +294,11 @@
                                     <td>{{ session.responsable }}</td>
                                     <td class="fs-12">{{ session.ouverte_a|date:"d/m H:i" }}</td>
                                     <td class="text-end">{{ session.fonds_ouverture|montant }}</td>
-                                    <td class="text-end {% if session.tresorerie_negative %}text-danger fw-semibold{% endif %}">{{ session.solde_theorique|montant }}</td>
+                                    <td class="text-end {% if session.tresorerie_negative %}ton-urgent fw-semibold{% endif %}">{{ session.solde_theorique|montant }}</td>
                                     <td class="text-end">{% if session.est_compte %}{{ session.solde_compte|montant }}{% else %}-{% endif %}</td>
                                     <td class="text-end">
                                         {% if session.ecart_connu %}
-                                            <span class="{% if session.ecart %}text-danger fw-semibold{% else %}text-success{% endif %}">{{ session.ecart|montant_signe }}</span>
+                                            <span class="{% if session.ecart %}ton-urgent fw-semibold{% else %}ton-normal{% endif %}">{{ session.ecart|montant_signe }}</span>
                                         {% else %}
                                             -
                                         {% endif %}
@@ -334,7 +334,7 @@
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted"
                           title="Chaque passage compte une fois. Un retour le meme jour n'est pas recompte. Ce n'est pas le nombre de personnes presentes en ce moment : aucune sortie n'est enregistree.">Passages aujourd'hui</span>
-                    <h3 class="mb-0 fw-bold">{{ today_checkins }}</h3>
+                    <div class="chiffre-cle">{{ today_checkins }}</div>
                     <div class="fs-12 text-muted">Refuses : {{ denied_today }}</div>
                 </div>
             </div>
@@ -344,7 +344,7 @@
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted"
                           title="Personnes differentes entrees aujourd'hui : membres et invites. Une ouverture manuelle n'identifie personne et n'est pas comptee ici.">Personnes differentes</span>
-                    <h3 class="mb-0 fw-bold">{{ today_unique_visitors }}</h3>
+                    <div class="chiffre-cle">{{ today_unique_visitors }}</div>
                     <div class="fs-12 text-muted">sur {{ today_checkins }} passage{{ today_checkins|pluralize }}</div>
                 </div>
             </div>
@@ -354,7 +354,7 @@
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted"
                           title="Creneau horaire ou les passages sont les plus nombreux sur la periode selectionnee.">Heure de pointe</span>
-                    <h3 class="mb-0 fw-bold">{% if peak_hour.has_data %}{{ peak_hour.label }}{% else %}-{% endif %}</h3>
+                    <div class="chiffre-cle ton-strategique">{% if peak_hour.has_data %}{{ peak_hour.label }}{% else %}-{% endif %}</div>
                     <div class="fs-12 text-muted">{% if peak_hour.has_data %}{{ peak_hour.count }} passage{{ peak_hour.count|pluralize }}{% else %}Pas encore de donnees{% endif %}</div>
                 </div>
             </div>
@@ -364,7 +364,7 @@
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted"
                           title="Disponibilite du parc : machines en service sur le total.">Machines en service</span>
-                    <h3 class="mb-0 fw-bold {% if machines_broken %}text-warning{% endif %}">{{ machines_ok|default:0 }} / {{ total_machines|default:0 }}</h3>
+                    <div class="chiffre-cle {% if machines_broken %}ton-attention{% else %}ton-normal{% endif %}">{{ machines_ok|default:0 }} / {{ total_machines|default:0 }}</div>
                     <div class="fs-12 text-muted">{{ availability_rate|default:0 }}% disponible</div>
                 </div>
             </div>
@@ -379,7 +379,7 @@
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted"
                           title="Membres au statut actif dont un abonnement couvre la date du jour. C'est une photographie d'aujourd'hui, pas un cumul de la periode : un nouveau membre pas encore abonne n'y figure pas.">Abonnements actifs</span>
-                    <h3 class="mb-0 fw-bold">{{ active_members }}</h3>
+                    <div class="chiffre-cle ton-normal">{{ active_members }}</div>
                     <div class="fs-12 text-muted">{{ active_member_rate }}% du portefeuille</div>
                 </div>
             </div>
@@ -389,7 +389,7 @@
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted"
                           title="Fiches membres creees pendant la periode, abonnees ou non.">Nouveaux membres</span>
-                    <h3 class="mb-0 fw-bold">{{ new_members_period }}</h3>
+                    <div class="chiffre-cle">{{ new_members_period }}</div>
                     <div class="fs-11 text-muted">{{ new_members_trend.basis }}</div>
                 </div>
             </div>
@@ -400,7 +400,7 @@
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted"
                           title="Abonnements en cours dont la fin tombe dans les 7 jours. Cliquez pour la liste a rappeler, du plus urgent au moins urgent.">Expirent sous 7 jours</span>
-                    <h3 class="mb-0 fw-bold {% if expiry_7_days %}text-warning{% endif %}">{{ expiry_7_days }}</h3>
+                    <div class="chiffre-cle {% if expiry_7_days %}ton-attention{% endif %}">{{ expiry_7_days }}</div>
                     <div class="fs-12 text-muted">dont {{ expiry_2_days }} sous 48 h</div>
                 </div>
             </a>
@@ -410,7 +410,7 @@
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted"
                           title="Paiements enregistres mais non encaisses : ce qui reste a regulariser.">Impayes</span>
-                    <h3 class="mb-0 fw-bold {% if pending_count %}text-warning{% endif %}">{{ pending_count }}</h3>
+                    <div class="chiffre-cle {% if pending_count %}ton-attention{% endif %}">{{ pending_count }}</div>
                     <div class="fs-12 text-muted">{{ pending_total|montant }} CDF a regulariser</div>
                 </div>
             </div>
@@ -424,7 +424,7 @@
        Membres. {% endcomment %}
     <div class="row g-3 mb-3">
         <div class="col-12">
-            <div class="card stretch stretch-full">
+            <div class="card stretch stretch-full bloc-royal">
                 <div class="card-header d-flex align-items-center justify-content-between">
                     <h5 class="card-title mb-0 d-flex align-items-center gap-2">
                         <span class="material-icons" style="font-size:20px;">notifications_active</span>
@@ -442,8 +442,8 @@
                         {% for alerte in alertes_urgentes %}
                         <div class="col-xl-6">
                             <a href="{{ alerte.url }}"
-                               class="d-flex align-items-start gap-2 text-decoration-none text-body border-start border-3 border-{{ alerte.ton }} ps-3 py-2">
-                                <span class="material-icons text-{{ alerte.ton }}" style="font-size:18px;">{% if alerte.ton == "danger" %}error{% else %}warning{% endif %}</span>
+                               class="d-flex align-items-start gap-2 text-decoration-none text-body border-start border-3 bord-{{ alerte.ton }} ps-3 py-2">
+                                <span class="material-icons ton-{{ alerte.ton }}" style="font-size:18px;">{% if alerte.ton == "urgent" %}error{% else %}warning{% endif %}</span>
                                 <span>
                                     <strong class="d-block">{{ alerte.titre }}</strong>
                                     <span class="fs-12 text-muted">{{ alerte.detail }}</span>
@@ -681,7 +681,7 @@
                                        caisse : c'est le sens du mouvement qui tranche. {% endcomment %}
                                     <td>
                                         {% if payment.type == "out" %}
-                                            <span class="text-danger fw-semibold">Decaissement</span>
+                                            <span class="ton-neutre fw-semibold">Decaissement</span>
                                             {% if payment.description %}<div class="fs-11 text-muted">{{ payment.description }}</div>{% endif %}
                                         {% elif payment.member %}
                                             {{ payment.member.first_name }} {{ payment.member.last_name }}
@@ -690,7 +690,7 @@
                                             {% if payment.description %}<div class="fs-11 text-muted">{{ payment.description }}</div>{% endif %}
                                         {% endif %}
                                     </td>
-                                    <td class="text-end {% if payment.type == "out" %}text-danger{% else %}text-success{% endif %}">
+                                    <td class="text-end {% if payment.type == "out" %}ton-neutre{% else %}ton-normal{% endif %}">
                                         {% if payment.type == "out" %}-{% endif %}{{ payment.amount_cdf|montant }} CDF
                                     </td>
                                     <td>{{ payment.get_method_display }}</td>
@@ -1099,7 +1099,7 @@
                                        caisse : c'est le sens du mouvement qui tranche. {% endcomment %}
                                     <td>
                                         {% if payment.type == "out" %}
-                                            <span class="text-danger fw-semibold">Decaissement</span>
+                                            <span class="ton-neutre fw-semibold">Decaissement</span>
                                             {% if payment.description %}<div class="fs-11 text-muted">{{ payment.description }}</div>{% endif %}
                                         {% elif payment.member %}
                                             {{ payment.member.first_name }} {{ payment.member.last_name }}
@@ -1108,7 +1108,7 @@
                                             {% if payment.description %}<div class="fs-11 text-muted">{{ payment.description }}</div>{% endif %}
                                         {% endif %}
                                     </td>
-                                    <td class="text-end {% if payment.type == "out" %}text-danger{% else %}text-success{% endif %}">
+                                    <td class="text-end {% if payment.type == "out" %}ton-neutre{% else %}ton-normal{% endif %}">
                                         {% if payment.type == "out" %}-{% endif %}{{ payment.amount_cdf|montant }} CDF
                                     </td>
                                     <td>{{ payment.get_method_display }}</td>

@@ -31,6 +31,13 @@ def organization_branding_processor(request):
         if item
     )[:2] or "SC"
 
+    # Chez un client d'une seule salle, l'organisation et la salle portent le
+    # meme nom : la marque s'affichait alors deux fois, l'une sous l'autre, et
+    # ressemblait a un defaut de maquette. Les initiales, elles, gardent les
+    # deux noms - c'est ce qui les rend distinctives.
+    if gym_name.strip().casefold() == organization_name.strip().casefold():
+        gym_name = ""
+
     return {
         "organization_brand_logo_url": _safe_file_url(getattr(organization, "logo", None)),
         "organization_brand_name": organization_name,

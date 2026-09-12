@@ -1,0 +1,121 @@
+/**
+ * Palette Royal Gym - identite et couleurs de sens.
+ *
+ * POURQUOI CE FICHIER
+ * L'or de la marque etait recopie a la main dans une quinzaine de gabarits
+ * (`style="color: #8A6D1D"`). Changer la teinte demandait de les retrouver
+ * tous, et le mode sombre en utilisait un autre sans que rien ne le relie.
+ * Les valeurs vivent ici, une fois.
+ *
+ * LES QUATRE TONS
+ * Ils ne sont pas decoratifs : chacun dit quelque chose, et un ton employe
+ * pour autre chose que son sens lui retire le sien.
+ *
+ *   vert    situation normale
+ *   orange  attention, a surveiller
+ *   rouge   anomalie urgente - un geste est attendu aujourd'hui
+ *   or      information strategique
+ *   neutre  un mouvement ordinaire : une sortie d'argent n'est pas une anomalie
+ *
+ * Le dernier ton est celui qui manquait. Afficher les decaissements en rouge
+ * rendait le rouge banal, et les vraies alertes se noyaient dedans.
+ *
+ * Ce fichier se charge apres le theme et apres le mode sombre : il gagne.
+ */
+
+:root {
+    --royal-or: #8A6D1D;
+    --royal-or-vif: #C9A227;
+    --royal-or-voile: rgba(138, 109, 29, 0.10);
+    --royal-noir: #0B0B0B;
+
+    --ton-normal: #17c666;
+    --ton-attention: #ffa21d;
+    --ton-urgent: #ea4d4d;
+    --ton-neutre: #334155;
+
+    --chiffre-cle: #0B0B0B;
+}
+
+/* En mode sombre, l'or fonce devient illisible sur fond noir et le neutre
+   doit s'eclaircir au lieu de s'assombrir. */
+html.app-skin-dark {
+    --royal-or: #C9A227;
+    --royal-or-voile: rgba(201, 162, 39, 0.14);
+    --ton-neutre: #cbd5e1;
+    --chiffre-cle: #f1f5f9;
+}
+
+/* ========== Les tons ========== */
+
+.ton-normal { color: var(--ton-normal) !important; }
+.ton-attention { color: var(--ton-attention) !important; }
+.ton-urgent { color: var(--ton-urgent) !important; }
+.ton-neutre { color: var(--ton-neutre) !important; }
+.ton-strategique { color: var(--royal-or) !important; }
+
+/* ========== Les chiffres principaux ========== */
+
+/* Ils etaient de la meme graisse que leur etiquette : l'oeil ne savait pas
+   ou se poser. */
+.chiffre-cle {
+    color: var(--chiffre-cle);
+    font-weight: 700;
+    font-size: 1.75rem;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+}
+
+.chiffre-cle.ton-normal,
+.chiffre-cle.ton-attention,
+.chiffre-cle.ton-urgent,
+.chiffre-cle.ton-neutre,
+.chiffre-cle.ton-strategique {
+    font-weight: 700;
+}
+
+/* ========== L'identite, par touches ========== */
+
+/* Un filet dore sous le titre de chaque bloc : present sans etre bruyant. */
+.bloc-royal .card-header {
+    border-bottom: 2px solid var(--royal-or-voile);
+}
+
+.bloc-royal .card-header .card-title .material-icons {
+    color: var(--royal-or);
+}
+
+/* La carte du bloc en cours de lecture se detache du fond. */
+.bloc-royal {
+    border-top: 3px solid var(--royal-or);
+}
+
+/* ========== La recherche de l'en-tete ========== */
+
+.recherche-membre {
+    min-width: 220px;
+}
+
+.recherche-membre .form-control {
+    border-radius: 999px 0 0 999px;
+}
+
+.recherche-membre .btn {
+    border-radius: 0 999px 999px 0;
+}
+
+@media (max-width: 991.98px) {
+    /* Sur tablette, la recherche prend la largeur disponible plutot que de
+       pousser le reste de l'en-tete hors de l'ecran. */
+    .recherche-membre {
+        min-width: 0;
+        flex: 1 1 100%;
+        order: 10;
+        margin-top: .5rem;
+    }
+}
+
+/* ========== Les bordures d'alerte ========== */
+
+.bord-urgent { border-color: var(--ton-urgent) !important; }
+.bord-attention { border-color: var(--ton-attention) !important; }

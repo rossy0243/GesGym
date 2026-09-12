@@ -340,7 +340,22 @@
             </div>
         </div>
 
-        <div class="header-right ms-auto d-flex align-items-center gap-3">
+        <div class="header-right ms-auto d-flex align-items-center flex-wrap gap-3">
+
+            {% comment %} Retrouver un membre depuis n'importe quel ecran. La liste
+               des membres sait deja chercher sur le nom, le telephone, l'e-mail et
+               l'identifiant : on lui passe la main plutot que d'ouvrir un second
+               point d'entree a securiser. {% endcomment %}
+            {% if can_members %}
+            <form class="recherche-membre input-group input-group-sm"
+                  action="{% url 'members:member_list' %}" method="get" role="search">
+                <input type="search" name="search" class="form-control"
+                       placeholder="Rechercher un membre" aria-label="Rechercher un membre">
+                <button class="btn btn-outline-secondary" type="submit" aria-label="Lancer la recherche">
+                    <span class="material-icons" style="font-size:18px;vertical-align:-4px;">search</span>
+                </button>
+            </form>
+            {% endif %}
             
             <!-- ==================== SÉLECTEUR DE GYM POUR OWNER ==================== -->
             {% if request.is_owner and request.owned_gyms %}

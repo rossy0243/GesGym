@@ -427,12 +427,16 @@ def _alertes_urgentes(caisse, refus_repetes, expirations_48h, machines_hs,
     jours restent donc dans le bloc Membres : seules les 48 heures arrivent
     ici, parce que c'est la que le coup de telephone change encore quelque
     chose.
+
+    Le ton dit l'urgence, pas la couleur : "urgent" appelle un geste
+    aujourd'hui, "attention" demande a etre surveille. La feuille de style
+    decide de la teinte, et elle seule.
     """
     alertes = []
 
     if caisse["oubliee_depuis_hier"]:
         alertes.append({
-            "ton": "danger",
+            "ton": "urgent",
             "titre": f'{caisse["oubliee_depuis_hier"]} caisse non clôturee',
             "detail": "Ouverte la veille : son solde theorique court toujours.",
             "url": reverse("pos:register_history"),
@@ -440,7 +444,7 @@ def _alertes_urgentes(caisse, refus_repetes, expirations_48h, machines_hs,
 
     if caisse["a_un_ecart"]:
         alertes.append({
-            "ton": "danger",
+            "ton": "urgent",
             "titre": "Ecart de caisse",
             "detail": "Le montant compte ne correspond pas au solde theorique.",
             "url": reverse("pos:register_history"),
@@ -448,7 +452,7 @@ def _alertes_urgentes(caisse, refus_repetes, expirations_48h, machines_hs,
 
     for personne in refus_repetes:
         alertes.append({
-            "ton": "warning",
+            "ton": "attention",
             "titre": f'{personne["nom"]} refuse {personne["tentatives"]} fois',
             "detail": "Abonnement echu, ou quelqu'un qui insiste.",
             "url": reverse("access:acces_dashboard"),
@@ -456,7 +460,7 @@ def _alertes_urgentes(caisse, refus_repetes, expirations_48h, machines_hs,
 
     if expirations_48h:
         alertes.append({
-            "ton": "warning",
+            "ton": "attention",
             "titre": f"{expirations_48h} abonnement(s) a echeance sous 48 h",
             "detail": "Passe ce delai, le membre trouvera porte close.",
             "url": f'{reverse("members:member_list")}?status=expiring&expiring_days=2',
@@ -464,7 +468,7 @@ def _alertes_urgentes(caisse, refus_repetes, expirations_48h, machines_hs,
 
     if machines_hs:
         alertes.append({
-            "ton": "warning",
+            "ton": "attention",
             "titre": f"{machines_hs} machine(s) en panne",
             "detail": "Le parc rend moins que ce que les membres attendent.",
             "url": reverse("machines:list"),
@@ -472,14 +476,14 @@ def _alertes_urgentes(caisse, refus_repetes, expirations_48h, machines_hs,
 
     if stock_epuise:
         alertes.append({
-            "ton": "danger",
+            "ton": "urgent",
             "titre": f"{stock_epuise} produit(s) en rupture",
             "detail": "Plus rien a vendre au comptoir.",
             "url": reverse("products:list"),
         })
     elif stock_bas:
         alertes.append({
-            "ton": "warning",
+            "ton": "attention",
             "titre": f"{stock_bas} produit(s) sous le seuil",
             "detail": "A reapprovisionner avant la rupture.",
             "url": reverse("products:list"),
