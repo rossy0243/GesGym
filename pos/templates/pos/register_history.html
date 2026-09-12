@@ -282,6 +282,7 @@
                         <th class="text-center">Total réel</th>
                         <th class="text-center">Différence</th>
                         <th class="text-center">Statut</th>
+                        <th class="text-center">Validation</th>
                         <th class="text-end">Action</th>
                     </tr>
                 </thead>
@@ -354,6 +355,44 @@
                             {% endif %}
                         </td>
 
+                        {% comment %} Clôturer, c'est compter le tiroir ; valider, c'est
+                           qu'une seconde personne l'ait regarde. Celui qui a clôture ne
+                           peut pas signer : la contre-signature perdrait son objet. {% endcomment %}
+                        <td class="text-center">
+                            {% if not r.closed_at %}
+                                <span class="text-muted">-</span>
+                            {% elif r.is_validated %}
+                                <span class="badge bg-success-subtle text-success border px-3 py-2"
+                                      title="Contre-signee apres la clôture">Validee</span>
+                                <div class="small text-muted mt-1">
+                                    {{ r.validated_by.get_full_name|default:r.validated_by.username }}
+                                    - {{ r.validated_at|date:"d/m H:i" }}
+                                </div>
+                                {% if r.validation_note %}
+                                    <div class="small text-muted fst-italic">{{ r.validation_note }}</div>
+                                {% endif %}
+                            {% elif r.closed_by_id == request.user.id %}
+                                <span class="badge bg-warning-subtle text-warning border px-3 py-2"
+                                      title="Vous avez clôture cette caisse : la validation revient a quelqu'un d'autre.">A contre-signer</span>
+                            {% else %}
+                                <form method="post" action="{% url 'pos:validate_register' r.id %}"
+                                      class="d-inline-block text-start" style="min-width:180px;">
+                                    {% csrf_token %}
+                                    {% if r.difference %}
+                                        {% comment %} Valider un ecart sans dire pourquoi ne vaut rien :
+                                           dans six mois personne ne saura de quoi il s'agissait. {% endcomment %}
+                                        <input type="text" name="validation_note" class="form-control form-control-sm mb-1"
+                                               maxlength="255" required
+                                               placeholder="Ce qui explique l'ecart">
+                                    {% endif %}
+                                    <button type="submit" class="btn btn-sm btn-outline-success w-100">
+                                        <span class="material-icons" style="font-size:16px;vertical-align:-3px;">how_to_reg</span>
+                                        Valider
+                                    </button>
+                                </form>
+                            {% endif %}
+                        </td>
+
                         <td class="text-end">
                             <div class="d-inline-flex gap-1">
                                 {% if not r.closed_at %}
@@ -370,7 +409,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="10" class="text-center py-5">
+                        <td colspan="11" class="text-center py-5">
                             <div class="d-flex flex-column align-items-center justify-content-center">
                                 <span class="material-icons empty-state-icon">receipt_long</span>
                                 <p class="mt-3 mb-1 fw-semibold text-muted">Aucune session de caisse trouvée</p>

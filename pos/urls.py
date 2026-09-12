@@ -10,4 +10,5 @@ urlpatterns = [
     path("register-history/", views.register_history, name="register_history"),
     path("decaissements/", views.expense_register, name="expense_register"),
     path("register-detail/<int:register_id>/", views.register_detail, name="register_detail"),
+    path("register-validate/<int:register_id>/", views.validate_register, name="validate_register"),
 ]

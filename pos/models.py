@@ -82,6 +82,25 @@ class CashRegister(models.Model):
 
     is_closed = models.BooleanField(default=False)
 
+    # La contre-signature. Clôturer, c'est compter le tiroir ; valider, c'est
+    # qu'une seconde personne l'ait regarde. Sans elle, un caissier qui compte
+    # seul et signe seul n'est controle par personne.
+    validated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="validated_registers",
+        verbose_name="Cloture validee par",
+    )
+
+    validated_at = models.DateTimeField(null=True, blank=True)
+
+    # Obligatoire des que l'ecart n'est pas nul : valider un ecart sans dire
+    # pourquoi ne vaut rien. Dans six mois, personne ne saura s'il s'agissait
+    # d'un rendu de monnaie ou d'autre chose.
+    validation_note = models.CharField(max_length=255, blank=True, default="")
+
     class Meta:
         indexes = [
             models.Index(fields=["gym"]),
@@ -105,6 +124,15 @@ class CashRegister(models.Model):
         if is_new and not self.session_code:
             self.session_code = f"{self.gym.id}-CS-{self.opened_at.year}-{self.id:04d}"
             super().save(update_fields=["session_code"])
+
+    @property
+    def is_validated(self):
+        return self.validated_at is not None
+
+    @property
+    def needs_validation(self):
+        """Clôturee mais pas encore contre-signee."""
+        return self.is_closed and not self.is_validated
 
     @property
     def was_force_closed(self):

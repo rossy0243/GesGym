@@ -269,6 +269,21 @@
                         {% endfor %}
                     </div>
                     {% endif %}
+
+                    {% if caisse.motifs %}
+                    {% comment %} Un total de decaissements ne dit pas ou l'argent est
+                       parti : c'est pourtant la question qu'on se pose en lisant le
+                       chiffre. {% endcomment %}
+                    <div class="d-flex flex-wrap gap-3 mt-2 fs-12 text-muted">
+                        <span class="fw-semibold">Sorties :</span>
+                        {% for ligne in caisse.motifs %}
+                            <span>{{ ligne.motif }} <strong class="ton-neutre">{{ ligne.montant|montant }}</strong></span>
+                        {% endfor %}
+                        {% if caisse.autres_sorties %}
+                            <a href="{% url 'pos:expense_register' %}" class="text-muted">et {{ caisse.autres_sorties }} autre{{ caisse.autres_sorties|pluralize }}</a>
+                        {% endif %}
+                    </div>
+                    {% endif %}
                 </div>
 
                 {% if caisse.sessions %}
@@ -309,6 +324,11 @@
                                             {% if session.cloture_forcee %}
                                                 <span class="badge bg-warning text-dark"
                                                       title="Clôturee par quelqu'un d'autre que son titulaire.">forcee</span>
+                                            {% endif %}
+                                            {% if session.est_validee %}
+                                                <div class="fs-11 text-muted">validee par {{ session.validee_par }}</div>
+                                            {% else %}
+                                                <div class="fs-11 ton-attention">a contre-signer</div>
                                             {% endif %}
                                         {% elif session.oubliee %}
                                             <span class="badge bg-danger">ouverte depuis hier</span>

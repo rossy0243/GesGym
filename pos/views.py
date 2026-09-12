@@ -7,6 +7,7 @@ from django.core.exceptions import ValidationError
 from django.db.models import Count, Q, Sum
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_POST
 from django.utils import timezone
 
 from members.models import Member
@@ -600,3 +601,79 @@ def expense_register(request):
             },
         },
     )
+
+
+@login_required
+@role_required(POS_HISTORY_ROLES)
+@module_required("POS")
+@require_POST
+def validate_register(request, register_id):
+    """
+    Contre-signature d'une clôture de caisse.
+
+    Clôturer, c'est compter le tiroir ; valider, c'est qu'une seconde personne
+    l'ait regarde. Un caissier qui compte seul et signe seul n'est controle
+    par personne - et c'est justement ce que le proprietaire demandait.
+
+    Celui qui a clôture ne peut donc pas valider : la signature perdrait son
+    objet. Le proprietaire reste libre de valider la clôture d'un gerant, et
+    l'inverse.
+    """
+    registre = get_object_or_404(
+        CashRegister, id=register_id, gym=request.gym, is_closed=True
+    )
+
+    if registre.is_validated:
+        messages.info(
+            request,
+            f"Cette clôture a deja ete validee le "
+            f"{timezone.localtime(registre.validated_at):%d/%m/%Y a %H:%M}.",
+        )
+        return redirect("pos:register_history")
+
+    if registre.closed_by_id == request.user.id:
+        messages.error(
+            request,
+            "Vous avez clôture cette caisse : la validation revient a "
+            "quelqu'un d'autre.",
+        )
+        return redirect("pos:register_history")
+
+    motif = (request.POST.get("validation_note") or "").strip()
+    # Un ecart valide sans explication ne vaut rien : dans six mois, personne
+    # ne saura s'il s'agissait d'un rendu de monnaie ou d'autre chose. Une
+    # caisse juste, elle, se valide d'un clic.
+    if registre.difference and not motif:
+        messages.error(
+            request,
+            "Cette caisse presente un ecart : indiquez ce qui l'explique "
+            "avant de valider.",
+        )
+        return redirect("pos:register_history")
+
+    registre.validated_by = request.user
+    registre.validated_at = timezone.now()
+    registre.validation_note = motif
+    registre.save(
+        update_fields=["validated_by", "validated_at", "validation_note"]
+    )
+
+    log_sensitive_action(
+        request,
+        "pos.register_validated",
+        "CashRegister",
+        registre.session_code or f"register-{registre.id}",
+        metadata={
+            "closed_by": (
+                registre.closed_by.username if registre.closed_by else ""
+            ),
+            "difference": str(registre.difference or 0),
+            "note": motif,
+        },
+    )
+
+    messages.success(
+        request,
+        f"Clôture du {timezone.localtime(registre.closed_at):%d/%m/%Y} validee.",
+    )
+    return redirect("pos:register_history")

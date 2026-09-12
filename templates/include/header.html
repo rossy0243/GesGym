@@ -342,15 +342,15 @@
 
         <div class="header-right ms-auto d-flex align-items-center gap-3">
 
-            {% comment %} Retrouver un membre depuis n'importe quel ecran. La liste
-               des membres sait deja chercher sur le nom, le telephone, l'e-mail et
-               l'identifiant : on lui passe la main plutot que d'ouvrir un second
-               point d'entree a securiser. {% endcomment %}
+            {% comment %} Retrouver un membre, un abonnement ou un paiement depuis
+               n'importe quel ecran. Chaque rubrique n'apparait qu'a qui a le droit de
+               la lire : les droits ne se relachent pas parce qu'on est passe par la
+               recherche. {% endcomment %}
             {% if can_members %}
             <form class="recherche-membre input-group input-group-sm"
-                  action="{% url 'members:member_list' %}" method="get" role="search">
-                <input type="search" name="search" class="form-control"
-                       placeholder="Rechercher un membre" aria-label="Rechercher un membre">
+                  action="{% url 'core:global_search' %}" method="get" role="search">
+                <input type="search" name="q" class="form-control"
+                       placeholder="Rechercher" aria-label="Rechercher un membre, un abonnement ou un paiement">
                 <button class="btn btn-outline-secondary" type="submit" aria-label="Lancer la recherche">
                     <span class="material-icons" style="font-size:18px;vertical-align:-4px;">search</span>
                 </button>

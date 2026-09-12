@@ -9,11 +9,12 @@ from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.db.models import Q, Count, Sum, Exists, OuterRef
 from django.db.models.functions import ExtractHour, ExtractMonth, TruncDate
-from django.utils.timezone import now
+from django.utils.timezone import localtime, now
 from datetime import timedelta
 import calendar
 import json
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
+from urllib.parse import quote
 from access.models import AccessLog
 from smartclub.decorators import role_required
 from core import marketing_qr
@@ -54,6 +55,9 @@ from .accounting_reports import (
     get_report_section,
 )
 from smartclub.access_control import (
+    MEMBER_ROLES,
+    POS_HISTORY_ROLES,
+    SUBSCRIPTION_ROLES,
     EMPLOYEE_ROLES_BY_MANAGER,
     EMPLOYEE_ROLES_BY_OWNER,
     DASHBOARD_SALES_ROLES,
@@ -246,6 +250,11 @@ def _personnes_distinctes(passages):
     return membres + invites
 
 
+# Assez de motifs pour expliquer l'essentiel d'une journee, assez peu pour
+# tenir sur une ligne sous le total.
+MOTIFS_AFFICHES = 4
+
+
 def _tableau_de_caisse(gym, today):
     """
     L'etat de la caisse aujourd'hui, salle d'abord puis caissier par caissier.
@@ -271,6 +280,9 @@ def _tableau_de_caisse(gym, today):
         return {
             "sessions": [],
             "ouvertes": 0,
+            "a_contre_signer": 0,
+            "motifs": [],
+            "autres_sorties": 0,
             "encaissements": zero,
             "decaissements": zero,
             "solde_theorique": zero,
@@ -304,10 +316,27 @@ def _tableau_de_caisse(gym, today):
             zero,
         )
 
+    # "Decaissements : total et motifs" - un total sans motif ne dit pas ou
+    # l'argent est parti, et c'est precisement la question qu'on se pose en
+    # lisant le chiffre. On montre les plus grosses sorties, celles qui
+    # expliquent l'essentiel du total.
+    sorties = Payment.objects.filter(
+        cash_register__in=sessions, gym=gym, status="success", type="out"
+    )
+    motifs = [
+        {
+            "motif": (sortie.description or "").strip() or "Sans motif",
+            "montant": sortie.amount_cdf,
+        }
+        for sortie in sorties.order_by("-amount_cdf")[:MOTIFS_AFFICHES]
+    ]
+    autres_sorties = max(sorties.count() - MOTIFS_AFFICHES, 0)
+
     libelles = dict(Payment.PAYMENT_METHODS)
     totaux_methode = {code: zero for code in libelles}
     encaissements = decaissements = solde_theorique = ecart = zero
     oubliee_depuis_hier = 0
+    a_contre_signer = 0
     rangs = []
 
     for session in sessions:
@@ -329,6 +358,8 @@ def _tableau_de_caisse(gym, today):
             ecart += session.difference
         if not session.is_closed and session.opened_at.date() < today:
             oubliee_depuis_hier += 1
+        if session.needs_validation:
+            a_contre_signer += 1
 
         rangs.append({
             "id": session.id,
@@ -352,6 +383,8 @@ def _tableau_de_caisse(gym, today):
             # pas anormale - un gerant debloque un poste abandonne - mais elle
             # doit se voir.
             "cloture_forcee": session.was_force_closed,
+            "est_validee": session.is_validated,
+            "validee_par": _nom_utilisateur(session.validated_by) if session.is_validated else "",
             "oubliee": not session.is_closed and session.opened_at.date() < today,
             "tresorerie_negative": attendu < 0,
         })
@@ -365,6 +398,9 @@ def _tableau_de_caisse(gym, today):
         "ecart": ecart,
         "a_un_ecart": ecart != zero,
         "oubliee_depuis_hier": oubliee_depuis_hier,
+        "a_contre_signer": a_contre_signer,
+        "motifs": motifs,
+        "autres_sorties": autres_sorties,
         "par_methode": [
             {"code": code, "label": libelle, "total": totaux_methode[code]}
             for code, libelle in libelles.items()
@@ -447,6 +483,16 @@ def _alertes_urgentes(caisse, refus_repetes, expirations_48h, machines_hs,
             "ton": "urgent",
             "titre": "Ecart de caisse",
             "detail": "Le montant compte ne correspond pas au solde theorique.",
+            "url": reverse("pos:register_history"),
+        })
+
+    if caisse["a_contre_signer"]:
+        # Une clôture que personne d'autre n'a regardee n'est pas encore un
+        # controle : elle attend une seconde signature.
+        alertes.append({
+            "ton": "attention",
+            "titre": f'{caisse["a_contre_signer"]} clôture a contre-signer',
+            "detail": "Le tiroir a ete compte, mais personne d'autre ne l'a verifie.",
             "url": reverse("pos:register_history"),
         })
 
@@ -2693,3 +2739,158 @@ def _fichier_a_telecharger(contenu, nom, type_mime):
     reponse = HttpResponse(contenu, content_type=type_mime)
     reponse["Content-Disposition"] = f'attachment; filename="{nom}"'
     return reponse
+
+
+# ---------------------------------------------------------------------------
+# Recherche globale
+# ---------------------------------------------------------------------------
+
+# Assez de lignes par section pour reconnaitre ce qu'on cherchait, assez peu
+# pour que les trois sections tiennent sur un ecran.
+RESULTATS_PAR_SECTION = 8
+
+
+def _montant_recherche(texte):
+    """
+    Le montant tape, s'il y en a un.
+
+    "30000" et "30 000" designent la meme somme ; "Ada" n'en designe aucune.
+    Sans cette lecture, chercher un montant ne ramenait rien.
+    """
+    nettoye = texte.replace(" ", "").replace("\u00a0", "").replace(",", ".")
+    try:
+        return Decimal(nettoye)
+    except (InvalidOperation, ValueError):
+        return None
+
+
+@login_required
+def global_search(request):
+    """
+    Retrouver un membre, un abonnement ou un paiement depuis n'importe ou.
+
+    Chaque section n'apparait qu'a qui a le droit de la lire : une
+    receptionniste voit les membres, pas les paiements. Les droits ne se
+    relachent pas parce qu'on est passe par la recherche.
+    """
+    requete = (request.GET.get("q") or request.GET.get("search") or "").strip()
+    gym = getattr(request, "gym", None)
+
+    sections = []
+    if gym and requete:
+        if has_role(request, MEMBER_ROLES):
+            sections.append(_recherche_membres(gym, requete))
+        if has_role(request, SUBSCRIPTION_ROLES):
+            sections.append(_recherche_abonnements(gym, requete))
+        if has_role(request, POS_HISTORY_ROLES):
+            sections.append(_recherche_paiements(gym, requete))
+
+    return render(
+        request,
+        "core/recherche.html",
+        {
+            "requete": requete,
+            "sections": sections,
+            "total": sum(section["total"] for section in sections),
+        },
+    )
+
+
+def _recherche_membres(gym, requete):
+    trouves = Member.objects.filter(gym=gym).filter(
+        Q(first_name__icontains=requete)
+        | Q(last_name__icontains=requete)
+        | Q(phone__icontains=requete)
+        | Q(email__icontains=requete)
+        | Q(user__username__icontains=requete)
+    ).order_by("first_name", "last_name")
+
+    return {
+        "titre": "Membres",
+        "icone": "group",
+        "total": trouves.count(),
+        "tout_voir": f'{reverse("members:member_list")}?search={quote(requete)}',
+        "lignes": [
+            {
+                "titre": f"{membre.first_name} {membre.last_name}".strip() or membre.phone,
+                "detail": membre.phone or membre.email or "",
+                "url": reverse("members:member_list"),
+            }
+            for membre in trouves[:RESULTATS_PAR_SECTION]
+        ],
+    }
+
+
+def _recherche_abonnements(gym, requete):
+    trouves = MemberSubscription.objects.filter(gym=gym).filter(
+        Q(member__first_name__icontains=requete)
+        | Q(member__last_name__icontains=requete)
+        | Q(member__phone__icontains=requete)
+        | Q(plan__name__icontains=requete)
+    ).select_related("member", "plan").order_by("-start_date")
+
+    return {
+        "titre": "Abonnements",
+        "icone": "card_membership",
+        "total": trouves.count(),
+        "tout_voir": reverse("members:member_list"),
+        "lignes": [
+            {
+                "titre": (
+                    f"{abonnement.member.first_name} {abonnement.member.last_name}".strip()
+                    + (f" - {abonnement.plan.name}" if abonnement.plan else "")
+                ),
+                "detail": (
+                    f"du {abonnement.start_date:%d/%m/%Y} au "
+                    f"{abonnement.end_date:%d/%m/%Y}"
+                ),
+                "url": reverse("members:member_list"),
+            }
+            for abonnement in trouves[:RESULTATS_PAR_SECTION]
+        ],
+    }
+
+
+def _recherche_paiements(gym, requete):
+    criteres = (
+        Q(member__first_name__icontains=requete)
+        | Q(member__last_name__icontains=requete)
+        | Q(description__icontains=requete)
+        | Q(cash_register__session_code__icontains=requete)
+    )
+    # Un montant tape se cherche comme un montant, pas comme du texte.
+    montant_cherche = _montant_recherche(requete)
+    if montant_cherche is not None:
+        criteres |= Q(amount_cdf=montant_cherche) | Q(amount=montant_cherche)
+
+    trouves = (
+        Payment.objects.filter(gym=gym)
+        .filter(criteres)
+        .select_related("member", "cash_register")
+        .order_by("-created_at")
+    )
+
+    lignes = []
+    for paiement in trouves[:RESULTATS_PAR_SECTION]:
+        if paiement.type == "out":
+            qui = "Decaissement"
+        elif paiement.member:
+            qui = f"{paiement.member.first_name} {paiement.member.last_name}".strip()
+        else:
+            qui = "Vente au comptoir"
+        lignes.append({
+            "titre": f"{qui} - {paiement.amount_cdf:.0f} CDF",
+            "detail": (
+                f'{paiement.description or "Sans motif"} - '
+                f'{localtime(paiement.created_at):%d/%m/%Y %H:%M}'
+            ),
+            "url": reverse("pos:register_history"),
+        })
+
+    return {
+        "titre": "Paiements",
+        "icone": "payments",
+        "total": trouves.count(),
+        "tout_voir": reverse("pos:register_history"),
+        "lignes": lignes,
+    }

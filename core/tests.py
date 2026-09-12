@@ -5114,3 +5114,487 @@ class SemanticColourTests(TestCase):
 
         self.assertLess(page.index("theme.min.css"), page.index("palette.css"))
         self.assertLess(page.index("dark-mode-pages.css"), page.index("palette.css"))
+
+
+class RegisterValidationTests(TestCase):
+    """
+    La contre-signature d'une clôture.
+
+    Clôturer, c'est compter le tiroir ; valider, c'est qu'une seconde personne
+    l'ait regarde. Un caissier qui compte seul et signe seul n'est controle par
+    personne.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Validation", slug="org-validation"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Validation",
+            slug="gym-validation", subdomain="gym-validation",
+        )
+        module, _ = Module.objects.get_or_create(code="POS", defaults={"name": "POS"})
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=module, defaults={"is_active": True}
+        )
+        self.caissiere = self._utilisateur("ada-validation", "cashier")
+        self.gerant = self._utilisateur("gerant-validation", "manager")
+        self.proprietaire = self._utilisateur("proprio-validation", "owner")
+
+    def _utilisateur(self, nom, role):
+        utilisateur = User.objects.create_user(username=nom, password="pass12345")
+        UserGymRole.objects.create(
+            user=utilisateur, gym=self.gym, role=role, is_active=True
+        )
+        return utilisateur
+
+    def _connecter(self, utilisateur):
+        self.client.force_login(utilisateur)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _caisse_close(self, par=None, ecart="0.00"):
+        registre = CashRegister.objects.create(
+            gym=self.gym, opened_by=self.caissiere,
+            opening_amount=Decimal("100000.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+        registre.closing_amount = Decimal("100000.00") + Decimal(ecart)
+        registre.difference = Decimal(ecart)
+        registre.closed_by = par or self.caissiere
+        registre.closed_at = timezone.now()
+        registre.is_closed = True
+        registre.save()
+        return registre
+
+    def _valider(self, registre, motif=""):
+        return self.client.post(
+            reverse("pos:validate_register", args=[registre.id]),
+            {"validation_note": motif} if motif else {},
+            follow=True,
+        )
+
+    # --- Ce que la validation enregistre ------------------------------------------
+
+    def test_a_manager_can_countersign_a_cashiers_closing(self):
+        registre = self._caisse_close()
+        self._connecter(self.gerant)
+
+        self._valider(registre)
+
+        registre.refresh_from_db()
+        self.assertTrue(registre.is_validated)
+        self.assertEqual(registre.validated_by, self.gerant)
+
+    def test_an_owner_can_countersign_a_managers_closing(self):
+        registre = self._caisse_close(par=self.gerant)
+        self._connecter(self.proprietaire)
+
+        self._valider(registre)
+
+        registre.refresh_from_db()
+        self.assertEqual(registre.validated_by, self.proprietaire)
+
+    def test_a_closed_register_starts_unvalidated(self):
+        registre = self._caisse_close()
+
+        self.assertFalse(registre.is_validated)
+        self.assertTrue(registre.needs_validation)
+
+    def test_an_open_register_is_not_waiting_for_a_signature(self):
+        # On ne contre-signe pas ce qui n'a pas encore ete compte.
+        registre = CashRegister.objects.create(
+            gym=self.gym, opened_by=self.caissiere,
+            opening_amount=Decimal("100000.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+
+        self.assertFalse(registre.needs_validation)
+
+    # --- Ce qui est refuse ---------------------------------------------------------
+
+    def test_whoever_closed_cannot_countersign(self):
+        # C'est tout le sens du dispositif : deux personnes ont regarde le
+        # tiroir.
+        registre = self._caisse_close(par=self.gerant)
+        self._connecter(self.gerant)
+
+        self._valider(registre)
+
+        registre.refresh_from_db()
+        self.assertFalse(registre.is_validated)
+
+    def test_a_cashier_cannot_countersign(self):
+        registre = self._caisse_close(par=self.gerant)
+        self._connecter(self.caissiere)
+
+        reponse = self.client.post(
+            reverse("pos:validate_register", args=[registre.id])
+        )
+
+        self.assertEqual(reponse.status_code, 403)
+
+    def test_a_variance_cannot_be_signed_without_a_reason(self):
+        # Valider un ecart sans dire pourquoi ne vaut rien : dans six mois,
+        # personne ne saura de quoi il s'agissait.
+        registre = self._caisse_close(ecart="-2000.00")
+        self._connecter(self.gerant)
+
+        self._valider(registre)
+
+        registre.refresh_from_db()
+        self.assertFalse(registre.is_validated)
+
+    def test_a_variance_signed_with_a_reason_goes_through(self):
+        registre = self._caisse_close(ecart="-2000.00")
+        self._connecter(self.gerant)
+
+        self._valider(registre, motif="Rendu de monnaie non enregistre")
+
+        registre.refresh_from_db()
+        self.assertTrue(registre.is_validated)
+        self.assertEqual(registre.validation_note, "Rendu de monnaie non enregistre")
+
+    def test_a_balanced_register_needs_no_reason(self):
+        registre = self._caisse_close(ecart="0.00")
+        self._connecter(self.gerant)
+
+        self._valider(registre)
+
+        registre.refresh_from_db()
+        self.assertTrue(registre.is_validated)
+
+    def test_signing_twice_keeps_the_first_signature(self):
+        registre = self._caisse_close()
+        self._connecter(self.gerant)
+        self._valider(registre)
+        registre.refresh_from_db()
+        premier = registre.validated_at
+
+        self._connecter(self.proprietaire)
+        self._valider(registre)
+
+        registre.refresh_from_db()
+        self.assertEqual(registre.validated_at, premier)
+        self.assertEqual(registre.validated_by, self.gerant)
+
+    def test_a_neighbouring_gym_register_cannot_be_signed(self):
+        voisine = Gym.objects.create(
+            organization=self.organization, name="Voisine",
+            slug="gym-validation-voisine", subdomain="gym-validation-voisine",
+        )
+        ailleurs = CashRegister.objects.create(
+            gym=voisine, opened_by=self.caissiere,
+            opening_amount=Decimal("100000.00"),
+            exchange_rate=Decimal("2800.00"),
+            is_closed=True, closed_at=timezone.now(), closed_by=self.caissiere,
+            closing_amount=Decimal("100000.00"), difference=Decimal("0.00"),
+        )
+        self._connecter(self.gerant)
+
+        reponse = self.client.post(
+            reverse("pos:validate_register", args=[ailleurs.id])
+        )
+
+        self.assertEqual(reponse.status_code, 404)
+
+    # --- Ce que le tableau de bord en dit ---------------------------------------------
+
+    def test_an_unsigned_closing_raises_an_alert(self):
+        self._caisse_close()
+        self._connecter(self.gerant)
+
+        alertes = self.client.get(
+            reverse("core:gym_dashboard", args=[self.gym.id])
+        ).context["alertes_urgentes"]
+
+        self.assertTrue(any("contre-signer" in a["titre"] for a in alertes))
+
+    def test_a_signed_closing_raises_nothing(self):
+        registre = self._caisse_close()
+        self._connecter(self.gerant)
+        self._valider(registre)
+
+        alertes = self.client.get(
+            reverse("core:gym_dashboard", args=[self.gym.id])
+        ).context["alertes_urgentes"]
+
+        self.assertFalse(any("contre-signer" in a["titre"] for a in alertes))
+
+
+class RegisterMotiveTests(TestCase):
+    """
+    Les motifs sous le total des decaissements.
+
+    Un total ne dit pas ou l'argent est parti, et c'est pourtant la question
+    qu'on se pose en lisant le chiffre.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Motif", slug="org-motif"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Motif",
+            slug="gym-motif", subdomain="gym-motif",
+        )
+        for code in ("MEMBERS", "POS"):
+            module, _ = Module.objects.get_or_create(
+                code=code, defaults={"name": code}
+            )
+            GymModule.objects.get_or_create(
+                gym=self.gym, module=module, defaults={"is_active": True}
+            )
+        self.gerant = User.objects.create_user(
+            username="gerant-motif", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.gerant, gym=self.gym, role="manager", is_active=True
+        )
+        self.registre = CashRegister.objects.create(
+            gym=self.gym, opened_by=self.gerant,
+            opening_amount=Decimal("500000.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+        self.client.force_login(self.gerant)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _sortie(self, motif, montant):
+        return record_payment(
+            gym=self.gym, register=self.registre, amount=Decimal(montant),
+            currency="CDF", method="cash", transaction_type="out",
+            category="expense", description=motif, created_by=self.gerant,
+        )
+
+    def _caisse(self):
+        return self.client.get(
+            reverse("core:gym_dashboard", args=[self.gym.id])
+        ).context["caisse"]
+
+    def test_a_disbursement_shows_its_reason_next_to_the_total(self):
+        self._sortie("Reparation du portail", "30000")
+
+        motifs = self._caisse()["motifs"]
+
+        self.assertEqual(motifs[0]["motif"], "Reparation du portail")
+        self.assertEqual(motifs[0]["montant"], Decimal("30000.00"))
+
+    def test_the_biggest_come_first(self):
+        # Ce sont elles qui expliquent l'essentiel du total.
+        self._sortie("Savon", "5000")
+        self._sortie("Plomberie", "30000")
+
+        motifs = [ligne["motif"] for ligne in self._caisse()["motifs"]]
+
+        self.assertEqual(motifs, ["Plomberie", "Savon"])
+
+    def test_beyond_four_the_rest_is_counted(self):
+        for index in range(6):
+            self._sortie(f"Depense {index}", str(1000 * (index + 1)))
+
+        caisse = self._caisse()
+
+        self.assertEqual(len(caisse["motifs"]), 4)
+        self.assertEqual(caisse["autres_sorties"], 2)
+
+    def test_an_incoming_payment_is_not_a_reason(self):
+        record_payment(
+            gym=self.gym, register=self.registre, amount=Decimal("30000"),
+            currency="CDF", method="cash", transaction_type="in",
+            category="subscription", description="Abonnement",
+            created_by=self.gerant,
+        )
+
+        self.assertEqual(self._caisse()["motifs"], [])
+
+    def test_a_disbursement_without_a_reason_says_so(self):
+        self._sortie("", "5000")
+
+        self.assertEqual(self._caisse()["motifs"][0]["motif"], "Sans motif")
+
+    def test_the_reasons_reach_the_page(self):
+        self._sortie("Reparation du portail", "30000")
+
+        self.assertContains(
+            self.client.get(reverse("core:gym_dashboard", args=[self.gym.id])),
+            "Reparation du portail",
+        )
+
+
+class GlobalSearchTests(TestCase):
+    """
+    La recherche globale.
+
+    Un membre, un abonnement ou un paiement, depuis n'importe quel ecran - et
+    chaque rubrique seulement pour qui a le droit de la lire.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Globale", slug="org-globale"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Globale",
+            slug="gym-globale", subdomain="gym-globale",
+        )
+        self.voisine = Gym.objects.create(
+            organization=self.organization, name="Voisine",
+            slug="gym-globale-voisine", subdomain="gym-globale-voisine",
+        )
+        for code in ("MEMBERS", "SUBSCRIPTIONS", "POS"):
+            module, _ = Module.objects.get_or_create(
+                code=code, defaults={"name": code}
+            )
+            for salle in (self.gym, self.voisine):
+                GymModule.objects.get_or_create(
+                    gym=salle, module=module, defaults={"is_active": True}
+                )
+
+        self.plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Premium", price=50, duration_days=30
+        )
+        self.membre = Member.objects.create(
+            gym=self.gym, first_name="Ada", last_name="Mbala",
+            phone="+243870778899",
+        )
+        MemberSubscription.objects.create(
+            gym=self.gym, member=self.membre, plan=self.plan,
+            start_date=timezone.localdate(),
+            end_date=timezone.localdate() + timedelta(days=30),
+            is_active=True,
+        )
+        self.gerant = self._utilisateur("gerant-globale", "manager")
+        self.registre = CashRegister.objects.create(
+            gym=self.gym, opened_by=self.gerant,
+            opening_amount=Decimal("100000.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+        record_payment(
+            gym=self.gym, register=self.registre, amount=Decimal("30000"),
+            currency="CDF", method="cash", transaction_type="out",
+            category="expense", description="Reparation du portail",
+            created_by=self.gerant,
+        )
+        self._connecter(self.gerant)
+
+    def _utilisateur(self, nom, role):
+        utilisateur = User.objects.create_user(username=nom, password="pass12345")
+        UserGymRole.objects.create(
+            user=utilisateur, gym=self.gym, role=role, is_active=True
+        )
+        return utilisateur
+
+    def _connecter(self, utilisateur):
+        self.client.force_login(utilisateur)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _chercher(self, requete):
+        return self.client.get(reverse("core:global_search"), {"q": requete})
+
+    def _sections(self, requete):
+        return {
+            section["titre"]: section
+            for section in self._chercher(requete).context["sections"]
+        }
+
+    # --- Les quatre facons de retrouver un paiement ---------------------------------
+
+    def test_a_payment_is_found_by_the_member_name(self):
+        record_payment(
+            gym=self.gym, register=self.registre, member=self.membre,
+            amount=Decimal("50000"), currency="CDF", method="cash",
+            transaction_type="in", category="subscription",
+            description="Abonnement Premium", created_by=self.gerant,
+        )
+
+        self.assertEqual(self._sections("Mbala")["Paiements"]["total"], 1)
+
+    def test_a_payment_is_found_by_its_reason(self):
+        # C'est le seul texte libre d'un decaissement : sans lui, une depense
+        # est introuvable.
+        self.assertEqual(self._sections("portail")["Paiements"]["total"], 1)
+
+    def test_a_payment_is_found_by_its_amount(self):
+        self.assertEqual(self._sections("30000")["Paiements"]["total"], 1)
+
+    def test_a_spaced_amount_is_read_as_a_number(self):
+        # On tape "30 000" comme on le lit a l'ecran.
+        self.assertEqual(self._sections("30 000")["Paiements"]["total"], 1)
+
+    def test_a_payment_is_found_by_its_session_code(self):
+        self.registre.refresh_from_db()
+
+        self.assertEqual(
+            self._sections(self.registre.session_code)["Paiements"]["total"], 1
+        )
+
+    def test_a_name_is_not_read_as_an_amount(self):
+        self.assertEqual(self._sections("Ada")["Paiements"]["total"], 0)
+
+    # --- Les autres rubriques ----------------------------------------------------------
+
+    def test_a_member_is_found_by_name(self):
+        self.assertEqual(self._sections("Ada")["Membres"]["total"], 1)
+
+    def test_a_member_is_found_by_phone(self):
+        self.assertEqual(self._sections("778899")["Membres"]["total"], 1)
+
+    def test_a_subscription_is_found_by_its_plan(self):
+        self.assertEqual(self._sections("Premium")["Abonnements"]["total"], 1)
+
+    def test_a_subscription_is_found_by_the_member(self):
+        self.assertEqual(self._sections("Mbala")["Abonnements"]["total"], 1)
+
+    # --- Le cloisonnement et les droits -------------------------------------------------
+
+    def test_a_neighbouring_gym_stays_out(self):
+        Member.objects.create(
+            gym=self.voisine, first_name="Zoe", last_name="Ailleurs",
+            phone="+243870990000",
+        )
+
+        self.assertEqual(self._sections("Ailleurs")["Membres"]["total"], 0)
+
+    def test_a_receptionist_sees_members_but_no_payments(self):
+        # Les droits ne se relachent pas parce qu'on est passe par la
+        # recherche.
+        self._connecter(self._utilisateur("accueil-globale", "reception"))
+
+        sections = self._sections("Mbala")
+
+        self.assertIn("Membres", sections)
+        self.assertNotIn("Paiements", sections)
+        self.assertNotIn("Abonnements", sections)
+
+    def test_a_manager_sees_the_three_sections(self):
+        sections = self._sections("Mbala")
+
+        self.assertEqual(
+            set(sections), {"Membres", "Abonnements", "Paiements"}
+        )
+
+    # --- Les cas vides ------------------------------------------------------------------
+
+    def test_an_empty_query_shows_the_invitation(self):
+        reponse = self.client.get(reverse("core:global_search"))
+
+        self.assertEqual(reponse.context["total"], 0)
+        self.assertContains(reponse, "Tapez un nom")
+
+    def test_a_query_that_finds_nothing_says_so(self):
+        reponse = self._chercher("zzzzzz")
+
+        self.assertEqual(reponse.context["total"], 0)
+        self.assertContains(reponse, "Rien ne correspond")
+
+    def test_the_header_leads_to_the_global_search(self):
+        page = self.client.get(
+            reverse("members:member_list")
+        ).content.decode("utf-8")
+
+        self.assertIn(reverse("core:global_search"), page)

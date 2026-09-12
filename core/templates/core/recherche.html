@@ -1,0 +1,93 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block page_titre %}Recherche{% endblock %}
+
+{% block content %}
+<div class="main-content">
+
+    <div class="row g-3 mb-3">
+        <div class="col-12">
+            <div class="card stretch stretch-full bloc-royal">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                    <h5 class="card-title mb-0 d-flex align-items-center gap-2">
+                        <span class="material-icons" style="font-size:20px;">search</span>
+                        Recherche
+                    </h5>
+                    {% if requete %}
+                        <span class="badge {% if total %}bg-success{% else %}bg-secondary{% endif %}">
+                            {{ total }} resultat{{ total|pluralize }}
+                        </span>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    <form method="get" action="{% url 'core:global_search' %}" role="search"
+                          class="d-flex gap-2 flex-wrap">
+                        <input type="search" name="q" value="{{ requete }}" class="form-control"
+                               style="max-width:420px;" autofocus
+                               placeholder="Un nom, un telephone, un motif, un montant, un code de session"
+                               aria-label="Rechercher">
+                        <button type="submit" class="btn btn-outline-primary">Rechercher</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if not requete %}
+        <div class="card stretch stretch-full">
+            <div class="card-body text-center text-muted py-5">
+                <span class="material-icons" style="font-size:42px;opacity:.4;">search</span>
+                <p class="mb-0 mt-2">Tapez un nom, un numero de telephone, le motif d'une depense,
+                   un montant ou un code de session.</p>
+            </div>
+        </div>
+    {% elif not total %}
+        <div class="card stretch stretch-full">
+            <div class="card-body text-center text-muted py-5">
+                <span class="material-icons" style="font-size:42px;opacity:.4;">search_off</span>
+                <p class="mb-0 mt-2">Rien ne correspond a « {{ requete }} » dans cette salle.</p>
+            </div>
+        </div>
+    {% else %}
+        <div class="row g-3">
+            {% comment %} Une section par type, et seulement celles que le role
+               autorise a lire : une receptionniste voit les membres, pas les
+               paiements. {% endcomment %}
+            {% for section in sections %}
+            <div class="col-xl-4">
+                <div class="card stretch stretch-full">
+                    <div class="card-header d-flex align-items-center justify-content-between">
+                        <h5 class="card-title mb-0 d-flex align-items-center gap-2">
+                            <span class="material-icons ton-strategique" style="font-size:18px;">{{ section.icone }}</span>
+                            {{ section.titre }}
+                        </h5>
+                        <span class="badge bg-light text-muted border">{{ section.total }}</span>
+                    </div>
+                    <div class="card-body">
+                        {% if section.lignes %}
+                            <div class="vstack gap-2">
+                                {% for ligne in section.lignes %}
+                                <a href="{{ ligne.url }}" class="text-decoration-none text-body">
+                                    <div class="fw-semibold">{{ ligne.titre }}</div>
+                                    <div class="fs-12 text-muted">{{ ligne.detail }}</div>
+                                </a>
+                                {% endfor %}
+                            </div>
+                            {% if section.total > section.lignes|length %}
+                            <a href="{{ section.tout_voir }}" class="btn btn-sm btn-light mt-3">
+                                Voir les {{ section.total }}
+                            </a>
+                            {% endif %}
+                        {% else %}
+                            <p class="text-muted fs-12 mb-0">Aucun resultat dans cette rubrique.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+</div>
+{% endblock %}
