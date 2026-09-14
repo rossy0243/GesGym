@@ -847,7 +847,7 @@
                             <tbody>
                                 {% for access in recent_access %}
                                 <tr>
-                                    <td>{{ access.member.first_name }} {{ access.member.last_name }}</td>
+                                    <td>{{ access.nom_affiche }}</td>
                                     <td>
                                         {% if access.access_granted %}
                                         <span class="badge bg-success">Autorise</span>
@@ -1255,7 +1255,7 @@
                             <tbody>
                                 {% for access in recent_access %}
                                 <tr>
-                                    <td>{{ access.member.first_name }} {{ access.member.last_name }}</td>
+                                    <td>{{ access.nom_affiche }}</td>
                                     <td>
                                         {% if access.access_granted %}
                                         <span class="badge bg-success">Autorise</span>

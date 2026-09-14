@@ -491,6 +491,22 @@ def device_webhook(request, token):
                 "door": {"attempted": False, "opened": False, "message": ""},
             })
 
+        # Une fiche creee a la main sur le terminal porte un numero hors de la
+        # plage de l'application. Le lecteur l'a reconnue et a decide seul :
+        # l'application ne la connait pas, mais le passage doit exister au
+        # journal, sinon quelqu'un entre sans laisser de trace. Un texte
+        # quelconque, lui, reste refuse sans trace comme avant.
+        if nature == "inconnu" and credential.strip().isdigit():
+            log = _journaliser_fiche_du_terminal(device, credential, parsed)
+            return JsonResponse({
+                "access": log.access_granted,
+                "member": log.nom_affiche,
+                "reason": log.denial_reason or "",
+                "log_id": log.id,
+                "stats": _today_stats(device.gym),
+                "door": {"attempted": False, "opened": False, "message": ""},
+            })
+
         return JsonResponse({"access": False, "reason": UNKNOWN_CREDENTIAL_REASON})
 
     # Le lecteur reemet la meme notification tant qu'il ne l'estime pas
@@ -509,7 +525,7 @@ def device_webhook(request, token):
         if deja is not None:
             return JsonResponse({
                 "access": deja.access_granted,
-                "member": f"{deja.member.first_name} {deja.member.last_name}",
+                "member": deja.nom_affiche,
                 "reason": deja.denial_reason or "",
                 "log_id": deja.id,
                 "stats": _today_stats(device.gym),
@@ -556,6 +572,62 @@ def device_webhook(request, token):
         "stats": _today_stats(device.gym),
         "door": door_status,
     })
+
+
+FICHE_TERMINAL_RAISON = "Fiche geree par le terminal"
+
+# Codes d'evenement d'une authentification acceptee par le lecteur - les memes
+# que ceux du rattrapage.
+MINORS_FICHE_OUVERTE = frozenset({1, 8, 38, 75})
+
+
+def _journaliser_fiche_du_terminal(device, credential, parsed):
+    """
+    Journalise le passage d'une fiche que l'application n'a pas posee.
+
+    Le lecteur a reconnu la fiche et ouvert : l'application n'a rien a
+    trancher, elle ne connait ni cette personne ni ses droits. Elle enregistre
+    ce qui s'est passe a la porte, hors de toute statistique des membres.
+    """
+    from django.utils import timezone
+
+    numero = parsed.get("event_id") or ""
+    if numero:
+        # Le lecteur reemet la meme notification tant qu'il ne l'estime pas
+        # acquittee : une redite ne cree pas de seconde ligne.
+        deja = AccessLog.objects.filter(device=device, device_event_id=numero).first()
+        if deja is not None:
+            return deja
+
+    evenement = parsed.get("event") or {}
+    nom = str(evenement.get("name") or "").strip()
+    libelle = (nom or f"Fiche {credential.strip()}")[:128]
+
+    # C'est le lecteur qui a tranche : son code d'evenement dit s'il a ouvert.
+    # Sans code lisible, on s'en tient a ce qu'il signale le plus souvent.
+    code = evenement.get("minor") or evenement.get("subEventType")
+    try:
+        accorde = int(code) in MINORS_FICHE_OUVERTE
+    except (TypeError, ValueError):
+        accorde = True
+
+    deja_entre = accorde and AccessLog.objects.filter(
+        gym=device.gym,
+        terminal_label=libelle,
+        access_granted=True,
+        check_in_time__date=timezone.localdate(),
+    ).exists()
+
+    return AccessLog.objects.create(
+        gym=device.gym,
+        device=device,
+        terminal_label=libelle,
+        access_granted=accorde,
+        is_return=deja_entre,
+        denial_reason="Retour dans la salle" if deja_entre else FICHE_TERMINAL_RAISON,
+        device_used=_libelle_methode(device, "lecteur", hikvision.est_un_visage(evenement)),
+        device_event_id=numero,
+    )
 
 
 def _resolve_member(gym, credential):

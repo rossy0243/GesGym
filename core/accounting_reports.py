@@ -484,7 +484,7 @@ def build_access_rows(gym, period_data):
             gym=gym,
             check_in_time__date__range=(period_data["start_date"], period_data["end_date"]),
         )
-        .select_related("member", "scanned_by")
+        .select_related("member", "scanned_by", "guest_pass", "employee")
         .order_by("check_in_time", "id")
     )
 
@@ -494,7 +494,13 @@ def build_access_rows(gym, period_data):
                 date=format_datetime(log.check_in_time),
                 sort_date=local_date(log.check_in_time),
                 dataset="Acces",
-                client=member_label(log.member),
+                # Un membre garde son libelle, une ouverture manuelle reste vide ;
+                # un invite, un employe ou une fiche du terminal sont nommes.
+                client=member_label(log.member) or (
+                    log.nom_affiche
+                    if (log.guest_pass_id or log.employee_id or log.terminal_label)
+                    else ""
+                ),
                 description=log.denial_reason or log.device_used or "Controle acces",
                 status="Autorise" if log.access_granted else "Refuse",
                 reference=f"ACC-{log.id:06d}",

@@ -192,9 +192,29 @@ class AccessDevice(models.Model):
         return self.nous_parle and self.est_joignable
 
 
+class AccessLogQuerySet(models.QuerySet):
+    """Les lectures du journal d'acces."""
+
+    def hors_personnel(self):
+        """
+        Le journal sans le personnel de la salle.
+
+        Un employe qui arrive le matin, ou une fiche creee a la main sur le
+        terminal, n'est pas un client : le compter gonflerait la frequentation
+        des membres. Toutes les statistiques des membres passent par ici.
+
+        Les ouvertures manuelles et les invites gardent exactement leur
+        definition d'avant : ce filtre ne retire que ce qui n'existait pas.
+        """
+        return self.filter(employee__isnull=True, terminal_label="")
+
+
 class AccessLog(models.Model):
     """
-    Historique des accès des membres (scan QR, entrée gym).
+    Historique des passages a l'entree de la salle.
+
+    Un passage concerne un membre, un invite, un employe, une fiche creee
+    directement sur le terminal - ou personne, pour une ouverture manuelle.
     """
 
     gym = models.ForeignKey(
@@ -280,6 +300,29 @@ class AccessLog(models.Model):
         related_name="access_scans"
     )
 
+    # Le personnel entre par la meme porte que les membres. Ses passages se
+    # journalisent, mais ne comptent dans aucune statistique des membres.
+    employee = models.ForeignKey(
+        "rh.Employee",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="access_logs",
+        verbose_name="Employe",
+    )
+
+    # Une fiche creee directement sur le terminal, hors application : le
+    # lecteur l'ouvre, l'application ne la connait pas. On garde le nom qu'il
+    # envoie - ou son numero - pour que le passage ne reste pas invisible.
+    terminal_label = models.CharField(
+        max_length=128,
+        blank=True,
+        default="",
+        verbose_name="Fiche du terminal",
+    )
+
+    objects = AccessLogQuerySet.as_manager()
+
     class Meta:
 
         indexes = [
@@ -288,9 +331,33 @@ class AccessLog(models.Model):
             models.Index(fields=["member"]),
             models.Index(fields=["check_in_time"]),
             models.Index(fields=["member", "check_in_time"]),
+            models.Index(fields=["employee", "check_in_time"]),
         ]
 
         ordering = ["-check_in_time"]
+
+    @property
+    def nom_affiche(self):
+        """Qui est passe, tel que l'equipe doit le lire - un seul libelle partout."""
+        if self.member_id:
+            return f"{self.member.first_name} {self.member.last_name}".strip()
+        if self.guest_pass_id:
+            return f"{self.guest_pass.guest_name} (invite)"
+        if self.employee_id:
+            return f"{self.employee.name} (personnel)"
+        if self.terminal_label:
+            return f"{self.terminal_label} (fiche du terminal)"
+        return "Ouverture manuelle"
+
+    @property
+    def telephone_affiche(self):
+        if self.member_id:
+            return self.member.phone or ""
+        if self.guest_pass_id:
+            return self.guest_pass.guest_phone or ""
+        if self.employee_id:
+            return self.employee.phone or ""
+        return ""
 
     def clean(self):
         if self.member_id and not self.gym_id:
@@ -298,6 +365,9 @@ class AccessLog(models.Model):
 
         if self.member_id and self.gym_id and self.member.gym_id != self.gym_id:
             raise ValidationError("Le membre n'appartient pas a ce gym.")
+
+        if self.employee_id and self.gym_id and self.employee.gym_id != self.gym_id:
+            raise ValidationError("L'employe n'appartient pas a ce gym.")
 
     def save(self, *args, **kwargs):
         if self.member_id and not self.gym_id:

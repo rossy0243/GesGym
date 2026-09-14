@@ -107,10 +107,12 @@ def _member_already_checked_in_today(gym, member):
 
 
 def _today_stats(gym):
+    # Le personnel et les fiches du terminal ne comptent pas dans les
+    # passages des membres : ils ont leur propre ligne ailleurs.
     logs_today = AccessLog.objects.filter(
         gym=gym,
         check_in_time__date=_today(),
-    )
+    ).hors_personnel()
 
     return {
         # Un retour n'est pas une nouvelle visite : sans cette exclusion, un
@@ -188,16 +190,8 @@ def _serialize_log(log):
     # ligne porte alors le geste, pas une personne qui se serait presentee.
     return {
         "id": log.id,
-        "member": (
-            f"{log.member.first_name} {log.member.last_name}" if log.member
-            else f"{log.guest_pass.guest_name} (invite)" if log.guest_pass_id
-            else "Ouverture manuelle"
-        ),
-        "phone": (
-            log.member.phone if log.member
-            else log.guest_pass.guest_phone if log.guest_pass_id
-            else ""
-        ),
+        "member": log.nom_affiche,
+        "phone": log.telephone_affiche,
         "qr_code": str(log.member.qr_code) if log.member else "",
         "time": checked_at.strftime("%H:%M"),
         "date": checked_at.strftime("%d/%m/%Y"),
@@ -253,10 +247,10 @@ def acces_dashboard(request):
     stats = _today_stats(gym)
     recent_logs = AccessLog.objects.filter(
         gym=gym
-    ).select_related("member", "scanned_by", "guest_pass").order_by("-check_in_time")[:10]
+    ).select_related("member", "scanned_by", "guest_pass", "employee").order_by("-check_in_time")[:10]
     history_logs = AccessLog.objects.filter(
         gym=gym
-    ).select_related("member", "scanned_by", "guest_pass").order_by("-check_in_time")[:200]
+    ).select_related("member", "scanned_by", "guest_pass", "employee").order_by("-check_in_time")[:200]
     agents = (
         AccessLog.objects.filter(gym=gym, scanned_by__isnull=False)
         .select_related("scanned_by")
@@ -293,7 +287,7 @@ def _legacy_member_access_unused(request, qr_code):
 def realtime_access(request):
     logs = AccessLog.objects.filter(
         gym=request.gym
-    ).select_related("member", "scanned_by", "guest_pass").order_by("-check_in_time")[:10]
+    ).select_related("member", "scanned_by", "guest_pass", "employee").order_by("-check_in_time")[:10]
 
     return JsonResponse([_serialize_log(log) for log in logs], safe=False)
 

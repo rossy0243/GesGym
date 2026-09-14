@@ -84,6 +84,7 @@ class Command(BaseCommand):
         recrees = 0
         ignores = 0
         inconnus = 0
+        fiches_terminal = 0
 
         for evenement in evenements:
             numero = str(evenement.get("serialNo") or "")
@@ -91,9 +92,28 @@ class Command(BaseCommand):
                 ignores += 1
                 continue
 
-            member_id = enrollment.member_id_depuis(evenement.get("employeeNoString"))
+            identifiant = str(evenement.get("employeeNoString") or "").strip()
+            member_id = enrollment.member_id_depuis(identifiant)
             if member_id is None:
-                # Badge du personnel, fiche creee a la main : pas un membre.
+                # Fiche creee a la main sur le terminal : pas un membre, mais un
+                # passage reel. Il est recree comme en direct, hors statistiques
+                # des membres ; sans cela, une coupure effacerait ces passages.
+                if identifiant.isdigit():
+                    horodatage = self._horodatage(evenement.get("time"))
+                    if horodatage is None:
+                        ignores += 1
+                        continue
+                    if simulation:
+                        self.stdout.write(
+                            f"    [simulation] {horodatage:%d/%m %H:%M} "
+                            f"fiche du terminal {identifiant}"
+                        )
+                    else:
+                        self._recreer_fiche_du_terminal(
+                            device, evenement, identifiant, numero, horodatage
+                        )
+                    fiches_terminal += 1
+                    continue
                 inconnus += 1
                 continue
 
@@ -120,7 +140,7 @@ class Command(BaseCommand):
 
         self.stdout.write(
             f"    {recrees} passage(s) recupere(s), {ignores} deja connu(s), "
-            f"{inconnus} hors membres"
+            f"{inconnus} hors membres, {fiches_terminal} fiche(s) du terminal"
         )
 
     def _lire_evenements(self, device, jours):
@@ -192,5 +212,43 @@ class Command(BaseCommand):
 
         # check_in_time est auto_now_add : il faut le corriger apres coup pour
         # que le passage apparaisse a l'heure ou il a reellement eu lieu.
+        AccessLog.objects.filter(pk=log.pk).update(check_in_time=horodatage)
+        return log
+
+
+    def _recreer_fiche_du_terminal(self, device, evenement, identifiant, numero, horodatage):
+        """
+        Recree le passage d'une fiche que l'application n'a pas posee.
+
+        Meme regle qu'en direct : le passage existe au journal, sous le nom que
+        le lecteur a garde, et n'entre dans aucune statistique des membres. Le
+        code d'evenement dit si le lecteur a ouvert.
+        """
+        par_le_visage = hikvision.est_un_visage(evenement)
+        methode = f"{device.name} (visage)" if par_le_visage else f"{device.name} (badge)"
+        libelle = (str(evenement.get("name") or "").strip() or f"Fiche {identifiant}")[:128]
+
+        try:
+            accorde = int(evenement.get("minor")) in MINORS_ACCES_ACCORDE
+        except (TypeError, ValueError):
+            accorde = True
+
+        deja_entre = accorde and AccessLog.objects.filter(
+            gym=device.gym,
+            terminal_label=libelle,
+            access_granted=True,
+            check_in_time__date=horodatage.date(),
+        ).exists()
+
+        log = AccessLog.objects.create(
+            gym=device.gym,
+            device=device,
+            terminal_label=libelle,
+            device_used=f"{methode} - rattrapage",
+            device_event_id=numero,
+            access_granted=accorde,
+            is_return=deja_entre,
+            denial_reason="Retour dans la salle" if deja_entre else "Fiche geree par le terminal",
+        )
         AccessLog.objects.filter(pk=log.pk).update(check_in_time=horodatage)
         return log

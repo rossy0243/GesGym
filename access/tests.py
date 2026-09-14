@@ -1499,11 +1499,13 @@ class FaceEventWebhookTests(TestCase):
 
     def test_a_manual_record_is_not_taken_for_a_member(self):
         # Le badge d'un employe, cree a la main sur le terminal, porte un
-        # petit numero. Il ne doit jamais etre confondu avec un membre.
-        response = self._pousser("2")
+        # petit numero. Il ne doit jamais etre confondu avec un membre - mais
+        # son passage est desormais journalise comme fiche du terminal, au
+        # lieu de disparaitre sans trace.
+        self._pousser("2")
 
-        self.assertFalse(response.json()["access"])
-        self.assertFalse(AccessLog.objects.exists())
+        self.assertFalse(AccessLog.objects.filter(member__isnull=False).exists())
+        self.assertEqual(AccessLog.objects.get().terminal_label, "Fiche 2")
 
     def test_an_unknown_member_is_refused(self):
         response = self._pousser(enrollment.PLAGE_APPLICATION + 999999)
@@ -3681,3 +3683,239 @@ class ReaderLogVolumeTests(TestCase):
         trace = chr(10).join(journal.output)
         self.assertIn("non reconnu", trace)
         self.assertIn("brut=", trace)
+
+
+class StaffAndTerminalPassageTests(TestCase):
+    """
+    Le journal accueille le personnel et les fiches du terminal ; les
+    statistiques des membres les ignorent.
+
+    Rien de ce qui existait ne doit changer : les ouvertures manuelles et les
+    invites gardent leur definition, et les chiffres d'hier restent ceux
+    d'aujourd'hui tant qu'aucun employe n'est passe.
+    """
+
+    def setUp(self):
+        from decimal import Decimal
+
+        from rh.models import Employee
+
+        self.organization = Organization.objects.create(name="Org Personnel", slug="org-personnel")
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Personnel",
+            slug="gym-personnel", subdomain="gym-personnel",
+        )
+        self.voisine = Gym.objects.create(
+            organization=self.organization, name="Voisine",
+            slug="gym-personnel-voisine", subdomain="gym-personnel-voisine",
+        )
+        for code in ("MEMBERS", "ACCESS"):
+            module, _ = Module.objects.get_or_create(code=code, defaults={"name": code})
+            GymModule.objects.get_or_create(gym=self.gym, module=module, defaults={"is_active": True})
+
+        self.device = AccessDevice.objects.create(
+            gym=self.gym, name="Terminal", host="10.0.0.9", password="secret"
+        )
+        self.url = reverse("access:device_webhook", args=[self.device.webhook_token])
+        self.member = Member.objects.create(
+            gym=self.gym, first_name="Alice", last_name="Nzuzi", phone="+243860000011",
+        )
+        plan = SubscriptionPlan.objects.create(gym=self.gym, name="Mensuel", price=30, duration_days=30)
+        today = timezone.localdate()
+        MemberSubscription.objects.create(
+            gym=self.gym, member=self.member, plan=plan,
+            start_date=today - timedelta(days=1), end_date=today + timedelta(days=29),
+            is_active=True,
+        )
+        self.employe = Employee.objects.create(
+            gym=self.gym, name="Paul Gardien", role="cleaner", phone="+243860000099",
+            compensation_type="daily", daily_salary=Decimal("5000"),
+        )
+        self.employe_voisin = Employee.objects.create(
+            gym=self.voisine, name="Zoe Ailleurs", role="cleaner",
+            compensation_type="daily", daily_salary=Decimal("5000"),
+        )
+
+        patcher = patch("access.hikvision.HikvisionClient.open_door")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _envoyer(self, **evenement):
+        charge = {"AccessControllerEvent": {"majorEventType": 5, "subEventType": 75, **evenement}}
+        return self.client.post(self.url, data=json.dumps(charge), content_type="application/json")
+
+    def _passages_typiques(self):
+        """Un membre, une ouverture manuelle, un employe et une fiche du terminal."""
+        AccessLog.objects.create(gym=self.gym, member=self.member, access_granted=True)
+        AccessLog.objects.create(gym=self.gym, access_granted=True)
+        AccessLog.objects.create(gym=self.gym, employee=self.employe, access_granted=True)
+        AccessLog.objects.create(gym=self.gym, employee=self.employe, access_granted=False)
+        AccessLog.objects.create(gym=self.gym, terminal_label="Fiche 3", access_granted=True, is_return=True)
+
+    # --- La fiche du terminal au journal ---------------------------------------------
+
+    def test_a_terminal_record_is_journaled_without_a_member(self):
+        self._envoyer(employeeNoString="2")
+
+        log = AccessLog.objects.get()
+        self.assertIsNone(log.member)
+        self.assertTrue(log.access_granted)
+        self.assertEqual(log.terminal_label, "Fiche 2")
+
+    def test_the_name_sent_by_the_reader_is_kept(self):
+        self._envoyer(employeeNoString="2", name="Paul Gardien")
+
+        log = AccessLog.objects.get()
+        self.assertEqual(log.terminal_label, "Paul Gardien")
+        self.assertEqual(log.nom_affiche, "Paul Gardien (fiche du terminal)")
+
+    def test_a_passage_refused_by_the_reader_is_journaled_as_refused(self):
+        # Fiche expiree sur le terminal : le lecteur n'a pas ouvert, le journal
+        # ne doit pas pretendre le contraire.
+        self._envoyer(employeeNoString="2", subEventType=9)
+
+        log = AccessLog.objects.get()
+        self.assertFalse(log.access_granted)
+        self.assertFalse(log.is_return)
+
+    def test_a_repeated_notification_is_not_journaled_twice(self):
+        # Le lecteur reemet tant qu'il ne s'estime pas acquitte.
+        self._envoyer(employeeNoString="2", serialNo="777")
+        self._envoyer(employeeNoString="2", serialNo="777")
+
+        self.assertEqual(AccessLog.objects.count(), 1)
+
+    def test_a_second_passage_the_same_day_is_a_return(self):
+        self._envoyer(employeeNoString="2", serialNo="1")
+        self._envoyer(employeeNoString="2", serialNo="2")
+
+        self.assertEqual(AccessLog.objects.filter(is_return=True).count(), 1)
+
+    def test_random_text_is_still_refused_without_trace(self):
+        # Seul un numero hors plage est une fiche du terminal : un texte
+        # quelconque lu par le lecteur reste refuse, comme avant.
+        reponse = self._envoyer(employeeNoString="bonjour")
+
+        self.assertFalse(reponse.json()["access"])
+        self.assertFalse(AccessLog.objects.exists())
+
+    def test_a_member_passage_is_unchanged(self):
+        self._envoyer(employeeNoString=enrollment.employee_no(self.member))
+
+        log = AccessLog.objects.get()
+        self.assertEqual(log.member, self.member)
+        self.assertEqual(log.terminal_label, "")
+
+    # --- Les statistiques des membres ----------------------------------------------------
+
+    def test_todays_counters_ignore_staff_and_terminal_passages(self):
+        from .views import _today_stats
+
+        self._passages_typiques()
+
+        stats = _today_stats(self.gym)
+
+        self.assertEqual(stats["entries"], 1)
+        self.assertEqual(stats["returns"], 0)
+        self.assertEqual(stats["denied"], 0)
+
+    def test_the_dashboard_counts_what_it_counted_before(self):
+        # Le membre et l'ouverture manuelle comptaient deja : ils comptent
+        # toujours. L'employe et la fiche du terminal n'entrent nulle part.
+        gerant = User.objects.create_user(username="gerant-personnel", password="pass12345")
+        UserGymRole.objects.create(user=gerant, gym=self.gym, role="manager", is_active=True)
+        self.client.force_login(gerant)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+        self._passages_typiques()
+
+        contexte = self.client.get(reverse("core:gym_dashboard", args=[self.gym.id])).context
+
+        self.assertEqual(contexte["today_checkins"], 2)
+        self.assertEqual(contexte["today_unique_visitors"], 1)
+        self.assertEqual(contexte["denied_today"], 0)
+        self.assertEqual(contexte["visits_period"], 2)
+
+    def test_the_filter_keeps_manual_openings(self):
+        AccessLog.objects.create(gym=self.gym, access_granted=True)
+        AccessLog.objects.create(gym=self.gym, employee=self.employe, access_granted=True)
+
+        self.assertEqual(AccessLog.objects.filter(gym=self.gym).hors_personnel().count(), 1)
+
+    # --- Les libelles ----------------------------------------------------------------------
+
+    def test_every_kind_of_passage_has_a_name(self):
+        membre = AccessLog.objects.create(gym=self.gym, member=self.member)
+        employe = AccessLog.objects.create(gym=self.gym, employee=self.employe)
+        fiche = AccessLog.objects.create(gym=self.gym, terminal_label="Fiche 8")
+        manuelle = AccessLog.objects.create(gym=self.gym)
+
+        self.assertEqual(membre.nom_affiche, "Alice Nzuzi")
+        self.assertEqual(employe.nom_affiche, "Paul Gardien (personnel)")
+        self.assertEqual(fiche.nom_affiche, "Fiche 8 (fiche du terminal)")
+        self.assertEqual(manuelle.nom_affiche, "Ouverture manuelle")
+
+    def test_the_access_screen_names_an_employee(self):
+        from .views import _serialize_log
+
+        log = AccessLog.objects.create(gym=self.gym, employee=self.employe)
+
+        ligne = _serialize_log(log)
+
+        self.assertEqual(ligne["member"], "Paul Gardien (personnel)")
+        self.assertEqual(ligne["phone"], "+243860000099")
+
+    def test_the_export_names_staff_and_leaves_manual_openings_blank(self):
+        from core.accounting_reports import build_access_rows
+        from core.views import _get_period_window
+
+        AccessLog.objects.create(gym=self.gym, employee=self.employe)
+        AccessLog.objects.create(gym=self.gym)
+
+        lignes = build_access_rows(self.gym, _get_period_window("day", timezone.localdate()))
+
+        clients = sorted(ligne["client"] for ligne in lignes)
+        self.assertEqual(clients, ["", "Paul Gardien (personnel)"])
+
+    def test_an_employee_of_another_gym_is_refused(self):
+        with self.assertRaises(ValidationError):
+            AccessLog.objects.create(gym=self.gym, employee=self.employe_voisin)
+
+    # --- Le rattrapage ------------------------------------------------------------------------
+
+    def test_the_catch_up_recreates_a_terminal_passage(self):
+        from django.core.management import call_command
+
+        from .management.commands.rattraper_passages import Command
+
+        evenements = [{
+            "employeeNoString": "5",
+            "name": "Gardien de nuit",
+            "minor": 75,
+            "serialNo": "900",
+            "time": timezone.localtime().replace(microsecond=0).isoformat(),
+        }]
+        with patch.object(Command, "_lire_evenements", return_value=evenements):
+            call_command("rattraper_passages", stdout=__import__("io").StringIO())
+
+        log = AccessLog.objects.get(device_event_id="900")
+        self.assertEqual(log.terminal_label, "Gardien de nuit")
+        self.assertIsNone(log.member)
+        self.assertTrue(log.access_granted)
+
+    def test_the_catch_up_keeps_a_refused_terminal_passage_refused(self):
+        from django.core.management import call_command
+
+        from .management.commands.rattraper_passages import Command
+
+        evenements = [{
+            "employeeNoString": "5",
+            "minor": 21,
+            "serialNo": "901",
+            "time": timezone.localtime().replace(microsecond=0).isoformat(),
+        }]
+        with patch.object(Command, "_lire_evenements", return_value=evenements):
+            call_command("rattraper_passages", stdout=__import__("io").StringIO())
+
+        self.assertFalse(AccessLog.objects.get(device_event_id="901").access_granted)

@@ -906,7 +906,7 @@ def _build_attendance_rows(gym, period_data):
         gym=gym,
         access_granted=True,
         check_in_time__date__range=(period_data["start_date"], period_data["end_date"]),
-    )
+    ).hors_personnel()
     period_key = period_data["key"]
     rows = []
 
@@ -2018,14 +2018,16 @@ def gym_dashboard(request, gym_id):
     expiry_1_day = _expiring_within(1)
     expiry_soon = _expiring_within(15)
 
+    # Le personnel et les fiches du terminal n'entrent dans aucune
+    # statistique des membres : visites, visiteurs, refus, heure de pointe.
     access_period_qs = AccessLog.objects.filter(
         gym=gym,
         check_in_time__date__range=(period_data["start_date"], period_data["end_date"]),
-    )
+    ).hors_personnel()
     access_previous_qs = AccessLog.objects.filter(
         gym=gym,
         check_in_time__date__range=(period_data["previous_start"], period_data["previous_end"]),
-    )
+    ).hors_personnel()
     # Un retour n'est pas une nouvelle visite : sans cette exclusion, un
     # membre ressorti puis revenu compterait double.
     visits_period = access_period_qs.filter(access_granted=True, is_return=False).count()
@@ -2041,14 +2043,14 @@ def gym_dashboard(request, gym_id):
         check_in_time__date=today,
         access_granted=True,
         is_return=False,
-    )
+    ).hors_personnel()
     today_checkins = passages_today_qs.count()
     today_unique_visitors = _personnes_distinctes(passages_today_qs)
     denied_today = AccessLog.objects.filter(
         gym=gym,
         check_in_time__date=today,
         access_granted=False,
-    ).count()
+    ).hors_personnel().count()
     # Assiduite : meme population au numerateur et au denominateur. L'ancien
     # "engagement" divisait les visiteurs de la periode - membres expires et
     # invites compris - par les membres actifs du jour. Deux populations
@@ -2184,7 +2186,7 @@ def gym_dashboard(request, gym_id):
     if user_role in ["owner", "manager", "reception"]:
         recent_access = (
             AccessLog.objects.filter(gym=gym)
-            .select_related("member", "guest_pass")
+            .select_related("member", "guest_pass", "employee")
             .order_by("-check_in_time")[:5]
         )
 

@@ -485,7 +485,7 @@
                     <tbody id="historiqueBody">
                         {% for log in history_logs %}
                         <tr data-history-row
-                            data-search="{% if log.member %}{{ log.member.first_name }} {{ log.member.last_name }} {{ log.member.phone }} {{ log.member.qr_code }}{% else %}Ouverture manuelle{% endif %}"
+                            data-search="{{ log.nom_affiche }} {{ log.telephone_affiche }}{% if log.member %} {{ log.member.qr_code }}{% endif %}"
                             data-date="{{ log.check_in_time|date:'Y-m-d' }}"
                             data-status="{% if log.access_granted %}success{% else %}denied{% endif %}"
                             data-method="{{ log.device_used|default:'' }}"
@@ -495,9 +495,12 @@
                                 <small class="text-muted">{{ log.check_in_time|date:"H:i" }}</small>
                             </td>
                             <td>
-                                {% if log.member %}
-                                    <div class="fw-semibold">{{ log.member.first_name }} {{ log.member.last_name }}</div>
-                                    <small class="text-muted">{{ log.member.phone }}</small>
+                                {% comment %} Un invite, un employe ou une fiche du terminal a
+                                   un nom : seule l'ouverture manuelle n'en a pas. Avant, un invite
+                                   s'affichait ici comme une ouverture manuelle. {% endcomment %}
+                                {% if log.member or log.guest_pass_id or log.employee_id or log.terminal_label %}
+                                    <div class="fw-semibold">{{ log.nom_affiche }}</div>
+                                    <small class="text-muted">{{ log.telephone_affiche }}</small>
                                 {% else %}
                                     <div class="fw-semibold d-flex align-items-center gap-1">
                                         <span class="material-icons text-warning" style="font-size:18px;">lock_open</span>
