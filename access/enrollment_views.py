@@ -20,7 +20,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.files.base import ContentFile
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -254,6 +254,8 @@ def staff_face_enrollment(request, employee_id):
     if capture and capture.get("employee_id") == employe.id:
         apercu = capture.get("image_b64")
 
+    recherche_membre = (request.GET.get("membre") or "").strip()
+
     return render(
         request,
         "access/face_enrollment_employee.html",
@@ -266,6 +268,12 @@ def staff_face_enrollment(request, employee_id):
             "sujet": "l'employé",
             "url_capture": reverse("access:staff_face_capture", args=[employe.id]),
             "url_valider": reverse("access:staff_face_confirm", args=[employe.id]),
+            "recherche_membre": recherche_membre,
+            "membres_candidats": (
+                personnel.membres_candidats(employe, recherche_membre)
+                if employe.is_active
+                else []
+            ),
         },
     )
 
@@ -378,6 +386,63 @@ def staff_face_remove(request, employee_id):
     else:
         messages.success(
             request, f"{employe.name} ne peut plus entrer par reconnaissance faciale."
+        )
+
+    return redirect("access:staff_face_enrollment", employee_id=employe.id)
+
+
+@login_required
+@module_required("ACCESS")
+@role_required(RH_EMPLOYEE_ROLES)
+@require_POST
+def staff_switch_from_member(request, employee_id):
+    """Reprend le visage d'un employe qui entrait avec une fiche membre."""
+    employe = _employe_de(request, employee_id)
+    try:
+        member_id = int(request.POST.get("member_id", ""))
+    except (TypeError, ValueError):
+        raise Http404
+    membre = get_object_or_404(Member, id=member_id, gym=request.gym)
+    nom_membre = f"{membre.first_name} {membre.last_name}".strip() or membre.phone
+
+    try:
+        resultat = personnel.basculer_membre(employe, membre)
+    except enrollment.EnrollmentError as exc:
+        messages.error(request, str(exc))
+        return redirect("access:staff_face_enrollment", employee_id=employe.id)
+
+    log_sensitive_action(
+        request,
+        "access.member_switched_to_staff",
+        "Employee",
+        employe.name,
+        metadata={
+            "employee_id": employe.id,
+            "member_id": membre.id,
+            "membre": nom_membre,
+            "visage_repris": resultat["photo"],
+            "echecs": resultat["echecs"],
+        },
+        gym=request.gym,
+    )
+
+    messages.success(
+        request,
+        f"La fiche membre de {nom_membre} est desactivee ; son historique est conserve.",
+    )
+    if resultat["echecs"]:
+        messages.warning(
+            request, "Le lecteur n'a pas tout accepte. " + " ".join(resultat["echecs"])
+        )
+    elif not resultat["photo"]:
+        messages.warning(
+            request,
+            "Sa fiche membre n'avait pas de photo prise par le lecteur : capturez "
+            f"maintenant le visage de {employe.name} ci-dessous.",
+        )
+    elif resultat["lecteurs"]:
+        messages.success(
+            request, f"Visage repris : {employe.name} entre desormais comme personnel."
         )
 
     return redirect("access:staff_face_enrollment", employee_id=employe.id)

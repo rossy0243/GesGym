@@ -1950,7 +1950,9 @@ def gym_dashboard(request, gym_id):
     current_month = today.month
     current_year = today.year
 
-    members_qs = Member.objects.filter(gym=gym)
+    # Une fiche membre desactivee (un employe passe au personnel) n'est plus un
+    # membre : elle sort de tous les chiffres des membres, son historique reste.
+    members_qs = Member.objects.filter(gym=gym, is_active=True)
     active_subscriptions_qs = MemberSubscription.objects.filter(
         member__gym=gym,
         is_active=True,

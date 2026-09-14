@@ -30,6 +30,7 @@ urlpatterns = [
         path("personnel/<int:employee_id>/visage/capturer/", enrollment_views.staff_face_capture, name="staff_face_capture"),
         path("personnel/<int:employee_id>/visage/valider/", enrollment_views.staff_face_confirm, name="staff_face_confirm"),
         path("personnel/<int:employee_id>/visage/retirer/", enrollment_views.staff_face_remove, name="staff_face_remove"),
+        path("personnel/<int:employee_id>/visage/depuis-membre/", enrollment_views.staff_switch_from_member, name="staff_switch_from_member"),
         path("personnel/retraits/<int:record_id>/reessayer/", enrollment_views.staff_removal_retry, name="staff_removal_retry"),
 
         # Messages affiches sur l'ecran du lecteur.

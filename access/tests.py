@@ -4598,3 +4598,259 @@ class StaffDepartureTests(TestCase):
         retrait.assert_not_called()
         self.assertIn(self.numero, [appel.args[0] for appel in pose.mock_calls])
         self.assertEqual(self.Fiche.objects.get().employee, self.employe)
+
+
+
+class StaffSwitchFromMemberTests(TestCase):
+    """Un employe inscrit comme membre passe au personnel, historique intact."""
+
+    def setUp(self):
+        from django.core.files.base import ContentFile
+
+        (self.gym, self.device, self.membre_normal, self.employe,
+         self.employe_voisin) = _salle_avec_personnel("bascule")
+        # La fiche membre de l'employe : meme nom, meme telephone, visage du lecteur.
+        self.faux_membre = Member.objects.create(
+            gym=self.gym, first_name="Paul", last_name="Gardien", phone="+243860000098",
+        )
+        self.faux_membre.photo.save(
+            f"visage_membre_{self.faux_membre.id}.jpg", ContentFile(_image_jpeg()), save=True
+        )
+        plan = SubscriptionPlan.objects.create(gym=self.gym, name="Mensuel", price=30, duration_days=30)
+        today = timezone.localdate()
+        MemberSubscription.objects.create(
+            gym=self.gym, member=self.faux_membre, plan=plan,
+            start_date=today - timedelta(days=1), end_date=today + timedelta(days=29),
+            is_active=True,
+        )
+        self.passage = AccessLog.objects.create(
+            gym=self.gym, member=self.faux_membre, access_granted=True
+        )
+        self.gerant = User.objects.create_user(username="gerant-bascule", password="pass12345")
+        UserGymRole.objects.create(user=self.gerant, gym=self.gym, role="manager", is_active=True)
+        self._connecter(self.gerant)
+
+    def _connecter(self, utilisateur):
+        self.client.force_login(utilisateur)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _basculer(self, membre=None, **retrait):
+        from . import personnel
+
+        appels = []
+        with patch.object(
+            hikvision.HikvisionClient, "delete_user",
+            side_effect=retrait.get("side_effect") or (lambda n: appels.append(("retrait", n))),
+        ), patch.object(
+            hikvision.HikvisionClient, "upsert_user",
+            side_effect=lambda n, *a, **k: appels.append(("fiche", n)),
+        ), patch.object(
+            hikvision.HikvisionClient, "set_face",
+            side_effect=lambda n, *a, **k: appels.append(("visage", n)),
+        ):
+            resultat = personnel.basculer_membre(self.employe, membre or self.faux_membre)
+        return resultat, appels
+
+    # --- Le service --------------------------------------------------------------------------
+
+    def test_the_member_record_leaves_the_reader_before_the_face_is_set(self):
+        # Le lecteur refuse un meme visage sur deux fiches : l'ordre est vital.
+        _, appels = self._basculer()
+
+        numero_membre = enrollment.employee_no(self.faux_membre)
+        numero_employe = enrollment.numero_personnel(self.employe)
+        self.assertEqual(
+            appels,
+            [("retrait", numero_membre), ("fiche", numero_employe), ("visage", numero_employe)],
+        )
+
+    def test_the_member_record_is_deactivated_and_its_history_kept(self):
+        resultat, _ = self._basculer()
+
+        self.faux_membre.refresh_from_db()
+        self.assertFalse(self.faux_membre.is_active)
+        self.assertTrue(resultat["photo"])
+        self.passage.refresh_from_db()
+        self.assertEqual(self.passage.member, self.faux_membre)
+        self.assertTrue(self.faux_membre.subscriptions.filter(is_active=True).exists())
+
+    def test_the_employee_is_remembered_on_the_reader(self):
+        from .models import StaffReaderRecord
+
+        self._basculer()
+
+        self.assertEqual(StaffReaderRecord.objects.get().employee, self.employe)
+
+    def test_a_photo_not_taken_by_the_reader_is_not_reused(self):
+        from django.core.files.base import ContentFile
+
+        self.faux_membre.photo.save("portrait_telephone.jpg", ContentFile(_image_jpeg()), save=True)
+
+        resultat, appels = self._basculer()
+
+        self.assertFalse(resultat["photo"])
+        self.assertNotIn("visage", [genre for genre, _ in appels])
+        self.faux_membre.refresh_from_db()
+        self.assertFalse(self.faux_membre.is_active)
+
+    def test_another_members_reader_photo_is_not_taken_for_this_one(self):
+        from . import personnel
+
+        self.faux_membre.photo.name = f"members/visage_membre_{self.faux_membre.id}7.jpg"
+
+        self.assertFalse(personnel.photo_reprise_possible(self.faux_membre))
+
+    def test_an_unreachable_reader_changes_nothing(self):
+        with self.assertRaises(enrollment.EnrollmentError):
+            _, appels = self._basculer(side_effect=hikvision.HikvisionUnreachable("coupure"))
+
+        self.faux_membre.refresh_from_db()
+        self.assertTrue(self.faux_membre.is_active)
+        from .models import StaffReaderRecord
+        self.assertFalse(StaffReaderRecord.objects.exists())
+
+    def test_a_record_already_absent_from_the_reader_does_not_block(self):
+        resultat, appels = self._basculer(side_effect=hikvision.HikvisionError("fiche inconnue"))
+
+        self.faux_membre.refresh_from_db()
+        self.assertFalse(self.faux_membre.is_active)
+        self.assertIn(("visage", enrollment.numero_personnel(self.employe)), appels)
+
+    def test_a_member_of_another_gym_is_refused(self):
+        etranger = Member.objects.create(
+            gym=self.employe_voisin.gym, first_name="X", last_name="Y", phone="+243860000031",
+        )
+
+        with self.assertRaises(enrollment.EnrollmentError):
+            self._basculer(membre=etranger)
+
+    def test_a_deactivated_employee_cannot_take_a_member_record(self):
+        self.employe.is_active = False
+        self.employe.save()
+
+        with self.assertRaises(enrollment.EnrollmentError):
+            self._basculer()
+        self.faux_membre.refresh_from_db()
+        self.assertTrue(self.faux_membre.is_active)
+
+    def test_a_deactivated_member_no_longer_opens_the_reader(self):
+        self.faux_membre.is_active = False
+        self.faux_membre.save()
+
+        with patch.object(hikvision.HikvisionClient, "upsert_user") as pose:
+            enrollment.inscrire_membre(self.device, self.faux_membre)
+
+        self.assertEqual(pose.mock_calls[0].args[3], timezone.localdate().strftime("%Y-%m-%dT00:00:00"))
+
+    # --- Les candidats ---------------------------------------------------------------------------
+
+    def test_a_member_with_the_same_phone_or_name_is_suggested(self):
+        from . import personnel
+
+        candidats = [c["membre"] for c in personnel.membres_candidats(self.employe)]
+
+        self.assertEqual(candidats, [self.faux_membre])
+
+    def test_a_deactivated_member_is_not_suggested(self):
+        from . import personnel
+
+        self.faux_membre.is_active = False
+        self.faux_membre.save()
+
+        self.assertEqual(personnel.membres_candidats(self.employe), [])
+
+    def test_the_search_finds_other_members(self):
+        from . import personnel
+
+        candidats = [c["membre"] for c in personnel.membres_candidats(self.employe, "Nzuzi")]
+
+        self.assertEqual(candidats, [self.membre_normal])
+
+    # --- L'ecran -----------------------------------------------------------------------------------
+
+    def test_the_screen_offers_the_matching_member(self):
+        reponse = self.client.get(reverse("access:staff_face_enrollment", args=[self.employe.id]))
+
+        self.assertContains(reponse, reverse("access:staff_switch_from_member", args=[self.employe.id]))
+        self.assertContains(reponse, f'name="member_id" value="{self.faux_membre.id}"')
+        self.assertContains(reponse, "visage pris par le lecteur")
+
+    def test_switching_from_the_screen_is_traced(self):
+        with patch.object(hikvision.HikvisionClient, "delete_user"), patch.object(
+            hikvision.HikvisionClient, "upsert_user"
+        ), patch.object(hikvision.HikvisionClient, "set_face"):
+            reponse = self.client.post(
+                reverse("access:staff_switch_from_member", args=[self.employe.id]),
+                {"member_id": self.faux_membre.id},
+                follow=True,
+            )
+
+        self.assertContains(reponse, "historique est conserve")
+        self.faux_membre.refresh_from_db()
+        self.assertFalse(self.faux_membre.is_active)
+        trace = SensitiveActivityLog.objects.get(action="access.member_switched_to_staff")
+        self.assertEqual(trace.metadata["member_id"], self.faux_membre.id)
+        self.assertTrue(trace.metadata["visage_repris"])
+
+    def test_a_receptionist_cannot_switch(self):
+        accueil = User.objects.create_user(username="accueil-bascule", password="pass12345")
+        UserGymRole.objects.create(user=accueil, gym=self.gym, role="reception", is_active=True)
+        self._connecter(accueil)
+
+        with patch.object(hikvision.HikvisionClient, "delete_user") as retrait:
+            reponse = self.client.post(
+                reverse("access:staff_switch_from_member", args=[self.employe.id]),
+                {"member_id": self.faux_membre.id},
+            )
+
+        self.assertIn(reponse.status_code, (302, 403))
+        retrait.assert_not_called()
+        self.faux_membre.refresh_from_db()
+        self.assertTrue(self.faux_membre.is_active)
+
+    def test_an_unreadable_member_id_is_not_found(self):
+        reponse = self.client.post(
+            reverse("access:staff_switch_from_member", args=[self.employe.id]),
+            {"member_id": "abc"},
+        )
+
+        self.assertEqual(reponse.status_code, 404)
+
+    # --- Le membre desactive, ailleurs dans l'application ---------------------------------------
+
+    def test_the_dashboard_no_longer_counts_the_member(self):
+        url = reverse("core:gym_dashboard", args=[self.gym.id])
+        avant = self.client.get(url).context
+
+        self.faux_membre.is_active = False
+        self.faux_membre.save()
+        apres = self.client.get(url).context
+
+        self.assertEqual(apres["total_members"], avant["total_members"] - 1)
+        self.assertEqual(apres["active_members"], avant["active_members"] - 1)
+
+    def test_the_member_list_marks_it_inactive(self):
+        self.faux_membre.is_active = False
+        self.faux_membre.save()
+
+        reponse = self.client.get(reverse("members:member_list"))
+
+        self.assertContains(reponse, 'badge bg-secondary px-3 py-2">Inactif')
+
+    def test_the_active_filter_leaves_it_out(self):
+        self.faux_membre.is_active = False
+        self.faux_membre.save()
+
+        reponse = self.client.get(reverse("members:member_list"), {"status": "active"})
+
+        self.assertNotContains(reponse, "Gardien")
+
+    def test_the_member_sheet_says_inactive(self):
+        self.faux_membre.is_active = False
+        self.faux_membre.save()
+
+        reponse = self.client.get(reverse("members:member_detail", args=[self.faux_membre.id]))
+
+        self.assertEqual(reponse.json()["status"], "inactive")

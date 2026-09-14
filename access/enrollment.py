@@ -115,6 +115,11 @@ def _periode_validite(member):
     Elle suit l'abonnement en cours. Sans abonnement, la fiche est creee mais
     fermee : le membre existe sur le lecteur, il n'entre pas.
     """
+    # Une fiche membre desactivee - un employe passe au personnel, par exemple -
+    # n'ouvre plus rien, meme avec un abonnement encore en cours.
+    if not member.is_active:
+        return None, None
+
     subscription = member.active_subscription
     if subscription is None:
         return None, None

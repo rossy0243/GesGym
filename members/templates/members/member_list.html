@@ -419,7 +419,9 @@ body.members-screen .modal.show .modal-dialog {
 
                         <!-- Statut - Badge amélioré -->
                         <td class="text-center">
-                            {% if member.computed_status == 'active' %}
+                            {% if not member.is_active %}
+                            <span class="badge bg-secondary px-3 py-2">Inactif</span>
+                            {% elif member.computed_status == 'active' %}
                             <span class="badge bg-success px-3 py-2">Actif</span>
                             {% elif member.computed_status == 'suspended' %}
                             <span class="badge bg-warning px-3 py-2 text-dark">Suspendu</span>
@@ -1273,6 +1275,10 @@ body.members-screen .modal.show .modal-dialog {
             },
             expired: {
                 label: "Expir\u00e9",
+                className: "badge-expire"
+            },
+            inactive: {
+                label: "Inactif",
                 className: "badge-expire"
             }
         };

@@ -73,6 +73,39 @@
             </div>
         </div>
 
+        <div class="etape-carte p-4 mb-3" id="deja-membre">
+            <h6 class="fw-bold mb-2">Déjà enregistré comme membre ?</h6>
+            <p class="small text-muted">
+                S'il entrait jusqu'ici avec une fiche membre, reprenez-la : sa fiche
+                membre est désactivée, son historique (paiements, passages) est
+                conservé, et son visage passe sur sa fiche d'employé.
+            </p>
+            <form method="get" class="d-flex gap-2 mb-2">
+                <input type="search" name="membre" value="{{ recherche_membre }}"
+                       class="form-control form-control-sm" placeholder="Nom ou téléphone du membre">
+                <button type="submit" class="btn btn-sm btn-outline-secondary">Chercher</button>
+            </form>
+            {% for candidat in membres_candidats %}
+            <div class="d-flex align-items-center gap-2 py-2 border-top">
+                <div class="flex-grow-1 small">
+                    <strong class="d-block">{{ candidat.membre.first_name }} {{ candidat.membre.last_name }}</strong>
+                    <span class="text-muted">{{ candidat.membre.phone }} —
+                        {% if candidat.visage %}visage pris par le lecteur{% else %}pas de photo du lecteur{% endif %}</span>
+                </div>
+                <form method="post" action="{% url 'access:staff_switch_from_member' employee.id %}"
+                      onsubmit="return confirm('Désactiver la fiche membre de {{ candidat.membre.first_name|escapejs }} {{ candidat.membre.last_name|escapejs }} et la reprendre pour cet employé ?');">
+                    {% csrf_token %}
+                    <input type="hidden" name="member_id" value="{{ candidat.membre.id }}">
+                    <button type="submit" class="btn btn-sm btn-outline-primary">Reprendre</button>
+                </form>
+            </div>
+            {% empty %}
+            <p class="small text-muted mb-0">
+                {% if recherche_membre %}Aucun membre actif ne correspond.{% else %}Aucune fiche membre au même nom ou au même téléphone.{% endif %}
+            </p>
+            {% endfor %}
+        </div>
+
         <div class="etape-carte p-4">
             <h6 class="fw-bold mb-2">Retirer du lecteur</h6>
             <p class="small text-muted">

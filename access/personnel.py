@@ -11,6 +11,7 @@ echouer parce qu'un lecteur est debranche.
 """
 
 import logging
+import re
 
 from django.utils import timezone
 
@@ -137,3 +138,152 @@ def en_attente(gym):
         .select_related("device", "employee")
         .order_by("retrait_demande_le")
     )
+
+
+# ---------------------------------------------------------------------------
+# Employes enregistres comme membres
+# ---------------------------------------------------------------------------
+#
+# Avant que le personnel ait sa place, certains employes ont ete inscrits comme
+# membres pour pouvoir passer la porte. La bascule reprend leur visage sur leur
+# fiche d'employe et desactive la fiche membre, sans rien effacer : paiements,
+# abonnements et passages restent ce qu'ils ont ete.
+
+
+def photo_reprise_possible(member):
+    """
+    Vrai si la photo du membre a ete prise par le lecteur a son enrolement.
+
+    Seule celle-la est reprise : le capteur l'a deja acceptee. Une photo
+    televersee depuis un telephone est souvent refusee par le lecteur.
+    """
+    nom = member.photo.name if member.photo else ""
+    return bool(re.search(rf"visage_membre_{member.id}(?!\d)", nom or ""))
+
+
+def photo_du_lecteur(member):
+    """Les octets de la photo prise par le lecteur, ou None."""
+    if not photo_reprise_possible(member):
+        return None
+    try:
+        member.photo.open("rb")
+        try:
+            return member.photo.read()
+        finally:
+            member.photo.close()
+    except (OSError, ValueError) as exc:
+        logger.warning("Photo du membre %s illisible : %s", member.id, exc)
+        return None
+
+
+def membres_candidats(employee, recherche=""):
+    """
+    Fiches membres qui pourraient etre celles de cet employe.
+
+    Sans recherche, on propose celles qui portent le meme telephone ou le meme
+    nom. Seules les fiches actives de la salle sont proposees.
+    """
+    from django.db.models import Q
+
+    from members.models import Member
+
+    membres = Member.objects.filter(gym=employee.gym, is_active=True)
+    recherche = (recherche or "").strip()
+
+    if recherche:
+        membres = membres.filter(
+            Q(first_name__icontains=recherche)
+            | Q(last_name__icontains=recherche)
+            | Q(phone__icontains=recherche)
+        )
+    else:
+        critere = Q(pk__in=[])
+        chiffres = "".join(ch for ch in (employee.phone or "") if ch.isdigit())
+        if len(chiffres) >= 9:
+            critere |= Q(phone__endswith=chiffres[-9:])
+        mots = (employee.name or "").split()
+        if len(mots) >= 2:
+            premier, reste = mots[0], " ".join(mots[1:])
+            critere |= Q(first_name__iexact=premier, last_name__iexact=reste)
+            critere |= Q(first_name__iexact=reste, last_name__iexact=premier)
+        membres = membres.filter(critere)
+
+    return [
+        {"membre": membre, "visage": photo_reprise_possible(membre)}
+        for membre in membres.order_by("first_name", "last_name")[:8]
+    ]
+
+
+def _reposer_membre(lecteurs, member, photo):
+    """Remet la fiche membre la ou elle venait d'etre retiree."""
+    for device in lecteurs:
+        try:
+            enrollment.inscrire_membre(device, member, photo)
+        except enrollment.EnrollmentError as exc:
+            logger.warning(
+                "Fiche du membre %s non reposee sur %s : %s", member.id, device.name, exc
+            )
+
+
+def basculer_membre(employee, member):
+    """
+    Fait passer au personnel un employe qui entrait avec une fiche membre.
+
+    1. la fiche membre quitte chaque lecteur - d'abord, car le lecteur refuse
+       d'attacher un meme visage a deux fiches ;
+    2. la fiche membre est desactivee, son historique intact ;
+    3. l'employe est inscrit, avec la photo du lecteur quand elle existe.
+
+    Si un lecteur ne repond pas a l'etape 1, rien n'est change et les fiches
+    deja retirees sont reposees. Leve EnrollmentError dans ce cas.
+    """
+    from . import hikvision
+
+    if member.gym_id != employee.gym_id:
+        raise enrollment.EnrollmentError("Ce membre n'appartient pas a cette salle.")
+    if not employee.is_active:
+        raise enrollment.EnrollmentError(
+            f"{employee.name} est desactive dans le module RH."
+        )
+    if not member.is_active:
+        raise enrollment.EnrollmentError("Cette fiche membre est deja desactivee.")
+
+    photo = photo_du_lecteur(member)
+    lecteurs = enrollment.lecteurs_de(employee.gym)
+    numero_membre = enrollment.employee_no(member)
+
+    retires = []
+    for device in lecteurs:
+        client = hikvision.HikvisionClient.from_device(device, timeout=25)
+        try:
+            client.delete_user(numero_membre)
+        except (hikvision.HikvisionUnreachable, hikvision.HikvisionAuthError) as exc:
+            _reposer_membre(retires, member, photo)
+            raise enrollment.EnrollmentError(
+                f"{device.name} ne repond pas ({exc}). Rien n'a ete change : "
+                "reessayez quand le lecteur est joignable."
+            ) from exc
+        except hikvision.HikvisionError as exc:
+            # Un refus sans panne vient le plus souvent d'une fiche absente de
+            # ce lecteur. Si elle y est encore, la pose du visage le dira.
+            logger.info(
+                "Retrait de la fiche membre %s sur %s refuse : %s",
+                numero_membre, device.name, exc,
+            )
+        retires.append(device)
+
+    member.is_active = False
+    member.save(update_fields=["is_active"])
+
+    echecs = []
+    for device in lecteurs:
+        try:
+            enrollment.inscrire_employe(device, employee, photo)
+        except enrollment.EnrollmentError as exc:
+            echecs.append(f"{device.name} : {exc}")
+            if "fiche est enregistree" not in str(exc):
+                continue
+        noter_inscription(device, employee)
+
+    return {"photo": photo is not None, "lecteurs": len(lecteurs), "echecs": echecs}
+

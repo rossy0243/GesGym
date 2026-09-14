@@ -1798,7 +1798,7 @@ def member_list(request):
 
     # 📊 Statut
     if status == "active":
-        members = members.filter(has_active_subscription=True)
+        members = members.filter(has_active_subscription=True, is_active=True)
 
     elif status == "expired":
         # Membres dont l'abonnement actif est expiré
@@ -1810,7 +1810,8 @@ def member_list(request):
         members = members.filter(status="suspended")
 
     elif status == "expiring":
-        members = members.filter(has_expiring_subscription=True)
+        # Personne ne doit relancer une fiche desactivee.
+        members = members.filter(has_expiring_subscription=True, is_active=True)
 
     # 💳 Plan
     if plan:
@@ -2179,7 +2180,7 @@ def member_detail(request, member_id):
         "last_name": member.last_name,
         "phone": member.phone,
         "email": member.email,
-        "status": member.computed_status,
+        "status": member.computed_status if member.is_active else "inactive",
         "qr_code": str(member.qr_code),
         "qr_code_expires_at": timezone.localtime(member.qr_code_expires_at).strftime("%d/%m/%Y %H:%M"),
         "can_regenerate_qr": _member_qr_admin_allowed(request),
