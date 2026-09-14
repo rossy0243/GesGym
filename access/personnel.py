@@ -16,7 +16,7 @@ import re
 from django.utils import timezone
 
 from . import enrollment
-from .models import StaffReaderRecord
+from .models import AccessLog, StaffReaderRecord
 
 logger = logging.getLogger(__name__)
 
@@ -340,13 +340,30 @@ def employe_de_la_fiche(device, numero):
     return fiche.employee if fiche else None
 
 
+def libelle_de_la_fiche(nom, numero):
+    """
+    Le nom sous lequel le journal enregistre les passages d'une fiche du terminal.
+
+    Meme regle qu'a la porte et au rattrapage : le nom porte par le lecteur,
+    ou "Fiche" suivi du numero quand la fiche n'a pas de nom.
+    """
+    return ((nom or "").strip() or f"Fiche {str(numero).strip()}")[:128]
+
+
 def fiches_du_terminal(gym, recherche=""):
     """
     Fiches creees a la main sur les lecteurs actifs, et pas encore adoptees.
 
+    Chaque fiche porte son dernier passage connu : une fiche sans nom se
+    reconnait en faisant passer la personne a la porte, puis en prenant celle
+    qui vient de passer. Les plus recentes viennent donc en tete.
+
     Interroge chaque lecteur : a n'appeler que sur demande. Un lecteur
     injoignable est signale sans empecher de lire les autres.
     """
+    from django.db.models import Max
+    from django.utils import timezone
+
     from . import hikvision
 
     recherche = (recherche or "").strip().lower()
@@ -362,6 +379,14 @@ def fiches_du_terminal(gym, recherche=""):
         adoptees = set(
             StaffReaderRecord.objects.filter(device=device).values_list("employee_no", flat=True)
         )
+        # Une requete par lecteur, quel que soit le nombre de fiches.
+        derniers_passages = dict(
+            AccessLog.objects.filter(device=device, employee__isnull=True)
+            .exclude(terminal_label="")
+            .values("terminal_label")
+            .annotate(dernier=Max("check_in_time"))
+            .values_list("terminal_label", "dernier")
+        )
         for fiche in lues:
             numero = str(fiche.get("employeeNo") or "").strip()
             if (
@@ -373,10 +398,26 @@ def fiches_du_terminal(gym, recherche=""):
             nom = str(fiche.get("name") or "").strip()
             if recherche and recherche not in nom.lower() and recherche not in numero:
                 continue
-            resultat["fiches"].append(
-                {"device": device, "numero": numero, "nom": nom or f"Fiche {numero}"}
-            )
+            dernier = derniers_passages.get(libelle_de_la_fiche(nom, numero))
+            resultat["fiches"].append({
+                "device": device,
+                "numero": numero,
+                "nom": nom or f"Fiche {numero}",
+                "dernier_passage": dernier,
+                "passe_aujourdhui": (
+                    dernier is not None
+                    and timezone.localtime(dernier).date() == timezone.localdate()
+                ),
+            })
 
+    # La fiche qui vient de passer en tete ; les fiches jamais vues a la fin.
+    resultat["fiches"].sort(
+        key=lambda fiche: (
+            fiche["dernier_passage"] is None,
+            -(fiche["dernier_passage"].timestamp() if fiche["dernier_passage"] else 0),
+            fiche["numero"].zfill(12),
+        )
+    )
     return resultat
 
 

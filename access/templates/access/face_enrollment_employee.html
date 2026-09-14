@@ -121,6 +121,10 @@
                 plutôt sa fiche : il garde le même visage, et ses passages sont
                 journalisés à son nom.
             </p>
+            <p class="small text-muted">
+                Fiche sans nom ? Faites passer l'employé à la porte, puis lisez les
+                fiches : celle qui vient de passer arrive en tête de liste.
+            </p>
             {% if fiches_terminal is None %}
             <a href="?fiches=1#fiche-terminal" class="btn btn-sm btn-outline-secondary">Lire les fiches du terminal</a>
             {% else %}
@@ -138,6 +142,9 @@
                 <div class="flex-grow-1 small">
                     <strong class="d-block">{{ fiche.nom }}</strong>
                     <span class="text-muted">n° {{ fiche.numero }}{% if devices|length > 1 %} — {{ fiche.device.name }}{% endif %}</span>
+                    <span class="d-block {% if fiche.passe_aujourdhui %}ton-normal fw-semibold{% else %}text-muted{% endif %}">
+                        {% if fiche.passe_aujourdhui %}passé aujourd'hui à {{ fiche.dernier_passage|date:"H:i" }}{% elif fiche.dernier_passage %}dernier passage le {{ fiche.dernier_passage|date:"d/m/Y à H:i" }}{% else %}jamais vu passer{% endif %}
+                    </span>
                 </div>
                 <form method="post" action="{% url 'access:staff_adopt_terminal_record' employee.id %}"
                       onsubmit="return confirm('Rattacher la fiche {{ fiche.nom|escapejs }} du terminal à cet employé ?');">

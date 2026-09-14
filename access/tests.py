@@ -5235,3 +5235,109 @@ class StaffTerminalAdoptionTests(TestCase):
 
         self.assertEqual(reponse.status_code, 404)
         self.assertFalse(self.Fiche.objects.exists())
+
+
+
+class TerminalRecordLastPassageTests(TestCase):
+    """Une fiche du terminal sans nom se reconnait a son dernier passage."""
+
+    def setUp(self):
+        (self.gym, self.device, self.member, self.employe,
+         _) = _salle_avec_personnel("dernier-passage")
+        gerant = User.objects.create_user(username="gerant-dernier-passage", password="pass12345")
+        UserGymRole.objects.create(user=gerant, gym=self.gym, role="manager", is_active=True)
+        self.client.force_login(gerant)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _lire(self, lues, recherche=""):
+        from . import personnel
+
+        with patch.object(hikvision.HikvisionClient, "list_users", return_value=lues):
+            return personnel.fiches_du_terminal(self.gym, recherche)["fiches"]
+
+    def _passage(self, libelle, device=None, il_y_a=None):
+        log = AccessLog.objects.create(
+            gym=self.gym, device=device or self.device, terminal_label=libelle, access_granted=True
+        )
+        if il_y_a is not None:
+            AccessLog.objects.filter(pk=log.pk).update(check_in_time=timezone.now() - il_y_a)
+        return log
+
+    def test_a_nameless_record_shows_its_last_passage(self):
+        self._passage("Fiche 6")
+
+        fiches = {f["numero"]: f for f in self._lire([{"employeeNo": "6", "name": ""}])}
+
+        self.assertIsNotNone(fiches["6"]["dernier_passage"])
+        self.assertTrue(fiches["6"]["passe_aujourdhui"])
+
+    def test_a_named_record_is_found_under_its_name(self):
+        self._passage("Paul G")
+
+        fiches = {f["numero"]: f for f in self._lire([{"employeeNo": "5", "name": "Paul G"}])}
+
+        self.assertIsNotNone(fiches["5"]["dernier_passage"])
+
+    def test_the_record_that_just_passed_comes_first(self):
+        self._passage("Fiche 9", il_y_a=timedelta(days=3))
+        self._passage("Fiche 6")
+
+        fiches = self._lire([
+            {"employeeNo": "5", "name": "Jamais vu"},
+            {"employeeNo": "9", "name": ""},
+            {"employeeNo": "6", "name": ""},
+        ])
+
+        self.assertEqual([f["numero"] for f in fiches], ["6", "9", "5"])
+        self.assertFalse(fiches[1]["passe_aujourdhui"])
+        self.assertIsNone(fiches[2]["dernier_passage"])
+
+    def test_a_passage_on_another_reader_is_not_this_records(self):
+        autre = AccessDevice.objects.create(
+            gym=self.gym, name="Terminal 2", host="10.0.0.10", password="secret"
+        )
+        self._passage("Fiche 6", device=autre)
+
+        with patch.object(
+            hikvision.HikvisionClient, "list_users", return_value=[{"employeeNo": "6", "name": ""}]
+        ):
+            from . import personnel
+
+            fiches = personnel.fiches_du_terminal(self.gym)["fiches"]
+
+        premiere = [f for f in fiches if f["device"] == self.device][0]
+        self.assertIsNone(premiere["dernier_passage"])
+
+    def test_the_door_and_the_listing_use_the_same_name(self):
+        # Sans la meme regle des deux cotes, un passage reel resterait "jamais vu".
+        charge = {"AccessControllerEvent": {
+            "majorEventType": 5, "subEventType": 75, "employeeNoString": "6",
+        }}
+        url = reverse("access:device_webhook", args=[self.device.webhook_token])
+        with patch("access.hikvision.HikvisionClient.open_door"):
+            self.client.post(url, data=json.dumps(charge), content_type="application/json")
+
+        fiches = self._lire([{"employeeNo": "6"}])
+
+        self.assertTrue(fiches[0]["passe_aujourdhui"])
+
+    def test_the_screen_says_when_each_record_last_passed(self):
+        self._passage("Fiche 6")
+        self._passage("Fiche 9", il_y_a=timedelta(days=3))
+        lues = [
+            {"employeeNo": "6", "name": ""},
+            {"employeeNo": "9", "name": ""},
+            {"employeeNo": "5", "name": "Jamais vu"},
+        ]
+
+        with patch.object(hikvision.HikvisionClient, "list_users", return_value=lues):
+            reponse = self.client.get(
+                reverse("access:staff_face_enrollment", args=[self.employe.id]), {"fiches": "1"}
+            )
+
+        self.assertContains(reponse, "passé aujourd'hui à")
+        self.assertContains(reponse, "dernier passage le")
+        self.assertContains(reponse, "jamais vu passer")
+        self.assertContains(reponse, "Fiche sans nom ?")

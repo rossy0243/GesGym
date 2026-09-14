@@ -243,7 +243,9 @@ class Command(BaseCommand):
             personne = {"employee": employe}
             motif = "Personnel de la salle"
         else:
-            libelle = (str(evenement.get("name") or "").strip() or f"Fiche {identifiant}")[:128]
+            from access import personnel
+
+            libelle = personnel.libelle_de_la_fiche(str(evenement.get("name") or ""), identifiant)
             personne = {"terminal_label": libelle}
             motif = "Fiche geree par le terminal"
 

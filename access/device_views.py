@@ -606,9 +606,10 @@ def _journaliser_fiche_du_terminal(device, credential, parsed):
     cette personne ni ses droits. Elle garde le nom que le lecteur envoie, ou
     le numero de la fiche.
     """
+    from . import personnel
+
     evenement = parsed.get("event") or {}
-    nom = str(evenement.get("name") or "").strip()
-    libelle = (nom or f"Fiche {credential.strip()}")[:128]
+    libelle = personnel.libelle_de_la_fiche(str(evenement.get("name") or ""), credential)
     return _journaliser_hors_membre(device, parsed, libelle=libelle)
 
 
