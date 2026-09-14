@@ -331,9 +331,14 @@ def retirer_membre(device, member):
 
 def retirer_employe(device, employee):
     """Supprime la fiche et le visage d'un employe sur le lecteur."""
+    retirer_fiche(device, numero_personnel(employee))
+
+
+def retirer_fiche(device, numero):
+    """Supprime une fiche du lecteur par son numero."""
     client = hikvision.HikvisionClient.from_device(device, timeout=25)
     try:
-        client.delete_user(numero_personnel(employee))
+        client.delete_user(str(numero))
     except hikvision.HikvisionUnreachable as exc:
         raise EnrollmentError(f"Lecteur injoignable ({device.host}).") from exc
     except hikvision.HikvisionError as exc:

@@ -129,42 +129,84 @@ class Command(BaseCommand):
 
     def _rafraichir_personnel(self, device, fiches, simulation):
         """
-        Tient a jour les fiches du personnel posees depuis le module RH.
+        Tient a jour les fiches du personnel et acheve les retraits demandes.
 
-        Seuls les employes deja inscrits sont concernes : la synchronisation
-        n'inscrit personne. Un employe desactive n'est jamais rouvert ; il est
-        signale tant que sa fiche reste sur le lecteur.
+        * un retrait en attente dont la fiche a disparu du lecteur est confirme ;
+        * un retrait en attente dont la fiche est encore la est retente ;
+        * un employe desactive encore present est retire ;
+        * un employe actif present est rafraichi, et note s'il ne l'etait pas.
+
+        La synchronisation n'inscrit personne de nouveau.
         """
+        from access import personnel
+        from access.models import StaffReaderRecord
         from rh.models import Employee
 
-        inscrits = {
-            enrollment.employee_id_depuis(fiche.get("employeeNo")) for fiche in fiches
-        } - {None}
-        if not inscrits:
-            return
+        presents = {
+            str(fiche.get("employeeNo")).strip()
+            for fiche in fiches
+            if enrollment.employee_id_depuis(fiche.get("employeeNo")) is not None
+        }
 
-        rafraichis = 0
-        desactives = 0
-        for employe in Employee.objects.filter(gym=device.gym, id__in=inscrits):
-            if not employe.is_active:
-                desactives += 1
+        confirmes = 0
+        retires = 0
+        echecs = 0
+        traites = set()
+
+        for fiche in StaffReaderRecord.objects.filter(
+            device=device, retrait_demande_le__isnull=False
+        ).select_related("device"):
+            traites.add(fiche.employee_no)
+            if simulation:
+                self.stdout.write(f"    [simulation] retrait en attente : {fiche.nom or fiche.employee_no}")
                 continue
+            if fiche.employee_no not in presents:
+                fiche.delete()
+                confirmes += 1
+            elif personnel.tenter(fiche):
+                retires += 1
+            else:
+                echecs += 1
+                self.stdout.write(self.style.ERROR(f"    retrait de {fiche.nom} : {fiche.derniere_erreur}"))
+
+        identifiants = {enrollment.employee_id_depuis(numero) for numero in presents}
+        rafraichis = 0
+        for employe in Employee.objects.filter(gym=device.gym, id__in=identifiants):
+            numero = enrollment.numero_personnel(employe)
+            if numero in traites:
+                continue
+
+            if not employe.is_active:
+                if simulation:
+                    self.stdout.write(f"    [simulation] retrait de {employe.name} (desactive)")
+                    continue
+                fiche = StaffReaderRecord(
+                    gym=device.gym, device=device, employee=employe,
+                    employee_no=numero, nom=(employe.name or "")[:255],
+                )
+                if personnel.tenter(fiche):
+                    retires += 1
+                else:
+                    echecs += 1
+                    self.stdout.write(self.style.ERROR(f"    retrait de {employe.name} : {fiche.derniere_erreur}"))
+                continue
+
             if simulation:
                 self.stdout.write(f"    [simulation] personnel : {employe.name}")
                 rafraichis += 1
                 continue
             try:
                 enrollment.inscrire_employe(device, employe)
+                personnel.noter_inscription(device, employe)
                 rafraichis += 1
             except enrollment.EnrollmentError as exc:
+                echecs += 1
                 self.stdout.write(self.style.ERROR(f"    {employe.name} : {exc}"))
 
-        self.stdout.write(f"    {rafraichis} fiche(s) du personnel rafraichie(s)")
-        if desactives:
+        if rafraichis or retires or confirmes or echecs:
             self.stdout.write(
-                self.style.WARNING(
-                    f"    {desactives} employe(s) desactive(s) encore present(s) sur le lecteur"
-                )
+                f"    personnel : {rafraichis} rafraichi(s), {retires + confirmes} retrait(s) "
+                f"confirme(s), {echecs} echec(s)"
             )
 
     def _purger(self, device, client, posees, membres, simulation):

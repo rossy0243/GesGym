@@ -12,6 +12,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from access import personnel as personnel_lecteurs
 from core.audit import log_sensitive_action
 from core.creation_emails import notify_creation_email_failure, send_employee_creation_email
 from pos.services import record_expense
@@ -177,6 +178,26 @@ def employee_list(request):
     return render(request, "rh/employee_list.html", context)
 
 
+def _retirer_des_lecteurs(request, employee):
+    """
+    Retire le visage d'un employe desactive des lecteurs de la salle.
+
+    Ne bloque jamais la desactivation : un retrait que le lecteur ne confirme
+    pas reste en attente, avec une alerte sur le tableau de bord.
+    """
+    resultat = personnel_lecteurs.retirer_des_lecteurs(employee)
+    if resultat["restantes"]:
+        lecteurs = ", ".join(fiche.device.name for fiche in resultat["restantes"])
+        messages.warning(
+            request,
+            f"Le lecteur ({lecteurs}) n'a pas confirme le retrait du visage : "
+            f"{employee.name} peut encore entrer. Une alerte reste sur le "
+            "tableau de bord jusqu'a confirmation.",
+        )
+    elif resultat["confirmees"]:
+        messages.info(request, f"Le visage de {employee.name} a ete retire du lecteur.")
+
+
 @login_required
 @module_required("RH")
 @role_required(RH_EMPLOYEE_ROLES)
@@ -285,6 +306,8 @@ def employee_update(request, employee_id):
                 gym=request.gym,
             )
             messages.success(request, f'Employe "{employee.name}" modifie avec succes.')
+            if "is_active" in form.changed_data and not employee.is_active:
+                _retirer_des_lecteurs(request, employee)
             return redirect("rh:detail", employee_id=employee.id)
     else:
         form = EmployeeForm(instance=employee)
@@ -314,6 +337,7 @@ def employee_delete(request, employee_id):
             gym=request.gym,
         )
         messages.success(request, f'Employe "{employee.name}" desactive avec succes.')
+        _retirer_des_lecteurs(request, employee)
         return redirect("rh:list")
 
     return render(request, "rh/employee_confirm_delete.html", {"gym": request.gym, "employee": employee})

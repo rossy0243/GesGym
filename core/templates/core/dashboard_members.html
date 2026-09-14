@@ -461,6 +461,22 @@
                     <div class="row g-2">
                         {% for alerte in alertes_urgentes %}
                         <div class="col-xl-6">
+                            {% if alerte.reessayer_url %}
+                            {% comment %} Un geste possible sur place : le lien ne peut pas
+                               contenir le formulaire, les deux sont donc cote a cote. {% endcomment %}
+                            <div class="d-flex align-items-start gap-2 border-start border-3 bord-{{ alerte.ton }} ps-3 py-2">
+                                <span class="material-icons ton-{{ alerte.ton }}" style="font-size:18px;">error</span>
+                                <a href="{{ alerte.url }}" class="flex-grow-1 text-decoration-none text-body">
+                                    <strong class="d-block">{{ alerte.titre }}</strong>
+                                    <span class="fs-12 text-muted">{{ alerte.detail }}</span>
+                                </a>
+                                <form method="post" action="{{ alerte.reessayer_url }}" class="flex-shrink-0">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">Réessayer</button>
+                                </form>
+                            </div>
+                            {% else %}
                             <a href="{{ alerte.url }}"
                                class="d-flex align-items-start gap-2 text-decoration-none text-body border-start border-3 bord-{{ alerte.ton }} ps-3 py-2">
                                 <span class="material-icons ton-{{ alerte.ton }}" style="font-size:18px;">{% if alerte.ton == "urgent" %}error{% else %}warning{% endif %}</span>
@@ -469,6 +485,7 @@
                                     <span class="fs-12 text-muted">{{ alerte.detail }}</span>
                                 </span>
                             </a>
+                            {% endif %}
                         </div>
                         {% endfor %}
                     </div>

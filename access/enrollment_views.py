@@ -23,6 +23,7 @@ from django.core.files.base import ContentFile
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from core.audit import log_sensitive_action
@@ -35,8 +36,8 @@ from smartclub.access_control import (
 )
 from smartclub.decorators import module_required, role_required
 
-from . import enrollment
-from .models import AccessDevice
+from . import enrollment, personnel
+from .models import AccessDevice, StaffReaderRecord
 
 logger = logging.getLogger("access")
 
@@ -328,6 +329,9 @@ def staff_face_confirm(request, employee_id):
         messages.error(request, str(exc))
         return redirect("access:staff_face_enrollment", employee_id=employe.id)
 
+    # Retenir le lecteur : c'est ce qui permettra d'en retirer le visage au
+    # depart de l'employe.
+    personnel.noter_inscription(lecteur, employe)
     request.session.pop(CLE_SESSION_PERSONNEL, None)
     log_sensitive_action(
         request,
@@ -357,12 +361,8 @@ def staff_face_remove(request, employee_id):
     """Retire l'employe des lecteurs de la salle."""
     employe = _employe_de(request, employee_id)
 
-    echecs = []
-    for lecteur in enrollment.lecteurs_de(request.gym):
-        try:
-            enrollment.retirer_employe(lecteur, employe)
-        except enrollment.EnrollmentError as exc:
-            echecs.append(f"{lecteur.name} : {exc}")
+    # Un retrait non confirme reste en attente, avec son alerte.
+    echecs = personnel.retirer_partout(employe)
 
     log_sensitive_action(
         request,
@@ -381,6 +381,52 @@ def staff_face_remove(request, employee_id):
         )
 
     return redirect("access:staff_face_enrollment", employee_id=employe.id)
+
+
+@login_required
+@module_required("ACCESS")
+@role_required(RH_EMPLOYEE_ROLES)
+@require_POST
+def staff_removal_retry(request, record_id):
+    """Relance le retrait d'un visage que le lecteur n'a pas confirme."""
+    fiche = get_object_or_404(
+        StaffReaderRecord.objects.select_related("device"),
+        id=record_id,
+        gym=request.gym,
+        retrait_demande_le__isnull=False,
+    )
+    nom = fiche.nom or fiche.employee_no
+    lecteur = fiche.device.name
+
+    confirme = personnel.reessayer(fiche)
+
+    log_sensitive_action(
+        request,
+        "access.staff_face_removal_retried",
+        "Employee",
+        nom,
+        metadata={
+            "employee_no": fiche.employee_no,
+            "lecteur": lecteur,
+            "confirme": confirme,
+            "erreur": "" if confirme else fiche.derniere_erreur,
+        },
+        gym=request.gym,
+    )
+
+    if confirme:
+        messages.success(request, f"Visage de {nom} retire de {lecteur}.")
+    else:
+        messages.error(
+            request,
+            f"{lecteur} n'a toujours pas confirme le retrait de {nom} : "
+            f"{fiche.derniere_erreur}",
+        )
+
+    suite = request.POST.get("next") or ""
+    if url_has_allowed_host_and_scheme(suite, allowed_hosts={request.get_host()}):
+        return redirect(suite)
+    return redirect("core:gym_dashboard", gym_id=request.gym.id)
 
 
 @login_required

@@ -377,3 +377,56 @@ class AccessLog(models.Model):
     
     def __str__(self):
         return f"{self.member} - {self.check_in_time}"
+
+
+class StaffReaderRecord(models.Model):
+    """
+    Fiche d'un employe posee sur un lecteur.
+
+    Le lecteur garde le visage ; l'application doit savoir sur quel lecteur il
+    se trouve pour pouvoir l'en retirer. Un retrait demande reste inscrit ici
+    tant que le lecteur ne l'a pas confirme : un employe parti dont le visage
+    ouvre encore la porte est un risque, et l'alerte du tableau de bord se
+    nourrit de ces lignes.
+
+    Le numero et le nom sont recopies : si la fiche RH est supprimee, il faut
+    encore pouvoir retirer la fiche du lecteur et dire de qui il s'agit.
+    """
+
+    gym = models.ForeignKey(
+        "organizations.Gym",
+        on_delete=models.CASCADE,
+        related_name="staff_reader_records",
+    )
+    device = models.ForeignKey(
+        AccessDevice,
+        on_delete=models.CASCADE,
+        related_name="staff_records",
+    )
+    employee = models.ForeignKey(
+        "rh.Employee",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reader_records",
+    )
+    employee_no = models.CharField(max_length=20)
+    nom = models.CharField(max_length=255, blank=True, default="")
+    inscrit_le = models.DateTimeField(auto_now_add=True)
+    retrait_demande_le = models.DateTimeField(null=True, blank=True)
+    derniere_tentative_le = models.DateTimeField(null=True, blank=True)
+    derniere_erreur = models.TextField(blank=True, default="")
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["device", "employee_no"], name="fiche_personnel_unique_par_lecteur"
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["gym", "retrait_demande_le"]),
+        ]
+
+    def __str__(self):
+        return f"{self.nom or self.employee_no} sur {self.device}"
+

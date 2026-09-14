@@ -4305,3 +4305,296 @@ class StaffFaceScreenTests(TestCase):
 
         self.assertEqual(reponse.status_code, 200)
         self.assertNotContains(reponse, reverse("access:staff_face_enrollment", args=[self.employe.id]))
+
+
+
+class StaffDepartureTests(TestCase):
+    """Au depart d'un employe, son visage quitte le lecteur - ou l'alerte reste."""
+
+    def setUp(self):
+        from .models import StaffReaderRecord
+
+        (self.gym, self.device, self.member, self.employe,
+         self.employe_voisin) = _salle_avec_personnel("depart")
+        self.gerant = User.objects.create_user(username="gerant-depart", password="pass12345")
+        UserGymRole.objects.create(user=self.gerant, gym=self.gym, role="manager", is_active=True)
+        self._connecter(self.gerant)
+        self.numero = enrollment.numero_personnel(self.employe)
+        self.Fiche = StaffReaderRecord
+
+    def _connecter(self, utilisateur):
+        self.client.force_login(utilisateur)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _inscrire(self):
+        from . import personnel
+
+        return personnel.noter_inscription(self.device, self.employe)
+
+    def _desactiver(self, **patch_retrait):
+        with patch.object(hikvision.HikvisionClient, "delete_user", **patch_retrait) as retrait:
+            reponse = self.client.post(reverse("rh:delete", args=[self.employe.id]), follow=True)
+        return reponse, retrait
+
+    def _lecteur_injoignable(self):
+        return {"side_effect": hikvision.HikvisionUnreachable("cable arrache")}
+
+    def _alertes(self):
+        return self.client.get(reverse("core:gym_dashboard", args=[self.gym.id])).context["alertes_urgentes"]
+
+    # --- L'inscription est retenue -------------------------------------------------------
+
+    def test_an_enrolment_remembers_the_reader(self):
+        with patch.object(hikvision.HikvisionClient, "capture_face", return_value=_image_jpeg()):
+            self.client.post(
+                reverse("access:staff_face_capture", args=[self.employe.id]),
+                {"device_id": self.device.id},
+            )
+        with patch.object(hikvision.HikvisionClient, "upsert_user"), patch.object(
+            hikvision.HikvisionClient, "set_face"
+        ):
+            self.client.post(reverse("access:staff_face_confirm", args=[self.employe.id]))
+
+        fiche = self.Fiche.objects.get()
+        self.assertEqual(fiche.device, self.device)
+        self.assertEqual(fiche.employee_no, self.numero)
+        self.assertIsNone(fiche.retrait_demande_le)
+
+    # --- La desactivation retire le visage ---------------------------------------------------
+
+    def test_deactivating_removes_the_face_from_the_reader(self):
+        self._inscrire()
+
+        reponse, retrait = self._desactiver()
+
+        retrait.assert_called_once_with(self.numero)
+        self.assertFalse(self.Fiche.objects.exists())
+        self.assertContains(reponse, "a ete retire du lecteur")
+
+    def test_deactivating_through_the_form_removes_it_too(self):
+        self._inscrire()
+
+        with patch.object(hikvision.HikvisionClient, "delete_user") as retrait:
+            self.client.post(
+                reverse("rh:update", args=[self.employe.id]),
+                {
+                    "name": "Paul Gardien", "role": "cleaner", "phone": "+243860000098",
+                    "email": "", "compensation_type": "daily",
+                    "daily_salary": "5000", "monthly_salary": "0",
+                },
+            )
+
+        retrait.assert_called_once_with(self.numero)
+        self.assertFalse(self.Fiche.objects.exists())
+
+    def test_editing_an_active_employee_never_calls_the_reader(self):
+        self._inscrire()
+
+        with patch.object(hikvision.HikvisionClient, "delete_user") as retrait:
+            self.client.post(
+                reverse("rh:update", args=[self.employe.id]),
+                {
+                    "name": "Paul Gardien", "role": "cleaner", "phone": "+243860000077",
+                    "email": "", "compensation_type": "daily",
+                    "daily_salary": "5000", "monthly_salary": "0", "is_active": "on",
+                },
+            )
+
+        retrait.assert_not_called()
+        self.assertIsNone(self.Fiche.objects.get().retrait_demande_le)
+
+    def test_an_employee_never_enrolled_never_calls_the_reader(self):
+        _, retrait = self._desactiver()
+
+        retrait.assert_not_called()
+
+    # --- Le lecteur ne confirme pas ------------------------------------------------------------
+
+    def test_an_unconfirmed_removal_stays_pending_and_warns(self):
+        self._inscrire()
+
+        reponse, _ = self._desactiver(**self._lecteur_injoignable())
+
+        self.employe.refresh_from_db()
+        self.assertFalse(self.employe.is_active)
+        fiche = self.Fiche.objects.get()
+        self.assertIsNotNone(fiche.retrait_demande_le)
+        self.assertIn("injoignable", fiche.derniere_erreur)
+        self.assertContains(reponse, "peut encore entrer")
+
+    def test_the_dashboard_raises_an_urgent_alert_with_a_retry(self):
+        self._inscrire()
+        self._desactiver(**self._lecteur_injoignable())
+
+        alertes = [a for a in self._alertes() if a.get("reessayer_url")]
+
+        self.assertEqual(len(alertes), 1)
+        self.assertEqual(alertes[0]["ton"], "urgent")
+        self.assertIn("Paul Gardien", alertes[0]["titre"])
+        page = self.client.get(reverse("core:gym_dashboard", args=[self.gym.id]))
+        self.assertContains(page, "Réessayer")
+        self.assertContains(page, alertes[0]["reessayer_url"])
+
+    def test_no_alert_once_the_removal_is_confirmed(self):
+        self._inscrire()
+        self._desactiver()
+
+        self.assertFalse([a for a in self._alertes() if a.get("reessayer_url")])
+
+    def test_retry_confirms_the_removal(self):
+        fiche = self._inscrire()
+        self._desactiver(**self._lecteur_injoignable())
+
+        with patch.object(hikvision.HikvisionClient, "delete_user") as retrait:
+            reponse = self.client.post(
+                reverse("access:staff_removal_retry", args=[fiche.id]), follow=True
+            )
+
+        retrait.assert_called_once_with(self.numero)
+        self.assertFalse(self.Fiche.objects.exists())
+        self.assertEqual(reponse.status_code, 200)
+        trace = SensitiveActivityLog.objects.get(action="access.staff_face_removal_retried")
+        self.assertTrue(trace.metadata["confirme"])
+
+    def test_a_failed_retry_keeps_the_alert(self):
+        fiche = self._inscrire()
+        self._desactiver(**self._lecteur_injoignable())
+
+        with patch.object(hikvision.HikvisionClient, "delete_user", **self._lecteur_injoignable()):
+            self.client.post(reverse("access:staff_removal_retry", args=[fiche.id]))
+
+        self.assertTrue(self.Fiche.objects.filter(retrait_demande_le__isnull=False).exists())
+
+    def test_a_receptionist_cannot_retry(self):
+        fiche = self._inscrire()
+        self._desactiver(**self._lecteur_injoignable())
+        accueil = User.objects.create_user(username="accueil-depart", password="pass12345")
+        UserGymRole.objects.create(user=accueil, gym=self.gym, role="reception", is_active=True)
+        self._connecter(accueil)
+
+        with patch.object(hikvision.HikvisionClient, "delete_user") as retrait:
+            reponse = self.client.post(reverse("access:staff_removal_retry", args=[fiche.id]))
+
+        self.assertIn(reponse.status_code, (302, 403))
+        retrait.assert_not_called()
+
+    def test_another_gym_record_is_out_of_reach(self):
+        from .models import StaffReaderRecord
+
+        voisin = AccessDevice.objects.create(
+            gym=self.employe_voisin.gym, name="Voisin", host="10.0.0.8", password="secret"
+        )
+        fiche = StaffReaderRecord.objects.create(
+            gym=voisin.gym, device=voisin, employee=self.employe_voisin,
+            employee_no=enrollment.numero_personnel(self.employe_voisin),
+            nom="Zoe Ailleurs", retrait_demande_le=timezone.now(),
+        )
+
+        reponse = self.client.post(reverse("access:staff_removal_retry", args=[fiche.id]))
+
+        self.assertEqual(reponse.status_code, 404)
+
+    def test_a_retry_only_redirects_inside_the_site(self):
+        fiche = self._inscrire()
+        self._desactiver(**self._lecteur_injoignable())
+
+        with patch.object(hikvision.HikvisionClient, "delete_user"):
+            reponse = self.client.post(
+                reverse("access:staff_removal_retry", args=[fiche.id]),
+                {"next": "https://ailleurs.example/piege"},
+            )
+
+        self.assertEqual(reponse["Location"], reverse("core:gym_dashboard", args=[self.gym.id]))
+
+    # --- Les autres chemins de depart ----------------------------------------------------------
+
+    def test_any_deactivation_requests_the_removal(self):
+        # Administration, script : sans passer par l'ecran RH, l'alerte existe.
+        self._inscrire()
+
+        self.employe.is_active = False
+        self.employe.save()
+
+        self.assertIsNotNone(self.Fiche.objects.get().retrait_demande_le)
+
+    def test_a_deleted_employee_leaves_a_named_alert(self):
+        self._inscrire()
+
+        self.employe.delete()
+
+        fiche = self.Fiche.objects.get()
+        self.assertIsNone(fiche.employee)
+        self.assertIsNotNone(fiche.retrait_demande_le)
+        self.assertTrue(any("Paul Gardien" in a["titre"] for a in self._alertes()))
+
+    def test_a_failed_manual_removal_is_not_cancelled_by_an_edit(self):
+        with patch.object(hikvision.HikvisionClient, "delete_user", **self._lecteur_injoignable()):
+            self.client.post(reverse("access:staff_face_remove", args=[self.employe.id]))
+
+        self.employe.phone = "+243860000055"
+        self.employe.save()
+
+        self.assertIsNotNone(self.Fiche.objects.get().retrait_demande_le)
+
+    def test_no_alert_without_the_access_module(self):
+        self._inscrire()
+        self._desactiver(**self._lecteur_injoignable())
+        GymModule.objects.filter(gym=self.gym, module__code="ACCESS").update(is_active=False)
+
+        self.assertFalse([a for a in self._alertes() if a.get("reessayer_url")])
+
+    # --- La synchronisation acheve le travail ----------------------------------------------------
+
+    def _synchroniser(self, fiches):
+        import io
+
+        from django.core.management import call_command
+
+        with patch.object(
+            hikvision.HikvisionClient, "user_count", return_value={"users": len(fiches), "faces": 0}
+        ), patch.object(
+            hikvision.HikvisionClient, "list_users", return_value=fiches
+        ), patch.object(
+            hikvision.HikvisionClient, "upsert_user"
+        ) as pose, patch.object(
+            hikvision.HikvisionClient, "delete_user"
+        ) as retrait:
+            call_command("synchroniser_lecteurs", stdout=io.StringIO())
+        return pose, retrait
+
+    def test_sync_confirms_a_removal_already_done_on_the_reader(self):
+        self._inscrire()
+        self.employe.is_active = False
+        self.employe.save()
+
+        _, retrait = self._synchroniser([])
+
+        retrait.assert_not_called()
+        self.assertFalse(self.Fiche.objects.exists())
+
+    def test_sync_retries_a_pending_removal(self):
+        self._inscrire()
+        self.employe.is_active = False
+        self.employe.save()
+
+        _, retrait = self._synchroniser([{"employeeNo": self.numero}])
+
+        retrait.assert_called_once_with(self.numero)
+        self.assertFalse(self.Fiche.objects.exists())
+
+    def test_sync_removes_a_deactivated_employee_it_did_not_know(self):
+        self.employe.is_active = False
+        self.employe.save()
+
+        _, retrait = self._synchroniser([{"employeeNo": self.numero}])
+
+        retrait.assert_called_once_with(self.numero)
+
+    def test_sync_notes_an_active_employee_found_on_the_reader(self):
+        pose, retrait = self._synchroniser([{"employeeNo": self.numero}])
+
+        retrait.assert_not_called()
+        self.assertIn(self.numero, [appel.args[0] for appel in pose.mock_calls])
+        self.assertEqual(self.Fiche.objects.get().employee, self.employe)

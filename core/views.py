@@ -493,8 +493,14 @@ def _refus_repetes(gym, today, seuil=3):
     ]
 
 
+def _retraits_lecteur(gym):
+    from access import personnel
+
+    return list(personnel.en_attente(gym))
+
+
 def _alertes_urgentes(caisse, refus_repetes, expirations_48h, machines_hs,
-                      stock_epuise, stock_bas):
+                      stock_epuise, stock_bas, retraits_lecteur=()):
     """
     Ce qui demande un geste aujourd'hui, et rien d'autre.
 
@@ -508,6 +514,24 @@ def _alertes_urgentes(caisse, refus_repetes, expirations_48h, machines_hs,
     decide de la teinte, et elle seule.
     """
     alertes = []
+
+    # En tete : une personne partie dont le visage ouvre encore la porte. Le
+    # bouton relance le retrait sans quitter le tableau de bord.
+    for fiche in retraits_lecteur:
+        alertes.append({
+            "ton": "urgent",
+            "titre": f"{fiche.nom or fiche.employee_no} : visage encore sur {fiche.device.name}",
+            "detail": (
+                "Retrait demande, mais le lecteur ne l'a pas confirme : "
+                "cette personne peut encore entrer."
+            ),
+            "url": (
+                reverse("access:staff_face_enrollment", args=[fiche.employee_id])
+                if fiche.employee_id
+                else reverse("access:acces_dashboard")
+            ),
+            "reessayer_url": reverse("access:staff_removal_retry", args=[fiche.id]),
+        })
 
     if caisse["oubliee_depuis_hier"]:
         alertes.append({
@@ -2323,6 +2347,7 @@ def gym_dashboard(request, gym_id):
         machine_kpis["machines_broken"],
         product_kpis["out_of_stock_count"],
         product_kpis["low_stock_count"],
+        retraits_lecteur=_retraits_lecteur(gym) if "ACCESS" in active_modules else (),
     )
 
     total_maintenance_cost = machine_kpis["total_maintenance_cost"]

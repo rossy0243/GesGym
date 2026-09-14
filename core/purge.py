@@ -59,6 +59,7 @@ DONNEES_CONSERVEES = (
     ("Specialites", "coaching.CoachSpecialty"),
     ("Programmes collectifs", "coaching.GroupCoachingProgram"),
     ("Lecteurs", "access.AccessDevice"),
+    ("Visages du personnel sur les lecteurs", "access.StaffReaderRecord"),
     ("Acces du personnel", "compte.UserGymRole"),
 )
 
