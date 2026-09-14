@@ -887,6 +887,29 @@ body.subscription-plan-screen #addFormuleModal .modal-dialog {
                         {{ offer_form.grants_group_coaching }}
                         <label class="form-check-label" for="{{ offer_form.grants_group_coaching.id_for_label }}">Donne acces au coaching groupe</label>
                     </div>
+                    {% comment %} Les articles remis avec l'offre, credites au membre a
+                       chaque paiement d'une formule qui la porte. {% endcomment %}
+                    <input type="hidden" name="kit_present" value="1">
+                    <div class="mb-3">
+                        <label class="form-label">Articles remis avec l'offre</label>
+                        <div class="form-text mb-2">
+                            Credites au membre a chaque paiement d'une formule qui porte cette offre,
+                            renouvellements compris. Modifier le kit n'agit que sur les paiements futurs.
+                        </div>
+                        <div id="kitLignes" class="vstack gap-2"></div>
+                        <button type="button" class="btn btn-sm btn-light mt-2" id="kitAjouter">+ Ajouter un article</button>
+                        <template id="kitModele">
+                            <div class="d-flex gap-2 align-items-center">
+                                <select name="kit_product" class="form-select form-select-sm" aria-label="Article">
+                                    <option value="">Choisir un article</option>
+                                    {% for produit in produits_stock %}<option value="{{ produit.id }}">{{ produit.name }}</option>{% endfor %}
+                                </select>
+                                <input type="number" name="kit_quantity" min="1" value="1"
+                                       class="form-control form-control-sm" style="width:90px;" aria-label="Quantite">
+                                <button type="button" class="btn btn-sm btn-outline-danger kit-retirer" aria-label="Retirer l'article">&times;</button>
+                            </div>
+                        </template>
+                    </div>
                     <div class="form-check mb-3">
                         {{ offer_form.is_active }}
                         <label class="form-check-label" for="{{ offer_form.is_active.id_for_label }}">Activer l'offre</label>
@@ -991,6 +1014,28 @@ document.addEventListener('DOMContentLoaded', function () {
         active: document.getElementById('id_offer-is_active'),
     };
 
+    // Les articles du kit : une ligne par article, ajoutee ou retiree a la main.
+    const kitLignes = document.getElementById('kitLignes');
+    const kitModele = document.getElementById('kitModele');
+
+    function ajouterLigneKit(productId, quantity) {
+        if (!kitLignes || !kitModele) return;
+        const ligne = kitModele.content.firstElementChild.cloneNode(true);
+        if (productId) ligne.querySelector('select').value = String(productId);
+        if (quantity) ligne.querySelector('input').value = quantity;
+        ligne.querySelector('.kit-retirer').addEventListener('click', () => ligne.remove());
+        kitLignes.appendChild(ligne);
+    }
+
+    function remplirKit(items) {
+        if (!kitLignes) return;
+        kitLignes.innerHTML = '';
+        (items || []).forEach((item) => ajouterLigneKit(item.product_id, item.quantity));
+    }
+
+    const kitAjouter = document.getElementById('kitAjouter');
+    if (kitAjouter) kitAjouter.addEventListener('click', () => ajouterLigneKit());
+
     function setCheckedValues(nodes, values) {
         const selected = new Set((values || []).map(String));
         nodes.forEach((node) => {
@@ -1021,6 +1066,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (offerFields.id) offerFields.id.value = '';
         if (offerFields.category) offerFields.category.value = 'access';
         if (offerFields.active) offerFields.active.checked = true;
+        remplirKit([]);
     }
 
     function cleanupModalArtifacts() {
@@ -1168,6 +1214,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (offerFields.grantsIndividual) offerFields.grantsIndividual.checked = Boolean(data.grants_individual_coaching);
                 if (offerFields.grantsGroup) offerFields.grantsGroup.checked = Boolean(data.grants_group_coaching);
                 if (offerFields.active) offerFields.active.checked = Boolean(data.is_active);
+                remplirKit(data.items);
             } catch (error) {
                 console.error(error);
                 offerModal.hide();

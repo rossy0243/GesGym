@@ -1,4 +1,5 @@
 from django.contrib.auth.decorators import login_required
+from subscriptions import avantages
 from django.db import transaction
 from django.db.models import Q
 from django.http import Http404, JsonResponse
@@ -321,6 +322,10 @@ def manual_access_entry(request, member_id):
 
     return JsonResponse({
         "member": f"{member.first_name} {member.last_name}",
+        "member_id": member.id,
+        # Le kit se remet la ou le membre arrive : apres le scan comme apres une
+        # ouverture manuelle, l'accueil voit ce qui lui revient.
+        "avantages": avantages.etat(member),
         "access": access_granted,
         "reason": reason,
         "stats": _today_stats(request.gym),
@@ -409,6 +414,10 @@ def member_access(request, qr_code):
 
     return JsonResponse({
         "member": f"{member.first_name} {member.last_name}",
+        "member_id": member.id,
+        # Le kit se remet la ou le membre arrive : apres le scan comme apres une
+        # ouverture manuelle, l'accueil voit ce qui lui revient.
+        "avantages": avantages.etat(member),
         "access": access_granted,
         "reason": reason,
         "stats": _today_stats(request.gym),

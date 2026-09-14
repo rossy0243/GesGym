@@ -17,15 +17,19 @@ from django.views.decorators.http import require_POST
 from core.audit import log_sensitive_action
 from pos.services import record_subscription_payment
 from smartclub.access_control import (
+    ACCESS_ROLES,
     SETTINGS_ORGANIZATION_ROLES,
     SUBSCRIPTION_ROLES,
     has_role,
 )
 from smartclub.decorators import module_required
 
+from subscriptions import avantages
+from products.models import Product
+from members.models import Member
 from . import corrections
 from .forms import MemberSubscriptionForm, SubscriptionOfferForm, SubscriptionPlanForm
-from .models import MemberSubscription, SubscriptionCorrection, SubscriptionOffer, SubscriptionPlan
+from .models import BenefitMovement, MemberSubscription, SubscriptionCorrection, SubscriptionOffer, SubscriptionPlan
 
 logger = logging.getLogger("subscriptions")
 
@@ -79,7 +83,11 @@ def _plan_list_context(request, form=None):
         "plans": plans,
         "form": form or SubscriptionPlanForm(gym=request.gym),
         "offer_form": SubscriptionOfferForm(gym=request.gym, prefix="offer"),
-        "offers_catalog": SubscriptionOffer.objects.filter(gym=request.gym).order_by("-is_active", "name"),
+        "offers_catalog": SubscriptionOffer.objects.filter(gym=request.gym)
+        .prefetch_related("items__product")
+        .order_by("-is_active", "name"),
+        # Les articles qu'une offre peut remettre avec une formule.
+        "produits_stock": Product.objects.filter(gym=request.gym, is_active=True).order_by("name"),
         "top_sales_count": top_sales_count,
         "active_plans_count": plans.filter(is_active=True).count(),
         "active_subscriptions_count": active_subscriptions.count(),
@@ -93,39 +101,6 @@ def _plan_list_context(request, form=None):
         ).count(),
         "upcoming_renewals": active_subscriptions.select_related("member", "plan").order_by("end_date")[:10],
     }
-
-
-def create_member_subscription(member, plan, start_date=None, auto_renew=False):
-    if member.gym_id != plan.gym_id:
-        raise PermissionDenied("Le membre et la formule doivent appartenir au meme gym.")
-
-    start_date = start_date or timezone.now().date()
-    end_date = start_date + timedelta(days=plan.duration_days)
-
-    with transaction.atomic():
-        MemberSubscription.objects.filter(
-            gym=member.gym,
-            member=member,
-            is_active=True,
-        ).update(is_active=False)
-
-        subscription = MemberSubscription.objects.create(
-            gym=member.gym,
-            member=member,
-            plan=plan,
-            start_date=start_date,
-            end_date=end_date,
-            auto_renew=auto_renew,
-            is_active=True,
-        )
-
-    # Meme raison qu'en caisse : le lecteur doit connaitre la nouvelle
-    # echeance sans attendre une resynchronisation.
-    from access import enrollment
-
-    enrollment.propager(member)
-
-    return subscription
 
 
 @login_required
@@ -301,9 +276,21 @@ def create_offer(request):
 
     form = SubscriptionOfferForm(request.POST, gym=request.gym, prefix="offer")
     if form.is_valid():
-        offer = form.save(commit=False)
-        offer.gym = request.gym
-        offer.save()
+        try:
+            # L'offre et son kit naissent ensemble : un article invalide annule
+            # tout, plutot que de laisser une offre sans les articles prevus.
+            with transaction.atomic():
+                offer = form.save(commit=False)
+                offer.gym = request.gym
+                offer.save()
+                if request.POST.get("kit_present"):
+                    avantages.definir_articles(offer, _articles_du_formulaire(request))
+        except ValidationError as exc:
+            message = exc.messages[0]
+            if _wants_json(request):
+                return JsonResponse({"success": False, "errors": {"kit": [message]}}, status=400)
+            messages.error(request, message)
+            return redirect("subscriptions:subscription_plan_list")
         log_sensitive_action(
             request,
             "subscription.offer_created",
@@ -330,7 +317,19 @@ def edit_offer(request, offer_id):
     if request.method == "POST":
         form = SubscriptionOfferForm(request.POST, instance=offer, gym=request.gym, prefix="offer")
         if form.is_valid():
-            form.save()
+            try:
+                with transaction.atomic():
+                    form.save()
+                    if request.POST.get("kit_present"):
+                        # N'agit que sur les paiements futurs : les soldes deja
+                        # credites appartiennent aux membres.
+                        avantages.definir_articles(offer, _articles_du_formulaire(request))
+            except ValidationError as exc:
+                message = exc.messages[0]
+                if _wants_json(request):
+                    return JsonResponse({"success": False, "errors": {"kit": [message]}}, status=400)
+                messages.error(request, message)
+                return redirect("subscriptions:subscription_plan_list")
             log_sensitive_action(
                 request,
                 "subscription.offer_updated",
@@ -356,6 +355,10 @@ def edit_offer(request, offer_id):
             "grants_individual_coaching": offer.grants_individual_coaching,
             "grants_group_coaching": offer.grants_group_coaching,
             "is_active": offer.is_active,
+            "items": [
+                {"product_id": article.product_id, "quantity": article.quantity}
+                for article in offer.items.all()
+            ],
         }
     )
 
@@ -543,3 +546,104 @@ def acknowledge_correction(request, correction_id):
     if _wants_json(request):
         return JsonResponse({"success": True})
     return redirect(request.META.get("HTTP_REFERER", "core:dashboard_redirect"))
+
+
+def _articles_du_formulaire(request):
+    """Les lignes du kit saisies dans le formulaire d'offre : article et quantite."""
+    return list(
+        zip(request.POST.getlist("kit_product"), request.POST.getlist("kit_quantity"))
+    )
+
+
+# ---------------------------------------------------------------------------
+# Les articles offerts, au comptoir
+# ---------------------------------------------------------------------------
+
+
+@login_required
+@module_required("SUBSCRIPTIONS")
+@require_POST
+def remettre_avantage(request, member_id):
+    """
+    Remet au comptoir un article du solde d'un membre.
+
+    Le geste de l'accueil ou de la caisse, apres le scan ou sur la fiche. Le
+    stock baisse, le journal garde la trace, et aucun paiement n'est cree.
+    """
+    if not has_role(request, ACCESS_ROLES):
+        return JsonResponse({"success": False, "error": "Acces refuse."}, status=403)
+
+    membre = get_object_or_404(Member, id=member_id, gym=request.gym)
+    try:
+        remise = avantages.remettre(
+            membre,
+            request.POST.get("product_id"),
+            request.POST.get("quantite", 1),
+            par=request.user,
+        )
+    except ValidationError as exc:
+        return JsonResponse(
+            {"success": False, "error": exc.messages[0], "avantages": avantages.etat(membre)},
+            status=400,
+        )
+
+    log_sensitive_action(
+        request,
+        "subscription.benefit_given",
+        "Member",
+        f"{membre.first_name} {membre.last_name}".strip(),
+        metadata={
+            "movement_id": remise.id,
+            "product": remise.product.name,
+            "quantity": -remise.quantity,
+        },
+    )
+    return JsonResponse({
+        "success": True,
+        "message": f"{-remise.quantity} {remise.product.name} remis.",
+        "avantages": avantages.etat(membre),
+    })
+
+
+@login_required
+@module_required("SUBSCRIPTIONS")
+@require_POST
+def annuler_avantage(request, movement_id):
+    """
+    Corrige une remise saisie par erreur, le jour meme et avec un motif.
+
+    L'article revient en stock et au solde. La remise et son annulation restent
+    toutes deux au journal : on sait ce qui s'est passe, et qui l'a corrige.
+    """
+    if not has_role(request, ACCESS_ROLES):
+        return JsonResponse({"success": False, "error": "Acces refuse."}, status=403)
+
+    remise = get_object_or_404(
+        BenefitMovement.objects.select_related("member", "product"),
+        id=movement_id,
+        gym=request.gym,
+    )
+    try:
+        avantages.annuler(remise, request.POST.get("motif"), par=request.user)
+    except ValidationError as exc:
+        return JsonResponse(
+            {"success": False, "error": exc.messages[0], "avantages": avantages.etat(remise.member)},
+            status=400,
+        )
+
+    log_sensitive_action(
+        request,
+        "subscription.benefit_cancelled",
+        "Member",
+        f"{remise.member.first_name} {remise.member.last_name}".strip(),
+        metadata={
+            "movement_id": remise.id,
+            "product": remise.product.name,
+            "motif": (request.POST.get("motif") or "").strip(),
+        },
+    )
+    return JsonResponse({
+        "success": True,
+        "message": "Remise annulee : l'article revient en stock et au solde.",
+        "avantages": avantages.etat(remise.member),
+    })

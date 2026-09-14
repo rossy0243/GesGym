@@ -15,10 +15,19 @@ from compte.models import User, UserGymRole
 from members.models import Member
 from organizations.models import Gym, GymModule, Module, Organization
 from pos.models import CashRegister, Payment
-from subscriptions import corrections
+from products.models import Product, StockMovement
+from subscriptions import avantages, corrections
 from subscriptions.forms import MemberSubscriptionForm, SubscriptionPlanForm
-from subscriptions.models import MemberSubscription, SubscriptionCorrection, SubscriptionOffer, SubscriptionPlan
-from subscriptions.views import create_member_subscription
+from subscriptions.models import (
+    BenefitMovement,
+    MemberSubscription,
+    OfferItem,
+    SubscriptionCorrection,
+    SubscriptionOffer,
+    SubscriptionPlan,
+    SubscriptionRequest,
+)
+from pos.services import record_subscription_payment
 
 
 class SubscriptionTenantSafetyTests(TestCase):
@@ -152,9 +161,22 @@ class SubscriptionTenantSafetyTests(TestCase):
         self.assertFalse(same_gym_form.is_valid())
         self.assertTrue(other_gym_form.is_valid())
 
-    def test_create_member_subscription_sets_gym_and_replaces_active_subscription(self):
-        first_subscription = create_member_subscription(self.member_a, self.plan_a)
-        second_subscription = create_member_subscription(self.member_a, self.plan_a)
+    def test_a_new_sale_sets_the_gym_and_replaces_the_active_subscription(self):
+        # Un abonnement ne nait plus que d'un paiement : la fonction qui le
+        # creait sans paiement - et donc sans kit - a disparu.
+        CashRegister.objects.create(
+            gym=self.gym_a,
+            opening_amount=Decimal("0.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+        first_subscription, _ = record_subscription_payment(
+            gym=self.gym_a, member=self.member_a, plan=self.plan_a,
+            currency="USD", method="cash",
+        )
+        second_subscription, _ = record_subscription_payment(
+            gym=self.gym_a, member=self.member_a, plan=self.plan_a,
+            currency="USD", method="cash",
+        )
 
         first_subscription.refresh_from_db()
         self.assertEqual(second_subscription.gym, self.gym_a)
@@ -427,9 +449,21 @@ class SubscriptionTenantSafetyTests(TestCase):
             coaching_level=SubscriptionPlan.COACHING_LEVEL_STANDARD,
         )
 
-        create_member_subscription(self.member_a, self.plan_a)
-        create_member_subscription(self.member_a, self.plan_a)
-        create_member_subscription(second_member, other_plan)
+        if not CashRegister.objects.filter(gym=self.gym_a, is_closed=False).exists():
+            CashRegister.objects.create(
+                gym=self.gym_a,
+                opening_amount=Decimal("0.00"),
+                exchange_rate=Decimal("2800.00"),
+            )
+        for membre, formule in (
+            (self.member_a, self.plan_a),
+            (self.member_a, self.plan_a),
+            (second_member, other_plan),
+        ):
+            record_subscription_payment(
+                gym=self.gym_a, member=membre, plan=formule,
+                currency="USD", method="cash",
+            )
 
         response = self.client.get(reverse("subscriptions:subscription_plan_list"))
 
@@ -1613,3 +1647,512 @@ class GuestInvitationVisibilityTests(TestCase):
             formules["Premium"]["offers"],
         )
         self.assertEqual(formules["Basique"]["offers"], [])
+
+
+class SubscriptionKitTests(TestCase):
+    """
+    Le kit d'une formule.
+
+    Un membre qui paie sa formule Premium recoit une serviette et quelques
+    bouteilles d'eau. Le solde se reporte d'un paiement au suivant, ce qui est
+    pris ne se recredite pas, et aucun article offert ne passe par la caisse.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(name="Org Kit", slug="org-kit")
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Kit",
+            slug="gym-kit", subdomain="gym-kit",
+        )
+        for code in ("MEMBERS", "SUBSCRIPTIONS", "POS", "ACCESS"):
+            module, _ = Module.objects.get_or_create(code=code, defaults={"name": code})
+            GymModule.objects.get_or_create(
+                gym=self.gym, module=module, defaults={"is_active": True}
+            )
+
+        self.caissiere = self._utilisateur("caisse-kit", "cashier")
+        self.registre = CashRegister.objects.create(
+            gym=self.gym, opened_by=self.caissiere,
+            opening_amount=Decimal("0.00"), exchange_rate=Decimal("2800.00"),
+        )
+        self.premium = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Premium", price=50, duration_days=30
+        )
+        self.standard = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Standard", price=30, duration_days=30
+        )
+        self.serviette = Product.objects.create(
+            gym=self.gym, name="Serviette", price=Decimal("5000"),
+            currency=Product.CURRENCY_CDF, quantity=20,
+        )
+        self.bouteille = Product.objects.create(
+            gym=self.gym, name="Bouteille d'eau", price=Decimal("1000"),
+            currency=Product.CURRENCY_CDF, quantity=50,
+        )
+        self.kit = SubscriptionOffer.objects.create(
+            gym=self.gym, name="Kit Premium", is_active=True
+        )
+        avantages.definir_articles(
+            self.kit, [(self.serviette.id, 1), (self.bouteille.id, 4)]
+        )
+        self.premium.offers.add(self.kit)
+        self.membre = Member.objects.create(
+            gym=self.gym, first_name="Ada", last_name="Mbala", phone="+243870123456",
+        )
+
+    # --- Fabriques ---------------------------------------------------------------
+
+    def _utilisateur(self, nom, role, gym=None):
+        utilisateur = User.objects.create_user(username=nom, password="pass12345")
+        UserGymRole.objects.create(
+            user=utilisateur, gym=gym or self.gym, role=role, is_active=True
+        )
+        return utilisateur
+
+    def _connecter(self, utilisateur):
+        self.client.force_login(utilisateur)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _vendre(self, plan=None):
+        return record_subscription_payment(
+            gym=self.gym, member=self.membre, plan=plan or self.premium,
+            currency="USD", method="cash", created_by=self.caissiere,
+        )
+
+    def _solde(self, produit):
+        return avantages.solde(self.membre, produit)
+
+    # --- Le credit ------------------------------------------------------------------
+
+    def test_a_sale_credits_the_kit(self):
+        self._vendre()
+
+        self.assertEqual(self._solde(self.serviette), 1)
+        self.assertEqual(self._solde(self.bouteille), 4)
+
+    def test_a_renewal_credits_it_again_and_carries_over(self):
+        # Ce qui n'a pas ete pris s'ajoute au kit suivant.
+        self._vendre()
+        self._vendre()
+
+        self.assertEqual(self._solde(self.serviette), 2)
+        self.assertEqual(self._solde(self.bouteille), 8)
+
+    def test_a_plan_without_the_offer_credits_nothing(self):
+        self._vendre(plan=self.standard)
+
+        self.assertFalse(BenefitMovement.objects.filter(member=self.membre).exists())
+
+    def test_an_inactive_offer_credits_nothing(self):
+        SubscriptionOffer.objects.filter(pk=self.kit.pk).update(is_active=False)
+
+        self._vendre()
+
+        self.assertEqual(self._solde(self.bouteille), 0)
+
+    def test_the_same_article_in_two_offers_adds_up(self):
+        bonus = SubscriptionOffer.objects.create(gym=self.gym, name="Bonus", is_active=True)
+        avantages.definir_articles(bonus, [(self.bouteille.id, 2)])
+        self.premium.offers.add(bonus)
+
+        self._vendre()
+
+        self.assertEqual(self._solde(self.bouteille), 6)
+        self.assertEqual(
+            BenefitMovement.objects.filter(
+                member=self.membre, product=self.bouteille, kind=BenefitMovement.KIND_CREDIT
+            ).count(),
+            1,
+        )
+
+    def test_crediting_creates_no_payment(self):
+        # Le seul paiement est celui de l'abonnement : le kit ne passe pas par
+        # la caisse.
+        self._vendre()
+
+        self.assertEqual(Payment.objects.filter(gym=self.gym).count(), 1)
+
+    def test_changing_the_kit_only_affects_future_sales(self):
+        self._vendre()
+
+        avantages.definir_articles(self.kit, [(self.bouteille.id, 10)])
+
+        self.assertEqual(self._solde(self.serviette), 1)
+        self.assertEqual(self._solde(self.bouteille), 4)
+        self._vendre()
+        self.assertEqual(self._solde(self.bouteille), 14)
+
+    # --- La remise -----------------------------------------------------------------
+
+    def test_giving_an_article_lowers_the_stock_and_the_balance(self):
+        self._vendre()
+
+        avantages.remettre(self.membre, self.bouteille.id, 3, par=self.caissiere)
+
+        self.bouteille.refresh_from_db()
+        self.assertEqual(self.bouteille.quantity, 47)
+        self.assertEqual(self._solde(self.bouteille), 1)
+
+    def test_giving_creates_no_payment(self):
+        # Une vente a zero ferait apparaitre une fausse vente dans les
+        # encaissements.
+        self._vendre()
+        avant = Payment.objects.filter(gym=self.gym).count()
+
+        avantages.remettre(self.membre, self.serviette.id, 1, par=self.caissiere)
+
+        self.assertEqual(Payment.objects.filter(gym=self.gym).count(), avant)
+
+    def test_the_stock_movement_says_why(self):
+        self._vendre()
+
+        avantages.remettre(self.membre, self.serviette.id, 1, par=self.caissiere)
+
+        mouvement = StockMovement.objects.filter(
+            product=self.serviette, movement_type="out"
+        ).latest("created_at")
+        self.assertTrue(mouvement.reason.startswith("Avantage abonne"))
+
+    def test_cannot_give_more_than_the_balance(self):
+        self._vendre()
+
+        with self.assertRaises(ValidationError):
+            avantages.remettre(self.membre, self.bouteille.id, 5, par=self.caissiere)
+
+    def test_what_was_taken_is_not_credited_back_before_the_next_payment(self):
+        self._vendre()
+        avantages.remettre(self.membre, self.serviette.id, 1, par=self.caissiere)
+
+        with self.assertRaises(ValidationError):
+            avantages.remettre(self.membre, self.serviette.id, 1, par=self.caissiere)
+
+    def test_out_of_stock_keeps_the_balance(self):
+        # Le membre ne perd rien parce qu'on ne peut pas le servir aujourd'hui.
+        self._vendre()
+        Product.objects.filter(pk=self.serviette.pk).update(quantity=0)
+
+        with self.assertRaises(ValidationError):
+            avantages.remettre(self.membre, self.serviette.id, 1, par=self.caissiere)
+
+        self.assertEqual(self._solde(self.serviette), 1)
+
+    def test_without_an_active_subscription_the_balance_is_kept(self):
+        self._vendre()
+        MemberSubscription.objects.filter(member=self.membre).update(is_active=False)
+
+        with self.assertRaises(ValidationError):
+            avantages.remettre(self.membre, self.bouteille.id, 1, par=self.caissiere)
+
+        self.assertEqual(self._solde(self.bouteille), 4)
+
+    # --- L'annulation --------------------------------------------------------------
+
+    def test_a_same_day_cancellation_restores_stock_and_balance(self):
+        self._vendre()
+        remise = avantages.remettre(self.membre, self.bouteille.id, 2, par=self.caissiere)
+
+        avantages.annuler(remise, "Mauvais membre", par=self.caissiere)
+
+        self.bouteille.refresh_from_db()
+        self.assertEqual(self.bouteille.quantity, 50)
+        self.assertEqual(self._solde(self.bouteille), 4)
+
+    def test_both_lines_stay_in_the_journal(self):
+        self._vendre()
+        remise = avantages.remettre(self.membre, self.bouteille.id, 2, par=self.caissiere)
+
+        annulation = avantages.annuler(remise, "Mauvais membre", par=self.caissiere)
+
+        self.assertTrue(BenefitMovement.objects.filter(pk=remise.pk).exists())
+        self.assertEqual(annulation.cancels_id, remise.pk)
+
+    def test_cancelling_requires_a_reason(self):
+        self._vendre()
+        remise = avantages.remettre(self.membre, self.bouteille.id, 1, par=self.caissiere)
+
+        with self.assertRaises(ValidationError):
+            avantages.annuler(remise, "  ", par=self.caissiere)
+
+    def test_yesterdays_giving_cannot_be_cancelled(self):
+        self._vendre()
+        remise = avantages.remettre(self.membre, self.bouteille.id, 1, par=self.caissiere)
+        BenefitMovement.objects.filter(pk=remise.pk).update(
+            created_at=timezone.now() - timedelta(days=1)
+        )
+
+        with self.assertRaises(ValidationError):
+            avantages.annuler(remise, "Trop tard", par=self.caissiere)
+
+    def test_a_giving_cannot_be_cancelled_twice(self):
+        self._vendre()
+        remise = avantages.remettre(self.membre, self.bouteille.id, 1, par=self.caissiere)
+        avantages.annuler(remise, "Erreur", par=self.caissiere)
+
+        with self.assertRaises(ValidationError):
+            avantages.annuler(remise, "Encore", par=self.caissiere)
+
+    # --- Au comptoir ------------------------------------------------------------------
+
+    def test_reception_gives_from_the_counter(self):
+        self._vendre()
+        self._connecter(self._utilisateur("accueil-kit", "reception"))
+
+        reponse = self.client.post(
+            reverse("subscriptions:remettre_avantage", args=[self.membre.id]),
+            {"product_id": self.serviette.id, "quantite": 1},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertTrue(reponse.json()["success"])
+        self.assertEqual(self._solde(self.serviette), 0)
+
+    def test_a_coach_cannot_give(self):
+        self._vendre()
+        self._connecter(self._utilisateur("coach-kit", "coach"))
+
+        reponse = self.client.post(
+            reverse("subscriptions:remettre_avantage", args=[self.membre.id]),
+            {"product_id": self.serviette.id, "quantite": 1},
+        )
+
+        self.assertEqual(reponse.status_code, 403)
+        self.assertEqual(self._solde(self.serviette), 1)
+
+    def test_a_neighbouring_gym_member_is_out_of_reach(self):
+        voisine = Gym.objects.create(
+            organization=self.organization, name="Voisine",
+            slug="gym-kit-voisine", subdomain="gym-kit-voisine",
+        )
+        ailleurs = Member.objects.create(
+            gym=voisine, first_name="Zoe", last_name="Ailleurs", phone="+243870999111",
+        )
+        self._connecter(self._utilisateur("accueil-kit2", "reception"))
+
+        reponse = self.client.post(
+            reverse("subscriptions:remettre_avantage", args=[ailleurs.id]),
+            {"product_id": self.serviette.id, "quantite": 1},
+        )
+
+        self.assertEqual(reponse.status_code, 404)
+
+    def test_cancelling_from_the_counter(self):
+        self._vendre()
+        remise = avantages.remettre(self.membre, self.bouteille.id, 2, par=self.caissiere)
+        self._connecter(self._utilisateur("accueil-kit3", "reception"))
+
+        reponse = self.client.post(
+            reverse("subscriptions:annuler_avantage", args=[remise.id]),
+            {"motif": "Mauvais membre"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertTrue(reponse.json()["success"])
+        self.assertEqual(self._solde(self.bouteille), 4)
+
+    def test_the_member_sheet_shows_the_balance(self):
+        self._vendre()
+        self._connecter(self._utilisateur("gerant-kit", "manager"))
+
+        fiche = self.client.get(reverse("members:member_detail", args=[self.membre.id])).json()
+
+        soldes = {ligne["nom"]: ligne["solde"] for ligne in fiche["avantages"]["soldes"]}
+        self.assertEqual(soldes["Serviette"], 1)
+        self.assertEqual(soldes["Bouteille d'eau"], 4)
+
+    def test_the_scan_shows_the_balance(self):
+        # Le kit se remet la ou le membre arrive : juste apres le scan.
+        self._vendre()
+        self._connecter(self._utilisateur("accueil-kit4", "reception"))
+
+        # La route n'accepte que POST, comme l'ecran de scan l'appelle.
+        reponse = self.client.post(
+            reverse("access:member_access", args=[self.membre.qr_code])
+        ).json()
+
+        self.assertEqual(reponse["member_id"], self.membre.id)
+        self.assertTrue(reponse["avantages"]["soldes"])
+
+    # --- Le parametrage de l'offre ------------------------------------------------------
+
+    def test_the_offer_form_saves_its_kit(self):
+        self._connecter(self._utilisateur("gerant-kit2", "manager"))
+
+        reponse = self.client.post(
+            reverse("subscriptions:create_subscription_offer"),
+            {
+                "offer-name": "Kit Standard",
+                "offer-category": "access",
+                "offer-is_active": "on",
+                "kit_present": "1",
+                "kit_product": [self.serviette.id, self.bouteille.id],
+                "kit_quantity": ["1", "2"],
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertTrue(reponse.json()["success"])
+        offre = SubscriptionOffer.objects.get(gym=self.gym, name="Kit Standard")
+        self.assertEqual(
+            {(article.product_id, article.quantity) for article in offre.items.all()},
+            {(self.serviette.id, 1), (self.bouteille.id, 2)},
+        )
+
+    def test_an_article_from_another_gym_cancels_the_whole_offer(self):
+        # L'offre et son kit naissent ensemble : pas d'offre sans les articles
+        # prevus.
+        voisine = Gym.objects.create(
+            organization=self.organization, name="Voisine",
+            slug="gym-kit-voisine2", subdomain="gym-kit-voisine2",
+        )
+        etranger = Product.objects.create(
+            gym=voisine, name="Casquette", price=Decimal("3000"),
+            currency=Product.CURRENCY_CDF, quantity=5,
+        )
+        self._connecter(self._utilisateur("gerant-kit3", "manager"))
+
+        reponse = self.client.post(
+            reverse("subscriptions:create_subscription_offer"),
+            {
+                "offer-name": "Kit Fautif",
+                "offer-category": "access",
+                "offer-is_active": "on",
+                "kit_present": "1",
+                "kit_product": [etranger.id],
+                "kit_quantity": ["1"],
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(reponse.status_code, 400)
+        self.assertFalse(SubscriptionOffer.objects.filter(name="Kit Fautif").exists())
+
+    def test_the_offer_edit_returns_its_kit(self):
+        self._connecter(self._utilisateur("gerant-kit4", "manager"))
+
+        donnees = self.client.get(
+            reverse("subscriptions:edit_subscription_offer", args=[self.kit.id])
+        ).json()
+
+        self.assertEqual(
+            {(article["product_id"], article["quantity"]) for article in donnees["items"]},
+            {(self.serviette.id, 1), (self.bouteille.id, 4)},
+        )
+
+    def test_an_offer_saved_without_kit_fields_keeps_its_kit(self):
+        # Un envoi qui ne porte pas le formulaire du kit ne doit pas l'effacer.
+        self._connecter(self._utilisateur("gerant-kit5", "manager"))
+
+        self.client.post(
+            reverse("subscriptions:edit_subscription_offer", args=[self.kit.id]),
+            {"offer-name": "Kit Premium", "offer-category": "access", "offer-is_active": "on"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(OfferItem.objects.filter(offer=self.kit).count(), 2)
+
+    # --- La grille du revenu --------------------------------------------------------------
+
+    def test_the_revenue_grid_counts_what_was_given(self):
+        self._vendre()
+        avantages.remettre(self.membre, self.bouteille.id, 3, par=self.caissiere)
+        avantages.remettre(self.membre, self.serviette.id, 1, par=self.caissiere)
+        self._connecter(self._utilisateur("gerant-kit6", "manager"))
+
+        bilan = self.client.get(
+            reverse("core:gym_dashboard", args=[self.gym.id]),
+            {"view": "analytics", "period": "month"},
+        ).context["bilan_periode"]
+
+        offerts = {ligne["nom"]: ligne["quantite"] for ligne in bilan["articles_offerts"]["articles"]}
+        self.assertEqual(offerts, {"Bouteille d'eau": 3, "Serviette": 1})
+        self.assertEqual(bilan["articles_offerts"]["valeur_cdf"], Decimal("8000.00"))
+
+    def test_a_cancelled_giving_is_not_counted(self):
+        self._vendre()
+        remise = avantages.remettre(self.membre, self.bouteille.id, 3, par=self.caissiere)
+        avantages.annuler(remise, "Erreur", par=self.caissiere)
+
+        offerts = avantages.offerts_sur_periode(
+            self.gym, timezone.localdate(), timezone.localdate()
+        )
+
+        self.assertEqual(offerts["articles"], [])
+
+
+class SubscriptionPaymentPathTests(TestCase):
+    """
+    Les deux constats corriges en construisant le kit.
+
+    Une demande faite depuis le portail restait « en attente » apres la vente au
+    comptoir. Et un abonnement pouvait naitre sans paiement, donc sans kit.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(name="Org Chemin", slug="org-chemin")
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Chemin",
+            slug="gym-chemin", subdomain="gym-chemin",
+        )
+        CashRegister.objects.create(
+            gym=self.gym, opening_amount=Decimal("0.00"), exchange_rate=Decimal("2800.00"),
+        )
+        self.premium = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Premium", price=50, duration_days=30
+        )
+        self.standard = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Standard", price=30, duration_days=30
+        )
+        self.membre = Member.objects.create(
+            gym=self.gym, first_name="Ada", last_name="Mbala", phone="+243870654321",
+        )
+
+    def _demande(self, plan, statut=SubscriptionRequest.STATUS_PENDING):
+        return SubscriptionRequest.objects.create(
+            gym=self.gym, member=self.membre, plan=plan, status=statut, price_usd=plan.price,
+        )
+
+    def _vendre(self, plan):
+        return record_subscription_payment(
+            gym=self.gym, member=self.membre, plan=plan, currency="USD", method="cash",
+        )
+
+    def test_a_counter_sale_settles_the_portal_request(self):
+        demande = self._demande(self.premium)
+
+        self._vendre(self.premium)
+
+        demande.refresh_from_db()
+        self.assertEqual(demande.status, SubscriptionRequest.STATUS_PAID)
+
+    def test_a_request_awaiting_payment_is_settled_too(self):
+        demande = self._demande(self.premium, SubscriptionRequest.STATUS_AWAITING_PAYMENT)
+
+        self._vendre(self.premium)
+
+        demande.refresh_from_db()
+        self.assertEqual(demande.status, SubscriptionRequest.STATUS_PAID)
+
+    def test_a_request_for_another_plan_stays_pending(self):
+        demande = self._demande(self.standard)
+
+        self._vendre(self.premium)
+
+        demande.refresh_from_db()
+        self.assertEqual(demande.status, SubscriptionRequest.STATUS_PENDING)
+
+    def test_a_cancelled_request_is_left_alone(self):
+        demande = self._demande(self.premium, SubscriptionRequest.STATUS_CANCELLED)
+
+        self._vendre(self.premium)
+
+        demande.refresh_from_db()
+        self.assertEqual(demande.status, SubscriptionRequest.STATUS_CANCELLED)
+
+    def test_no_code_path_creates_a_subscription_without_payment(self):
+        # La fonction qui creait un abonnement sans paiement - et donc sans kit
+        # - a disparu : l'abonnement ne nait plus que d'une vente.
+        from subscriptions import views as vues
+
+        self.assertFalse(hasattr(vues, "create_member_subscription"))

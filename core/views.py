@@ -580,6 +580,12 @@ def _alertes_urgentes(caisse, refus_repetes, expirations_48h, machines_hs,
 
 
 
+def _articles_offerts(gym, debut, fin):
+    from subscriptions import avantages
+
+    return avantages.offerts_sur_periode(gym, debut, fin)
+
+
 def _bilan_de_periode(gym, period_data):
     """
     L'argent de la periode choisie : ce qui est entre, ce qui est parti, ce qui
@@ -664,6 +670,8 @@ def _bilan_de_periode(gym, period_data):
         "ecart": ecart,
         "a_un_ecart": ecart != zero,
         "nombre_encaissements": recettes.count(),
+        # Ni recette ni depense : ce que les avantages coutent en marchandise.
+        "articles_offerts": _articles_offerts(gym, debut, fin),
     }
 
 

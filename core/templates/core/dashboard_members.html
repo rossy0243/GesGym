@@ -578,6 +578,15 @@
                         </span>
                     </div>
                     {% endif %}
+                    {% if bilan_periode.articles_offerts.articles %}
+                    <div class="fs-12 text-muted mt-2">
+                        <span class="aide" title="Articles du stock remis avec une formule sur la periode. Ni une recette ni une depense : ce que les avantages coutent en marchandise, au prix de vente.">
+                            <strong>Articles offerts</strong> :
+                            {% for article in bilan_periode.articles_offerts.articles %}{{ article.quantite }} {{ article.nom }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                            {% if bilan_periode.articles_offerts.valeur_cdf %}&mdash; valeur {{ bilan_periode.articles_offerts.valeur_cdf|montant }} CDF{% if not bilan_periode.articles_offerts.valeur_complete %} (hors articles sans taux de change){% endif %}{% endif %}
+                        </span>
+                    </div>
+                    {% endif %}
                 </div>
 
                 {% if operations_periode %}

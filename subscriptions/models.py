@@ -503,3 +503,123 @@ class SubscriptionCorrection(models.Model):
     @property
     def is_acknowledged(self):
         return self.acknowledged_at is not None
+
+
+class OfferItem(models.Model):
+    """
+    Un article du stock remis avec une offre, a chaque paiement de la formule.
+
+    L'offre « Kit Premium » porte par exemple une serviette et quatre bouteilles
+    d'eau. Attachee a une formule, elle credite ces articles au solde du membre
+    chaque fois qu'il paie cette formule - renouvellements compris.
+    """
+
+    offer = models.ForeignKey(
+        SubscriptionOffer,
+        on_delete=models.CASCADE,
+        related_name="items",
+    )
+    product = models.ForeignKey(
+        "products.Product",
+        on_delete=models.PROTECT,
+        related_name="offer_items",
+    )
+    quantity = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["offer", "product"], name="unique_product_per_offer"
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.quantity is not None and self.quantity < 1:
+            raise ValidationError({"quantity": "Un article du kit compte au moins une unite."})
+        if self.offer_id and self.product_id and self.offer.gym_id != self.product.gym_id:
+            raise ValidationError({"product": "L'article doit appartenir a la salle de l'offre."})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.offer.name} : {self.product.name} x{self.quantity}"
+
+
+class BenefitMovement(models.Model):
+    """
+    Une ligne du journal des articles offerts a un membre.
+
+    Le solde d'un membre n'est pas un compteur qu'on modifie : c'est la somme de
+    ces lignes. Rien ne s'efface. Le report d'un kit sur le suivant se fait donc
+    tout seul, et une annulation est une ligne de plus, pas une suppression.
+
+    Aucune de ces lignes ne cree de paiement. Un article offert sort du stock
+    sans entrer dans la caisse : l'enregistrer comme une vente a zero ferait
+    apparaitre une fausse vente dans les encaissements.
+    """
+
+    KIND_CREDIT = "credit"
+    KIND_REMISE = "remise"
+    KIND_ANNULATION = "annulation"
+
+    KIND_CHOICES = (
+        (KIND_CREDIT, "Credit a la vente"),
+        (KIND_REMISE, "Remise au comptoir"),
+        (KIND_ANNULATION, "Annulation d'une remise"),
+    )
+
+    gym = models.ForeignKey(
+        Gym,
+        on_delete=models.CASCADE,
+        related_name="benefit_movements",
+    )
+    member = models.ForeignKey(
+        Member,
+        on_delete=models.CASCADE,
+        related_name="benefit_movements",
+    )
+    product = models.ForeignKey(
+        "products.Product",
+        on_delete=models.PROTECT,
+        related_name="benefit_movements",
+    )
+    # Signe : un credit ou une annulation ajoute, une remise retire.
+    quantity = models.IntegerField()
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES)
+    subscription = models.ForeignKey(
+        MemberSubscription,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="benefit_movements",
+    )
+    # L'annulation pointe la remise qu'elle corrige.
+    cancels = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cancellations",
+    )
+    reason = models.CharField(max_length=255, blank=True, default="")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="benefit_movements",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["gym", "member", "product"]),
+            models.Index(fields=["gym", "kind", "created_at"]),
+        ]
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.get_kind_display()} - {self.product} ({self.quantity:+d})"

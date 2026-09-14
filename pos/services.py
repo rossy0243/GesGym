@@ -239,6 +239,28 @@ def record_subscription_payment(
             source_id=subscription.id,
         )
 
+        # Le kit de la formule, credite dans la meme transaction que la vente :
+        # un paiement sans son kit, ou un kit sans paiement, ne doit pas pouvoir
+        # exister. Renouvellements compris.
+        from subscriptions import avantages
+
+        avantages.crediter(subscription, par=created_by)
+
+        # Une demande faite depuis le portail pour cette formule est reglee.
+        # Rien ne la marquait comme payee : apres la vente au comptoir, le
+        # membre continuait de la voir en attente.
+        from subscriptions.models import SubscriptionRequest
+
+        SubscriptionRequest.objects.filter(
+            gym=gym,
+            member=member,
+            plan=plan,
+            status__in=[
+                SubscriptionRequest.STATUS_PENDING,
+                SubscriptionRequest.STATUS_AWAITING_PAYMENT,
+            ],
+        ).update(status=SubscriptionRequest.STATUS_PAID, updated_at=timezone.now())
+
     # Le lecteur porte ses propres dates de validite : il doit apprendre la
     # nouvelle echeance tout de suite. propager() ne leve jamais, un lecteur
     # debranche ne doit pas empecher d'encaisser.

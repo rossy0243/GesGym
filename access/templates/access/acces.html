@@ -1108,6 +1108,7 @@ document.addEventListener("DOMContentLoaded", function () {
 });
 </script>
 
+<script src="{% static 'js/avantages.js' %}?v=20260914"></script>
 <script>
 function renderAccessResult(data) {
     const allowed = Boolean(data.access);
@@ -1155,6 +1156,18 @@ function showAccessResult(data, targetId) {
 
     result.innerHTML = renderAccessResult(data);
     result.style.display = "block";
+
+    // Le kit se remet la ou le membre arrive : juste apres le scan. Rien ne
+    // s'affiche pour un membre qui n'a aucun article en attente.
+    if (data && window.Avantages && window.Avantages.aQuelqueChose(data.avantages)) {
+        const carte = document.createElement("div");
+        carte.className = "card mt-3";
+        const corps = document.createElement("div");
+        corps.className = "card-body";
+        carte.appendChild(corps);
+        result.appendChild(carte);
+        window.Avantages.brancher(corps, data.avantages);
+    }
 }
 
 function showScanResult(data) {

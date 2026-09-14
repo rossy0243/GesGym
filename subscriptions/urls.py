@@ -4,6 +4,8 @@ from .views import (
     create_offer,
     create_plan,
     acknowledge_correction,
+    annuler_avantage,
+    remettre_avantage,
     correct_subscription,
     create_subscription,
     delete_plan,
@@ -24,4 +26,6 @@ urlpatterns = [
     path('subscriptions/create/', create_subscription, name='create_subscription'),
     path('subscriptions/<int:subscription_id>/corriger/', correct_subscription, name='correct_subscription'),
     path('corrections/<int:correction_id>/vue/', acknowledge_correction, name='acknowledge_correction'),
+    path('avantages/<int:member_id>/remettre/', remettre_avantage, name='remettre_avantage'),
+    path('avantages/remises/<int:movement_id>/annuler/', annuler_avantage, name='annuler_avantage'),
 ]

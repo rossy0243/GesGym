@@ -48,6 +48,7 @@ from .models import GuestPass, Member, MemberGoal, MemberPreRegistration, Member
 from notifications.models import Notification
 from organizations.models import Organization
 from pos.models import Payment
+from subscriptions import avantages as subscription_avantages
 from subscriptions import corrections as subscription_corrections
 from subscriptions.models import MemberSubscription, SubscriptionPlan, SubscriptionRequest
 
@@ -2218,6 +2219,8 @@ def member_detail(request, member_id):
         ),
 
         "subscriptions": _subscription_history(request, member),
+        # Le solde des articles offerts, et les remises du jour annulables.
+        "avantages": subscription_avantages.etat(member),
         "payments": payments_data,
         "access_logs": access_data,
     }

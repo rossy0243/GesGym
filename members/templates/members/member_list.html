@@ -836,6 +836,12 @@ body.members-screen .modal.show .modal-dialog {
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link d-flex align-items-center gap-1" id="avantages-tab" data-bs-toggle="tab"
+                            href="#avantages">
+                            <span class="material-icons" style="font-size:18px;">redeem</span>Avantages
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link d-flex align-items-center gap-1" id="access-tab" data-bs-toggle="tab"
                             href="#access">
                             <span class="material-icons" style="font-size:18px;">login</span>Accès
@@ -904,6 +910,12 @@ body.members-screen .modal.show .modal-dialog {
                                 <tbody id="paymentHistory"></tbody>
                             </table>
                         </div>
+                    </div>
+
+                    {% comment %} Les articles offerts avec la formule : le solde du membre,
+                       et les remises du jour, annulables en cas d'erreur de saisie. {% endcomment %}
+                    <div class="tab-pane fade" id="avantages">
+                        <div id="memberAvantages"></div>
                     </div>
 
                     <div class="tab-pane fade" id="access">
@@ -1051,6 +1063,7 @@ body.members-screen .modal.show .modal-dialog {
 {% endblock %}
 
 {% block extra_js %}
+<script src="{% static 'js/avantages.js' %}?v=20260914"></script>
 <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
 
@@ -1395,6 +1408,10 @@ body.members-screen .modal.show .modal-dialog {
                     : "Aucune offre affectee";
 
                 renderSubscriptionHistory(data);
+                const zoneAvantages = document.getElementById("memberAvantages");
+                if (zoneAvantages && window.Avantages) {
+                    window.Avantages.brancher(zoneAvantages, data.avantages);
+                }
 
                 // === PAIEMENTS ===
                 document.getElementById("viewPrice").innerText = (data.price || 0) + " USD";
