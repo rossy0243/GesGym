@@ -22,7 +22,6 @@ from django.utils import timezone
 from access import enrollment, hikvision
 from access.models import AccessDevice, AccessLog
 from members.models import Member
-from rh.models import Employee
 
 # Codes d'evenement correspondant a une authentification acceptee.
 MINORS_ACCES_ACCORDE = frozenset({1, 8, 38, 75})
@@ -225,11 +224,10 @@ class Command(BaseCommand):
 
 
     def _employe_de(self, device, identifiant):
-        """L'employe de cette salle derriere un numero de la plage du personnel."""
-        employee_id = enrollment.employee_id_depuis(identifiant)
-        if employee_id is None:
-            return None
-        return Employee.objects.filter(id=employee_id, gym=device.gym).first()
+        """L'employe derriere un numero : plage du personnel ou fiche adoptee."""
+        from access import personnel
+
+        return personnel.employe_de_la_fiche(device, identifiant)
 
     def _recreer_hors_membre(self, device, evenement, identifiant, numero, horodatage, employe=None):
         """

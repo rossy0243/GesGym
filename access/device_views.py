@@ -495,7 +495,7 @@ def device_webhook(request, token):
         # personnel. Le lecteur l'a laisse entrer sans abonnement ; le passage
         # est journalise a son nom, hors de toute statistique des membres.
         if nature == "inconnu":
-            employe = _resolve_employee(device.gym, credential)
+            employe = _resolve_employee(device, credential)
             if employe is not None:
                 log = _journaliser_hors_membre(device, parsed, employee=employe)
                 return JsonResponse({
@@ -662,20 +662,17 @@ def _journaliser_hors_membre(device, parsed, employee=None, libelle=""):
     )
 
 
-def _resolve_employee(gym, credential):
+def _resolve_employee(device, credential):
     """
-    Retrouve l'employe derriere un numero de la plage du personnel.
+    Retrouve l'employe derriere un numero lu par ce lecteur.
 
-    Un numero de la plage dont l'employe n'existe pas dans cette salle rend
-    None : le passage est alors journalise comme fiche du terminal, pour ne
-    jamais laisser entrer quelqu'un sans trace.
+    Numero de la plage du personnel, ou fiche du terminal adoptee. Sans
+    employe, le passage est journalise comme fiche du terminal, pour ne jamais
+    laisser entrer quelqu'un sans trace.
     """
-    from rh.models import Employee
+    from . import personnel
 
-    employee_id = enrollment.employee_id_depuis(credential)
-    if employee_id is None:
-        return None
-    return Employee.objects.filter(gym=gym, id=employee_id).first()
+    return personnel.employe_de_la_fiche(device, credential)
 
 
 def _resolve_member(gym, credential):

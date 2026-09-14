@@ -138,15 +138,25 @@ class Command(BaseCommand):
 
         La synchronisation n'inscrit personne de nouveau.
         """
+        from django.utils import timezone
+
         from access import personnel
         from access.models import StaffReaderRecord
         from rh.models import Employee
 
+        # Tous les numeros du lecteur : une fiche adoptee garde son petit numero,
+        # et la croire absente confirmerait a tort son retrait.
         presents = {
-            str(fiche.get("employeeNo")).strip()
+            str(fiche.get("employeeNo") or "").strip()
             for fiche in fiches
-            if enrollment.employee_id_depuis(fiche.get("employeeNo")) is not None
-        }
+        } - {""}
+
+        # Une fiche adoptee suit la regle commune : employe desactive, retrait
+        # demande - meme si la desactivation n'est pas passee par l'ecran RH.
+        if not simulation:
+            StaffReaderRecord.objects.filter(
+                device=device, retrait_demande_le__isnull=True, employee__is_active=False
+            ).update(retrait_demande_le=timezone.now())
 
         confirmes = 0
         retires = 0
@@ -169,7 +179,7 @@ class Command(BaseCommand):
                 echecs += 1
                 self.stdout.write(self.style.ERROR(f"    retrait de {fiche.nom} : {fiche.derniere_erreur}"))
 
-        identifiants = {enrollment.employee_id_depuis(numero) for numero in presents}
+        identifiants = {enrollment.employee_id_depuis(numero) for numero in presents} - {None}
         rafraichis = 0
         for employe in Employee.objects.filter(gym=device.gym, id__in=identifiants):
             numero = enrollment.numero_personnel(employe)

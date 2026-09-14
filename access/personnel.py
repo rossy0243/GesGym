@@ -110,17 +110,20 @@ def retirer_partout(employee):
     numero = enrollment.numero_personnel(employee)
     echecs = []
     for device in enrollment.lecteurs_de(employee.gym):
-        fiche = StaffReaderRecord.objects.filter(device=device, employee_no=numero).first()
-        if fiche is None:
-            fiche = StaffReaderRecord(
+        # Les fiches connues d'abord - dont une fiche du terminal adoptee, qui
+        # garde son propre numero. A defaut, le numero de la plage du personnel.
+        fiches = list(StaffReaderRecord.objects.filter(device=device, employee=employee))
+        if not fiches:
+            fiches = [StaffReaderRecord(
                 gym=device.gym,
                 device=device,
                 employee=employee,
                 employee_no=numero,
                 nom=(employee.name or "")[:255],
-            )
-        if not tenter(fiche):
-            echecs.append(f"{device.name} : {fiche.derniere_erreur}")
+            )]
+        for fiche in fiches:
+            if not tenter(fiche):
+                echecs.append(f"{device.name} : {fiche.derniere_erreur}")
     return echecs
 
 
@@ -286,4 +289,136 @@ def basculer_membre(employee, member):
         noter_inscription(device, employee)
 
     return {"photo": photo is not None, "lecteurs": len(lecteurs), "echecs": echecs}
+
+
+# ---------------------------------------------------------------------------
+# Fiches creees a la main sur le terminal
+# ---------------------------------------------------------------------------
+#
+# Un employe cree directement sur le terminal entre avec son visage, mais
+# l'application ne le connait pas. Le lecteur refuse de lui attacher le meme
+# visage une seconde fois : on rattache donc sa fiche existante a l'employe,
+# sans nouvelle capture. La fiche garde son petit numero ; le lien est porte
+# par StaffReaderRecord, et vaut pour ce lecteur seulement.
+
+
+def est_une_fiche_du_terminal(numero):
+    """Vrai pour un numero que l'application n'a pas pose."""
+    numero = str(numero or "").strip()
+    return (
+        numero.isdigit()
+        and enrollment.member_id_depuis(numero) is None
+        and enrollment.employee_id_depuis(numero) is None
+    )
+
+
+def employe_de_la_fiche(device, numero):
+    """
+    L'employe derriere un numero lu par ce lecteur, ou None.
+
+    Un numero de la plage du personnel designe l'employe directement. Un petit
+    numero designe un employe s'il a ete adopte - sur ce lecteur : deux
+    lecteurs peuvent porter le meme petit numero pour deux personnes.
+    """
+    from rh.models import Employee
+
+    numero = str(numero or "").strip()
+    if not numero:
+        return None
+
+    employee_id = enrollment.employee_id_depuis(numero)
+    if employee_id is not None:
+        return Employee.objects.filter(gym=device.gym, id=employee_id).first()
+
+    fiche = (
+        StaffReaderRecord.objects.filter(
+            device=device, employee_no=numero, employee__isnull=False, employee__gym=device.gym
+        )
+        .select_related("employee")
+        .first()
+    )
+    return fiche.employee if fiche else None
+
+
+def fiches_du_terminal(gym, recherche=""):
+    """
+    Fiches creees a la main sur les lecteurs actifs, et pas encore adoptees.
+
+    Interroge chaque lecteur : a n'appeler que sur demande. Un lecteur
+    injoignable est signale sans empecher de lire les autres.
+    """
+    from . import hikvision
+
+    recherche = (recherche or "").strip().lower()
+    resultat = {"fiches": [], "erreurs": []}
+
+    for device in enrollment.lecteurs_de(gym):
+        try:
+            lues = hikvision.HikvisionClient.from_device(device, timeout=25).list_users()
+        except hikvision.HikvisionError as exc:
+            resultat["erreurs"].append(f"{device.name} : {exc}")
+            continue
+
+        adoptees = set(
+            StaffReaderRecord.objects.filter(device=device).values_list("employee_no", flat=True)
+        )
+        for fiche in lues:
+            numero = str(fiche.get("employeeNo") or "").strip()
+            if (
+                not numero
+                or not est_une_fiche_du_terminal(numero)
+                or numero in adoptees
+            ):
+                continue
+            nom = str(fiche.get("name") or "").strip()
+            if recherche and recherche not in nom.lower() and recherche not in numero:
+                continue
+            resultat["fiches"].append(
+                {"device": device, "numero": numero, "nom": nom or f"Fiche {numero}"}
+            )
+
+    return resultat
+
+
+def adopter_fiche(device, employee, numero):
+    """Rattache une fiche du terminal a un employe. Leve EnrollmentError."""
+    numero = str(numero or "").strip()
+
+    if device.gym_id != employee.gym_id or not device.is_active:
+        raise enrollment.EnrollmentError("Ce lecteur n'appartient pas a cette salle.")
+    if not employee.is_active:
+        raise enrollment.EnrollmentError(
+            f"{employee.name} est desactive dans le module RH."
+        )
+    if not est_une_fiche_du_terminal(numero):
+        raise enrollment.EnrollmentError(
+            "Seule une fiche creee a la main sur le terminal peut etre rattachee."
+        )
+
+    deja = StaffReaderRecord.objects.filter(device=device, employee_no=numero).first()
+    if deja is not None:
+        if deja.employee_id == employee.id:
+            return deja
+        raise enrollment.EnrollmentError(
+            f"Cette fiche est deja rattachee a {deja.nom or 'une autre personne'}."
+        )
+
+    return StaffReaderRecord.objects.create(
+        gym=device.gym,
+        device=device,
+        employee=employee,
+        employee_no=numero,
+        nom=(employee.name or "")[:255],
+    )
+
+
+def fiches_adoptees(employee):
+    """Fiches du terminal rattachees a cet employe."""
+    return [
+        fiche
+        for fiche in StaffReaderRecord.objects.filter(
+            employee=employee, retrait_demande_le__isnull=True
+        ).select_related("device")
+        if est_une_fiche_du_terminal(fiche.employee_no)
+    ]
 

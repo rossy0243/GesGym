@@ -4932,3 +4932,306 @@ class StaffTodayOnDashboardTests(TestCase):
 
         self.assertIsNone(reponse.context["personnel_today"])
         self.assertNotContains(reponse, "Personnel passe")
+
+
+
+class StaffTerminalAdoptionTests(TestCase):
+    """Un employe cree a la main sur le terminal garde son visage, a son nom."""
+
+    def setUp(self):
+        from .models import StaffReaderRecord
+
+        (self.gym, self.device, self.member, self.employe,
+         self.employe_voisin) = _salle_avec_personnel("adoption")
+        self.Fiche = StaffReaderRecord
+        self.gerant = User.objects.create_user(username="gerant-adoption", password="pass12345")
+        UserGymRole.objects.create(user=self.gerant, gym=self.gym, role="manager", is_active=True)
+        self._connecter(self.gerant)
+        self.url_ecran = reverse("access:staff_face_enrollment", args=[self.employe.id])
+        self.url_adopter = reverse("access:staff_adopt_terminal_record", args=[self.employe.id])
+
+    def _connecter(self, utilisateur):
+        self.client.force_login(utilisateur)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _adopter(self, numero="5", employe=None, device=None):
+        from . import personnel
+
+        return personnel.adopter_fiche(device or self.device, employe or self.employe, numero)
+
+    def _synchroniser(self, fiches):
+        import io
+
+        from django.core.management import call_command
+
+        with patch.object(
+            hikvision.HikvisionClient, "user_count", return_value={"users": len(fiches), "faces": 0}
+        ), patch.object(
+            hikvision.HikvisionClient, "list_users", return_value=fiches
+        ), patch.object(
+            hikvision.HikvisionClient, "upsert_user"
+        ) as pose, patch.object(
+            hikvision.HikvisionClient, "delete_user"
+        ) as retrait:
+            call_command("synchroniser_lecteurs", stdout=io.StringIO())
+        return pose, retrait
+
+    # --- Le service --------------------------------------------------------------------------
+
+    def test_an_adopted_record_designates_the_employee(self):
+        from . import personnel
+
+        self._adopter("5")
+
+        self.assertEqual(personnel.employe_de_la_fiche(self.device, "5"), self.employe)
+
+    def test_the_link_holds_for_that_reader_only(self):
+        from . import personnel
+
+        autre = AccessDevice.objects.create(
+            gym=self.gym, name="Terminal 2", host="10.0.0.10", password="secret"
+        )
+        self._adopter("5")
+
+        self.assertIsNone(personnel.employe_de_la_fiche(autre, "5"))
+
+    def test_only_a_manual_record_can_be_adopted(self):
+        for numero in (
+            enrollment.employee_no(self.member),
+            enrollment.numero_personnel(self.employe),
+            "badge",
+            "",
+        ):
+            with self.subTest(numero=numero):
+                with self.assertRaises(enrollment.EnrollmentError):
+                    self._adopter(numero)
+        self.assertFalse(self.Fiche.objects.exists())
+
+    def test_a_record_already_adopted_by_someone_else_is_refused(self):
+        from decimal import Decimal
+
+        from rh.models import Employee
+
+        collegue = Employee.objects.create(
+            gym=self.gym, name="Rita Accueil", role="reception",
+            compensation_type="daily", daily_salary=Decimal("5000"),
+        )
+        self._adopter("5", employe=collegue)
+
+        with self.assertRaises(enrollment.EnrollmentError):
+            self._adopter("5")
+
+    def test_adopting_twice_for_the_same_employee_is_harmless(self):
+        self._adopter("5")
+        self._adopter("5")
+
+        self.assertEqual(self.Fiche.objects.count(), 1)
+
+    def test_a_deactivated_employee_cannot_adopt(self):
+        self.employe.is_active = False
+        self.employe.save()
+
+        with self.assertRaises(enrollment.EnrollmentError):
+            self._adopter("5")
+
+    def test_a_reader_of_another_gym_is_refused(self):
+        voisin = AccessDevice.objects.create(
+            gym=self.employe_voisin.gym, name="Voisin", host="10.0.0.8", password="secret"
+        )
+
+        with self.assertRaises(enrollment.EnrollmentError):
+            self._adopter("5", device=voisin)
+
+    def test_the_listing_keeps_only_free_manual_records(self):
+        from . import personnel
+
+        self._adopter("7")
+        lues = [
+            {"employeeNo": "5", "name": "Paul G"},
+            {"employeeNo": "7", "name": "Deja rattache"},
+            {"employeeNo": enrollment.employee_no(self.member), "name": "Alice"},
+            {"employeeNo": enrollment.numero_personnel(self.employe), "name": "Paul"},
+        ]
+        with patch.object(hikvision.HikvisionClient, "list_users", return_value=lues):
+            resultat = personnel.fiches_du_terminal(self.gym)
+
+        self.assertEqual([f["numero"] for f in resultat["fiches"]], ["5"])
+        self.assertEqual(resultat["erreurs"], [])
+
+    def test_the_listing_can_be_filtered(self):
+        from . import personnel
+
+        lues = [{"employeeNo": "5", "name": "Paul G"}, {"employeeNo": "6", "name": "Rita"}]
+        with patch.object(hikvision.HikvisionClient, "list_users", return_value=lues):
+            resultat = personnel.fiches_du_terminal(self.gym, "rita")
+
+        self.assertEqual([f["numero"] for f in resultat["fiches"]], ["6"])
+
+    def test_an_unreachable_reader_is_reported(self):
+        from . import personnel
+
+        with patch.object(
+            hikvision.HikvisionClient, "list_users",
+            side_effect=hikvision.HikvisionUnreachable("coupure"),
+        ):
+            resultat = personnel.fiches_du_terminal(self.gym)
+
+        self.assertEqual(resultat["fiches"], [])
+        self.assertEqual(len(resultat["erreurs"]), 1)
+
+    # --- La porte et le rattrapage ------------------------------------------------------------
+
+    def _envoyer(self, **evenement):
+        charge = {"AccessControllerEvent": {"majorEventType": 5, "subEventType": 75, **evenement}}
+        url = reverse("access:device_webhook", args=[self.device.webhook_token])
+        with patch("access.hikvision.HikvisionClient.open_door"):
+            return self.client.post(url, data=json.dumps(charge), content_type="application/json")
+
+    def test_a_passage_on_an_adopted_record_is_the_employees(self):
+        self._adopter("5")
+
+        self._envoyer(employeeNoString="5", name="Paul G")
+
+        log = AccessLog.objects.get()
+        self.assertEqual(log.employee, self.employe)
+        self.assertEqual(log.terminal_label, "")
+
+    def test_a_record_not_adopted_stays_a_terminal_record(self):
+        self._envoyer(employeeNoString="5", name="Paul G")
+
+        log = AccessLog.objects.get()
+        self.assertIsNone(log.employee)
+        self.assertEqual(log.terminal_label, "Paul G")
+
+    def test_the_catch_up_names_the_adopting_employee(self):
+        import io
+
+        from django.core.management import call_command
+
+        from .management.commands.rattraper_passages import Command
+
+        self._adopter("5")
+        evenements = [{
+            "employeeNoString": "5", "name": "Paul G", "minor": 75, "serialNo": "960",
+            "time": timezone.localtime().replace(microsecond=0).isoformat(),
+        }]
+        with patch.object(Command, "_lire_evenements", return_value=evenements):
+            call_command("rattraper_passages", stdout=io.StringIO())
+
+        self.assertEqual(AccessLog.objects.get(device_event_id="960").employee, self.employe)
+
+    # --- Le depart ---------------------------------------------------------------------------------
+
+    def test_deactivating_removes_the_adopted_record(self):
+        self._adopter("5")
+
+        with patch.object(hikvision.HikvisionClient, "delete_user") as retrait:
+            self.client.post(reverse("rh:delete", args=[self.employe.id]))
+
+        retrait.assert_called_once_with("5")
+        self.assertFalse(self.Fiche.objects.exists())
+
+    def test_manual_removal_targets_the_adopted_number_only(self):
+        self._adopter("5")
+
+        with patch.object(hikvision.HikvisionClient, "delete_user") as retrait:
+            self.client.post(reverse("access:staff_face_remove", args=[self.employe.id]))
+
+        retrait.assert_called_once_with("5")
+
+    def test_sync_does_not_confirm_an_adopted_removal_still_on_the_reader(self):
+        self._adopter("5")
+        self.employe.is_active = False
+        self.employe.save()
+
+        with patch.object(hikvision.HikvisionClient, "delete_user", side_effect=hikvision.HikvisionUnreachable("coupure")):
+            import io
+
+            from django.core.management import call_command
+
+            with patch.object(
+                hikvision.HikvisionClient, "user_count", return_value={"users": 1, "faces": 0}
+            ), patch.object(hikvision.HikvisionClient, "list_users", return_value=[{"employeeNo": "5"}]):
+                call_command("synchroniser_lecteurs", stdout=io.StringIO())
+
+        self.assertTrue(self.Fiche.objects.filter(retrait_demande_le__isnull=False).exists())
+
+    def test_sync_removes_an_adopted_record_of_a_deactivated_employee(self):
+        from rh.models import Employee
+
+        self._adopter("5")
+        # Desactivation hors application, sans signal.
+        Employee.objects.filter(pk=self.employe.pk).update(is_active=False)
+
+        _, retrait = self._synchroniser([{"employeeNo": "5"}])
+
+        retrait.assert_called_once_with("5")
+        self.assertFalse(self.Fiche.objects.exists())
+
+    def test_sync_leaves_an_active_adopted_record_alone(self):
+        self._adopter("5")
+
+        pose, retrait = self._synchroniser([{"employeeNo": "5"}])
+
+        pose.assert_not_called()
+        retrait.assert_not_called()
+        self.assertTrue(self.Fiche.objects.exists())
+
+    # --- L'ecran -----------------------------------------------------------------------------------
+
+    def test_the_screen_does_not_read_the_reader_unasked(self):
+        with patch.object(hikvision.HikvisionClient, "list_users") as lecture:
+            reponse = self.client.get(self.url_ecran)
+
+        lecture.assert_not_called()
+        self.assertContains(reponse, "Lire les fiches du terminal")
+
+    def test_the_screen_lists_terminal_records_on_demand(self):
+        with patch.object(
+            hikvision.HikvisionClient, "list_users",
+            return_value=[{"employeeNo": "5", "name": "Paul G"}],
+        ):
+            reponse = self.client.get(self.url_ecran, {"fiches": "1"})
+
+        self.assertContains(reponse, "Paul G")
+        self.assertContains(reponse, 'name="employee_no" value="5"')
+        self.assertContains(reponse, self.url_adopter)
+
+    def test_adopting_from_the_screen_is_traced(self):
+        reponse = self.client.post(
+            self.url_adopter,
+            {"device_id": self.device.id, "employee_no": "5", "nom": "Paul G"},
+            follow=True,
+        )
+
+        self.assertEqual(self.Fiche.objects.get().employee_no, "5")
+        trace = SensitiveActivityLog.objects.get(action="access.staff_terminal_record_adopted")
+        self.assertEqual(trace.metadata["employee_no"], "5")
+        self.assertContains(reponse, "Fiche du terminal rattach")
+        self.assertContains(reponse, "n° 5 sur Terminal")
+
+    def test_a_receptionist_cannot_adopt(self):
+        accueil = User.objects.create_user(username="accueil-adoption", password="pass12345")
+        UserGymRole.objects.create(user=accueil, gym=self.gym, role="reception", is_active=True)
+        self._connecter(accueil)
+
+        reponse = self.client.post(
+            self.url_adopter, {"device_id": self.device.id, "employee_no": "5"}
+        )
+
+        self.assertIn(reponse.status_code, (302, 403))
+        self.assertFalse(self.Fiche.objects.exists())
+
+    def test_a_reader_of_another_gym_is_out_of_reach_on_screen(self):
+        voisin = AccessDevice.objects.create(
+            gym=self.employe_voisin.gym, name="Voisin", host="10.0.0.8", password="secret"
+        )
+
+        reponse = self.client.post(
+            self.url_adopter, {"device_id": voisin.id, "employee_no": "5"}
+        )
+
+        self.assertEqual(reponse.status_code, 404)
+        self.assertFalse(self.Fiche.objects.exists())

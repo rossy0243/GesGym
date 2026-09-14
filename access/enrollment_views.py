@@ -255,6 +255,9 @@ def staff_face_enrollment(request, employee_id):
         apercu = capture.get("image_b64")
 
     recherche_membre = (request.GET.get("membre") or "").strip()
+    # Lire les fiches du lecteur prend du temps : seulement sur demande.
+    afficher_fiches = request.GET.get("fiches") == "1"
+    recherche_fiche = (request.GET.get("fiche") or "").strip()
 
     return render(
         request,
@@ -274,6 +277,13 @@ def staff_face_enrollment(request, employee_id):
                 if employe.is_active
                 else []
             ),
+            "recherche_fiche": recherche_fiche,
+            "fiches_terminal": (
+                personnel.fiches_du_terminal(request.gym, recherche_fiche)
+                if afficher_fiches and employe.is_active
+                else None
+            ),
+            "fiches_adoptees": personnel.fiches_adoptees(employe),
         },
     )
 
@@ -445,6 +455,49 @@ def staff_switch_from_member(request, employee_id):
             request, f"Visage repris : {employe.name} entre desormais comme personnel."
         )
 
+    return redirect("access:staff_face_enrollment", employee_id=employe.id)
+
+
+@login_required
+@module_required("ACCESS")
+@role_required(RH_EMPLOYEE_ROLES)
+@require_POST
+def staff_adopt_terminal_record(request, employee_id):
+    """Rattache a un employe la fiche que le terminal porte deja pour lui."""
+    employe = _employe_de(request, employee_id)
+    try:
+        device_id = int(request.POST.get("device_id", ""))
+    except (TypeError, ValueError):
+        raise Http404
+    lecteur = get_object_or_404(AccessDevice, id=device_id, gym=request.gym, is_active=True)
+    numero = (request.POST.get("employee_no") or "").strip()
+    nom_terminal = (request.POST.get("nom") or "").strip()[:128]
+
+    try:
+        personnel.adopter_fiche(lecteur, employe, numero)
+    except enrollment.EnrollmentError as exc:
+        messages.error(request, str(exc))
+        return redirect("access:staff_face_enrollment", employee_id=employe.id)
+
+    log_sensitive_action(
+        request,
+        "access.staff_terminal_record_adopted",
+        "Employee",
+        employe.name,
+        metadata={
+            "employee_id": employe.id,
+            "lecteur": lecteur.name,
+            "employee_no": numero,
+            "nom_sur_le_terminal": nom_terminal,
+        },
+        gym=request.gym,
+    )
+    messages.success(
+        request,
+        f"Fiche n° {numero} du terminal ({nom_terminal or 'sans nom'}) rattachee a "
+        f"{employe.name} : il entre avec le meme visage, et ses passages sont "
+        "journalises a son nom.",
+    )
     return redirect("access:staff_face_enrollment", employee_id=employe.id)
 
 

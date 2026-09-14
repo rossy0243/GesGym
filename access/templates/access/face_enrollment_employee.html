@@ -66,6 +66,13 @@
                 </div>
             </div>
 
+            {% for fiche in fiches_adoptees %}
+            <div class="small py-2 border-top">
+                <span class="text-muted">Fiche du terminal rattachée</span>
+                <strong class="d-block">n° {{ fiche.employee_no }} sur {{ fiche.device.name }}</strong>
+            </div>
+            {% endfor %}
+
             <div class="alert alert-info small mt-3 mb-0">
                 Sans abonnement, l'employé entre <strong>à toute heure, tant que sa
                 fiche RH est active</strong>. Ses passages sont journalisés à son nom
@@ -104,6 +111,49 @@
                 {% if recherche_membre %}Aucun membre actif ne correspond.{% else %}Aucune fiche membre au même nom ou au même téléphone.{% endif %}
             </p>
             {% endfor %}
+        </div>
+
+        <div class="etape-carte p-4 mb-3" id="fiche-terminal">
+            <h6 class="fw-bold mb-2">Visage déjà sur le terminal ?</h6>
+            <p class="small text-muted">
+                Si cet employé a été créé directement sur le terminal, le lecteur
+                refuse une nouvelle capture (« visage déjà enregistré »). Rattachez
+                plutôt sa fiche : il garde le même visage, et ses passages sont
+                journalisés à son nom.
+            </p>
+            {% if fiches_terminal is None %}
+            <a href="?fiches=1#fiche-terminal" class="btn btn-sm btn-outline-secondary">Lire les fiches du terminal</a>
+            {% else %}
+            <form method="get" action="#fiche-terminal" class="d-flex gap-2 mb-2">
+                <input type="hidden" name="fiches" value="1">
+                <input type="search" name="fiche" value="{{ recherche_fiche }}"
+                       class="form-control form-control-sm" placeholder="Nom ou numéro sur le terminal">
+                <button type="submit" class="btn btn-sm btn-outline-secondary">Filtrer</button>
+            </form>
+            {% for erreur in fiches_terminal.erreurs %}
+            <div class="alert alert-warning small py-2 mb-2">{{ erreur }}</div>
+            {% endfor %}
+            {% for fiche in fiches_terminal.fiches %}
+            <div class="d-flex align-items-center gap-2 py-2 border-top">
+                <div class="flex-grow-1 small">
+                    <strong class="d-block">{{ fiche.nom }}</strong>
+                    <span class="text-muted">n° {{ fiche.numero }}{% if devices|length > 1 %} — {{ fiche.device.name }}{% endif %}</span>
+                </div>
+                <form method="post" action="{% url 'access:staff_adopt_terminal_record' employee.id %}"
+                      onsubmit="return confirm('Rattacher la fiche {{ fiche.nom|escapejs }} du terminal à cet employé ?');">
+                    {% csrf_token %}
+                    <input type="hidden" name="device_id" value="{{ fiche.device.id }}">
+                    <input type="hidden" name="employee_no" value="{{ fiche.numero }}">
+                    <input type="hidden" name="nom" value="{{ fiche.nom }}">
+                    <button type="submit" class="btn btn-sm btn-outline-primary">Rattacher</button>
+                </form>
+            </div>
+            {% empty %}
+            {% if not fiches_terminal.erreurs %}
+            <p class="small text-muted mb-0">Aucune fiche créée à la main {% if recherche_fiche %}ne correspond{% else %}n'est libre sur le lecteur{% endif %}.</p>
+            {% endif %}
+            {% endfor %}
+            {% endif %}
         </div>
 
         <div class="etape-carte p-4">
