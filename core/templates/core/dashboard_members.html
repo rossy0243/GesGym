@@ -515,12 +515,96 @@
     </div>
     {% endif %}
 
+    {% if context_view == "analytics" and bilan_periode %}
+    {% comment %} La caisse du jour, etiree sur la periode choisie. Sur des
+       dizaines de sessions, un solde theorique cumule ne voudrait rien dire :
+       la case de synthese est le resultat - gagne moins depense. C'est aussi la
+       seule place du revenu de la periode dans cette vue. {% endcomment %}
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="card stretch stretch-full bloc-royal">
+                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                    <h5 class="card-title mb-0 d-flex align-items-center gap-2">
+                        <span class="material-icons" style="font-size:20px;">account_balance_wallet</span>
+                        Revenus de la periode
+                    </h5>
+                    <span class="dashboard-context-chip">
+                        <span class="material-icons fs-6">calendar_month</span>
+                        {{ period_label }} - {{ period_range_label }}
+                    </span>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-lg-3 col-6">
+                            <div class="fs-12 text-muted aide"
+                                 title="Ce que la salle a gagne sur la periode : abonnements, ventes, toutes methodes. L'argent rendu apres un decaissement et les apports n'y figurent pas.">Encaissements</div>
+                            <div class="chiffre-cle ton-normal">{{ bilan_periode.encaissements|montant }} CDF</div>
+                            <div class="fs-11 text-muted mt-1">
+                                {{ bilan_periode.tendance.display }} - periode precedente {{ bilan_periode.encaissements_precedents|montant }} CDF
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-6">
+                            <div class="fs-12 text-muted aide"
+                                 title="Ce que la salle a reellement depense : les sorties de la periode, moins l'argent revenu en caisse sur ces depenses.">Decaissements</div>
+                            <div class="chiffre-cle ton-neutre">{{ bilan_periode.decaissements|montant }} CDF</div>
+                            <div class="fs-11 text-muted mt-1">
+                                {% if bilan_periode.retours %}
+                                    {{ bilan_periode.sorties_brutes|montant }} sortis, dont {{ bilan_periode.retours|montant }} rendus
+                                {% else %}
+                                    aucun retour sur ces sorties
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-6">
+                            <div class="fs-12 text-muted aide"
+                                 title="Encaissements moins decaissements : ce que la salle a gagne sur la periode. Les apports en caisse n'y comptent pas - ce n'est pas de l'argent gagne.">Resultat</div>
+                            <div class="chiffre-cle {% if bilan_periode.resultat < 0 %}ton-urgent{% else %}ton-strategique{% endif %}">{{ bilan_periode.resultat|montant_signe }} CDF</div>
+                            <div class="fs-11 text-muted mt-1">
+                                periode precedente {{ bilan_periode.resultat_precedent|montant_signe }} CDF
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-6">
+                            <div class="fs-12 text-muted aide"
+                                 title="Somme des ecarts constates aux clôtures de caisse de la periode. Excedent en positif, deficit en negatif.">Ecart de caisse</div>
+                            <div class="chiffre-cle {% if bilan_periode.a_un_ecart %}ton-urgent{% else %}ton-normal{% endif %}">{{ bilan_periode.ecart|montant_signe }} CDF</div>
+                            <div class="fs-11 text-muted mt-1">cumule des clôtures</div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex flex-wrap gap-3 mt-3 fs-12 text-muted">
+                        {% for ligne in bilan_periode.par_methode %}
+                            <span><strong>{{ ligne.label }}</strong> : {{ ligne.total|montant }} CDF</span>
+                        {% endfor %}
+                        {% if bilan_periode.apports %}
+                            <span class="aide" title="De l'argent mis dans les caisses, qui n'est pas une recette : il n'entre ni dans les encaissements ni dans le resultat.">
+                                <strong>Apports en caisse</strong> : {{ bilan_periode.apports|montant }} CDF
+                            </span>
+                        {% endif %}
+                    </div>
+
+                    {% if bilan_periode.motifs %}
+                    <div class="d-flex flex-wrap gap-3 mt-2 fs-12 text-muted">
+                        <span class="fw-semibold">Sorties :</span>
+                        {% for ligne in bilan_periode.motifs %}
+                            <span>{{ ligne.motif }} <strong class="ton-neutre">{{ ligne.montant|montant }}</strong></span>
+                        {% endfor %}
+                        {% if bilan_periode.autres_sorties %}
+                            <a href="{% url 'pos:expense_register' %}" class="text-muted">et {{ bilan_periode.autres_sorties }} autre{{ bilan_periode.autres_sorties|pluralize }}</a>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     {% comment %} Ces rangees s'affichaient dans les deux vues et allongeaient
        la vue d'ensemble de dix cartes. Renouvellements, moyenne journaliere,
        visiteurs uniques et revenus de periode relevent de l'analyse. {% endcomment %}
     {% if context_view == "analytics" %}
     <div class="row g-3 mb-4">
-        <div class="col-xxl-2 col-md-4 col-sm-6">
+        <div class="col-xxl col-md-4 col-sm-6">
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted aide"
@@ -530,7 +614,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-xxl-2 col-md-4 col-sm-6">
+        <div class="col-xxl col-md-4 col-sm-6">
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted aide"
@@ -542,7 +626,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-xxl-2 col-md-4 col-sm-6">
+        <div class="col-xxl col-md-4 col-sm-6">
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted aide"
@@ -554,7 +638,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-xxl-2 col-md-4 col-sm-6">
+        <div class="col-xxl col-md-4 col-sm-6">
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted aide"
@@ -566,7 +650,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-xxl-2 col-md-4 col-sm-6">
+        <div class="col-xxl col-md-4 col-sm-6">
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted aide"
@@ -575,18 +659,6 @@
                     <span class="badge bg-soft-{{ visits_trend.badge_class }} text-{{ visits_trend.badge_class }}"
                           title="{{ visits_trend.basis }}">{{ visits_trend.display }}</span>
                     <div class="fs-11 text-muted mt-1">{{ visits_trend.basis }}</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-xxl-2 col-md-4 col-sm-6">
-            <div class="card stretch stretch-full stat-card">
-                <div class="card-body">
-                    <span class="fs-12 fw-medium text-muted aide"
-                          title="Encaissements de la periode, convertis en CDF.">Revenus {{ period_label_lower }}</span>
-                    <h3 class="mb-2 fw-bold">{{ period_revenue|montant }} CDF</h3>
-                    <span class="badge bg-soft-{{ revenue_trend.badge_class }} text-{{ revenue_trend.badge_class }}"
-                          title="{{ revenue_trend.basis }}">{{ revenue_trend.display }}</span>
-                    <div class="fs-11 text-muted mt-1">{{ revenue_trend.basis }}</div>
                 </div>
             </div>
         </div>
@@ -732,42 +804,35 @@
 
     {% if context_view == "analytics" %}
     <div class="row g-3 mb-4">
-        <div class="col-xxl-2 col-md-4 col-sm-6">
-            <div class="analytics-kpi-card">
-                <div class="analytics-kpi-card__label">Revenus periode</div>
-                <div class="analytics-kpi-card__value">{{ period_revenue|montant }} CDF</div>
-                <div class="analytics-kpi-card__meta">{{ revenue_trend.display }} vs periode precedente</div>
-            </div>
-        </div>
-        <div class="col-xxl-2 col-md-4 col-sm-6">
+        <div class="col-xxl col-md-4 col-sm-6">
             <div class="analytics-kpi-card">
                 <div class="analytics-kpi-card__label">Entrees QR</div>
                 <div class="analytics-kpi-card__value">{{ visits_period }}</div>
                 <div class="analytics-kpi-card__meta">{{ unique_visitors_period }} visiteur(s) unique(s)</div>
             </div>
         </div>
-        <div class="col-xxl-2 col-md-4 col-sm-6">
+        <div class="col-xxl col-md-4 col-sm-6">
             <div class="analytics-kpi-card">
                 <div class="analytics-kpi-card__label">Membres actifs</div>
                 <div class="analytics-kpi-card__value">{{ active_members }}</div>
                 <div class="analytics-kpi-card__meta">{{ active_member_rate }}% du portefeuille</div>
             </div>
         </div>
-        <div class="col-xxl-2 col-md-4 col-sm-6">
+        <div class="col-xxl col-md-4 col-sm-6">
             <div class="analytics-kpi-card">
                 <div class="analytics-kpi-card__label">Abonnements actifs</div>
                 <div class="analytics-kpi-card__value">{{ total_subscriptions }}</div>
                 <div class="analytics-kpi-card__meta">{{ renewals_period }} renouvellement(s)</div>
             </div>
         </div>
-        <div class="col-xxl-2 col-md-4 col-sm-6">
+        <div class="col-xxl col-md-4 col-sm-6">
             <div class="analytics-kpi-card">
                 <div class="analytics-kpi-card__label">A risque J-15</div>
                 <div class="analytics-kpi-card__value">{{ expiry_soon }}</div>
                 <div class="analytics-kpi-card__meta">J-7 {{ expiry_7_days }} | J-3 {{ expiry_3_days }}</div>
             </div>
         </div>
-        <div class="col-xxl-2 col-md-4 col-sm-6">
+        <div class="col-xxl col-md-4 col-sm-6">
             <div class="analytics-kpi-card">
                 <div class="analytics-kpi-card__label">Refus d'acces</div>
                 <div class="analytics-kpi-card__value">{{ denied_period }}</div>

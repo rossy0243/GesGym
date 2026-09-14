@@ -6554,3 +6554,264 @@ class CashReturnTests(TestCase):
             ).count(),
             1,
         )
+
+
+class AnalyticsRevenueGridTests(TestCase):
+    """
+    Le revenu de la periode, detaille comme la caisse du jour.
+
+    Encaissements, decaissements, resultat, ecart - pour le jour, la semaine,
+    le mois ou l'annee choisis. Et un seul chiffre de revenu dans la vue : celui
+    de la grille.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Bilan", slug="org-bilan"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Bilan",
+            slug="gym-bilan", subdomain="gym-bilan",
+        )
+        self.voisine = Gym.objects.create(
+            organization=self.organization, name="Voisine",
+            slug="gym-bilan-voisine", subdomain="gym-bilan-voisine",
+        )
+        for code in ("MEMBERS", "POS"):
+            module, _ = Module.objects.get_or_create(
+                code=code, defaults={"name": code}
+            )
+            for salle in (self.gym, self.voisine):
+                GymModule.objects.get_or_create(
+                    gym=salle, module=module, defaults={"is_active": True}
+                )
+        self.gerant = User.objects.create_user(
+            username="gerant-bilan", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.gerant, gym=self.gym, role="manager", is_active=True
+        )
+        self.registre = CashRegister.objects.create(
+            gym=self.gym, opened_by=self.gerant,
+            opening_amount=Decimal("100000.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+        self.client.force_login(self.gerant)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    # --- Fabriques ---------------------------------------------------------------
+
+    def _vente(self, montant, gym=None, registre=None):
+        return record_payment(
+            gym=gym or self.gym, register=registre or self.registre,
+            amount=Decimal(montant), currency="CDF", method="cash",
+            transaction_type="in", category="subscription",
+            description="Abonnement", created_by=self.gerant,
+        )
+
+    def _depense(self, montant, motif="Plomberie"):
+        return record_expense(
+            gym=self.gym, amount=Decimal(montant), currency="CDF",
+            method="cash", category="expense", description=motif,
+            created_by=self.gerant, source_app="pos",
+            source_model="ManualExpense",
+        )
+
+    def _dater(self, paiement, jour):
+        Payment.objects.filter(pk=paiement.pk).update(
+            created_at=timezone.make_aware(datetime.combine(jour, time(12, 0)))
+        )
+
+    def _page(self, periode="month", vue="analytics"):
+        return self.client.get(
+            reverse("core:gym_dashboard", args=[self.gym.id]),
+            {"view": vue, "period": periode},
+        )
+
+    def _bilan(self, periode="month"):
+        return self._page(periode).context["bilan_periode"]
+
+    # --- La place de la grille ------------------------------------------------------
+
+    def test_the_grid_opens_the_analytics_view(self):
+        page = self._page().content.decode("utf-8")
+
+        self.assertIn("Revenus de la periode", page)
+        self.assertLess(page.index("Revenus de la periode"), page.index("Renouvellements"))
+
+    def test_the_overview_does_not_carry_it(self):
+        # La vue d'ensemble a sa caisse du jour : la grille de periode releve
+        # de l'analyse.
+        self.assertNotContains(self._page(vue="dashboard"), "Revenus de la periode")
+
+    def test_the_revenue_is_stated_once_in_analytics(self):
+        # Les deux cartes qui repetaient ce chiffre ont disparu : la grille est
+        # sa seule place.
+        page = self._page().content.decode("utf-8")
+
+        self.assertEqual(page.count("Revenus de la periode"), 1)
+        self.assertNotIn("Revenus periode", page)
+
+    # --- Le revenu reflete le total ----------------------------------------------------
+
+    def test_the_takings_equal_the_period_revenue(self):
+        self._vente("30000")
+        self._vente("20000")
+
+        contexte = self._page().context
+
+        self.assertEqual(contexte["bilan_periode"]["encaissements"], Decimal("50000.00"))
+        self.assertEqual(
+            contexte["bilan_periode"]["encaissements"], contexte["period_revenue"]
+        )
+
+    def test_they_agree_for_every_filter(self):
+        self._vente("30000")
+
+        for periode in ("day", "week", "month", "year"):
+            with self.subTest(periode=periode):
+                contexte = self._page(periode).context
+                self.assertEqual(
+                    contexte["bilan_periode"]["encaissements"],
+                    contexte["period_revenue"],
+                )
+
+    def test_the_previous_period_is_its_comparison_base(self):
+        fenetre = _get_period_window("month", timezone.localdate())
+        ancienne = self._vente("40000")
+        self._dater(ancienne, fenetre["previous_start"])
+        self._vente("10000")
+
+        bilan = self._bilan("month")
+
+        self.assertEqual(bilan["encaissements"], Decimal("10000.00"))
+        self.assertEqual(bilan["encaissements_precedents"], Decimal("40000.00"))
+
+    # --- Ce qui n'est pas une recette ---------------------------------------------------
+
+    def test_a_return_is_not_counted_as_takings(self):
+        depense = self._depense("50000")
+        record_expense_refund(
+            gym=self.gym, expense=depense, amount=Decimal("20000"),
+            currency="CDF", created_by=self.gerant,
+        )
+
+        self.assertEqual(self._bilan()["encaissements"], Decimal("0.00"))
+
+    def test_an_injection_is_shown_apart(self):
+        # Un renfort de 500 000 ressemblerait sinon a un bon mois.
+        record_cash_injection(
+            gym=self.gym, amount=Decimal("500000"), currency="CDF",
+            description="Renfort de fonds", created_by=self.gerant,
+        )
+
+        bilan = self._bilan()
+
+        self.assertEqual(bilan["apports"], Decimal("500000.00"))
+        self.assertEqual(bilan["encaissements"], Decimal("0.00"))
+        self.assertEqual(bilan["resultat"], Decimal("0.00"))
+
+    # --- Les decaissements et le resultat -------------------------------------------------
+
+    def test_the_disbursements_are_net_of_returns(self):
+        depense = self._depense("50000")
+        record_expense_refund(
+            gym=self.gym, expense=depense, amount=Decimal("20000"),
+            currency="CDF", created_by=self.gerant,
+        )
+
+        bilan = self._bilan()
+
+        self.assertEqual(bilan["sorties_brutes"], Decimal("50000.00"))
+        self.assertEqual(bilan["retours"], Decimal("20000.00"))
+        self.assertEqual(bilan["decaissements"], Decimal("30000.00"))
+
+    def test_the_result_is_takings_minus_real_spending(self):
+        self._vente("80000")
+        depense = self._depense("50000")
+        record_expense_refund(
+            gym=self.gym, expense=depense, amount=Decimal("20000"),
+            currency="CDF", created_by=self.gerant,
+        )
+
+        self.assertEqual(self._bilan()["resultat"], Decimal("50000.00"))
+
+    def test_a_losing_period_shows_a_negative_result(self):
+        self._depense("30000")
+
+        page = self._page()
+
+        self.assertEqual(page.context["bilan_periode"]["resultat"], Decimal("-30000.00"))
+        self.assertContains(page, "ton-urgent")
+
+    def test_a_late_return_is_deducted_in_the_month_of_the_expense(self):
+        # C'est la regle du registre des decaissements : les deux ecrans
+        # doivent donner le meme chiffre.
+        fenetre = _get_period_window("month", timezone.localdate())
+        depense = self._depense("50000")
+        self._dater(depense, fenetre["previous_start"])
+        record_expense_refund(
+            gym=self.gym, expense=depense, amount=Decimal("20000"),
+            currency="CDF", created_by=self.gerant,
+        )
+
+        bilan = self._bilan("month")
+
+        # Le mois courant n'a aucune depense, donc rien a deduire.
+        self.assertEqual(bilan["decaissements"], Decimal("0.00"))
+        # Le mois precedent a coute 30 000, et non 50 000.
+        self.assertEqual(bilan["resultat_precedent"], Decimal("-30000.00"))
+
+    # --- L'ecart de caisse ----------------------------------------------------------------
+
+    def test_the_variance_adds_up_the_closings_of_the_period(self):
+        self.registre.closing_amount = Decimal("98000.00")
+        self.registre.difference = Decimal("-2000.00")
+        self.registre.closed_by = self.gerant
+        self.registre.closed_at = timezone.now()
+        self.registre.is_closed = True
+        self.registre.save()
+
+        bilan = self._bilan()
+
+        self.assertEqual(bilan["ecart"], Decimal("-2000.00"))
+        self.assertTrue(bilan["a_un_ecart"])
+
+    # --- Le detail ---------------------------------------------------------------------------
+
+    def test_the_takings_are_broken_down_by_method(self):
+        self._vente("30000")
+        record_payment(
+            gym=self.gym, register=self.registre, amount=Decimal("15000"),
+            currency="CDF", method="mobile_money", transaction_type="in",
+            category="subscription", description="Abonnement",
+            created_by=self.gerant,
+        )
+
+        lignes = {l["code"]: l["total"] for l in self._bilan()["par_methode"]}
+
+        self.assertEqual(lignes["cash"], Decimal("30000.00"))
+        self.assertEqual(lignes["mobile_money"], Decimal("15000.00"))
+
+    def test_the_reasons_of_the_spending_are_listed(self):
+        self._depense("30000", motif="Reparation du portail")
+
+        self.assertContains(self._page(), "Reparation du portail")
+
+    def test_the_amounts_are_grouped(self):
+        self._vente("1599739")
+
+        self.assertContains(self._page(), GROUPE)
+
+    # --- Le cloisonnement ----------------------------------------------------------------------
+
+    def test_a_neighbouring_gym_stays_out(self):
+        registre_voisin = CashRegister.objects.create(
+            gym=self.voisine, opened_by=self.gerant,
+            opening_amount=Decimal("0.00"), exchange_rate=Decimal("2800.00"),
+        )
+        self._vente("999999", gym=self.voisine, registre=registre_voisin)
+
+        self.assertEqual(self._bilan()["encaissements"], Decimal("0.00"))

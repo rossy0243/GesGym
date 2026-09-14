@@ -579,6 +579,116 @@ def _alertes_urgentes(caisse, refus_repetes, expirations_48h, machines_hs,
     return alertes
 
 
+
+def _bilan_de_periode(gym, period_data):
+    """
+    L'argent de la periode choisie : ce qui est entre, ce qui est parti, ce qui
+    reste.
+
+    C'est la caisse du jour, etiree sur une semaine, un mois ou une annee - a
+    une difference pres : sur trente sessions ouvertes et fermees, un solde
+    theorique cumule ne voudrait rien dire. La case de synthese est donc le
+    **resultat** : ce que la salle a gagne moins ce qu'elle a reellement
+    depense.
+
+    Les apports sont montres a part. Un renfort de 500 000 dans le tiroir
+    ressemblerait sinon a un bon mois.
+
+    Les encaissements sont ceux de ``Payment.objects.recettes()`` : le revenu de
+    la periode affiche ailleurs est, par construction, le meme chiffre.
+    """
+    zero = Decimal("0.00")
+    debut, fin = period_data["start_date"], period_data["end_date"]
+    avant_debut, avant_fin = period_data["previous_start"], period_data["previous_end"]
+    paiements = Payment.objects.filter(gym=gym)
+
+    def _total(requete):
+        return requete.aggregate(total=Sum("amount_cdf"))["total"] or zero
+
+    def _depense_nette(sorties):
+        # Un retour se deduit dans la periode de la depense, quelle que soit sa
+        # date : c'est deja la regle du registre des decaissements, et les deux
+        # ecrans doivent donner le meme chiffre. Contrepartie assumee : un mois
+        # passe peut baisser apres coup quand l'argent revient.
+        rendus = _total(
+            Payment.objects.filter(
+                gym=gym, status="success", refund_of__in=sorties
+            )
+        )
+        return _total(sorties), rendus
+
+    recettes = paiements.recettes().filter(created_at__date__range=(debut, fin))
+    encaissements = _total(recettes)
+    encaissements_precedents = _total(
+        paiements.recettes().filter(created_at__date__range=(avant_debut, avant_fin))
+    )
+
+    sorties = paiements.sorties().filter(created_at__date__range=(debut, fin))
+    sorties_brutes, retours = _depense_nette(sorties)
+    decaissements = sorties_brutes - retours
+
+    brutes_precedentes, retours_precedents = _depense_nette(
+        paiements.sorties().filter(created_at__date__range=(avant_debut, avant_fin))
+    )
+    resultat = encaissements - decaissements
+    resultat_precedent = encaissements_precedents - (
+        brutes_precedentes - retours_precedents
+    )
+
+    apports = _total(
+        paiements.filter(
+            type="in",
+            status="success",
+            category="cash_injection",
+            created_at__date__range=(debut, fin),
+        )
+    )
+
+    # L'ecart se rattache au jour ou la caisse a ete comptee.
+    ecart = CashRegister.objects.filter(
+        gym=gym, is_closed=True, closed_at__date__range=(debut, fin)
+    ).aggregate(total=Sum("difference"))["total"] or zero
+
+    libelles = dict(Payment.PAYMENT_METHODS)
+    par_methode = [
+        {
+            "code": ligne["method"],
+            "label": libelles.get(ligne["method"], ligne["method"]),
+            "total": ligne["total"],
+        }
+        for ligne in recettes.values("method")
+        .annotate(total=Sum("amount_cdf"))
+        .order_by("-total")
+        if ligne["total"]
+    ]
+
+    motifs = [
+        {
+            "motif": (sortie.description or "").strip() or "Sans motif",
+            "montant": sortie.montant_net,
+        }
+        for sortie in sorties.order_by("-amount_cdf")[:MOTIFS_AFFICHES]
+    ]
+
+    return {
+        "encaissements": encaissements,
+        "encaissements_precedents": encaissements_precedents,
+        "tendance": _build_trend(encaissements, encaissements_precedents),
+        "decaissements": decaissements,
+        "sorties_brutes": sorties_brutes,
+        "retours": retours,
+        "resultat": resultat,
+        "resultat_precedent": resultat_precedent,
+        "apports": apports,
+        "ecart": ecart,
+        "a_un_ecart": ecart != zero,
+        "par_methode": par_methode,
+        "motifs": motifs,
+        "autres_sorties": max(sorties.count() - MOTIFS_AFFICHES, 0),
+        "nombre_encaissements": recettes.count(),
+    }
+
+
 def _get_period_window(period_key, reference_date):
     period_key = period_key if period_key in PERIOD_LABELS else "month"
 
@@ -2089,6 +2199,13 @@ def gym_dashboard(request, gym_id):
         coaching_kpis = build_coaching_kpis(gym, period_data)
 
     tableau_de_caisse = _tableau_de_caisse(gym, today)
+    # Le revenu reste reserve a qui le voyait deja : meme garde que
+    # period_revenue, pour que les deux chiffres ne divergent jamais.
+    bilan_periode = (
+        _bilan_de_periode(gym, period_data)
+        if user_role in DASHBOARD_SALES_ROLES
+        else None
+    )
     refus_repetes = _refus_repetes(gym, today)
     # Les alertes arrivent en dernier : elles lisent la caisse, les acces, le
     # parc et le stock, et ne peuvent donc se calculer qu'apres eux.
@@ -2150,6 +2267,7 @@ def gym_dashboard(request, gym_id):
         "today_checkins": today_checkins,
         "today_unique_visitors": today_unique_visitors,
         "caisse": tableau_de_caisse,
+        "bilan_periode": bilan_periode,
         "refus_repetes": refus_repetes,
         "expiry_2_days": expiry_2_days,
         "alertes_urgentes": alertes_urgentes,
