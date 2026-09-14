@@ -455,6 +455,29 @@ def _nom_utilisateur(utilisateur):
 
 
 
+def _personnel_passe(gym, jour):
+    """
+    Membres du personnel entres ce jour-la, chacun compte une fois.
+
+    Employes inscrits depuis leur fiche RH et fiches creees a la main sur le
+    terminal : ni l'un ni l'autre n'entre dans les passages des membres, ils
+    ont donc leur propre ligne. Un refus n'est pas une entree.
+    """
+    passages = AccessLog.objects.filter(
+        gym=gym, check_in_time__date=jour, access_granted=True
+    )
+    employes = (
+        passages.filter(employee__isnull=False)
+        .values("employee_id").distinct().count()
+    )
+    fiches = (
+        passages.filter(employee__isnull=True)
+        .exclude(terminal_label="")
+        .values("terminal_label").distinct().count()
+    )
+    return employes + fiches
+
+
 def _refus_repetes(gym, today, seuil=3):
     """
     Les personnes a qui la porte s'est fermee plusieurs fois aujourd'hui.
@@ -2072,6 +2095,10 @@ def gym_dashboard(request, gym_id):
     ).hors_personnel()
     today_checkins = passages_today_qs.count()
     today_unique_visitors = _personnes_distinctes(passages_today_qs)
+    # Sans module d'acces, il n'y a pas de lecteur : la ligne n'aurait rien a dire.
+    personnel_today = (
+        _personnel_passe(gym, today) if "ACCESS" in active_modules else None
+    )
     denied_today = AccessLog.objects.filter(
         gym=gym,
         check_in_time__date=today,
@@ -2400,6 +2427,7 @@ def gym_dashboard(request, gym_id):
         "period_revenue": period_revenue,
         "today_checkins": today_checkins,
         "today_unique_visitors": today_unique_visitors,
+        "personnel_today": personnel_today,
         "caisse": tableau_de_caisse,
         "bilan_periode": bilan_periode,
         "operations_periode": operations_periode,

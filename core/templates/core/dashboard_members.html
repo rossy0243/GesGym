@@ -356,6 +356,10 @@
                           title="Chaque passage compte une fois. Un retour le meme jour n'est pas recompte. Ce n'est pas le nombre de personnes presentes en ce moment : aucune sortie n'est enregistree.">Passages aujourd'hui</span>
                     <div class="chiffre-cle">{{ today_checkins }}</div>
                     <div class="fs-12 text-muted">Refuses : {{ denied_today }}</div>
+                    {% if personnel_today is not None %}
+                    <span class="fs-12 text-muted aide"
+                          title="Employes et fiches creees sur le terminal, entres aujourd'hui, chacun compte une fois. Ils ne comptent pas dans les passages des membres.">Personnel passe : {{ personnel_today }}</span>
+                    {% endif %}
                 </div>
             </div>
         </div>

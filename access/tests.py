@@ -4854,3 +4854,81 @@ class StaffSwitchFromMemberTests(TestCase):
         reponse = self.client.get(reverse("members:member_detail", args=[self.faux_membre.id]))
 
         self.assertEqual(reponse.json()["status"], "inactive")
+
+
+
+class StaffTodayOnDashboardTests(TestCase):
+    """Le personnel passe aujourd'hui a sa ligne, hors des chiffres des membres."""
+
+    def setUp(self):
+        from decimal import Decimal
+
+        from rh.models import Employee
+
+        (self.gym, self.device, self.member, self.employe,
+         _) = _salle_avec_personnel("tableau-personnel")
+        self.collegue = Employee.objects.create(
+            gym=self.gym, name="Rita Accueil", role="reception",
+            compensation_type="daily", daily_salary=Decimal("5000"),
+        )
+        gerant = User.objects.create_user(username="gerant-tableau-personnel", password="pass12345")
+        UserGymRole.objects.create(user=gerant, gym=self.gym, role="manager", is_active=True)
+        self.client.force_login(gerant)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+        self.url = reverse("core:gym_dashboard", args=[self.gym.id])
+
+    def _passage(self, **champs):
+        return AccessLog.objects.create(gym=self.gym, access_granted=True, **champs)
+
+    def test_each_staff_person_counts_once(self):
+        self._passage(employee=self.employe)
+        self._passage(employee=self.employe, is_return=True)
+        self._passage(employee=self.collegue)
+        self._passage(terminal_label="Gardien de nuit")
+        self._passage(terminal_label="Gardien de nuit", is_return=True)
+
+        self.assertEqual(self.client.get(self.url).context["personnel_today"], 3)
+
+    def test_member_numbers_do_not_move(self):
+        self._passage(member=self.member)
+        self._passage(employee=self.employe)
+        self._passage(terminal_label="Fiche 4")
+
+        contexte = self.client.get(self.url).context
+
+        self.assertEqual(contexte["today_checkins"], 1)
+        self.assertEqual(contexte["personnel_today"], 2)
+
+    def test_a_refusal_is_not_an_entry(self):
+        self._passage(employee=self.employe)
+        AccessLog.objects.create(gym=self.gym, employee=self.collegue, access_granted=False)
+
+        self.assertEqual(self.client.get(self.url).context["personnel_today"], 1)
+
+    def test_yesterday_is_not_today(self):
+        hier = self._passage(employee=self.employe)
+        AccessLog.objects.filter(pk=hier.pk).update(check_in_time=timezone.now() - timedelta(days=1))
+
+        self.assertEqual(self.client.get(self.url).context["personnel_today"], 0)
+
+    def test_members_and_manual_openings_are_not_staff(self):
+        self._passage(member=self.member)
+        self._passage()
+
+        self.assertEqual(self.client.get(self.url).context["personnel_today"], 0)
+
+    def test_the_line_appears_in_the_activity_block(self):
+        self._passage(employee=self.employe)
+
+        self.assertContains(self.client.get(self.url), "Personnel passe : 1")
+
+    def test_no_line_without_the_access_module(self):
+        GymModule.objects.filter(gym=self.gym, module__code="ACCESS").update(is_active=False)
+        self._passage(employee=self.employe)
+
+        reponse = self.client.get(self.url)
+
+        self.assertIsNone(reponse.context["personnel_today"])
+        self.assertNotContains(reponse, "Personnel passe")
