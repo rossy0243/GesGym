@@ -491,6 +491,22 @@ def device_webhook(request, token):
                 "door": {"attempted": False, "opened": False, "message": ""},
             })
 
+        # Un employe inscrit depuis sa fiche RH porte un numero de la plage du
+        # personnel. Le lecteur l'a laisse entrer sans abonnement ; le passage
+        # est journalise a son nom, hors de toute statistique des membres.
+        if nature == "inconnu":
+            employe = _resolve_employee(device.gym, credential)
+            if employe is not None:
+                log = _journaliser_hors_membre(device, parsed, employee=employe)
+                return JsonResponse({
+                    "access": log.access_granted,
+                    "member": log.nom_affiche,
+                    "reason": log.denial_reason or "",
+                    "log_id": log.id,
+                    "stats": _today_stats(device.gym),
+                    "door": {"attempted": False, "opened": False, "message": ""},
+                })
+
         # Une fiche creee a la main sur le terminal porte un numero hors de la
         # plage de l'application. Le lecteur l'a reconnue et a decide seul :
         # l'application ne la connait pas, mais le passage doit exister au
@@ -575,6 +591,7 @@ def device_webhook(request, token):
 
 
 FICHE_TERMINAL_RAISON = "Fiche geree par le terminal"
+PERSONNEL_RAISON = "Personnel de la salle"
 
 # Codes d'evenement d'une authentification acceptee par le lecteur - les memes
 # que ceux du rattrapage.
@@ -585,9 +602,23 @@ def _journaliser_fiche_du_terminal(device, credential, parsed):
     """
     Journalise le passage d'une fiche que l'application n'a pas posee.
 
-    Le lecteur a reconnu la fiche et ouvert : l'application n'a rien a
-    trancher, elle ne connait ni cette personne ni ses droits. Elle enregistre
-    ce qui s'est passe a la porte, hors de toute statistique des membres.
+    Le lecteur a reconnu la fiche et decide : l'application ne connait ni
+    cette personne ni ses droits. Elle garde le nom que le lecteur envoie, ou
+    le numero de la fiche.
+    """
+    evenement = parsed.get("event") or {}
+    nom = str(evenement.get("name") or "").strip()
+    libelle = (nom or f"Fiche {credential.strip()}")[:128]
+    return _journaliser_hors_membre(device, parsed, libelle=libelle)
+
+
+def _journaliser_hors_membre(device, parsed, employee=None, libelle=""):
+    """
+    Journalise le passage d'un employe ou d'une fiche du terminal.
+
+    Dans les deux cas c'est le lecteur qui a tranche, sans abonnement a
+    verifier : l'application enregistre ce qui s'est passe a la porte, hors
+    de toute statistique des membres.
     """
     from django.utils import timezone
 
@@ -600,8 +631,6 @@ def _journaliser_fiche_du_terminal(device, credential, parsed):
             return deja
 
     evenement = parsed.get("event") or {}
-    nom = str(evenement.get("name") or "").strip()
-    libelle = (nom or f"Fiche {credential.strip()}")[:128]
 
     # C'est le lecteur qui a tranche : son code d'evenement dit s'il a ouvert.
     # Sans code lisible, on s'en tient a ce qu'il signale le plus souvent.
@@ -611,23 +640,42 @@ def _journaliser_fiche_du_terminal(device, credential, parsed):
     except (TypeError, ValueError):
         accorde = True
 
+    personne = {"employee": employee} if employee is not None else {"terminal_label": libelle}
+    motif = PERSONNEL_RAISON if employee is not None else FICHE_TERMINAL_RAISON
+
     deja_entre = accorde and AccessLog.objects.filter(
         gym=device.gym,
-        terminal_label=libelle,
         access_granted=True,
         check_in_time__date=timezone.localdate(),
+        **personne,
     ).exists()
 
     return AccessLog.objects.create(
         gym=device.gym,
         device=device,
-        terminal_label=libelle,
         access_granted=accorde,
         is_return=deja_entre,
-        denial_reason="Retour dans la salle" if deja_entre else FICHE_TERMINAL_RAISON,
+        denial_reason="Retour dans la salle" if deja_entre else motif,
         device_used=_libelle_methode(device, "lecteur", hikvision.est_un_visage(evenement)),
         device_event_id=numero,
+        **personne,
     )
+
+
+def _resolve_employee(gym, credential):
+    """
+    Retrouve l'employe derriere un numero de la plage du personnel.
+
+    Un numero de la plage dont l'employe n'existe pas dans cette salle rend
+    None : le passage est alors journalise comme fiche du terminal, pour ne
+    jamais laisser entrer quelqu'un sans trace.
+    """
+    from rh.models import Employee
+
+    employee_id = enrollment.employee_id_depuis(credential)
+    if employee_id is None:
+        return None
+    return Employee.objects.filter(gym=gym, id=employee_id).first()
 
 
 def _resolve_member(gym, credential):

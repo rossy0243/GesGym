@@ -118,12 +118,54 @@ class Command(BaseCommand):
         if echecs:
             self.stdout.write(self.style.ERROR(f"    {echecs} echec(s)"))
 
+        self._rafraichir_personnel(device, fiches, simulation)
+
         if purger:
             self._purger(device, client, posees, membres, simulation)
 
         if not simulation:
             device.last_error = ""
             device.save(update_fields=["last_error", "updated_at"])
+
+    def _rafraichir_personnel(self, device, fiches, simulation):
+        """
+        Tient a jour les fiches du personnel posees depuis le module RH.
+
+        Seuls les employes deja inscrits sont concernes : la synchronisation
+        n'inscrit personne. Un employe desactive n'est jamais rouvert ; il est
+        signale tant que sa fiche reste sur le lecteur.
+        """
+        from rh.models import Employee
+
+        inscrits = {
+            enrollment.employee_id_depuis(fiche.get("employeeNo")) for fiche in fiches
+        } - {None}
+        if not inscrits:
+            return
+
+        rafraichis = 0
+        desactives = 0
+        for employe in Employee.objects.filter(gym=device.gym, id__in=inscrits):
+            if not employe.is_active:
+                desactives += 1
+                continue
+            if simulation:
+                self.stdout.write(f"    [simulation] personnel : {employe.name}")
+                rafraichis += 1
+                continue
+            try:
+                enrollment.inscrire_employe(device, employe)
+                rafraichis += 1
+            except enrollment.EnrollmentError as exc:
+                self.stdout.write(self.style.ERROR(f"    {employe.name} : {exc}"))
+
+        self.stdout.write(f"    {rafraichis} fiche(s) du personnel rafraichie(s)")
+        if desactives:
+            self.stdout.write(
+                self.style.WARNING(
+                    f"    {desactives} employe(s) desactive(s) encore present(s) sur le lecteur"
+                )
+            )
 
     def _purger(self, device, client, posees, membres, simulation):
         """Retire les fiches applicatives dont le membre a disparu de la base."""

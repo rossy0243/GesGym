@@ -3919,3 +3919,389 @@ class StaffAndTerminalPassageTests(TestCase):
             call_command("rattraper_passages", stdout=__import__("io").StringIO())
 
         self.assertFalse(AccessLog.objects.get(device_event_id="901").access_granted)
+
+
+
+def _salle_avec_personnel(suffixe):
+    """Une salle avec lecteur, modules actifs, un membre et deux employes."""
+    from decimal import Decimal
+
+    from rh.models import Employee
+
+    organisation = Organization.objects.create(name=f"Org {suffixe}", slug=f"org-{suffixe}")
+    salle = Gym.objects.create(
+        organization=organisation, name=f"Gym {suffixe}", slug=f"gym-{suffixe}",
+        subdomain=f"gym-{suffixe}",
+    )
+    voisine = Gym.objects.create(
+        organization=organisation, name=f"Voisine {suffixe}", slug=f"voisine-{suffixe}",
+        subdomain=f"voisine-{suffixe}",
+    )
+    for code in ("MEMBERS", "ACCESS", "RH"):
+        module, _ = Module.objects.get_or_create(code=code, defaults={"name": code})
+        GymModule.objects.get_or_create(gym=salle, module=module, defaults={"is_active": True})
+    lecteur = AccessDevice.objects.create(
+        gym=salle, name="Terminal", host="10.0.0.9", password="secret"
+    )
+    membre = Member.objects.create(
+        gym=salle, first_name="Alice", last_name="Nzuzi", phone="+243860000021",
+    )
+    employe = Employee.objects.create(
+        gym=salle, name="Paul Gardien", role="cleaner", phone="+243860000098",
+        compensation_type="daily", daily_salary=Decimal("5000"),
+    )
+    employe_voisin = Employee.objects.create(
+        gym=voisine, name="Zoe Ailleurs", role="cleaner",
+        compensation_type="daily", daily_salary=Decimal("5000"),
+    )
+    return salle, lecteur, membre, employe, employe_voisin
+
+
+def _image_jpeg():
+    tampon = BytesIO()
+    Image.new("RGB", (352, 432), (90, 90, 90)).save(tampon, format="JPEG")
+    return tampon.getvalue()
+
+
+class StaffFaceNumberingTests(TestCase):
+    """Les employes ont leur plage de numeros, distincte de celle des membres."""
+
+    def setUp(self):
+        self.gym, self.device, self.member, self.employe, _ = _salle_avec_personnel("numeros")
+
+    def test_an_employee_number_is_in_the_staff_range(self):
+        self.assertEqual(
+            enrollment.numero_personnel(self.employe),
+            str(enrollment.PLAGE_PERSONNEL + self.employe.id),
+        )
+
+    def test_an_employee_number_maps_back_to_the_employee(self):
+        numero = enrollment.numero_personnel(self.employe)
+
+        self.assertEqual(enrollment.employee_id_depuis(numero), self.employe.id)
+
+    def test_an_employee_is_never_taken_for_a_member(self):
+        # Sans borne, le numero d'un employe designait un membre inexistant :
+        # la purge l'aurait retire du lecteur.
+        self.assertIsNone(enrollment.member_id_depuis(enrollment.numero_personnel(self.employe)))
+
+    def test_a_member_is_never_taken_for_an_employee(self):
+        self.assertIsNone(enrollment.employee_id_depuis(enrollment.employee_no(self.member)))
+
+    def test_the_ranges_meet_without_overlap(self):
+        self.assertEqual(
+            enrollment.member_id_depuis(str(enrollment.PLAGE_PERSONNEL)),
+            enrollment.PLAGE_PERSONNEL - enrollment.PLAGE_APPLICATION,
+        )
+        self.assertIsNone(enrollment.employee_id_depuis(str(enrollment.PLAGE_PERSONNEL)))
+        self.assertIsNone(enrollment.member_id_depuis(str(enrollment.PLAGE_PERSONNEL + 1)))
+
+    def test_manual_records_belong_to_nobody(self):
+        for brut in ("2", "badge", None, ""):
+            with self.subTest(brut=brut):
+                self.assertIsNone(enrollment.employee_id_depuis(brut))
+                self.assertIsNone(enrollment.member_id_depuis(brut))
+
+    def test_an_employee_record_is_open_at_all_times(self):
+        with patch.object(hikvision.HikvisionClient, "upsert_user") as pose:
+            enrollment.inscrire_employe(self.device, self.employe)
+
+        args = pose.mock_calls[0].args
+        self.assertEqual(args[0], enrollment.numero_personnel(self.employe))
+        self.assertEqual(args[1], "Paul Gardien")
+        self.assertEqual(args[2], enrollment.DEBUT_PAR_DEFAUT)
+        self.assertEqual(args[3], enrollment.FIN_PAR_DEFAUT)
+
+    def test_a_deactivated_employee_is_never_enrolled(self):
+        self.employe.is_active = False
+        self.employe.save()
+
+        with patch.object(hikvision.HikvisionClient, "upsert_user") as pose:
+            with self.assertRaises(enrollment.EnrollmentError):
+                enrollment.inscrire_employe(self.device, self.employe)
+
+        pose.assert_not_called()
+
+    def test_a_refused_face_still_says_the_record_exists(self):
+        with patch.object(hikvision.HikvisionClient, "upsert_user"), patch.object(
+            hikvision.HikvisionClient, "set_face",
+            side_effect=hikvision.HikvisionError('{"subStatusCode": "alreadyExistThisFace"}'),
+        ):
+            with self.assertRaises(enrollment.EnrollmentError) as capture:
+                enrollment.inscrire_employe(self.device, self.employe, _image_jpeg())
+
+        self.assertIn("fiche est enregistree", str(capture.exception))
+        self.assertIn("deja enregistre sous une autre fiche", str(capture.exception))
+
+    def test_removing_an_employee_deletes_the_staff_number(self):
+        with patch.object(hikvision.HikvisionClient, "delete_user") as retrait:
+            enrollment.retirer_employe(self.device, self.employe)
+
+        retrait.assert_called_once_with(enrollment.numero_personnel(self.employe))
+
+
+class StaffFaceWebhookTests(TestCase):
+    """Le lecteur reconnait un employe : le passage est journalise a son nom."""
+
+    def setUp(self):
+        (self.gym, self.device, self.member, self.employe,
+         self.employe_voisin) = _salle_avec_personnel("webhook-personnel")
+        self.url = reverse("access:device_webhook", args=[self.device.webhook_token])
+        patcher = patch("access.hikvision.HikvisionClient.open_door")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _envoyer(self, **evenement):
+        charge = {"AccessControllerEvent": {"majorEventType": 5, "subEventType": 75, **evenement}}
+        return self.client.post(self.url, data=json.dumps(charge), content_type="application/json")
+
+    def test_an_employee_enters_without_subscription_and_is_journaled(self):
+        reponse = self._envoyer(employeeNoString=enrollment.numero_personnel(self.employe))
+
+        self.assertTrue(reponse.json()["access"])
+        self.assertEqual(reponse.json()["member"], "Paul Gardien (personnel)")
+        log = AccessLog.objects.get()
+        self.assertEqual(log.employee, self.employe)
+        self.assertIsNone(log.member)
+        self.assertEqual(log.terminal_label, "")
+
+    def test_an_employee_passage_is_not_counted_as_attendance(self):
+        from .views import _today_stats
+
+        self._envoyer(employeeNoString=enrollment.numero_personnel(self.employe))
+
+        self.assertEqual(_today_stats(self.gym)["entries"], 0)
+
+    def test_a_second_passage_the_same_day_is_a_return(self):
+        numero = enrollment.numero_personnel(self.employe)
+        self._envoyer(employeeNoString=numero, serialNo="11")
+        self._envoyer(employeeNoString=numero, serialNo="12")
+
+        self.assertEqual(AccessLog.objects.filter(employee=self.employe, is_return=True).count(), 1)
+
+    def test_a_repeated_notification_is_journaled_once(self):
+        numero = enrollment.numero_personnel(self.employe)
+        self._envoyer(employeeNoString=numero, serialNo="21")
+        self._envoyer(employeeNoString=numero, serialNo="21")
+
+        self.assertEqual(AccessLog.objects.count(), 1)
+
+    def test_an_employee_of_another_gym_is_not_named(self):
+        # Le numero est dans la plage, mais pas dans cette salle : on ne nomme
+        # personne, et le passage reste trace comme fiche du terminal.
+        self._envoyer(employeeNoString=enrollment.numero_personnel(self.employe_voisin))
+
+        log = AccessLog.objects.get()
+        self.assertIsNone(log.employee)
+        self.assertTrue(log.terminal_label.startswith("Fiche "))
+
+    def test_a_member_is_still_recognised_as_a_member(self):
+        self._envoyer(employeeNoString=enrollment.employee_no(self.member))
+
+        log = AccessLog.objects.get()
+        self.assertEqual(log.member, self.member)
+        self.assertIsNone(log.employee)
+
+    def test_the_catch_up_recreates_an_employee_passage(self):
+        import io
+
+        from django.core.management import call_command
+
+        from .management.commands.rattraper_passages import Command
+
+        evenements = [{
+            "employeeNoString": enrollment.numero_personnel(self.employe),
+            "minor": 75,
+            "serialNo": "950",
+            "time": timezone.localtime().replace(microsecond=0).isoformat(),
+        }]
+        with patch.object(Command, "_lire_evenements", return_value=evenements):
+            call_command("rattraper_passages", stdout=io.StringIO())
+
+        log = AccessLog.objects.get(device_event_id="950")
+        self.assertEqual(log.employee, self.employe)
+        self.assertEqual(log.terminal_label, "")
+
+
+class StaffFaceSyncTests(TestCase):
+    """La synchronisation tient le personnel a jour et ne le purge jamais."""
+
+    def setUp(self):
+        self.gym, self.device, self.member, self.employe, _ = _salle_avec_personnel("sync-personnel")
+
+    def _synchroniser(self, fiches, *options):
+        import io
+
+        from django.core.management import call_command
+
+        with patch.object(
+            hikvision.HikvisionClient, "user_count", return_value={"users": len(fiches), "faces": len(fiches)}
+        ), patch.object(
+            hikvision.HikvisionClient, "list_users", return_value=fiches
+        ), patch.object(
+            hikvision.HikvisionClient, "upsert_user"
+        ) as pose, patch.object(
+            hikvision.HikvisionClient, "delete_user"
+        ) as retrait:
+            call_command("synchroniser_lecteurs", *options, stdout=io.StringIO())
+        return pose, retrait
+
+    def test_an_enrolled_employee_is_refreshed(self):
+        numero = enrollment.numero_personnel(self.employe)
+
+        pose, _ = self._synchroniser([{"employeeNo": numero}])
+
+        self.assertIn(numero, [appel.args[0] for appel in pose.mock_calls])
+
+    def test_a_deactivated_employee_is_not_reopened(self):
+        self.employe.is_active = False
+        self.employe.save()
+        numero = enrollment.numero_personnel(self.employe)
+
+        pose, _ = self._synchroniser([{"employeeNo": numero}])
+
+        self.assertNotIn(numero, [appel.args[0] for appel in pose.mock_calls])
+
+    def test_the_purge_never_removes_an_employee(self):
+        numero_employe = enrollment.numero_personnel(self.employe)
+        membre_disparu = str(enrollment.PLAGE_APPLICATION + 999_999)
+
+        _, retrait = self._synchroniser(
+            [{"employeeNo": numero_employe}, {"employeeNo": membre_disparu}], "--purger"
+        )
+
+        retires = [appel.args[0] for appel in retrait.mock_calls]
+        self.assertEqual(retires, [membre_disparu])
+
+    def test_members_are_still_refreshed(self):
+        numero_membre = enrollment.employee_no(self.member)
+
+        pose, _ = self._synchroniser([{"employeeNo": numero_membre}])
+
+        self.assertIn(numero_membre, [appel.args[0] for appel in pose.mock_calls])
+
+
+class StaffFaceScreenTests(TestCase):
+    """Le parcours d'enrolement d'un employe, depuis sa fiche RH."""
+
+    def setUp(self):
+        (self.gym, self.device, self.member, self.employe,
+         self.employe_voisin) = _salle_avec_personnel("ecran-personnel")
+        self.gerant = self._utilisateur("gerant-ecran-personnel", "manager")
+        self._connecter(self.gerant)
+
+    def _utilisateur(self, nom, role):
+        utilisateur = User.objects.create_user(username=nom, password="pass12345")
+        UserGymRole.objects.create(user=utilisateur, gym=self.gym, role=role, is_active=True)
+        return utilisateur
+
+    def _connecter(self, utilisateur):
+        self.client.force_login(utilisateur)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _capturer(self):
+        with patch.object(hikvision.HikvisionClient, "capture_face", return_value=_image_jpeg()):
+            return self.client.post(
+                reverse("access:staff_face_capture", args=[self.employe.id]),
+                {"device_id": self.device.id},
+            )
+
+    def test_the_manager_sees_the_three_steps(self):
+        reponse = self.client.get(reverse("access:staff_face_enrollment", args=[self.employe.id]))
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertContains(reponse, "Paul Gardien")
+        self.assertContains(reponse, "devant le lecteur")
+        self.assertContains(reponse, "Lancez la capture")
+        self.assertContains(reponse, reverse("access:staff_face_capture", args=[self.employe.id]))
+        self.assertContains(reponse, enrollment.numero_personnel(self.employe))
+
+    def test_a_receptionist_cannot_enrol_staff(self):
+        # L'accueil enrole les membres, pas quelqu'un qui entre sans abonnement.
+        self._connecter(self._utilisateur("accueil-ecran-personnel", "reception"))
+
+        reponse = self.client.get(reverse("access:staff_face_enrollment", args=[self.employe.id]))
+
+        self.assertIn(reponse.status_code, (302, 403))
+
+    def test_an_employee_of_another_gym_is_out_of_reach(self):
+        reponse = self.client.get(
+            reverse("access:staff_face_enrollment", args=[self.employe_voisin.id])
+        )
+
+        self.assertEqual(reponse.status_code, 404)
+
+    def test_capture_then_validation_enrols_the_employee(self):
+        self.assertTrue(self._capturer().json()["ok"])
+
+        with patch.object(hikvision.HikvisionClient, "upsert_user") as pose, patch.object(
+            hikvision.HikvisionClient, "set_face"
+        ) as visage:
+            reponse = self.client.post(
+                reverse("access:staff_face_confirm", args=[self.employe.id]), follow=True
+            )
+
+        self.assertEqual(reponse.status_code, 200)
+        numero = enrollment.numero_personnel(self.employe)
+        self.assertEqual(pose.mock_calls[0].args[0], numero)
+        visage.assert_called_once()
+        self.assertEqual(visage.mock_calls[0].args[0], numero)
+        trace = SensitiveActivityLog.objects.get(action="access.staff_face_enrolled")
+        self.assertEqual(trace.actor, self.gerant)
+        self.assertEqual(trace.metadata["employee_id"], self.employe.id)
+
+    def test_a_member_capture_cannot_enrol_an_employee(self):
+        # Les deux parcours ont chacun leur capture : l'image d'un membre ne
+        # doit jamais finir sur la fiche d'un employe.
+        with patch.object(hikvision.HikvisionClient, "capture_face", return_value=_image_jpeg()):
+            self.client.post(
+                reverse("access:face_capture", args=[self.member.id]),
+                {"device_id": self.device.id},
+            )
+
+        with patch.object(hikvision.HikvisionClient, "upsert_user") as pose:
+            reponse = self.client.post(
+                reverse("access:staff_face_confirm", args=[self.employe.id]), follow=True
+            )
+
+        self.assertContains(reponse, "Aucune capture en attente")
+        pose.assert_not_called()
+
+    def test_a_deactivated_employee_cannot_be_captured(self):
+        self.employe.is_active = False
+        self.employe.save()
+
+        reponse = self._capturer()
+
+        self.assertEqual(reponse.status_code, 400)
+        self.assertIn("desactive", reponse.json()["error"])
+
+    def test_removal_takes_the_employee_off_the_readers(self):
+        with patch.object(hikvision.HikvisionClient, "delete_user") as retrait:
+            self.client.post(
+                reverse("access:staff_face_remove", args=[self.employe.id]), follow=True
+            )
+
+        retrait.assert_called_once_with(enrollment.numero_personnel(self.employe))
+
+    def test_the_member_screen_is_unchanged(self):
+        reponse = self.client.get(reverse("access:face_enrollment", args=[self.member.id]))
+
+        self.assertContains(reponse, "Placez le membre devant le lecteur")
+        self.assertContains(reponse, reverse("access:face_capture", args=[self.member.id]))
+        self.assertContains(reponse, reverse("access:face_confirm", args=[self.member.id]))
+
+    def test_the_rh_sheet_offers_the_enrolment(self):
+        reponse = self.client.get(reverse("rh:detail", args=[self.employe.id]))
+
+        self.assertContains(reponse, reverse("access:staff_face_enrollment", args=[self.employe.id]))
+
+    def test_the_rh_sheet_hides_it_without_the_access_module(self):
+        GymModule.objects.filter(gym=self.gym, module__code="ACCESS").update(is_active=False)
+
+        reponse = self.client.get(reverse("rh:detail", args=[self.employe.id]))
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertNotContains(reponse, reverse("access:staff_face_enrollment", args=[self.employe.id]))

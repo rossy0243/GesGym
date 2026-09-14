@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+
+{% block page_titre %}Enrôler un visage{% endblock %}
+
+{% block content %}
+
+<div class="page-header mb-4">
+    <div class="page-header-left d-flex align-items-center">
+        <div class="page-header-title d-flex align-items-center gap-2">
+            <span class="material-icons text-primary" style="font-size:28px;">badge</span>
+            <div>
+                <h5 class="mb-0">Enrôler le visage d'un employé</h5>
+                <small class="text-muted">{{ employee.name }} — {{ gym.name }}</small>
+            </div>
+        </div>
+    </div>
+    <div class="page-header-right ms-auto">
+        <a href="{% url 'rh:detail' employee.id %}" class="btn btn-light d-flex align-items-center gap-2">
+            <span class="material-icons" style="font-size:18px;">arrow_back</span>
+            Retour à la fiche
+        </a>
+    </div>
+</div>
+
+{% if not employee.is_active %}
+<div class="alert alert-warning d-flex align-items-start gap-3">
+    <span class="material-icons">block</span>
+    <div>
+        <strong>{{ employee.name }} est désactivé dans le module RH.</strong>
+        <p class="mb-0">Un employé désactivé ne peut pas être inscrit sur le lecteur.</p>
+    </div>
+</div>
+{% elif not devices %}
+<div class="alert alert-warning d-flex align-items-start gap-3">
+    <span class="material-icons">warning</span>
+    <div>
+        <strong>Aucun lecteur actif dans cette salle.</strong>
+        <p class="mb-0">
+            L'enrôlement du visage se fait par le terminal lui-même.
+            Enregistrez d'abord un lecteur, puis revenez sur cette page.
+        </p>
+    </div>
+</div>
+{% else %}
+
+<div class="row g-4">
+    <div class="col-lg-7">
+        {% include "access/_enrolement_etapes.html" %}
+    </div>
+
+    <div class="col-lg-5">
+        <div class="etape-carte p-4 mb-3">
+            <h6 class="fw-bold mb-3">Cet employé</h6>
+            <div class="small">
+                <div class="d-flex justify-content-between py-2 border-bottom">
+                    <span class="text-muted">Nom</span>
+                    <strong>{{ employee.name }}</strong>
+                </div>
+                <div class="d-flex justify-content-between py-2 border-bottom">
+                    <span class="text-muted">Rôle</span>
+                    <span>{{ employee.get_role_display }}</span>
+                </div>
+                <div class="d-flex justify-content-between py-2">
+                    <span class="text-muted">Identifiant sur le lecteur</span>
+                    <span><code>{{ employee_no }}</code></span>
+                </div>
+            </div>
+
+            <div class="alert alert-info small mt-3 mb-0">
+                Sans abonnement, l'employé entre <strong>à toute heure, tant que sa
+                fiche RH est active</strong>. Ses passages sont journalisés à son nom
+                et ne comptent pas dans la fréquentation des membres.
+            </div>
+        </div>
+
+        <div class="etape-carte p-4">
+            <h6 class="fw-bold mb-2">Retirer du lecteur</h6>
+            <p class="small text-muted">
+                Supprime la fiche et le visage de tous les lecteurs de la salle.
+                L'employé devra repasser une capture pour être réinscrit.
+            </p>
+            <form method="post" action="{% url 'access:staff_face_remove' employee.id %}"
+                  onsubmit="return confirm('Retirer cet employé des lecteurs ? Il faudra recapturer son visage pour le réinscrire.');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline-danger btn-sm">
+                    Retirer des lecteurs
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endif %}
+{% endblock %}

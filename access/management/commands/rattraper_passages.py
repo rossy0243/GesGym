@@ -22,6 +22,7 @@ from django.utils import timezone
 from access import enrollment, hikvision
 from access.models import AccessDevice, AccessLog
 from members.models import Member
+from rh.models import Employee
 
 # Codes d'evenement correspondant a une authentification acceptee.
 MINORS_ACCES_ACCORDE = frozenset({1, 8, 38, 75})
@@ -85,6 +86,7 @@ class Command(BaseCommand):
         ignores = 0
         inconnus = 0
         fiches_terminal = 0
+        personnel = 0
 
         for evenement in evenements:
             numero = str(evenement.get("serialNo") or "")
@@ -95,24 +97,29 @@ class Command(BaseCommand):
             identifiant = str(evenement.get("employeeNoString") or "").strip()
             member_id = enrollment.member_id_depuis(identifiant)
             if member_id is None:
-                # Fiche creee a la main sur le terminal : pas un membre, mais un
-                # passage reel. Il est recree comme en direct, hors statistiques
-                # des membres ; sans cela, une coupure effacerait ces passages.
+                # Employe inscrit depuis sa fiche RH, ou fiche creee a la main
+                # sur le terminal : pas un membre, mais un passage reel. Il est
+                # recree comme en direct, hors statistiques des membres ; sans
+                # cela, une coupure effacerait ces passages.
                 if identifiant.isdigit():
                     horodatage = self._horodatage(evenement.get("time"))
                     if horodatage is None:
                         ignores += 1
                         continue
+                    employe = self._employe_de(device, identifiant)
                     if simulation:
+                        qui = employe.name if employe else f"fiche du terminal {identifiant}"
                         self.stdout.write(
-                            f"    [simulation] {horodatage:%d/%m %H:%M} "
-                            f"fiche du terminal {identifiant}"
+                            f"    [simulation] {horodatage:%d/%m %H:%M} {qui}"
                         )
                     else:
-                        self._recreer_fiche_du_terminal(
-                            device, evenement, identifiant, numero, horodatage
+                        self._recreer_hors_membre(
+                            device, evenement, identifiant, numero, horodatage, employe
                         )
-                    fiches_terminal += 1
+                    if employe:
+                        personnel += 1
+                    else:
+                        fiches_terminal += 1
                     continue
                 inconnus += 1
                 continue
@@ -140,7 +147,8 @@ class Command(BaseCommand):
 
         self.stdout.write(
             f"    {recrees} passage(s) recupere(s), {ignores} deja connu(s), "
-            f"{inconnus} hors membres, {fiches_terminal} fiche(s) du terminal"
+            f"{inconnus} hors membres, {personnel} passage(s) du personnel, "
+            f"{fiches_terminal} fiche(s) du terminal"
         )
 
     def _lire_evenements(self, device, jours):
@@ -216,17 +224,30 @@ class Command(BaseCommand):
         return log
 
 
-    def _recreer_fiche_du_terminal(self, device, evenement, identifiant, numero, horodatage):
-        """
-        Recree le passage d'une fiche que l'application n'a pas posee.
+    def _employe_de(self, device, identifiant):
+        """L'employe de cette salle derriere un numero de la plage du personnel."""
+        employee_id = enrollment.employee_id_depuis(identifiant)
+        if employee_id is None:
+            return None
+        return Employee.objects.filter(id=employee_id, gym=device.gym).first()
 
-        Meme regle qu'en direct : le passage existe au journal, sous le nom que
-        le lecteur a garde, et n'entre dans aucune statistique des membres. Le
-        code d'evenement dit si le lecteur a ouvert.
+    def _recreer_hors_membre(self, device, evenement, identifiant, numero, horodatage, employe=None):
+        """
+        Recree le passage d'un employe ou d'une fiche que l'application n'a pas posee.
+
+        Meme regle qu'en direct : le passage existe au journal, au nom de
+        l'employe ou sous le nom que le lecteur a garde, et n'entre dans aucune
+        statistique des membres. Le code d'evenement dit si le lecteur a ouvert.
         """
         par_le_visage = hikvision.est_un_visage(evenement)
         methode = f"{device.name} (visage)" if par_le_visage else f"{device.name} (badge)"
-        libelle = (str(evenement.get("name") or "").strip() or f"Fiche {identifiant}")[:128]
+        if employe is not None:
+            personne = {"employee": employe}
+            motif = "Personnel de la salle"
+        else:
+            libelle = (str(evenement.get("name") or "").strip() or f"Fiche {identifiant}")[:128]
+            personne = {"terminal_label": libelle}
+            motif = "Fiche geree par le terminal"
 
         try:
             accorde = int(evenement.get("minor")) in MINORS_ACCES_ACCORDE
@@ -235,20 +256,20 @@ class Command(BaseCommand):
 
         deja_entre = accorde and AccessLog.objects.filter(
             gym=device.gym,
-            terminal_label=libelle,
             access_granted=True,
             check_in_time__date=horodatage.date(),
+            **personne,
         ).exists()
 
         log = AccessLog.objects.create(
             gym=device.gym,
             device=device,
-            terminal_label=libelle,
             device_used=f"{methode} - rattrapage",
             device_event_id=numero,
             access_granted=accorde,
             is_return=deja_entre,
-            denial_reason="Retour dans la salle" if deja_entre else "Fiche geree par le terminal",
+            denial_reason="Retour dans la salle" if deja_entre else motif,
+            **personne,
         )
         AccessLog.objects.filter(pk=log.pk).update(check_in_time=horodatage)
         return log

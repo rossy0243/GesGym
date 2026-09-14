@@ -26,6 +26,11 @@
             <a href="{% url 'rh:update' employee.id %}" class="btn btn-outline-secondary">
                 <i class="fas fa-edit"></i> Modifier
             </a>
+            {% if module_access %}
+            <a href="{% url 'access:staff_face_enrollment' employee.id %}" class="btn btn-outline-primary">
+                <i class="fas fa-user-check"></i> Visage a l'entree
+            </a>
+            {% endif %}
             <a href="{% url 'rh:list' %}" class="btn btn-secondary">
                 <i class="fas fa-arrow-left"></i> Retour
             </a>

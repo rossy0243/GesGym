@@ -25,6 +25,11 @@ urlpatterns = [
         path("membres/<int:member_id>/visage/capturer/", enrollment_views.face_capture, name="face_capture"),
         path("membres/<int:member_id>/visage/valider/", enrollment_views.face_confirm, name="face_confirm"),
         path("membres/<int:member_id>/visage/retirer/", enrollment_views.face_remove, name="face_remove"),
+        # Enrolement du personnel, depuis la fiche RH.
+        path("personnel/<int:employee_id>/visage/", enrollment_views.staff_face_enrollment, name="staff_face_enrollment"),
+        path("personnel/<int:employee_id>/visage/capturer/", enrollment_views.staff_face_capture, name="staff_face_capture"),
+        path("personnel/<int:employee_id>/visage/valider/", enrollment_views.staff_face_confirm, name="staff_face_confirm"),
+        path("personnel/<int:employee_id>/visage/retirer/", enrollment_views.staff_face_remove, name="staff_face_remove"),
 
         # Messages affiches sur l'ecran du lecteur.
         path("devices/<int:device_id>/messages/", enrollment_views.device_messages, name="device_messages"),

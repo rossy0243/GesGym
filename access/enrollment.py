@@ -49,6 +49,15 @@ class EnrollmentError(Exception):
 # son nom, ses dates et son visage.
 PLAGE_APPLICATION = 1_000_000
 
+# Plage du personnel, au-dessus de celle des membres. Les membres occupent les
+# numeros de PLAGE_APPLICATION (exclu) a PLAGE_PERSONNEL (inclus) : un million
+# de fiches, bien au-dela des 1500 visages que tient le lecteur.
+#
+# Borner la plage des membres est indispensable : sans borne, un employe serait
+# pris pour un membre inconnu, et la purge de la synchronisation retirerait son
+# visage du lecteur comme celui d'un membre disparu.
+PLAGE_PERSONNEL = 2_000_000
+
 
 def employee_no(member):
     """
@@ -72,9 +81,31 @@ def member_id_depuis(employee_no_lu):
     except (TypeError, ValueError):
         return None
 
-    if valeur <= PLAGE_APPLICATION:
+    if valeur <= PLAGE_APPLICATION or valeur > PLAGE_PERSONNEL:
         return None
     return valeur - PLAGE_APPLICATION
+
+
+def numero_personnel(employee):
+    """
+    Identifiant d'un employe sur le lecteur.
+
+    Dans sa propre plage : un employe n'est jamais confondu avec un membre, ni
+    avec une fiche creee a la main sur le terminal.
+    """
+    return str(PLAGE_PERSONNEL + employee.id)
+
+
+def employee_id_depuis(employee_no_lu):
+    """Retrouve l'employe derriere un employeeNo, ou None hors de sa plage."""
+    try:
+        valeur = int(str(employee_no_lu).strip())
+    except (TypeError, ValueError):
+        return None
+
+    if valeur <= PLAGE_PERSONNEL:
+        return None
+    return valeur - PLAGE_PERSONNEL
 
 
 def _periode_validite(member):
@@ -220,23 +251,71 @@ def inscrire_membre(device, member, image_bytes=None):
         raise EnrollmentError(f"Le lecteur a refuse la fiche : {exc}") from exc
 
     if image_bytes:
-        try:
-            client.set_face(numero, preparer_photo(image_bytes))
-        except hikvision.HikvisionError as exc:
-            # La fiche est posee ; seul le visage manque. On le dit sans
-            # laisser croire que rien n'a marche.
-            cause = _cause_du_refus(exc) or (
-                f"le lecteur l'a refuse sans motif reconnu. ({exc})"
-            )
-            raise EnrollmentError(
-                f"La fiche est enregistree mais le visage a ete refuse : {cause}"
-            ) from exc
+        _envoyer_visage(client, numero, image_bytes)
 
+    _marquer_joignable(device)
+
+    return {"employee_no": numero, "sans_abonnement": sans_abonnement}
+
+
+def _envoyer_visage(client, numero, image_bytes):
+    """Pose le visage sur une fiche deja creee."""
+    try:
+        client.set_face(numero, preparer_photo(image_bytes))
+    except hikvision.HikvisionError as exc:
+        # La fiche est posee ; seul le visage manque. On le dit sans
+        # laisser croire que rien n'a marche.
+        cause = _cause_du_refus(exc) or (
+            f"le lecteur l'a refuse sans motif reconnu. ({exc})"
+        )
+        raise EnrollmentError(
+            f"La fiche est enregistree mais le visage a ete refuse : {cause}"
+        ) from exc
+
+
+def _marquer_joignable(device):
     device.last_seen_at = timezone.now()
     device.last_error = ""
     device.save(update_fields=["last_seen_at", "last_error", "updated_at"])
 
-    return {"employee_no": numero, "sans_abonnement": sans_abonnement}
+
+def inscrire_employe(device, employee, image_bytes=None):
+    """
+    Cree ou met a jour la fiche d'un employe sur le lecteur.
+
+    Un employe n'a pas d'abonnement : il entre a toute heure, tant que sa fiche
+    RH est active. Sa fiche est donc ouverte sur toute la periode que le
+    materiel accepte. Un employe desactive n'est jamais inscrit.
+    """
+    if not employee.is_active:
+        raise EnrollmentError(
+            f"{employee.name} est desactive dans le module RH : il ne peut pas "
+            "etre inscrit sur le lecteur."
+        )
+
+    client = hikvision.HikvisionClient.from_device(device, timeout=25)
+    numero = numero_personnel(employee)
+    nom = (employee.name or "").strip() or f"Employe {employee.id}"
+
+    try:
+        client.upsert_user(
+            numero,
+            nom,
+            DEBUT_PAR_DEFAUT,
+            FIN_PAR_DEFAUT,
+            door_number=device.door_number,
+        )
+    except hikvision.HikvisionUnreachable as exc:
+        raise EnrollmentError(f"Lecteur injoignable ({device.host}).") from exc
+    except hikvision.HikvisionError as exc:
+        raise EnrollmentError(f"Le lecteur a refuse la fiche : {exc}") from exc
+
+    if image_bytes:
+        _envoyer_visage(client, numero, image_bytes)
+
+    _marquer_joignable(device)
+
+    return {"employee_no": numero}
 
 
 def retirer_membre(device, member):
@@ -244,6 +323,17 @@ def retirer_membre(device, member):
     client = hikvision.HikvisionClient.from_device(device, timeout=25)
     try:
         client.delete_user(employee_no(member))
+    except hikvision.HikvisionUnreachable as exc:
+        raise EnrollmentError(f"Lecteur injoignable ({device.host}).") from exc
+    except hikvision.HikvisionError as exc:
+        raise EnrollmentError(f"Le lecteur a refuse le retrait : {exc}") from exc
+
+
+def retirer_employe(device, employee):
+    """Supprime la fiche et le visage d'un employe sur le lecteur."""
+    client = hikvision.HikvisionClient.from_device(device, timeout=25)
+    try:
+        client.delete_user(numero_personnel(employee))
     except hikvision.HikvisionUnreachable as exc:
         raise EnrollmentError(f"Lecteur injoignable ({device.host}).") from exc
     except hikvision.HikvisionError as exc:

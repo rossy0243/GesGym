@@ -22,11 +22,17 @@ from django.core.exceptions import PermissionDenied
 from django.core.files.base import ContentFile
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from core.audit import log_sensitive_action
 from members.models import Member
-from smartclub.access_control import ACCESS_DEVICE_ROLES, ACCESS_DEVICE_USE_ROLES, has_role
+from smartclub.access_control import (
+    ACCESS_DEVICE_ROLES,
+    ACCESS_DEVICE_USE_ROLES,
+    RH_EMPLOYEE_ROLES,
+    has_role,
+)
 from smartclub.decorators import module_required, role_required
 
 from . import enrollment
@@ -75,6 +81,9 @@ def face_enrollment(request, member_id):
             "subscription": subscription,
             "apercu_base64": apercu,
             "employee_no": enrollment.employee_no(member),
+            "sujet": "le membre",
+            "url_capture": reverse("access:face_capture", args=[member.id]),
+            "url_valider": reverse("access:face_confirm", args=[member.id]),
         },
     )
 
@@ -213,6 +222,165 @@ def face_remove(request, member_id):
         )
 
     return redirect("access:face_enrollment", member_id=member.id)
+
+
+# ---------------------------------------------------------------------------
+# Enrolement du personnel
+# ---------------------------------------------------------------------------
+#
+# Meme parcours que pour un membre, depuis la fiche RH. Reserve au proprietaire
+# et au gerant : inscrire quelqu'un qui entre a toute heure, sans abonnement,
+# n'est pas un geste d'accueil.
+
+CLE_SESSION_PERSONNEL = "enrolement_visage_personnel"
+
+
+def _employe_de(request, employee_id):
+    from rh.models import Employee
+
+    return get_object_or_404(Employee, id=employee_id, gym=request.gym)
+
+
+@login_required
+@module_required("ACCESS")
+@role_required(RH_EMPLOYEE_ROLES)
+def staff_face_enrollment(request, employee_id):
+    """Ecran d'enrolement du visage d'un employe."""
+    employe = _employe_de(request, employee_id)
+
+    capture = request.session.get(CLE_SESSION_PERSONNEL)
+    apercu = None
+    if capture and capture.get("employee_id") == employe.id:
+        apercu = capture.get("image_b64")
+
+    return render(
+        request,
+        "access/face_enrollment_employee.html",
+        {
+            "gym": request.gym,
+            "employee": employe,
+            "devices": enrollment.lecteurs_de(request.gym),
+            "apercu_base64": apercu,
+            "employee_no": enrollment.numero_personnel(employe),
+            "sujet": "l'employé",
+            "url_capture": reverse("access:staff_face_capture", args=[employe.id]),
+            "url_valider": reverse("access:staff_face_confirm", args=[employe.id]),
+        },
+    )
+
+
+@login_required
+@module_required("ACCESS")
+@role_required(RH_EMPLOYEE_ROLES)
+@require_POST
+def staff_face_capture(request, employee_id):
+    """Declenche la photographie ; l'image attend en session d'etre acceptee."""
+    employe = _employe_de(request, employee_id)
+
+    if not employe.is_active:
+        return JsonResponse(
+            {"ok": False, "error": f"{employe.name} est desactive dans le module RH."},
+            status=400,
+        )
+
+    lecteur = _lecteur_de(request, request.POST.get("device_id"))
+    if lecteur is None:
+        return JsonResponse(
+            {"ok": False, "error": "Choisissez le lecteur devant lequel se trouve l'employe."},
+            status=400,
+        )
+
+    try:
+        image = enrollment.capturer_visage(lecteur)
+    except enrollment.EnrollmentError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+
+    encodee = base64.b64encode(image).decode()
+    request.session[CLE_SESSION_PERSONNEL] = {
+        "employee_id": employe.id,
+        "device_id": lecteur.id,
+        "image_b64": encodee,
+    }
+    request.session.modified = True
+
+    return JsonResponse({"ok": True, "image": encodee, "device": lecteur.name})
+
+
+@login_required
+@module_required("ACCESS")
+@role_required(RH_EMPLOYEE_ROLES)
+@require_POST
+def staff_face_confirm(request, employee_id):
+    """Inscrit l'employe sur le lecteur avec le visage accepte."""
+    employe = _employe_de(request, employee_id)
+    capture = request.session.get(CLE_SESSION_PERSONNEL)
+
+    if not capture or capture.get("employee_id") != employe.id:
+        messages.error(request, "Aucune capture en attente. Relancez la capture.")
+        return redirect("access:staff_face_enrollment", employee_id=employe.id)
+
+    image = base64.b64decode(capture["image_b64"])
+    lecteur = get_object_or_404(AccessDevice, id=capture["device_id"], gym=request.gym)
+
+    try:
+        resultat = enrollment.inscrire_employe(lecteur, employe, image)
+    except enrollment.EnrollmentError as exc:
+        messages.error(request, str(exc))
+        return redirect("access:staff_face_enrollment", employee_id=employe.id)
+
+    request.session.pop(CLE_SESSION_PERSONNEL, None)
+    log_sensitive_action(
+        request,
+        "access.staff_face_enrolled",
+        "Employee",
+        employe.name,
+        metadata={
+            "employee_id": employe.id,
+            "lecteur": lecteur.name,
+            "employee_no": resultat["employee_no"],
+        },
+        gym=request.gym,
+    )
+    messages.success(
+        request,
+        f"Visage enrole. {employe.name} entre par reconnaissance faciale, a "
+        "toute heure, tant que sa fiche RH est active.",
+    )
+    return redirect("access:staff_face_enrollment", employee_id=employe.id)
+
+
+@login_required
+@module_required("ACCESS")
+@role_required(RH_EMPLOYEE_ROLES)
+@require_POST
+def staff_face_remove(request, employee_id):
+    """Retire l'employe des lecteurs de la salle."""
+    employe = _employe_de(request, employee_id)
+
+    echecs = []
+    for lecteur in enrollment.lecteurs_de(request.gym):
+        try:
+            enrollment.retirer_employe(lecteur, employe)
+        except enrollment.EnrollmentError as exc:
+            echecs.append(f"{lecteur.name} : {exc}")
+
+    log_sensitive_action(
+        request,
+        "access.staff_face_removed",
+        "Employee",
+        employe.name,
+        metadata={"employee_id": employe.id, "echecs": echecs},
+        gym=request.gym,
+    )
+
+    if echecs:
+        messages.error(request, "Retrait incomplet. " + " ".join(echecs))
+    else:
+        messages.success(
+            request, f"{employe.name} ne peut plus entrer par reconnaissance faciale."
+        )
+
+    return redirect("access:staff_face_enrollment", employee_id=employe.id)
 
 
 @login_required
