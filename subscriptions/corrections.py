@@ -36,12 +36,6 @@ def periode_close(start_date, plan, aujourd_hui=None):
     return start_date + timedelta(days=plan.duration_days) < aujourd_hui
 
 
-def restantes(subscription):
-    """Corrections encore possibles sur cet abonnement."""
-    deja = subscription.corrections.count()
-    return max(SubscriptionCorrection.MAXIMUM_PAR_ABONNEMENT - deja, 0)
-
-
 def _chevauchement(subscription, debut, fin):
     """Un autre abonnement du membre occupe-t-il deja cette periode ?"""
     return (
@@ -82,12 +76,9 @@ def corriger(subscription, nouveau_debut, motif, par, acquitte=False):
             "Cet abonnement n'a plus de formule : sa duree est inconnue."
         )
 
-    if restantes(subscription) == 0:
-        raise ValidationError(
-            f"Cet abonnement a deja ete corrige "
-            f"{SubscriptionCorrection.MAXIMUM_PAR_ABONNEMENT} fois. "
-            "Au-dela, c'est la vente elle-meme qu'il faut revoir."
-        )
+    # Pas de plafond. Il protegeait contre un gerant qui deplacerait une periode
+    # a repetition ; la correction est desormais reservee au proprietaire, qui
+    # ne se controle pas lui-meme, et ce risque a disparu avec le geste.
 
     nouvelle_fin = nouveau_debut + timedelta(days=subscription.plan.duration_days)
 

@@ -1062,23 +1062,17 @@ class SubscriptionCorrectionTests(TestCase):
 
         self.assertIn("rien a corriger", str(capture.exception))
 
-    def test_a_third_correction_is_refused(self):
-        # Deux fois, c'est une faute de frappe. Trois fois, c'est la vente
-        # elle-meme qu'il faut revoir.
-        self._corriger(debut=timezone.localdate())
-        self._corriger(debut=timezone.localdate() - timedelta(days=1))
+    def test_a_subscription_can_be_corrected_as_often_as_needed(self):
+        # Le plafond de deux protegeait contre un gerant qui deplacerait une
+        # periode a repetition. La correction est reservee au proprietaire : le
+        # plafond n'a plus d'objet.
+        for decalage in range(4):
+            self._corriger(debut=timezone.localdate() - timedelta(days=decalage))
 
-        with self.assertRaises(ValidationError) as capture:
-            self._corriger(debut=timezone.localdate() - timedelta(days=2))
-
-        self.assertIn("deja ete corrige", str(capture.exception))
-
-    def test_the_remaining_count_is_visible(self):
-        self.assertEqual(corrections.restantes(self.abonnement), 2)
-
-        self._corriger()
-
-        self.assertEqual(corrections.restantes(self.abonnement), 1)
+        self.assertEqual(
+            SubscriptionCorrection.objects.filter(subscription=self.abonnement).count(),
+            4,
+        )
 
     def test_an_overlapping_period_is_refused(self):
         # Le membre a rachete depuis : deplacer l'ancienne periode ne doit pas
@@ -1198,7 +1192,9 @@ class SubscriptionCorrectionViewTests(TestCase):
         )
 
         self.gerant = self._utilisateur("gerant-correction-vue", "manager")
-        self._connecter(self.gerant)
+        # La correction est reservee au proprietaire : c'est lui qu'on connecte.
+        self.proprietaire = self._utilisateur("proprio-principal-vue", "owner")
+        self._connecter(self.proprietaire)
 
     def _utilisateur(self, nom, role):
         utilisateur = User.objects.create_user(username=nom, password="pass12345")
@@ -1242,24 +1238,30 @@ class SubscriptionCorrectionViewTests(TestCase):
         self.assertEqual(historique[0]["id"], self.abonnement.id)
         self.assertEqual(historique[0]["state"], "Termine")
 
-    def test_a_manager_is_offered_the_correction(self):
+    def test_the_owner_is_offered_the_correction(self):
         self.assertTrue(self._fiche()["subscriptions"][0]["can_correct"])
+
+    def test_a_manager_is_no_longer_offered_the_correction(self):
+        self._connecter(self.gerant)
+
+        self.assertFalse(self._fiche()["subscriptions"][0]["can_correct"])
 
     def test_a_receptionist_is_not_offered_the_correction(self):
         self._connecter(self._utilisateur("accueil-correction-vue", "reception"))
 
         self.assertFalse(self._fiche()["subscriptions"][0]["can_correct"])
 
-    def test_a_twice_corrected_subscription_is_no_longer_offered(self):
+    def test_a_corrected_subscription_is_still_offered(self):
+        # Plus de plafond : une periode corrigee deux fois reste corrigeable.
         corrections.corriger(
-            self.abonnement, timezone.localdate(), "un", self.gerant
+            self.abonnement, timezone.localdate(), "un", self.proprietaire, acquitte=True
         )
         corrections.corriger(
             self.abonnement, timezone.localdate() - timedelta(days=1),
-            "deux", self.gerant,
+            "deux", self.proprietaire, acquitte=True,
         )
 
-        self.assertFalse(self._fiche()["subscriptions"][0]["can_correct"])
+        self.assertTrue(self._fiche()["subscriptions"][0]["can_correct"])
 
     def test_the_history_carries_the_past_corrections(self):
         corrections.corriger(
@@ -1287,7 +1289,16 @@ class SubscriptionCorrectionViewTests(TestCase):
 
     # --- La correction elle-meme -------------------------------------------------
 
-    def test_a_manager_can_correct_and_the_member_gets_access_back(self):
+    def test_a_manager_can_no_longer_correct(self):
+        self._connecter(self.gerant)
+
+        reponse = self._corriger()
+
+        self.assertEqual(reponse.status_code, 403)
+        self.abonnement.refresh_from_db()
+        self.assertEqual(self.abonnement.start_date, self.faux_debut)
+
+    def test_the_owner_can_correct_and_the_member_gets_access_back(self):
         reponse = self._corriger()
 
         self.assertTrue(reponse.json()["success"])
@@ -1306,10 +1317,11 @@ class SubscriptionCorrectionViewTests(TestCase):
         self.abonnement.refresh_from_db()
         self.assertEqual(self.abonnement.start_date, self.faux_debut)
 
-    def test_a_managers_correction_waits_for_the_owner(self):
+    def test_the_owners_correction_is_acknowledged_at_once(self):
+        # Il n'a pas a s'accuser reception a lui-meme : rien n'arrive au bandeau.
         self._corriger()
 
-        self.assertEqual(corrections.en_attente(self.gym).count(), 1)
+        self.assertEqual(corrections.en_attente(self.gym).count(), 0)
 
     def test_an_owners_correction_needs_no_acknowledgement(self):
         self._connecter(self._utilisateur("proprio-correction-vue", "owner"))
@@ -1349,8 +1361,11 @@ class SubscriptionCorrectionViewTests(TestCase):
     # --- L'accuse de reception ---------------------------------------------------
 
     def test_the_owner_can_acknowledge(self):
-        self._corriger()
-        trace = SubscriptionCorrection.objects.get(subscription=self.abonnement)
+        # Une correction faite par un gerant avant que ce geste lui soit retire
+        # reste a acquitter : le bandeau sert encore pour elle.
+        trace = corrections.corriger(
+            self.abonnement, timezone.localdate(), "Ancienne correction", self.gerant
+        )
         self._connecter(self._utilisateur("proprio-accuse", "owner"))
 
         reponse = self.client.post(
@@ -1362,10 +1377,12 @@ class SubscriptionCorrectionViewTests(TestCase):
         self.assertEqual(corrections.en_attente(self.gym).count(), 0)
 
     def test_a_manager_cannot_acknowledge(self):
-        # L'accuse de reception est ce qui rend acceptable qu'un gerant touche
-        # a une periode vendue : lui laisser le donner le viderait de son sens.
-        self._corriger()
-        trace = SubscriptionCorrection.objects.get(subscription=self.abonnement)
+        # L'accuse de reception reste reserve au proprietaire, y compris pour
+        # les corrections faites par un gerant avant la revision.
+        trace = corrections.corriger(
+            self.abonnement, timezone.localdate(), "Ancienne correction", self.gerant
+        )
+        self._connecter(self.gerant)
 
         reponse = self.client.post(
             reverse("subscriptions:acknowledge_correction", args=[trace.id]),

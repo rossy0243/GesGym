@@ -439,13 +439,12 @@ class SubscriptionCorrection(models.Model):
     l'argent - la recette, elle, a bien eu lieu.
 
     Une table a part plutot que des champs sur l'abonnement : une periode peut
-    etre corrigee deux fois, et l'historique de ces gestes est precisement ce
+    etre corrigee plusieurs fois, et l'historique de ces gestes est precisement ce
     que le proprietaire veut pouvoir relire.
     """
 
     # Au-dela, une periode corrigee ne raconte plus une faute de frappe : c'est
     # le geste lui-meme qu'il faut examiner, pas la date.
-    MAXIMUM_PAR_ABONNEMENT = 2
 
     gym = models.ForeignKey(
         Gym,

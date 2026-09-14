@@ -470,7 +470,9 @@ def correct_subscription(request, subscription_id):
     correction prend effet aussitot - le membre retrouve son acces sans
     attendre que quiconque valide.
     """
-    _require_gym_role(request, PLAN_MANAGEMENT_ROLES)
+    # Reserve au proprietaire. Le gerant pouvait corriger, sous le controle d'un
+    # bandeau ; le client a prefere retirer ce geste a tout autre que lui.
+    _require_gym_role(request, SETTINGS_ORGANIZATION_ROLES)
 
     abonnement = get_object_or_404(
         MemberSubscription, id=subscription_id, gym=request.gym
@@ -479,12 +481,11 @@ def correct_subscription(request, subscription_id):
     debut = parse_date((request.POST.get("start_date") or "").strip())
     motif = request.POST.get("reason") or ""
 
-    # Le proprietaire n'a pas a s'accuser reception a lui-meme.
-    est_proprietaire = has_role(request, SETTINGS_ORGANIZATION_ROLES)
-
     try:
+        # Seul le proprietaire corrige : il n'a pas a s'accuser reception a
+        # lui-meme, la correction est donc acquittee d'office.
         trace = corrections.corriger(
-            abonnement, debut, motif, request.user, acquitte=est_proprietaire
+            abonnement, debut, motif, request.user, acquitte=True
         )
     except ValidationError as exc:
         message = exc.messages[0]

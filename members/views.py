@@ -38,7 +38,7 @@ from smartclub.access_control import (
     MEMBER_ROLES,
     MEMBER_STATUS_ROLES,
     MEMBER_WRITE_ROLES,
-    SUBSCRIPTION_ROLES,
+    SETTINGS_ORGANIZATION_ROLES,
     has_role,
 )
 from smartclub.public_links import build_public_url
@@ -2075,7 +2075,8 @@ def _subscription_history(request, member):
     pouvoir corriger - sans cet historique, il serait hors d'atteinte.
     """
     aujourd_hui = timezone.localdate()
-    peut_corriger = has_role(request, SUBSCRIPTION_ROLES)
+    # La correction d'une periode est reservee au proprietaire.
+    peut_corriger = has_role(request, SETTINGS_ORGANIZATION_ROLES)
     historique = []
 
     abonnements = (
@@ -2116,11 +2117,7 @@ def _subscription_history(request, member):
             "is_current": etat == "En cours",
             # Une formule supprimee n'a plus de duree : la fin ne peut plus se
             # recalculer, donc la correction n'est pas proposee.
-            "can_correct": (
-                peut_corriger
-                and abonnement.plan is not None
-                and subscription_corrections.restantes(abonnement) > 0
-            ),
+            "can_correct": peut_corriger and abonnement.plan is not None,
             "corrections": traces,
         })
 

@@ -56,8 +56,8 @@ moment de la saisie. C'est ce cas precis, et lui seul, qu'il faut attraper.
 | A la saisie | Avertir et demander confirmation si la periode est deja terminee |
 | Reparation | Corriger les dates sur place ; la fin se recalcule sur la duree de la formule |
 | L'argent | Jamais touche par une correction |
-| Qui corrige | Le proprietaire et le gerant |
-| Nombre de corrections | Deux au maximum par abonnement |
+| Qui corrige | Le proprietaire seul *(revise le 14/09/2026)* |
+| Nombre de corrections | Sans limite *(revise le 14/09/2026)* |
 | Prise d'effet | Immediate : la correction n'attend aucune validation |
 | **Contrepartie** | **Toute correction reste affichee au proprietaire jusqu'a ce qu'il en accuse reception** |
 
@@ -106,7 +106,7 @@ proprietaire veut pouvoir relire.
 
 **A la correction**
 
-1. reservee au proprietaire et au gerant ;
+1. reservee au proprietaire ;
 2. seule la date de debut se saisit ; la fin se recalcule sur la duree de la
    formule, pour qu'une correction ne puisse pas allonger discretement un
    abonnement ;
@@ -114,9 +114,8 @@ proprietaire veut pouvoir relire.
 4. la nouvelle periode ne doit chevaucher aucun autre abonnement du membre -
    la regle existe deja dans `MemberSubscription.clean()` ;
 5. **le paiement n'est pas touche** ;
-6. deux corrections au maximum par abonnement ;
-7. si l'auteur n'est pas le proprietaire, la correction s'affiche chez lui
-   jusqu'a accuse de reception - sans jamais retarder sa prise d'effet.
+6. autant de corrections que necessaire ;
+7. le proprietaire corrigeant lui-meme, la correction est acquittee d'office.
 
 ## Deux points tranches apres coup
 
@@ -161,3 +160,23 @@ que part la correction.
 Un renouvellement anticipe reporte les jours restants : la fin peut tomber loin
 dans le futur alors meme que `debut + duree` est deja passe. Le service
 compare donc la date de fin qu'il s'apprete a ecrire.
+
+## Revision du 14 septembre 2026
+
+Precision du client : la correction est **retiree au gerant**, et le **plafond de
+deux corrections est leve**.
+
+Les deux changements vont ensemble. Le plafond protegeait contre un gerant qui
+deplacerait une periode a repetition, et le bandeau d'accuse de reception rendait
+acceptable qu'il touche a une periode vendue. Reservee au proprietaire, qui ne se
+controle pas lui-meme, la correction n'a plus besoin ni de l'un ni de l'autre.
+
+- les corrections du proprietaire sont acquittees d'office : elles n'arrivent plus
+  dans le bandeau ;
+- le bandeau et le bouton « J'ai vu » restent en place pour les corrections deja
+  faites par un gerant et pas encore vues ;
+- le motif reste obligatoire, la fin se recalcule toujours sur la duree de la
+  formule, et le paiement n'est jamais touche.
+
+La section « Deux points tranches apres coup » ci-dessus decrit la regle d'origine
+et reste en l'etat, comme trace de la decision precedente.
