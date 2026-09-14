@@ -48,7 +48,7 @@
     <link rel="stylesheet" type="text/css" href="{% static 'css/app-pages.css' %}?v=20260821b" />
     <!--! Palette Royal Gym : chargee en dernier, elle a le dernier mot sur les
           tons de sens et sur l'or de la marque. -->
-    <link rel="stylesheet" type="text/css" href="{% static 'css/palette.css' %}?v=20260912" />
+    <link rel="stylesheet" type="text/css" href="{% static 'css/palette.css' %}?v=20260914" />
     <script>
     (function () {
         try {
@@ -317,24 +317,51 @@
     <script src="{% static 'js/nav-toggle.js' %}?v=20260419"></script>
 
     <script>
-    // Les definitions d'indicateurs. L'attribut `title` du navigateur ne
-    // s'ouvre qu'au survol : sur tablette, il n'existe pas. On le confie a
-    // l'infobulle de Bootstrap, declenchee au survol *et* au focus - un
-    // element focalisable s'active par une simple tape.
+    // Les definitions d'indicateurs.
+    //
+    // Premier essai : l'infobulle s'ouvrait au survol *et* au focus. Deux
+    // defauts en sont sortis. Un clic donnait le focus, la bulle ne se
+    // refermait plus, et chaque survol suivant en ouvrait une autre par-dessus.
+    // Et la bulle venait parfois se poser sous le curseur : l'element perdait
+    // le survol, la bulle se fermait, le survol revenait - elle clignotait.
+    //
+    // Desormais : au survol avec une souris, a la tape sur un ecran tactile ;
+    // une seule bulle ouverte a la fois ; et la bulle ne capte jamais le
+    // curseur (voir palette.css).
     document.addEventListener("DOMContentLoaded", function () {
         if (!window.bootstrap || !window.bootstrap.Tooltip) { return; }
 
+        const avecSouris = window.matchMedia("(hover: hover)").matches;
+        const bulles = [];
+
         document.querySelectorAll(".aide[title]").forEach(function (element) {
-            if (!element.hasAttribute("tabindex")) {
+            if (!avecSouris && !element.hasAttribute("tabindex")) {
                 element.setAttribute("tabindex", "0");
             }
-            new bootstrap.Tooltip(element, {
-                trigger: "hover focus",
+            const bulle = new bootstrap.Tooltip(element, {
+                trigger: avecSouris ? "hover" : "click",
                 placement: "top",
+                fallbackPlacements: ["bottom"],
                 customClass: "aide-bulle",
                 container: "body",
             });
+            bulles.push(bulle);
+
+            element.addEventListener("show.bs.tooltip", function () {
+                bulles.forEach(function (autre) {
+                    if (autre !== bulle) { autre.hide(); }
+                });
+            });
         });
+
+        // Sur tablette, toucher ailleurs referme la bulle ouverte.
+        if (!avecSouris) {
+            document.addEventListener("click", function (evenement) {
+                if (!evenement.target.closest(".aide")) {
+                    bulles.forEach(function (bulle) { bulle.hide(); });
+                }
+            });
+        }
     });
     </script>
 </body>

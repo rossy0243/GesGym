@@ -6163,8 +6163,29 @@ class IndicatorHelpTests(TestCase):
         page = self._page().content.decode("utf-8")
 
         self.assertIn(".aide[title]", page)
-        self.assertIn('trigger: "hover focus"', page)
-        self.assertIn('setAttribute("tabindex", "0")', page)
+        # Au survol avec une souris, a la tape sur un ecran tactile. Le
+        # declenchement au focus laissait des bulles ouvertes s'accumuler.
+        self.assertIn('matchMedia("(hover: hover)")', page)
+        self.assertIn('avecSouris ? "hover" : "click"', page)
+        self.assertNotIn('trigger: "hover focus"', page)
+
+    def test_only_one_bubble_is_open_at_a_time(self):
+        page = self._page().content.decode("utf-8")
+
+        self.assertIn("show.bs.tooltip", page)
+        self.assertIn("autre.hide()", page)
+
+    def test_the_bubble_never_catches_the_cursor(self):
+        # Posee sous la souris, elle retirait le survol a son element : elle
+        # clignotait.
+        palette = (
+            Path(settings.BASE_DIR) / "static" / "css" / "palette.css"
+        ).read_text(encoding="utf-8")
+
+        debut = palette.index(".tooltip.aide-bulle {")
+        regle = palette[debut:palette.index("}", debut)]
+        self.assertIn("pointer-events: none", regle)
+        self.assertIn("text-transform: none", regle)
 
     def test_the_marker_is_styled_by_the_palette(self):
         palette = (
@@ -6781,19 +6802,17 @@ class AnalyticsRevenueGridTests(TestCase):
 
     # --- Le detail ---------------------------------------------------------------------------
 
-    def test_the_takings_are_broken_down_by_method(self):
+    def test_the_summary_lines_gave_way_to_the_table(self):
+        # "Especes : ..." et "Sorties : ..." repetaient ce que le tableau des
+        # operations detaille desormais ligne a ligne.
         self._vente("30000")
-        record_payment(
-            gym=self.gym, register=self.registre, amount=Decimal("15000"),
-            currency="CDF", method="mobile_money", transaction_type="in",
-            category="subscription", description="Abonnement",
-            created_by=self.gerant,
-        )
+        self._depense("5000", motif="Savon")
 
-        lignes = {l["code"]: l["total"] for l in self._bilan()["par_methode"]}
+        reponse = self._page()
 
-        self.assertEqual(lignes["cash"], Decimal("30000.00"))
-        self.assertEqual(lignes["mobile_money"], Decimal("15000.00"))
+        self.assertNotIn("par_methode", reponse.context["bilan_periode"])
+        self.assertNotIn("motifs", reponse.context["bilan_periode"])
+        self.assertNotContains(reponse, '<span class="fw-semibold">Sorties :</span>')
 
     def test_the_reasons_of_the_spending_are_listed(self):
         self._depense("30000", motif="Reparation du portail")
@@ -6815,3 +6834,243 @@ class AnalyticsRevenueGridTests(TestCase):
         self._vente("999999", gym=self.voisine, registre=registre_voisin)
 
         self.assertEqual(self._bilan()["encaissements"], Decimal("0.00"))
+
+
+class AnalyticsOperationsTableTests(TestCase):
+    """
+    Les operations de la periode, ligne a ligne, sous la grille du revenu.
+
+    Deux onglets, tries par date la plus recente, pagines par 25. Le tableau
+    doit permettre de retrouver chaque franc que la grille additionne.
+    """
+
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Org Operations", slug="org-operations"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organization, name="Gym Operations",
+            slug="gym-operations", subdomain="gym-operations",
+        )
+        self.voisine = Gym.objects.create(
+            organization=self.organization, name="Voisine",
+            slug="gym-operations-voisine", subdomain="gym-operations-voisine",
+        )
+        for code in ("MEMBERS", "POS"):
+            module, _ = Module.objects.get_or_create(
+                code=code, defaults={"name": code}
+            )
+            for salle in (self.gym, self.voisine):
+                GymModule.objects.get_or_create(
+                    gym=salle, module=module, defaults={"is_active": True}
+                )
+        self.gerant = User.objects.create_user(
+            username="gerant-operations", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.gerant, gym=self.gym, role="manager", is_active=True
+        )
+        self.registre = CashRegister.objects.create(
+            gym=self.gym, opened_by=self.gerant,
+            opening_amount=Decimal("100000.00"),
+            exchange_rate=Decimal("2800.00"),
+        )
+        self.client.force_login(self.gerant)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    # --- Fabriques ----------------------------------------------------------------
+
+    def _vente(self, montant, motif="Abonnement", gym=None, registre=None):
+        return record_payment(
+            gym=gym or self.gym, register=registre or self.registre,
+            amount=Decimal(montant), currency="CDF", method="cash",
+            transaction_type="in", category="subscription",
+            description=motif, created_by=self.gerant,
+        )
+
+    def _depense(self, montant, motif="Plomberie"):
+        return record_expense(
+            gym=self.gym, amount=Decimal(montant), currency="CDF",
+            method="cash", category="expense", description=motif,
+            created_by=self.gerant, source_app="pos",
+            source_model="ManualExpense",
+        )
+
+    def _a_heure(self, paiement, jour, heure):
+        Payment.objects.filter(pk=paiement.pk).update(
+            created_at=timezone.make_aware(datetime.combine(jour, time(heure, 0)))
+        )
+
+    def _page(self, vue="analytics", **parametres):
+        parametres.setdefault("period", "month")
+        parametres["view"] = vue
+        return self.client.get(
+            reverse("core:gym_dashboard", args=[self.gym.id]), parametres
+        )
+
+    def _lignes(self, cle, **parametres):
+        return list(
+            self._page(**parametres).context["operations_periode"][cle]["page"]
+        )
+
+    # --- La place du tableau --------------------------------------------------------
+
+    def test_the_table_sits_inside_the_revenue_grid(self):
+        page = self._page().content.decode("utf-8")
+
+        position = page.index('id="operations"')
+        self.assertLess(page.index("Revenus de la periode"), position)
+        self.assertLess(position, page.index("Renouvellements"))
+
+    def test_the_overview_computes_no_table(self):
+        # La vue d'ensemble n'a pas a payer deux listes qu'elle ne montre pas.
+        reponse = self._page(vue="dashboard")
+
+        self.assertIsNone(reponse.context["operations_periode"])
+        self.assertNotContains(reponse, 'id="operations"')
+
+    # --- Ce qui est liste ------------------------------------------------------------
+
+    def test_the_takings_are_listed(self):
+        self._vente("30000", motif="Abonnement mensuel")
+
+        lignes = self._lignes("encaissements")
+
+        self.assertEqual(len(lignes), 1)
+        self.assertEqual(lignes[0].description, "Abonnement mensuel")
+
+    def test_returns_and_injections_are_not_takings(self):
+        # Le tableau doit retomber sur le total de la grille : ni l'argent rendu
+        # ni les apports n'y figurent.
+        depense = self._depense("50000")
+        record_expense_refund(
+            gym=self.gym, expense=depense, amount=Decimal("20000"),
+            currency="CDF", created_by=self.gerant,
+        )
+        record_cash_injection(
+            gym=self.gym, amount=Decimal("100000"), currency="CDF",
+            description="Renfort", created_by=self.gerant,
+        )
+
+        self.assertEqual(self._lignes("encaissements"), [])
+
+    def test_a_disbursement_shows_what_came_back(self):
+        depense = self._depense("50000")
+        record_expense_refund(
+            gym=self.gym, expense=depense, amount=Decimal("20000"),
+            currency="CDF", created_by=self.gerant,
+        )
+
+        ligne = self._lignes("decaissements")[0]
+
+        self.assertEqual(ligne.rendu_cdf, Decimal("20000.00"))
+        self.assertEqual(ligne.net_cdf, Decimal("30000.00"))
+
+    def test_the_takings_add_up_to_the_grid(self):
+        self._vente("30000")
+        self._vente("12500")
+
+        reponse = self._page()
+        lignes = list(reponse.context["operations_periode"]["encaissements"]["page"])
+
+        self.assertEqual(
+            sum(ligne.amount_cdf for ligne in lignes),
+            reponse.context["bilan_periode"]["encaissements"],
+        )
+
+    def test_the_period_filter_applies(self):
+        fenetre = _get_period_window("month", timezone.localdate())
+        ancienne = self._vente("40000", motif="Mois dernier")
+        Payment.objects.filter(pk=ancienne.pk).update(
+            created_at=timezone.make_aware(
+                datetime.combine(fenetre["previous_start"], time(12, 0))
+            )
+        )
+
+        self.assertEqual(self._lignes("encaissements"), [])
+
+    def test_a_neighbouring_gym_stays_out(self):
+        registre_voisin = CashRegister.objects.create(
+            gym=self.voisine, opened_by=self.gerant,
+            opening_amount=Decimal("0.00"), exchange_rate=Decimal("2800.00"),
+        )
+        self._vente("999999", gym=self.voisine, registre=registre_voisin)
+
+        self.assertEqual(self._lignes("encaissements"), [])
+
+    # --- Le tri ----------------------------------------------------------------------
+
+    def test_the_newest_comes_first(self):
+        aujourd_hui = timezone.localdate()
+        matin = self._vente("10000", motif="Matin")
+        soir = self._vente("20000", motif="Soir")
+        self._a_heure(matin, aujourd_hui, 9)
+        self._a_heure(soir, aujourd_hui, 15)
+
+        lignes = self._lignes("encaissements", period="year")
+
+        self.assertEqual([l.description for l in lignes], ["Soir", "Matin"])
+
+    def test_sorting_by_amount(self):
+        self._vente("10000", motif="Petit")
+        self._vente("90000", motif="Gros")
+
+        lignes = self._lignes("encaissements", enc_tri="-montant")
+
+        self.assertEqual(lignes[0].description, "Gros")
+
+    def test_clicking_the_sorted_column_reverses_it(self):
+        liste = self._page(enc_tri="-montant").context["operations_periode"]["encaissements"]
+
+        self.assertIn("enc_tri=montant", liste["tri_montant"])
+
+    def test_an_unknown_sort_falls_back_to_the_date(self):
+        # L'URL est modifiable a la main : order_by ne recoit jamais n'importe
+        # quoi.
+        liste = self._page(enc_tri="drop_table").context["operations_periode"]["encaissements"]
+
+        self.assertEqual(liste["tri"], "-date")
+
+    # --- La pagination ----------------------------------------------------------------
+
+    def test_twenty_five_lines_a_page(self):
+        for index in range(30):
+            self._vente(str(1000 + index), motif=f"Vente {index}")
+
+        self.assertEqual(len(self._lignes("encaissements")), 25)
+        self.assertEqual(len(self._lignes("encaissements", enc_page=2)), 5)
+
+    def test_the_total_covers_every_page(self):
+        for index in range(30):
+            self._vente("1000")
+
+        bilan = self._page(enc_page=2).context["bilan_periode"]
+
+        self.assertEqual(bilan["encaissements"], Decimal("30000.00"))
+
+    def test_turning_one_page_keeps_the_rest_of_the_view(self):
+        # Tourner la page des encaissements ne remet a zero ni le tri des
+        # decaissements, ni la periode, ni la vue.
+        for index in range(30):
+            self._vente("1000")
+
+        liste = self._page(period="year", dec_tri="montant").context["operations_periode"]["encaissements"]
+
+        self.assertIn("enc_page=2", liste["suivante"])
+        self.assertIn("dec_tri=montant", liste["suivante"])
+        self.assertIn("period=year", liste["suivante"])
+        self.assertIn("view=analytics", liste["suivante"])
+        self.assertTrue(liste["suivante"].endswith("#operations"))
+
+    def test_the_open_tab_is_remembered(self):
+        reponse = self._page(onglet="decaissements")
+
+        self.assertEqual(reponse.context["operations_periode"]["onglet"], "decaissements")
+        self.assertContains(reponse, 'tab-pane fade show active"\n                             id="liste-decaissements"')
+
+    def test_an_unknown_tab_opens_the_takings(self):
+        reponse = self._page(onglet="nimporte")
+
+        self.assertEqual(reponse.context["operations_periode"]["onglet"], "encaissements")

@@ -200,6 +200,25 @@ html.app-skin-dark {
     border-left: 3px solid var(--royal-or);
 }
 
+/*
+ * La bulle ne capte jamais le curseur : posee sous la souris, elle retirait le
+ * survol a son element, se refermait, puis revenait - elle clignotait. Le
+ * theme ecrit aussi ses bulles en majuscules de 10 px, illisibles pour une
+ * definition de trois lignes.
+ */
+.tooltip.aide-bulle {
+    pointer-events: none;
+    font-size: 12px;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+.tooltip.aide-bulle .tooltip-inner {
+    text-transform: none;
+    letter-spacing: normal;
+}
+
 .tooltip.aide-bulle .tooltip-arrow::before {
     border-top-color: #14120C;
     border-bottom-color: #14120C;

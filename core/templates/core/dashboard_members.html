@@ -571,29 +571,140 @@
                         </div>
                     </div>
 
-                    <div class="d-flex flex-wrap gap-3 mt-3 fs-12 text-muted">
-                        {% for ligne in bilan_periode.par_methode %}
-                            <span><strong>{{ ligne.label }}</strong> : {{ ligne.total|montant }} CDF</span>
-                        {% endfor %}
-                        {% if bilan_periode.apports %}
-                            <span class="aide" title="De l'argent mis dans les caisses, qui n'est pas une recette : il n'entre ni dans les encaissements ni dans le resultat.">
-                                <strong>Apports en caisse</strong> : {{ bilan_periode.apports|montant }} CDF
-                            </span>
-                        {% endif %}
-                    </div>
-
-                    {% if bilan_periode.motifs %}
-                    <div class="d-flex flex-wrap gap-3 mt-2 fs-12 text-muted">
-                        <span class="fw-semibold">Sorties :</span>
-                        {% for ligne in bilan_periode.motifs %}
-                            <span>{{ ligne.motif }} <strong class="ton-neutre">{{ ligne.montant|montant }}</strong></span>
-                        {% endfor %}
-                        {% if bilan_periode.autres_sorties %}
-                            <a href="{% url 'pos:expense_register' %}" class="text-muted">et {{ bilan_periode.autres_sorties }} autre{{ bilan_periode.autres_sorties|pluralize }}</a>
-                        {% endif %}
+                    {% if bilan_periode.apports %}
+                    <div class="fs-12 text-muted mt-3">
+                        <span class="aide" title="De l'argent mis dans les caisses, qui n'est pas une recette : il n'entre ni dans les encaissements ni dans le resultat.">
+                            <strong>Apports en caisse</strong> : {{ bilan_periode.apports|montant }} CDF
+                        </span>
                     </div>
                     {% endif %}
                 </div>
+
+                {% if operations_periode %}
+                {% comment %} Le detail derriere les chiffres : chaque encaissement que la
+                   grille additionne, chaque decaissement avec ce qui en est revenu. Les
+                   lignes de resume par methode et par motif ont laisse leur place a ce
+                   tableau, qui dit la meme chose en entier. {% endcomment %}
+                <div class="card-body pt-0" id="operations">
+                    <ul class="nav nav-tabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link {% if operations_periode.onglet == "encaissements" %}active{% endif %}"
+                                    id="onglet-encaissements" data-bs-toggle="tab" data-bs-target="#liste-encaissements"
+                                    type="button" role="tab" aria-controls="liste-encaissements"
+                                    aria-selected="{% if operations_periode.onglet == "encaissements" %}true{% else %}false{% endif %}">
+                                Encaissements
+                                <span class="badge bg-light text-muted border ms-1">{{ operations_periode.encaissements.page.paginator.count }}</span>
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link {% if operations_periode.onglet == "decaissements" %}active{% endif %}"
+                                    id="onglet-decaissements" data-bs-toggle="tab" data-bs-target="#liste-decaissements"
+                                    type="button" role="tab" aria-controls="liste-decaissements"
+                                    aria-selected="{% if operations_periode.onglet == "decaissements" %}true{% else %}false{% endif %}">
+                                Decaissements
+                                <span class="badge bg-light text-muted border ms-1">{{ operations_periode.decaissements.page.paginator.count }}</span>
+                            </button>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content pt-3">
+                        <div class="tab-pane fade {% if operations_periode.onglet == "encaissements" %}show active{% endif %}"
+                             id="liste-encaissements" role="tabpanel" aria-labelledby="onglet-encaissements">
+                            {% with liste=operations_periode.encaissements %}
+                            <div class="d-flex flex-wrap justify-content-between gap-2 mb-2 fs-12 text-muted">
+                                <span>Total : <strong class="ton-normal">{{ bilan_periode.encaissements|montant }} CDF</strong></span>
+                                <span>Page {{ liste.page.number }} sur {{ liste.page.paginator.num_pages }}</span>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th class=""><a href="{{ liste.tri_date }}" class="text-reset text-decoration-none">Date{% if liste.tri == '-date' %} &darr;{% elif liste.tri == 'date' %} &uarr;{% endif %}</a></th>
+                                            <th>Operation</th>
+                                            <th>Categorie</th>
+                                            <th>Methode</th>
+                                            <th class="text-end"><a href="{{ liste.tri_montant }}" class="text-reset text-decoration-none">Montant{% if liste.tri == '-montant' %} &darr;{% elif liste.tri == 'montant' %} &uarr;{% endif %}</a></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for paiement in liste.page %}
+                                        <tr>
+                                            <td class="fs-12 text-nowrap">{{ paiement.created_at|date:"d/m/Y H:i" }}</td>
+                                            <td>
+                                                {% if paiement.member %}{{ paiement.member.first_name }} {{ paiement.member.last_name }}{% else %}Vente au comptoir{% endif %}
+                                                {% if paiement.description %}<div class="fs-11 text-muted">{{ paiement.description }}</div>{% endif %}
+                                            </td>
+                                            <td class="fs-12">{{ paiement.get_category_display }}</td>
+                                            <td class="fs-12">{{ paiement.get_method_display }}</td>
+                                            <td class="text-end text-nowrap ton-normal">{{ paiement.amount_cdf|montant }} CDF</td>
+                                        </tr>
+                                        {% empty %}
+                                        <tr><td colspan="5" class="text-center text-muted py-4">Aucun encaissement sur cette periode.</td></tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% if liste.page.paginator.num_pages > 1 %}
+                            <nav class="d-flex justify-content-between align-items-center mt-2" aria-label="Pages des encaissements">
+                                {% if liste.precedente %}<a href="{{ liste.precedente }}" class="btn btn-sm btn-light">&larr; Precedente</a>{% else %}<span></span>{% endif %}
+                                <span class="fs-12 text-muted">{{ liste.page.start_index }}-{{ liste.page.end_index }} sur {{ liste.page.paginator.count }}</span>
+                                {% if liste.suivante %}<a href="{{ liste.suivante }}" class="btn btn-sm btn-light">Suivante &rarr;</a>{% else %}<span></span>{% endif %}
+                            </nav>
+                            {% endif %}
+                            {% endwith %}
+                        </div>
+
+                        <div class="tab-pane fade {% if operations_periode.onglet == "decaissements" %}show active{% endif %}"
+                             id="liste-decaissements" role="tabpanel" aria-labelledby="onglet-decaissements">
+                            {% with liste=operations_periode.decaissements %}
+                            <div class="d-flex flex-wrap justify-content-between gap-2 mb-2 fs-12 text-muted">
+                                <span class="aide" title="Le total net : les sorties de la periode, moins l'argent revenu en caisse sur ces depenses. C'est le chiffre de la grille.">Total net : <strong class="ton-neutre">{{ bilan_periode.decaissements|montant }} CDF</strong></span>
+                                <span>Page {{ liste.page.number }} sur {{ liste.page.paginator.num_pages }}</span>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th class=""><a href="{{ liste.tri_date }}" class="text-reset text-decoration-none">Date{% if liste.tri == '-date' %} &darr;{% elif liste.tri == 'date' %} &uarr;{% endif %}</a></th>
+                                            <th>Motif</th>
+                                            <th>Categorie</th>
+                                            <th>Saisi par</th>
+                                            <th class="text-end"><a href="{{ liste.tri_montant }}" class="text-reset text-decoration-none">Montant{% if liste.tri == '-montant' %} &darr;{% elif liste.tri == 'montant' %} &uarr;{% endif %}</a></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for sortie in liste.page %}
+                                        <tr>
+                                            <td class="fs-12 text-nowrap">{{ sortie.created_at|date:"d/m/Y H:i" }}</td>
+                                            <td>{{ sortie.description|default:"Sans motif" }}</td>
+                                            <td class="fs-12">{{ sortie.get_category_display }}</td>
+                                            <td class="fs-12">{% if sortie.created_by %}{{ sortie.created_by.get_full_name|default:sortie.created_by.username }}{% else %}-{% endif %}</td>
+                                            <td class="text-end text-nowrap">
+                                                <span class="ton-neutre">-{{ sortie.amount_cdf|montant }} CDF</span>
+                                                {% if sortie.rendu_cdf %}
+                                                    <div class="fs-11 ton-normal">{{ sortie.rendu_cdf|montant }} rendus</div>
+                                                    <div class="fs-11 text-muted">net {{ sortie.net_cdf|montant }}</div>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% empty %}
+                                        <tr><td colspan="5" class="text-center text-muted py-4">Aucun decaissement sur cette periode.</td></tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% if liste.page.paginator.num_pages > 1 %}
+                            <nav class="d-flex justify-content-between align-items-center mt-2" aria-label="Pages des decaissements">
+                                {% if liste.precedente %}<a href="{{ liste.precedente }}" class="btn btn-sm btn-light">&larr; Precedente</a>{% else %}<span></span>{% endif %}
+                                <span class="fs-12 text-muted">{{ liste.page.start_index }}-{{ liste.page.end_index }} sur {{ liste.page.paginator.count }}</span>
+                                {% if liste.suivante %}<a href="{{ liste.suivante }}" class="btn btn-sm btn-light">Suivante &rarr;</a>{% else %}<span></span>{% endif %}
+                            </nav>
+                            {% endif %}
+                            {% endwith %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>

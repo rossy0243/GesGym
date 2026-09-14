@@ -649,27 +649,8 @@ def _bilan_de_periode(gym, period_data):
         gym=gym, is_closed=True, closed_at__date__range=(debut, fin)
     ).aggregate(total=Sum("difference"))["total"] or zero
 
-    libelles = dict(Payment.PAYMENT_METHODS)
-    par_methode = [
-        {
-            "code": ligne["method"],
-            "label": libelles.get(ligne["method"], ligne["method"]),
-            "total": ligne["total"],
-        }
-        for ligne in recettes.values("method")
-        .annotate(total=Sum("amount_cdf"))
-        .order_by("-total")
-        if ligne["total"]
-    ]
-
-    motifs = [
-        {
-            "motif": (sortie.description or "").strip() or "Sans motif",
-            "montant": sortie.montant_net,
-        }
-        for sortie in sorties.order_by("-amount_cdf")[:MOTIFS_AFFICHES]
-    ]
-
+    # Plus de resume par methode ni de liste des plus grosses sorties : le
+    # tableau des operations, juste en dessous, les detaille ligne a ligne.
     return {
         "encaissements": encaissements,
         "encaissements_precedents": encaissements_precedents,
@@ -682,10 +663,119 @@ def _bilan_de_periode(gym, period_data):
         "apports": apports,
         "ecart": ecart,
         "a_un_ecart": ecart != zero,
-        "par_methode": par_methode,
-        "motifs": motifs,
-        "autres_sorties": max(sorties.count() - MOTIFS_AFFICHES, 0),
         "nombre_encaissements": recettes.count(),
+    }
+
+
+
+# Assez de lignes pour lire une semaine d'un coup, assez peu pour que la grille
+# reste une grille, meme sur une annee.
+OPERATIONS_PAR_PAGE = 25
+
+# Les tris proposes. Un parametre inconnu retombe sur le premier : l'URL est
+# modifiable a la main, et order_by ne doit jamais recevoir n'importe quoi.
+TRIS_OPERATIONS = {
+    "-date": ("-created_at", "-id"),
+    "date": ("created_at", "id"),
+    "-montant": ("-amount_cdf", "-created_at"),
+    "montant": ("amount_cdf", "created_at"),
+}
+
+
+def _lien_operations(request, **changements):
+    """
+    L'adresse de la meme page, un parametre change.
+
+    Tourner la page des decaissements ne doit pas remettre a zero le tri des
+    encaissements, ni la periode choisie, ni la vue : on part de la requete
+    courante et on ne touche qu'a ce qui change.
+    """
+    parametres = request.GET.copy()
+    for cle, valeur in changements.items():
+        parametres[cle] = str(valeur)
+    return f"?{parametres.urlencode()}#operations"
+
+
+def _liste_paginee(request, requete, prefixe, onglet):
+    tri = request.GET.get(f"{prefixe}_tri", "-date")
+    if tri not in TRIS_OPERATIONS:
+        tri = "-date"
+
+    page = Paginator(
+        requete.order_by(*TRIS_OPERATIONS[tri]), OPERATIONS_PAR_PAGE
+    ).get_page(request.GET.get(f"{prefixe}_page"))
+
+    def _lien_tri(colonne):
+        # Cliquer sur la colonne deja triee inverse le sens, comme partout.
+        suivant = colonne if tri == f"-{colonne}" else f"-{colonne}"
+        return _lien_operations(
+            request, **{f"{prefixe}_tri": suivant, f"{prefixe}_page": 1, "onglet": onglet}
+        )
+
+    def _lien_page(numero):
+        return _lien_operations(
+            request, **{f"{prefixe}_page": numero, "onglet": onglet}
+        )
+
+    return {
+        "page": page,
+        "tri": tri,
+        "tri_date": _lien_tri("date"),
+        "tri_montant": _lien_tri("montant"),
+        "precedente": _lien_page(page.previous_page_number()) if page.has_previous() else "",
+        "suivante": _lien_page(page.next_page_number()) if page.has_next() else "",
+    }
+
+
+def _operations_de_periode(request, gym, period_data):
+    """
+    Les mouvements de la periode, ligne a ligne.
+
+    Les encaissements sont exactement ceux que la grille additionne - les
+    recettes, sans les retours ni les apports. Les decaissements portent ce qui
+    est revenu sur chacun : la grille compte le net, le tableau doit permettre
+    de le retrouver.
+    """
+    paiements = Payment.objects.filter(
+        gym=gym,
+        created_at__date__range=(period_data["start_date"], period_data["end_date"]),
+    )
+
+    encaissements = _liste_paginee(
+        request,
+        paiements.recettes().select_related("member"),
+        "enc",
+        "encaissements",
+    )
+
+    decaissements = _liste_paginee(
+        request,
+        paiements.sorties()
+        .select_related("created_by")
+        .annotate(
+            rendu=Sum("refunds__amount_cdf", filter=Q(refunds__status="success"))
+        ),
+        "dec",
+        "decaissements",
+    )
+
+    # La page est evaluee une fois : sans cela, le gabarit relancerait la
+    # requete et perdrait le net calcule ici.
+    sorties = list(decaissements["page"].object_list)
+    zero = Decimal("0.00")
+    for sortie in sorties:
+        sortie.rendu_cdf = sortie.rendu or zero
+        sortie.net_cdf = sortie.amount_cdf - sortie.rendu_cdf
+    decaissements["page"].object_list = sorties
+
+    onglet = request.GET.get("onglet")
+    if onglet not in {"encaissements", "decaissements"}:
+        onglet = "encaissements"
+
+    return {
+        "encaissements": encaissements,
+        "decaissements": decaissements,
+        "onglet": onglet,
     }
 
 
@@ -2206,6 +2296,13 @@ def gym_dashboard(request, gym_id):
         if user_role in DASHBOARD_SALES_ROLES
         else None
     )
+    # Le detail n'est calcule que pour la vue qui l'affiche : la vue d'ensemble
+    # n'a pas a payer deux listes paginees qu'elle ne montre pas.
+    operations_periode = (
+        _operations_de_periode(request, gym, period_data)
+        if view == "analytics" and user_role in DASHBOARD_SALES_ROLES
+        else None
+    )
     refus_repetes = _refus_repetes(gym, today)
     # Les alertes arrivent en dernier : elles lisent la caisse, les acces, le
     # parc et le stock, et ne peuvent donc se calculer qu'apres eux.
@@ -2268,6 +2365,7 @@ def gym_dashboard(request, gym_id):
         "today_unique_visitors": today_unique_visitors,
         "caisse": tableau_de_caisse,
         "bilan_periode": bilan_periode,
+        "operations_periode": operations_periode,
         "refus_repetes": refus_repetes,
         "expiry_2_days": expiry_2_days,
         "alertes_urgentes": alertes_urgentes,
