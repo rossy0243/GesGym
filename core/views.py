@@ -358,9 +358,10 @@ def _tableau_de_caisse(gym, today):
     autres_sorties = max(sorties.count() - MOTIFS_AFFICHES, 0)
 
     # Les gestes offerts : des lignes a zero, dont seule la valeur parle.
+    # Un geste annule ne compte plus : la ligne reste, la valeur part.
     offerts = Payment.objects.filter(
         cash_register__in=sessions, gym=gym
-    ).offerts().aggregate(nombre=Count("id"), valeur=Sum("valeur_offerte_cdf"))
+    ).offerts_valides().aggregate(nombre=Count("id"), valeur=Sum("valeur_offerte_cdf"))
 
     libelles = dict(Payment.PAYMENT_METHODS)
     totaux_methode = {code: zero for code in libelles}
@@ -840,7 +841,7 @@ def _operations_de_periode(request, gym, period_data):
         "off",
         "offerts",
     )
-    valeur_offerte = paiements.offerts().aggregate(
+    valeur_offerte = paiements.offerts_valides().aggregate(
         total=Sum("valeur_offerte_cdf")
     )["total"] or Decimal("0.00")
 

@@ -25,6 +25,7 @@ from core.audit import log_sensitive_action
 from .models import CashRegister, ExchangeRate, Payment
 from . import validation
 from .services import (
+    annuler_geste_offert,
     record_cash_injection,
     record_expense,
     record_expense_refund,
@@ -312,10 +313,25 @@ def cashier_dashboard(request):
         non_cash_balance = 0
         has_negative_cash = False
 
+    peut_offrir = has_role(request, SETTINGS_ORGANIZATION_ROLES)
+    # Les gestes du jour, toutes caisses confondues : celui qui offre n'a pas
+    # forcement de caisse a lui, et doit pouvoir se relire - et se corriger.
+    gestes_offerts = (
+        Payment.objects.filter(
+            gym=gym, offert=True, status="success",
+            created_at__date=timezone.localdate(),
+        )
+        .select_related("member", "product")
+        .order_by("-created_at")
+        if peut_offrir
+        else []
+    )
+
     return render(
         request,
         "pos/cashier.html",
         {
+            "gestes_offerts": gestes_offerts,
             "plans": plans,
             "products": products,
             "payments": payments,
@@ -326,9 +342,42 @@ def cashier_dashboard(request):
             "non_cash_balance": non_cash_balance,
             "has_negative_cash": has_negative_cash,
             "latest_exchange_rate": latest_exchange_rate,
-            "peut_offrir": has_role(request, SETTINGS_ORGANIZATION_ROLES),
+            "peut_offrir": peut_offrir,
         },
     )
+
+
+@login_required
+@role_required(POS_CASHIER_ROLES)
+@module_required("POS")
+@require_POST
+def annuler_offert(request, payment_id):
+    """Annule un geste offert du jour. Proprietaire seul, motif obligatoire."""
+    if not has_role(request, SETTINGS_ORGANIZATION_ROLES):
+        raise PermissionDenied
+
+    paiement = get_object_or_404(Payment, id=payment_id, gym=request.gym, offert=True)
+    motif = (request.POST.get("motif") or "").strip()
+
+    try:
+        annuler_geste_offert(paiement, motif, par=request.user)
+    except ValidationError as exc:
+        messages.error(request, _validation_message(exc))
+        return redirect("pos:cashier_dashboard")
+
+    log_sensitive_action(
+        request,
+        "pos.gift_cancelled",
+        "Payment",
+        paiement.description or f"paiement-{paiement.id}",
+        metadata={
+            "payment_id": paiement.id,
+            "motif": motif,
+            "valeur": str(paiement.valeur_offerte_cdf),
+        },
+    )
+    messages.success(request, "Geste offert annule.")
+    return redirect("pos:cashier_dashboard")
 
 
 @login_required

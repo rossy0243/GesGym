@@ -356,6 +356,69 @@
     </div>
     {% endif %}
 
+    {% if peut_offrir %}
+    {% comment %} Le proprietaire n'a pas de caisse a lui : ses gestes offerts
+       n'apparaitraient nulle part chez lui. Ils ont donc leur carte, ou il peut
+       les annuler le jour meme. {% endcomment %}
+    <div class="card cashier-table-card mb-3">
+        <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <h5 class="card-title mb-0 d-flex align-items-center gap-2">
+                <span class="material-icons">card_giftcard</span>
+                Gestes offerts aujourd'hui
+            </h5>
+            {% if gestes_offerts %}
+            <span class="badge bg-light text-dark">{{ gestes_offerts|length }}</span>
+            {% endif %}
+        </div>
+        <div class="card-body custom-card-action p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Heure</th>
+                            <th>Beneficiaire</th>
+                            <th>Operation</th>
+                            <th>Motif</th>
+                            <th class="text-end">Valeur</th>
+                            <th class="text-end">Annuler</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for geste in gestes_offerts %}
+                        <tr>
+                            <td>{{ geste.created_at|date:"H:i" }}</td>
+                            <td>{% if geste.member %}{{ geste.member.first_name }} {{ geste.member.last_name }}{% elif geste.beneficiaire %}{{ geste.beneficiaire }}{% else %}Non precise{% endif %}</td>
+                            <td>{{ geste.description }}</td>
+                            <td class="text-muted">{{ geste.motif_offert|default:"-" }}</td>
+                            <td class="text-end">{{ geste.valeur_offerte_cdf }} CDF</td>
+                            <td class="text-end">
+                                {% if geste.annule_le %}
+                                    <span class="badge bg-secondary">Annulé</span>
+                                    <small class="text-muted d-block">{{ geste.motif_annulation }}</small>
+                                {% elif geste.annulable %}
+                                <form method="post" action="{% url 'pos:annuler_offert' geste.id %}"
+                                      class="d-inline-flex gap-1 align-items-center justify-content-end"
+                                      onsubmit="return confirm('Annuler ce geste offert ?');">
+                                    {% csrf_token %}
+                                    <input type="text" name="motif" class="form-control form-control-sm"
+                                           style="max-width:160px;" placeholder="Motif" required>
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">Annuler</button>
+                                </form>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="6" class="text-center text-muted py-4">Aucun geste offert aujourd'hui.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <div class="card cashier-table-card">
         <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
             <h5 class="card-title mb-0 d-flex align-items-center gap-2">
@@ -494,6 +557,12 @@
                                 <div class="fw-semibold montant-mouvement">
                                     {% if payment.type == 'out' %}&minus;{% else %}+{% endif %}{{ payment.amount }} {{ payment.currency }}
                                 </div>
+                                {% if payment.offert %}
+                                    <span class="badge bg-info text-dark">Offert</span>
+                                    <small class="text-muted d-block">valeur {{ payment.valeur_offerte_cdf }} CDF</small>
+                                    {% if payment.motif_offert %}<small class="text-muted d-block">{{ payment.motif_offert }}</small>{% endif %}
+                                    {% if payment.annule_le %}<span class="badge bg-secondary">Annulé</span>{% endif %}
+                                {% endif %}
                                 <small class="text-muted d-block">{{ payment.amount_cdf }} CDF comptable</small>
                                 {% if payment.amount_usd %}
                                     <small class="d-block text-muted">Référence : {{ payment.amount_usd }} USD</small>

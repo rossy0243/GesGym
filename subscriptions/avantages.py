@@ -119,6 +119,44 @@ def crediter(subscription, par=None):
     ]
 
 
+@transaction.atomic
+def reprendre_kit(subscription, motif="", par=None):
+    """
+    Reprend le kit credite par une vente annulee.
+
+    Un article deja remis ne se reprend pas : la salle a livre la marchandise,
+    et ce qui est pris ne se reprend plus. L'annulation est alors refusee -
+    mieux vaut un geste qui reste qu'un solde qui ment.
+    """
+    deja_remis = BenefitMovement.objects.filter(
+        subscription=subscription, kind=BenefitMovement.KIND_REMISE
+    ).exists()
+    if deja_remis:
+        raise ValidationError(
+            "Des articles de ce kit ont deja ete remis au membre : ce geste ne "
+            "peut plus etre annule."
+        )
+
+    credits = BenefitMovement.objects.filter(
+        subscription=subscription, kind=BenefitMovement.KIND_CREDIT, cancellations__isnull=True
+    ).select_related("product", "member", "gym")
+
+    return [
+        BenefitMovement.objects.create(
+            gym=credit.gym,
+            member=credit.member,
+            product=credit.product,
+            quantity=-credit.quantity,
+            kind=BenefitMovement.KIND_ANNULATION,
+            subscription=subscription,
+            cancels=credit,
+            reason=(motif or "")[:255],
+            created_by=par,
+        )
+        for credit in credits
+    ]
+
+
 def solde(member, product):
     """Ce qu'il reste de cet article au membre : la somme de son journal."""
     return (

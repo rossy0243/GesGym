@@ -777,7 +777,13 @@
                                             <td class="fs-12 text-nowrap">{{ geste.created_at|date:"d/m/Y H:i" }}</td>
                                             <td>{% if geste.member %}{{ geste.member.first_name }} {{ geste.member.last_name }}{% elif geste.beneficiaire %}{{ geste.beneficiaire }}{% else %}Non precise{% endif %}</td>
                                             <td class="fs-12">{{ geste.description }}</td>
-                                            <td class="fs-12">{{ geste.motif_offert|default:"Sans motif" }}</td>
+                                            <td class="fs-12">
+                                                {{ geste.motif_offert|default:"Sans motif" }}
+                                                {% if geste.annule_le %}
+                                                    <div><span class="badge bg-secondary">Annulé</span>
+                                                    <span class="fs-11 text-muted">{{ geste.motif_annulation }}</span></div>
+                                                {% endif %}
+                                            </td>
                                             <td class="fs-12">{% if geste.created_by %}{{ geste.created_by.get_full_name|default:geste.created_by.username }}{% else %}-{% endif %}</td>
                                             <td class="text-end text-nowrap">{{ geste.valeur_offerte_cdf|montant }} CDF</td>
                                         </tr>

@@ -14,6 +14,7 @@ from subscriptions.models import MemberSubscription, SubscriptionPlan
 from .models import CashRegister, ExchangeRate, Payment
 from .views import MEMBER_SEARCH_LIMIT
 from .services import (
+    annuler_geste_offert,
     record_expense,
     record_expense_refund,
     record_payment,
@@ -2170,3 +2171,252 @@ class GestesOffertsTests(TestCase):
         self.assertEqual(operations["offerts"]["page"].paginator.count, 1)
         self.assertEqual(operations["encaissements"]["page"].paginator.count, 1)
         self.assertEqual(operations["valeur_offerte"], self.valeur_abonnement)
+
+
+
+class AnnulationGesteOffertTests(TestCase):
+    """Un geste offert par erreur se corrige le jour meme, et laisse sa trace."""
+
+    def setUp(self):
+        from subscriptions.models import BenefitMovement, SubscriptionOffer, OfferItem
+
+        self.BenefitMovement = BenefitMovement
+        self.organisation = Organization.objects.create(name="Org Annul", slug="org-annul")
+        self.gym = Gym.objects.create(
+            organization=self.organisation, name="Gym Annul",
+            slug="gym-annul", subdomain="gym-annul",
+        )
+        module, _ = Module.objects.get_or_create(code="POS", defaults={"name": "POS"})
+        GymModule.objects.get_or_create(gym=self.gym, module=module, defaults={"is_active": True})
+
+        self.proprietaire = User.objects.create_user(username="proprio-annul", password="pass12345")
+        UserGymRole.objects.create(user=self.proprietaire, gym=self.gym, role="owner", is_active=True)
+        self.caissiere = User.objects.create_user(username="caissiere-annul", password="pass12345")
+        UserGymRole.objects.create(user=self.caissiere, gym=self.gym, role="cashier", is_active=True)
+
+        self.membre = Member.objects.create(
+            gym=self.gym, first_name="Alice", last_name="Nzuzi", phone="+243880000001",
+        )
+        self.serviette = Product.objects.create(
+            gym=self.gym, name="Serviette", price=Decimal("5000.00"), currency="CDF", quantity=20,
+        )
+        self.eau = Product.objects.create(
+            gym=self.gym, name="Eau", price=Decimal("2000.00"), currency="CDF", quantity=10,
+        )
+        self.formule = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Premium", duration_days=30, price=Decimal("25.00"),
+        )
+        # La formule remet une serviette : le kit doit se reprendre avec le geste.
+        offre = SubscriptionOffer.objects.create(gym=self.gym, name="Kit Premium")
+        OfferItem.objects.create(offer=offre, product=self.serviette, quantity=1)
+        self.formule.offers.add(offre)
+
+        self.caisse = CashRegister.objects.create(
+            gym=self.gym, opened_by=self.caissiere,
+            opening_amount=Decimal("10000.00"), exchange_rate=Decimal("2800.00"),
+        )
+
+    def _connecter(self, utilisateur):
+        self.client.force_login(utilisateur)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _offrir_abonnement(self):
+        return record_subscription_payment(
+            gym=self.gym, member=self.membre, plan=self.formule, currency="USD",
+            method="cash", created_by=self.proprietaire, offert=True, motif="Champion",
+        )
+
+    def _offrir_produit(self, quantite=2):
+        return record_product_sale(
+            gym=self.gym, product=self.eau, quantity=quantite, currency="CDF",
+            method="cash", created_by=self.proprietaire, offert=True,
+            motif="Geste commercial", beneficiaire="Jean Passant",
+        )
+
+    # --- Le produit -------------------------------------------------------------------------------
+
+    def test_cancelling_a_product_gift_puts_it_back_in_stock(self):
+        paiement = self._offrir_produit()
+        self.eau.refresh_from_db()
+        self.assertEqual(self.eau.quantity, 8)
+
+        annuler_geste_offert(paiement, "Erreur de saisie", par=self.proprietaire)
+
+        self.eau.refresh_from_db()
+        self.assertEqual(self.eau.quantity, 10)
+        paiement.refresh_from_db()
+        self.assertIsNotNone(paiement.annule_le)
+        self.assertEqual(paiement.annule_par, self.proprietaire)
+        self.assertEqual(paiement.motif_annulation, "Erreur de saisie")
+
+    def test_the_stock_movement_says_it_was_a_cancellation(self):
+        paiement = self._offrir_produit()
+
+        annuler_geste_offert(paiement, "Erreur de saisie", par=self.proprietaire)
+
+        mouvement = StockMovement.objects.filter(product=self.eau).order_by("-id").first()
+        self.assertEqual(mouvement.movement_type, "in")
+        self.assertIn("Annulation", mouvement.reason)
+
+    # --- L'abonnement ------------------------------------------------------------------------------
+
+    def test_cancelling_a_subscription_gift_closes_the_access_and_takes_the_kit_back(self):
+        from subscriptions import avantages
+
+        abonnement, paiement = self._offrir_abonnement()
+        self.assertEqual(avantages.solde(self.membre, self.serviette), 1)
+
+        annuler_geste_offert(paiement, "Erreur de saisie", par=self.proprietaire)
+
+        abonnement.refresh_from_db()
+        self.assertFalse(abonnement.is_active)
+        self.assertEqual(avantages.solde(self.membre, self.serviette), 0)
+        self.membre.refresh_from_db()
+        self.assertIsNone(self.membre.active_subscription)
+
+    def test_a_kit_already_handed_over_blocks_the_cancellation(self):
+        from subscriptions import avantages
+
+        _, paiement = self._offrir_abonnement()
+        avantages.remettre(self.membre, self.serviette.id, 1, par=self.caissiere)
+
+        with self.assertRaises(ValidationError):
+            annuler_geste_offert(paiement, "Erreur de saisie", par=self.proprietaire)
+
+        paiement.refresh_from_db()
+        self.assertIsNone(paiement.annule_le)
+        self.assertTrue(paiement.subscription.is_active)
+
+    # --- Les garde-fous -----------------------------------------------------------------------------
+
+    def test_a_cancellation_needs_a_reason(self):
+        paiement = self._offrir_produit()
+
+        with self.assertRaises(ValidationError):
+            annuler_geste_offert(paiement, "   ", par=self.proprietaire)
+
+        self.eau.refresh_from_db()
+        self.assertEqual(self.eau.quantity, 8)
+
+    def test_a_gift_is_cancelled_only_once(self):
+        paiement = self._offrir_produit()
+        annuler_geste_offert(paiement, "Erreur", par=self.proprietaire)
+
+        with self.assertRaises(ValidationError):
+            annuler_geste_offert(paiement, "Encore", par=self.proprietaire)
+
+        self.eau.refresh_from_db()
+        self.assertEqual(self.eau.quantity, 10)
+
+    def test_yesterdays_gift_can_no_longer_be_cancelled(self):
+        paiement = self._offrir_produit()
+        Payment.objects.filter(pk=paiement.pk).update(
+            created_at=timezone.now() - timedelta(days=1)
+        )
+        paiement.refresh_from_db()
+
+        with self.assertRaises(ValidationError):
+            annuler_geste_offert(paiement, "Trop tard", par=self.proprietaire)
+
+        self.eau.refresh_from_db()
+        self.assertEqual(self.eau.quantity, 8)
+
+    def test_a_paid_sale_is_not_cancelled_here(self):
+        paiement = record_product_sale(
+            gym=self.gym, product=self.eau, quantity=1, currency="CDF",
+            method="cash", created_by=self.caissiere,
+        )
+
+        with self.assertRaises(ValidationError):
+            annuler_geste_offert(paiement, "Erreur", par=self.proprietaire)
+
+    # --- Les comptes ---------------------------------------------------------------------------------
+
+    def test_a_cancelled_gift_no_longer_counts_but_stays_listed(self):
+        from core.views import _tableau_de_caisse
+
+        paiement = self._offrir_produit()
+        annuler_geste_offert(paiement, "Erreur", par=self.proprietaire)
+
+        caisse = _tableau_de_caisse(self.gym, timezone.localdate())
+
+        self.assertEqual(caisse["offerts"], 0)
+        self.assertEqual(caisse["valeur_offerte"], Decimal("0.00"))
+        self.assertEqual(Payment.objects.offerts().count(), 1)
+        self.assertEqual(Payment.objects.offerts_valides().count(), 0)
+
+    def test_the_period_lists_it_with_its_cancellation(self):
+        from django.test import RequestFactory
+
+        from core.views import _get_period_window, _operations_de_periode
+
+        paiement = self._offrir_produit()
+        annuler_geste_offert(paiement, "Erreur de saisie", par=self.proprietaire)
+
+        operations = _operations_de_periode(
+            RequestFactory().get("/"), self.gym,
+            _get_period_window("day", timezone.localdate()),
+        )
+
+        self.assertEqual(operations["offerts"]["page"].paginator.count, 1)
+        self.assertEqual(operations["valeur_offerte"], Decimal("0.00"))
+
+    # --- Le comptoir -----------------------------------------------------------------------------------
+
+    def test_the_owner_cancels_from_the_counter(self):
+        paiement = self._offrir_produit()
+        self._connecter(self.proprietaire)
+
+        reponse = self.client.post(
+            reverse("pos:annuler_offert", args=[paiement.id]), {"motif": "Erreur de saisie"}
+        )
+
+        self.assertEqual(reponse.status_code, 302)
+        paiement.refresh_from_db()
+        self.assertIsNotNone(paiement.annule_le)
+        self.assertTrue(
+            SensitiveActivityLog.objects.filter(action="pos.gift_cancelled").exists()
+        )
+
+    def test_a_cashier_cannot_cancel(self):
+        paiement = self._offrir_produit()
+        self._connecter(self.caissiere)
+
+        reponse = self.client.post(
+            reverse("pos:annuler_offert", args=[paiement.id]), {"motif": "Erreur"}
+        )
+
+        self.assertEqual(reponse.status_code, 403)
+        paiement.refresh_from_db()
+        self.assertIsNone(paiement.annule_le)
+
+    def test_the_counter_refuses_a_cancellation_without_a_reason(self):
+        paiement = self._offrir_produit()
+        self._connecter(self.proprietaire)
+
+        self.client.post(reverse("pos:annuler_offert", args=[paiement.id]), {"motif": ""})
+
+        paiement.refresh_from_db()
+        self.assertIsNone(paiement.annule_le)
+
+    def test_the_button_is_shown_on_todays_gift_only(self):
+        paiement = self._offrir_produit()
+        self._connecter(self.proprietaire)
+        adresse = reverse("pos:annuler_offert", args=[paiement.id])
+
+        self.assertContains(self.client.get(reverse("pos:cashier_dashboard")), adresse)
+
+        Payment.objects.filter(pk=paiement.pk).update(
+            created_at=timezone.now() - timedelta(days=1)
+        )
+        self.assertNotContains(self.client.get(reverse("pos:cashier_dashboard")), adresse)
+
+    def test_the_cashier_does_not_see_the_button(self):
+        paiement = self._offrir_produit()
+        self._connecter(self.caissiere)
+
+        reponse = self.client.get(reverse("pos:cashier_dashboard"))
+
+        self.assertNotContains(reponse, reverse("pos:annuler_offert", args=[paiement.id]))

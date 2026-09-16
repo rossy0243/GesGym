@@ -261,8 +261,17 @@ class PaymentQuerySet(models.QuerySet):
         return self.filter(type="out", status="success")
 
     def offerts(self):
-        """Les gestes offerts : un abonnement ou un produit donne, sans argent."""
+        """
+        Les gestes offerts, annulations comprises.
+
+        La liste les montre tous : une annulation fait partie de l'histoire de
+        la journee, l'effacer rendrait le journal incomprehensible.
+        """
         return self.filter(offert=True, status="success")
+
+    def offerts_valides(self):
+        """Les gestes offerts qui tiennent encore : eux seuls comptent."""
+        return self.offerts().filter(annule_le__isnull=True)
 
     def retours(self):
         """Les sommes revenues dans le tiroir apres un decaissement."""
@@ -431,6 +440,24 @@ class Payment(models.Model):
     # A qui, quand ce n'est pas un membre inscrit.
     beneficiaire = models.CharField(max_length=255, blank=True, default="")
 
+    # Combien d'articles : sans cette quantite, une annulation ne saurait pas
+    # ce qu'il faut remettre en stock.
+    quantite = models.PositiveIntegerField(null=True, blank=True)
+
+    # Un geste offert saisi par erreur s'annule le jour meme. La ligne reste,
+    # marquee : on ne reecrit pas les comptes d'une journee.
+    annule_le = models.DateTimeField(null=True, blank=True)
+
+    annule_par = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="gestes_offerts_annules",
+    )
+
+    motif_annulation = models.CharField(max_length=255, blank=True, default="")
+
     objects = PaymentQuerySet.as_manager()
 
     transaction_id = models.CharField(
@@ -478,6 +505,15 @@ class Payment(models.Model):
             models.Index(fields=["currency"]),
             models.Index(fields=["gym", "category"]),
         ]
+
+    @property
+    def annulable(self):
+        """Vrai tant que ce geste offert peut encore etre annule."""
+        from django.utils import timezone
+
+        if not self.offert or self.annule_le is not None or self.created_at is None:
+            return False
+        return timezone.localtime(self.created_at).date() == timezone.localdate()
 
     def clean(self):
         if not self.cash_register:

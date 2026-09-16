@@ -17,6 +17,10 @@ from .models import CashRegister, Payment, _money
 DELAI_DEBUT_FUTUR_MAX = 90
 
 
+# Ce que l'annulation ecrit dans le journal du stock.
+MOTIF_STOCK_ANNULATION_OFFERT = "Annulation d'un geste offert"
+
+
 def _to_decimal(value, field_label="Montant"):
     try:
         return Decimal(str(value or "0"))
@@ -90,6 +94,7 @@ def record_payment(
     valeur_offerte_cdf=None,
     motif_offert="",
     beneficiaire="",
+    quantite=None,
 ):
     register = register or get_open_register(gym, created_by)
     if register.gym_id != gym.id:
@@ -121,6 +126,7 @@ def record_payment(
         valeur_offerte_cdf=_to_decimal(valeur_offerte_cdf or 0, "Valeur offerte"),
         motif_offert=motif_offert,
         beneficiaire=beneficiaire,
+        quantite=quantite,
     )
 
 
@@ -363,6 +369,7 @@ def record_product_sale(
             valeur_offerte_cdf=valeur_offerte,
             motif_offert=motif if offert else "",
             beneficiaire=beneficiaire if offert else "",
+            quantite=quantity,
             created_by=created_by,
             source_app="products",
             source_model="Product",
@@ -521,3 +528,61 @@ def record_cash_injection(
         source_app="pos",
         source_model="CashInjection",
     )
+
+
+@transaction.atomic
+def annuler_geste_offert(payment, motif, par=None):
+    """
+    Annule un geste offert saisi par erreur : le jour meme, avec un motif.
+
+    Le produit revient en stock ; l'abonnement offert est desactive, son kit
+    repris et le lecteur prevenu. La ligne, elle, reste au journal, marquee
+    annulee : les comptes d'une journee ne se reecrivent pas.
+    """
+    payment = (
+        Payment.objects.select_for_update()
+        .select_related("product", "subscription", "member")
+        .get(pk=payment.pk)
+    )
+    motif = (motif or "").strip()
+
+    if not payment.offert:
+        raise ValidationError("Seul un geste offert s'annule ici.")
+    if payment.annule_le is not None:
+        raise ValidationError("Ce geste a deja ete annule.")
+    if not motif:
+        raise ValidationError(
+            "Le motif est obligatoire : une annulation corrige une erreur, elle "
+            "doit dire laquelle."
+        )
+    if timezone.localtime(payment.created_at).date() != timezone.localdate():
+        raise ValidationError(
+            "Un geste offert ne s'annule que le jour meme : passe ce delai, les "
+            "comptes du jour sont clos."
+        )
+
+    if payment.subscription_id is not None:
+        # Le kit d'abord : s'il a deja ete remis, rien ne doit bouger.
+        from subscriptions import avantages
+
+        avantages.reprendre_kit(payment.subscription, motif=motif, par=par)
+        MemberSubscription.objects.filter(pk=payment.subscription_id).update(is_active=False)
+
+    if payment.product_id is not None and payment.quantite:
+        produit = Product.objects.select_for_update().get(pk=payment.product_id)
+        produit.update_stock(payment.quantite, "in", MOTIF_STOCK_ANNULATION_OFFERT)
+
+    payment.annule_le = timezone.now()
+    payment.annule_par = par
+    payment.motif_annulation = motif[:255]
+    payment.save(update_fields=["annule_le", "annule_par", "motif_annulation"])
+
+    # Le lecteur porte ses propres dates : sans cela, l'abonnement annule
+    # ouvrirait encore la porte jusqu'a la prochaine synchronisation.
+    if payment.member_id is not None and payment.subscription_id is not None:
+        from access import enrollment
+
+        enrollment.propager(payment.member)
+
+    return payment
+
