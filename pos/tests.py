@@ -2323,6 +2323,28 @@ class AnnulationGesteOffertTests(TestCase):
         self.eau.refresh_from_db()
         self.assertEqual(self.eau.quantity, 8)
 
+    def test_the_lock_never_joins_an_optional_table(self):
+        # PostgreSQL refuse FOR UPDATE sur le cote possiblement NULL d'une
+        # jointure externe : verrouiller le paiement avec son produit, son
+        # abonnement ou son membre - tous facultatifs - faisait echouer
+        # l'annulation en production, la ou SQLite l'acceptait en test.
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        paiement = self._offrir_produit()
+
+        with CaptureQueriesContext(connection) as requetes:
+            annuler_geste_offert(paiement, "Erreur de saisie", par=self.proprietaire)
+
+        lectures = [
+            requete["sql"]
+            for requete in requetes.captured_queries
+            if requete["sql"].upper().startswith("SELECT") and "pos_payment" in requete["sql"]
+        ]
+        self.assertTrue(lectures)
+        for sql in lectures:
+            self.assertNotIn("LEFT OUTER JOIN", sql.upper())
+
     def test_a_paid_sale_is_not_cancelled_here(self):
         paiement = record_product_sale(
             gym=self.gym, product=self.eau, quantity=1, currency="CDF",

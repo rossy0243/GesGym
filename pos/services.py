@@ -539,11 +539,11 @@ def annuler_geste_offert(payment, motif, par=None):
     repris et le lecteur prevenu. La ligne, elle, reste au journal, marquee
     annulee : les comptes d'une journee ne se reecrivent pas.
     """
-    payment = (
-        Payment.objects.select_for_update()
-        .select_related("product", "subscription", "member")
-        .get(pk=payment.pk)
-    )
+    # Verrou sur la seule ligne de paiement. Y joindre le produit, l'abonnement
+    # ou le membre - tous facultatifs - produit une jointure externe, et
+    # PostgreSQL refuse de verrouiller le cote possiblement NULL d'une telle
+    # jointure. Les objets lies se chargent ensuite, sans verrou.
+    payment = Payment.objects.select_for_update().get(pk=payment.pk)
     motif = (motif or "").strip()
 
     if not payment.offert:
