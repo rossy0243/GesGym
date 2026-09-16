@@ -4949,9 +4949,11 @@ class StaffTodayOnDashboardTests(TestCase):
         self.assertEqual(self.client.get(self.url).context["personnel_today"], 0)
 
     def test_the_line_appears_in_the_activity_block(self):
+        # La ligne vit desormais dans la carte du detail des passages, avec les
+        # invites et les ouvertures manuelles.
         self._passage(employee=self.employe)
 
-        self.assertContains(self.client.get(self.url), "Personnel passe : 1")
+        self.assertContains(self.client.get(self.url), "Passages du personnel : 1")
 
     def test_no_line_without_the_access_module(self):
         GymModule.objects.filter(gym=self.gym, module__code="ACCESS").update(is_active=False)
@@ -5514,3 +5516,96 @@ class RelecturesTests(TestCase):
             call_command("rattraper_passages", stdout=io.StringIO())
 
         self.assertEqual(AccessLog.objects.filter(member=self.member).count(), 1)
+
+
+
+class DetailDesPassagesTests(TestCase):
+    """
+    "Personnes differentes : 0 sur 1 passage" laissait croire a une erreur.
+
+    Chaque categorie est desormais nommee : membres, invites, personnel,
+    ouvertures manuelles.
+    """
+
+    def setUp(self):
+        from members.models import GuestPass
+
+        (self.gym, self.device, self.member, self.employe,
+         _) = _salle_avec_personnel("detail-passages")
+        self.GuestPass = GuestPass
+        self.gerant = User.objects.create_user(username="gerant-detail", password="pass12345")
+        UserGymRole.objects.create(user=self.gerant, gym=self.gym, role="manager", is_active=True)
+        self.client.force_login(self.gerant)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+        self.url = reverse("core:gym_dashboard", args=[self.gym.id])
+
+    def _carnet(self):
+        from members import invitations
+
+        plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Premium", price=50, duration_days=30,
+            guest_invites_per_month=2, guest_sessions_per_invite=2,
+        )
+        MemberSubscription.objects.create(
+            gym=self.gym, member=self.member, plan=plan,
+            start_date=timezone.localdate(),
+            end_date=timezone.localdate() + timedelta(days=30), is_active=True,
+        )
+        return invitations.emettre(self.member, "Paul Kabeya", "0820000001")
+
+    def _detail(self):
+        return self.client.get(self.url).context["passages_detail"]
+
+    def test_each_kind_of_passage_is_named(self):
+        carnet = self._carnet()
+        AccessLog.objects.create(gym=self.gym, member=self.member, access_granted=True)
+        AccessLog.objects.create(gym=self.gym, guest_pass=carnet, access_granted=True)
+        AccessLog.objects.create(gym=self.gym, employee=self.employe, access_granted=True)
+        AccessLog.objects.create(gym=self.gym, access_granted=True)
+
+        detail = self._detail()
+
+        self.assertEqual(detail["membres"], 1)
+        self.assertEqual(detail["invites"], 1)
+        self.assertEqual(detail["personnel"], 1)
+        self.assertEqual(detail["ouvertures"], 1)
+
+    def test_a_return_adds_nobody(self):
+        AccessLog.objects.create(gym=self.gym, member=self.member, access_granted=True)
+        AccessLog.objects.create(gym=self.gym, member=self.member, access_granted=True, is_return=True)
+
+        self.assertEqual(self._detail()["membres"], 1)
+
+    def test_a_refusal_is_not_an_entry(self):
+        AccessLog.objects.create(gym=self.gym, member=self.member, access_granted=False)
+
+        self.assertEqual(self._detail()["membres"], 0)
+
+    def test_a_quiet_day_says_so(self):
+        detail = self._detail()
+
+        self.assertEqual(detail["membres"], 0)
+        self.assertFalse(detail["autres"])
+        self.assertContains(self.client.get(self.url), "Aucun autre passage aujourd'hui")
+
+    def test_the_card_names_the_staff_passage(self):
+        # Le cas du client : un seul passage, celui d'un employe.
+        AccessLog.objects.create(gym=self.gym, employee=self.employe, access_granted=True)
+
+        reponse = self.client.get(self.url)
+
+        self.assertContains(reponse, "Membres différents")
+        self.assertContains(reponse, "Passages du personnel : 1")
+        self.assertNotContains(reponse, "Personnel passe :")
+
+    def test_the_card_names_guests_and_manual_openings(self):
+        carnet = self._carnet()
+        AccessLog.objects.create(gym=self.gym, guest_pass=carnet, access_granted=True)
+        AccessLog.objects.create(gym=self.gym, access_granted=True)
+
+        reponse = self.client.get(self.url)
+
+        self.assertContains(reponse, "Invités : 1")
+        self.assertContains(reponse, "Ouvertures manuelles : 1")

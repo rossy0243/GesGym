@@ -518,6 +518,37 @@ def _personnel_passe(gym, jour):
     return employes + fiches
 
 
+def _detail_des_passages(gym, jour, personnel):
+    """
+    Qui est entre aujourd'hui, par categorie.
+
+    "Personnes differentes : 0 sur 1 passage" laissait croire a une erreur : le
+    passage etait celui d'un employe, ou une ouverture manuelle. Nommer chaque
+    categorie repond a la question au lieu de la poser.
+
+    Chaque personne compte une fois : un retour dans la journee n'ajoute rien.
+    """
+    entrees = AccessLog.objects.filter(
+        gym=gym, check_in_time__date=jour, access_granted=True, is_return=False
+    )
+
+    membres = entrees.filter(member__isnull=False).values("member_id").distinct().count()
+    invites = entrees.filter(guest_pass__isnull=False).values("guest_pass_id").distinct().count()
+    # Ni membre, ni invite, ni personnel : un geste de l'equipe, qui n'identifie
+    # personne.
+    ouvertures = entrees.filter(
+        member__isnull=True, guest_pass__isnull=True, employee__isnull=True, terminal_label=""
+    ).count()
+
+    return {
+        "membres": membres,
+        "invites": invites,
+        "ouvertures": ouvertures,
+        "personnel": personnel or 0,
+        "autres": bool(invites or ouvertures or personnel),
+    }
+
+
 def _refus_repetes(gym, today, seuil=3):
     """
     Les personnes a qui la porte s'est fermee plusieurs fois aujourd'hui.
@@ -2158,6 +2189,7 @@ def gym_dashboard(request, gym_id):
     personnel_today = (
         _personnel_passe(gym, today) if "ACCESS" in active_modules else None
     )
+    passages_detail = _detail_des_passages(gym, today, personnel_today)
     denied_today = AccessLog.objects.filter(
         gym=gym,
         check_in_time__date=today,
@@ -2487,6 +2519,7 @@ def gym_dashboard(request, gym_id):
         "today_checkins": today_checkins,
         "today_unique_visitors": today_unique_visitors,
         "personnel_today": personnel_today,
+        "passages_detail": passages_detail,
         "caisse": tableau_de_caisse,
         "bilan_periode": bilan_periode,
         "operations_periode": operations_periode,

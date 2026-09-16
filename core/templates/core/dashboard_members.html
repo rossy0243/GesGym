@@ -386,10 +386,9 @@
                           title="Chaque passage compte une fois. Un retour le meme jour n'est pas recompte. Ce n'est pas le nombre de personnes presentes en ce moment : aucune sortie n'est enregistree.">Passages aujourd'hui</span>
                     <div class="chiffre-cle">{{ today_checkins }}</div>
                     <div class="fs-12 text-muted">Refuses : {{ denied_today }}</div>
-                    {% if personnel_today is not None %}
-                    <span class="fs-12 text-muted aide"
-                          title="Employes et fiches creees sur le terminal, entres aujourd'hui, chacun compte une fois. Ils ne comptent pas dans les passages des membres.">Personnel passe : {{ personnel_today }}</span>
-                    {% endif %}
+                    {% comment %} Le personnel a sa ligne dans la carte voisine, avec le
+                       reste du detail : le repeter ici ferait lire deux fois le meme
+                       chiffre. {% endcomment %}
                 </div>
             </div>
         </div>
@@ -397,9 +396,14 @@
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted aide"
-                          title="Personnes differentes entrees aujourd'hui : membres et invites. Une ouverture manuelle n'identifie personne et n'est pas comptee ici.">Personnes differentes</span>
-                    <div class="chiffre-cle">{{ today_unique_visitors }}</div>
-                    <div class="fs-12 text-muted">sur {{ today_checkins }} passage{{ today_checkins|pluralize }}</div>
+                          title="Membres differents entres aujourd'hui, chacun compte une fois. Ce qui entre par la meme porte sans etre un membre - invites, personnel, ouvertures manuelles - est nomme en dessous.">Membres différents</span>
+                    <div class="chiffre-cle">{{ passages_detail.membres }}</div>
+                    <div class="fs-12 text-muted">
+                        {% if passages_detail.invites %}Invités : {{ passages_detail.invites }}<br>{% endif %}
+                        {% if passages_detail.personnel %}Passages du personnel : {{ passages_detail.personnel }}<br>{% endif %}
+                        {% if passages_detail.ouvertures %}Ouvertures manuelles : {{ passages_detail.ouvertures }}{% endif %}
+                        {% if not passages_detail.autres %}Aucun autre passage aujourd'hui{% endif %}
+                    </div>
                 </div>
             </div>
         </div>
