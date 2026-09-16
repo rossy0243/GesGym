@@ -43,8 +43,10 @@ class RhTenantTests(TestCase):
         GymModule.objects.create(gym=self.gym_a, module=module, is_active=True)
         GymModule.objects.create(gym=self.gym_b, module=module, is_active=True)
 
-        self.user = User.objects.create_user(username="rh-manager", password="test-pass")
-        UserGymRole.objects.create(user=self.user, gym=self.gym_a, role="manager")
+        # La paie est reservee au proprietaire : c'est donc lui qui mene ces
+        # tests, qui couvrent surtout les bulletins et les paiements.
+        self.user = User.objects.create_user(username="rh-proprietaire", password="test-pass")
+        UserGymRole.objects.create(user=self.user, gym=self.gym_a, role="owner")
         self.register_a = CashRegister.objects.create(
             gym=self.gym_a,
             opened_by=self.user,
@@ -85,7 +87,7 @@ class RhTenantTests(TestCase):
             amount=999,
             present_days=1,
         )
-        self.client.login(username="rh-manager", password="test-pass")
+        self.client.login(username="rh-proprietaire", password="test-pass")
 
     def test_employee_list_is_scoped_to_current_gym(self):
         response = self.client.get(reverse("rh:list"))
@@ -538,3 +540,114 @@ class RhTenantTests(TestCase):
             fetch_redirect_response=False,
         )
         self.assertTrue(PayrollContributionRule.objects.filter(gym=self.gym_a, name="CNSS").exists())
+
+
+
+class PaieReserveeAuProprietaireTests(TestCase):
+    """
+    La paie appartient au proprietaire.
+
+    Le gerant continue de tenir les employes et les presences : c'est le
+    travail quotidien de la salle. Mais l'argent des salaires sort de la poche
+    du proprietaire, et lui seul le decide.
+    """
+
+    def setUp(self):
+        self.organisation = Organization.objects.create(name="Org Paie", slug="org-paie")
+        self.gym = Gym.objects.create(
+            organization=self.organisation, name="Gym Paie",
+            slug="gym-paie", subdomain="gym-paie",
+        )
+        module, _ = Module.objects.get_or_create(code="RH", defaults={"name": "RH"})
+        GymModule.objects.get_or_create(gym=self.gym, module=module, defaults={"is_active": True})
+
+        self.proprietaire = User.objects.create_user(username="proprio-paie", password="pass12345")
+        UserGymRole.objects.create(user=self.proprietaire, gym=self.gym, role="owner", is_active=True)
+        self.gerant = User.objects.create_user(username="gerant-paie", password="pass12345")
+        UserGymRole.objects.create(user=self.gerant, gym=self.gym, role="manager", is_active=True)
+
+        self.employe = Employee.objects.create(
+            gym=self.gym, name="Alice Paie", role="coach", daily_salary=Decimal("100.00"),
+        )
+        self.today = timezone.localdate()
+
+    def _connecter(self, utilisateur):
+        self.client.force_login(utilisateur)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _adresses_de_paie(self):
+        return [
+            reverse("rh:payroll_dashboard"),
+            reverse("rh:process_payment", args=[self.employe.id, self.today.year, self.today.month]),
+            reverse("rh:download_payslip_pdf", args=[self.employe.id, self.today.year, self.today.month]),
+        ]
+
+    # --- Ce que le gerant ne peut plus faire ---------------------------------------------------
+
+    def test_a_manager_no_longer_reaches_payroll(self):
+        self._connecter(self.gerant)
+
+        for adresse in self._adresses_de_paie():
+            with self.subTest(adresse=adresse):
+                self.assertIn(self.client.get(adresse).status_code, (302, 403))
+
+    def test_a_manager_cannot_approve_or_pay(self):
+        self._connecter(self.gerant)
+
+        for adresse in (
+            reverse("rh:review_payroll_slip", args=[self.employe.id, self.today.year, self.today.month]),
+            reverse("rh:approve_payroll_slip", args=[self.employe.id, self.today.year, self.today.month]),
+            reverse("rh:add_adjustment", args=[self.employe.id, self.today.year, self.today.month]),
+        ):
+            with self.subTest(adresse=adresse):
+                self.assertIn(self.client.post(adresse).status_code, (302, 403))
+
+    def test_the_payroll_menu_is_hidden_from_a_manager(self):
+        self._connecter(self.gerant)
+
+        reponse = self.client.get(reverse("rh:list"))
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertNotContains(reponse, reverse("rh:payroll_dashboard"))
+
+    # --- Ce que le gerant garde ------------------------------------------------------------------
+
+    def test_a_manager_still_manages_employees(self):
+        self._connecter(self.gerant)
+
+        self.assertEqual(self.client.get(reverse("rh:list")).status_code, 200)
+        self.assertEqual(self.client.get(reverse("rh:create")).status_code, 200)
+        self.assertEqual(
+            self.client.get(reverse("rh:detail", args=[self.employe.id])).status_code, 200
+        )
+
+    def test_a_manager_still_records_attendance(self):
+        self._connecter(self.gerant)
+
+        self.assertEqual(self.client.get(reverse("rh:attendance_list")).status_code, 200)
+        self.assertEqual(self.client.get(reverse("rh:attendance_create")).status_code, 200)
+
+    # --- Ce que le proprietaire peut ----------------------------------------------------------------
+
+    def test_the_owner_reaches_payroll(self):
+        self._connecter(self.proprietaire)
+
+        for adresse in (reverse("rh:payroll_dashboard"),
+                        reverse("rh:process_payment", args=[self.employe.id, self.today.year, self.today.month])):
+            with self.subTest(adresse=adresse):
+                self.assertEqual(self.client.get(adresse).status_code, 200)
+
+    def test_the_payroll_menu_is_offered_to_the_owner(self):
+        self._connecter(self.proprietaire)
+
+        self.assertContains(self.client.get(reverse("rh:list")), reverse("rh:payroll_dashboard"))
+
+    def test_the_rule_is_written_once(self):
+        from smartclub.access_control import RH_ATTENDANCE_ROLES, RH_EMPLOYEE_ROLES, RH_PAYROLL_ROLES
+
+        self.assertEqual(RH_PAYROLL_ROLES, {"owner"})
+        # Le reste du module RH ne bouge pas.
+        self.assertIn("manager", RH_EMPLOYEE_ROLES)
+        self.assertIn("manager", RH_ATTENDANCE_ROLES)

@@ -30,7 +30,11 @@ NOTIFICATION_ROLES = frozenset({"owner", "manager", "commercial"})
 MACHINE_ROLES = frozenset({"owner", "manager"})
 RH_EMPLOYEE_ROLES = frozenset({"owner", "manager"})
 RH_ATTENDANCE_ROLES = frozenset({"owner", "manager", "reception"})
-RH_PAYROLL_ROLES = frozenset({"owner", "manager"})
+# La paie appartient au proprietaire : bulletins, primes, retenues,
+# approbation et paiement. Le gerant tient les employes et les presences, mais
+# l'argent des salaires sort de la poche du proprietaire, et lui seul le
+# decide.
+RH_PAYROLL_ROLES = frozenset({"owner"})
 PRODUCT_ROLES = frozenset({"owner", "manager"})
 SETTINGS_ROLES = frozenset({"owner", "manager"})
 SETTINGS_ORGANIZATION_ROLES = frozenset({"owner"})
