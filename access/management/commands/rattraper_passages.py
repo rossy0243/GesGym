@@ -282,6 +282,6 @@ class Command(BaseCommand):
         if employe is not None and accorde:
             from rh import presence
 
-            presence.noter_passage(employe, horodatage)
+            presence.noter_passage(employe, horodatage, sens=log.sens)
 
         return log

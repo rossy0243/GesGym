@@ -112,7 +112,7 @@ def _today_stats(gym):
     logs_today = AccessLog.objects.filter(
         gym=gym,
         check_in_time__date=_today(),
-    ).hors_personnel()
+    ).entrees().hors_personnel()
 
     return {
         # Un retour n'est pas une nouvelle visite : sans cette exclusion, un
@@ -135,7 +135,7 @@ def _today_stats(gym):
 
 def _record_access(
     gym, member, user, method, require_valid_qr=False, device=None,
-    allow_return=False, device_event_id="",
+    allow_return=False, device_event_id="", sens=AccessLog.SENS_ENTREE,
 ):
     """
     Enregistre un passage et tranche s'il ouvre la porte.
@@ -148,7 +148,7 @@ def _record_access(
     """
     # Le lecteur lit parfois deux fois de suite : le passage deja enregistre
     # fait foi, et la porte s'ouvre sans qu'une seconde ligne apparaisse.
-    deja = relectures.passage_recent(gym, member=member)
+    deja = relectures.passage_recent(gym, member=member, sens=sens)
     if deja is not None:
         return True, relectures.RELECTURE_REASON, deja
 
@@ -177,6 +177,7 @@ def _record_access(
         log = AccessLog.objects.create(
             gym=gym,
             member=member,
+            sens=sens,
             access_granted=access_granted,
             is_return=est_un_retour,
             denial_reason=reason,

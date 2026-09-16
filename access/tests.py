@@ -5664,3 +5664,153 @@ class PointageAuPassageTests(TestCase):
             call_command("rattraper_passages", stdout=io.StringIO())
 
         self.assertTrue(self.Attendance.objects.filter(employee=self.employe).exists())
+
+
+
+class SensDuPassageTests(TestCase):
+    """
+    Un passage porte un sens : entree ou sortie.
+
+    Tant qu'aucun lecteur de sortie n'existe et qu'aucune touche n'est pressee
+    au terminal, tout reste une entree - c'est-a-dire ce que la salle vit
+    aujourd'hui.
+    """
+
+    def setUp(self):
+        from rh.models import Attendance
+
+        self.Attendance = Attendance
+        (self.gym, self.device, self.member, self.employe,
+         _) = _salle_avec_personnel("sens")
+        self.url = reverse("access:device_webhook", args=[self.device.webhook_token])
+        patcher = patch("access.hikvision.HikvisionClient.open_door")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _envoyer(self, **evenement):
+        charge = {"AccessControllerEvent": {"majorEventType": 5, "subEventType": 75, **evenement}}
+        return self.client.post(self.url, data=json.dumps(charge), content_type="application/json")
+
+    # --- Le sens lu ---------------------------------------------------------------------------
+
+    def test_a_passage_is_an_entry_by_default(self):
+        self._envoyer(employeeNoString=enrollment.numero_personnel(self.employe))
+
+        self.assertEqual(AccessLog.objects.get().sens, AccessLog.SENS_ENTREE)
+
+    def test_a_reader_declared_as_an_exit_records_exits(self):
+        self.device.sens = AccessDevice.SENS_SORTIE
+        self.device.save()
+
+        self._envoyer(employeeNoString=enrollment.numero_personnel(self.employe))
+
+        self.assertEqual(AccessLog.objects.get().sens, AccessLog.SENS_SORTIE)
+
+    def test_the_terminal_key_decides_when_it_speaks(self):
+        # Une touche pressee au terminal l'emporte sur le role du lecteur.
+        self._envoyer(
+            employeeNoString=enrollment.numero_personnel(self.employe),
+            attendanceStatus="checkOut",
+        )
+
+        self.assertEqual(AccessLog.objects.get().sens, AccessLog.SENS_SORTIE)
+
+    def test_an_unknown_key_leaves_the_reader_decide(self):
+        self._envoyer(
+            employeeNoString=enrollment.numero_personnel(self.employe),
+            attendanceStatus="quelqueChose",
+        )
+
+        self.assertEqual(AccessLog.objects.get().sens, AccessLog.SENS_ENTREE)
+
+    def test_a_member_passage_carries_the_direction_too(self):
+        self.device.sens = AccessDevice.SENS_SORTIE
+        self.device.save()
+        plan = SubscriptionPlan.objects.create(gym=self.gym, name="Mensuel", price=30, duration_days=30)
+        MemberSubscription.objects.create(
+            gym=self.gym, member=self.member, plan=plan,
+            start_date=timezone.localdate(), end_date=timezone.localdate() + timedelta(days=30),
+            is_active=True,
+        )
+
+        self._envoyer(employeeNoString=enrollment.employee_no(self.member))
+
+        self.assertEqual(AccessLog.objects.get(member=self.member).sens, AccessLog.SENS_SORTIE)
+
+    # --- Les statistiques ------------------------------------------------------------------------
+
+    def test_an_exit_is_not_a_visit(self):
+        from .views import _today_stats
+
+        AccessLog.objects.create(gym=self.gym, member=self.member, access_granted=True)
+        AccessLog.objects.create(
+            gym=self.gym, member=self.member, access_granted=True, sens=AccessLog.SENS_SORTIE
+        )
+
+        self.assertEqual(_today_stats(self.gym)["entries"], 1)
+
+    def test_an_exit_does_not_count_as_staff_passage(self):
+        from core.views import _personnel_passe
+
+        AccessLog.objects.create(
+            gym=self.gym, employee=self.employe, access_granted=True, sens=AccessLog.SENS_SORTIE
+        )
+
+        self.assertEqual(_personnel_passe(self.gym, timezone.localdate()), 0)
+
+    def test_entering_then_leaving_within_the_minute_is_kept(self):
+        # Deux lectures de sens contraire ne sont pas une relecture.
+        numero = enrollment.numero_personnel(self.employe)
+        self._envoyer(employeeNoString=numero, serialNo="1")
+        self._envoyer(employeeNoString=numero, serialNo="2", attendanceStatus="checkOut")
+
+        self.assertEqual(AccessLog.objects.count(), 2)
+
+    # --- Le pointage --------------------------------------------------------------------------------
+
+    def test_an_exit_fills_the_departure_hour(self):
+        numero = enrollment.numero_personnel(self.employe)
+        self._envoyer(employeeNoString=numero, serialNo="1")
+        self._envoyer(employeeNoString=numero, serialNo="2", attendanceStatus="checkOut")
+
+        pointage = self.Attendance.objects.get(employee=self.employe)
+        self.assertIsNotNone(pointage.heure_arrivee)
+        self.assertIsNotNone(pointage.heure_depart)
+
+
+class VerificationDuPointageTests(TestCase):
+    """La commande qui demande au terminal s'il sait marquer les sorties."""
+
+    def setUp(self):
+        (self.gym, self.device, _, _, _) = _salle_avec_personnel("verif-pointage")
+
+    def _lancer(self, **patch_reponse):
+        import io
+
+        from django.core.management import call_command
+
+        sortie = io.StringIO()
+        with patch.object(hikvision.HikvisionClient, "request", **patch_reponse):
+            call_command("verifier_pointage", stdout=sortie)
+        return sortie.getvalue()
+
+    def test_a_terminal_that_can_mark_exits_says_so(self):
+        texte = self._lancer(return_value='{"AttendanceMode": {"mode": "manual"}}')
+
+        self.assertIn("manual", texte)
+        self.assertIn("marquer leur depart", texte)
+
+    def test_a_disabled_function_is_named_as_such(self):
+        texte = self._lancer(return_value='{"AttendanceMode": {"mode": "disable"}}')
+
+        self.assertIn("desactivee", texte)
+
+    def test_a_terminal_without_the_function_points_to_a_second_reader(self):
+        texte = self._lancer(side_effect=hikvision.HikvisionError("404"))
+
+        self.assertIn("second lecteur", texte)
+
+    def test_the_declared_role_is_recalled(self):
+        texte = self._lancer(return_value='{"AttendanceMode": {"mode": "manual"}}')
+
+        self.assertIn("role declare dans l'application", texte)

@@ -18,9 +18,14 @@ from .models import Attendance
 logger = logging.getLogger(__name__)
 
 
-def noter_passage(employee, moment=None):
+def noter_passage(employee, moment=None, sens="entree"):
     """
     Marque l'employe present le jour de son passage.
+
+    Une entree fixe l'heure d'arrivee - la premiere de la journee. Une sortie
+    fixe l'heure de depart - la derniere. Tant qu'aucun lecteur de sortie
+    n'existe, seule l'arrivee est connue, et la duree reste vide : mieux vaut
+    pas d'heure qu'une heure inventee.
 
     Renvoie la presence, ou None si rien n'a ete touche - une presence saisie a
     la main n'est jamais recouverte.
@@ -30,6 +35,7 @@ def noter_passage(employee, moment=None):
 
     moment = moment or timezone.now()
     local = timezone.localtime(moment)
+    une_sortie = sens == "sortie"
 
     try:
         presence = Attendance.objects.filter(employee=employee, date=local.date()).first()
@@ -41,12 +47,21 @@ def noter_passage(employee, moment=None):
                 date=local.date(),
                 status="present",
                 source=Attendance.SOURCE_LECTEUR,
-                heure_arrivee=local.time(),
+                heure_arrivee=None if une_sortie else local.time(),
+                heure_depart=local.time() if une_sortie else None,
             )
 
         if presence.source != Attendance.SOURCE_LECTEUR:
             # Quelqu'un a tranche a la main : c'est cette decision qui compte.
             return None
+
+        if une_sortie:
+            # Plusieurs sorties : la derniere est celle qui compte.
+            if presence.heure_depart is None or local.time() > presence.heure_depart:
+                presence.status = "present"
+                presence.heure_depart = local.time()
+                presence.save(update_fields=["status", "heure_depart", "updated_at"])
+            return presence
 
         # Plusieurs passages dans la journee : l'heure d'arrivee est la premiere.
         if presence.heure_arrivee is None or local.time() < presence.heure_arrivee:

@@ -505,7 +505,7 @@ def _personnel_passe(gym, jour):
     """
     passages = AccessLog.objects.filter(
         gym=gym, check_in_time__date=jour, access_granted=True
-    )
+    ).entrees()
     employes = (
         passages.filter(employee__isnull=False)
         .values("employee_id").distinct().count()
@@ -530,7 +530,7 @@ def _detail_des_passages(gym, jour, personnel):
     """
     entrees = AccessLog.objects.filter(
         gym=gym, check_in_time__date=jour, access_granted=True, is_return=False
-    )
+    ).entrees()
 
     membres = entrees.filter(member__isnull=False).values("member_id").distinct().count()
     invites = entrees.filter(guest_pass__isnull=False).values("guest_pass_id").distinct().count()
@@ -2173,11 +2173,11 @@ def gym_dashboard(request, gym_id):
     access_period_qs = AccessLog.objects.filter(
         gym=gym,
         check_in_time__date__range=(period_data["start_date"], period_data["end_date"]),
-    ).hors_personnel()
+    ).entrees().hors_personnel()
     access_previous_qs = AccessLog.objects.filter(
         gym=gym,
         check_in_time__date__range=(period_data["previous_start"], period_data["previous_end"]),
-    ).hors_personnel()
+    ).entrees().hors_personnel()
     # Un retour n'est pas une nouvelle visite : sans cette exclusion, un
     # membre ressorti puis revenu compterait double.
     visits_period = access_period_qs.filter(access_granted=True, is_return=False).count()
@@ -2193,7 +2193,7 @@ def gym_dashboard(request, gym_id):
         check_in_time__date=today,
         access_granted=True,
         is_return=False,
-    ).hors_personnel()
+    ).entrees().hors_personnel()
     today_checkins = passages_today_qs.count()
     today_unique_visitors = _personnes_distinctes(passages_today_qs)
     # Sans module d'acces, il n'y a pas de lecteur : la ligne n'aurait rien a dire.
@@ -2205,7 +2205,7 @@ def gym_dashboard(request, gym_id):
         gym=gym,
         check_in_time__date=today,
         access_granted=False,
-    ).hors_personnel().count()
+    ).entrees().hors_personnel().count()
     # Assiduite : meme population au numerateur et au denominateur. L'ancien
     # "engagement" divisait les visiteurs de la periode - membres expires et
     # invites compris - par les membres actifs du jour. Deux populations

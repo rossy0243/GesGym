@@ -197,6 +197,10 @@ class Attendance(models.Model):
     # L'heure du premier passage du jour. Aucun horaire de reference n'existe :
     # l'application montre l'heure, elle ne juge pas un retard.
     heure_arrivee = models.TimeField(null=True, blank=True)
+    # L'heure du dernier passage marque comme une sortie. Elle reste vide tant
+    # qu'aucun lecteur de sortie n'existe : mieux vaut pas d'heure qu'une heure
+    # inventee.
+    heure_depart = models.TimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -211,6 +215,29 @@ class Attendance(models.Model):
 
     def __str__(self):
         return f"{self.employee} - {self.date} - {self.get_status_display()}"
+
+    @property
+    def duree_presence(self):
+        """Le temps passe dans la salle, quand on connait les deux bouts."""
+        from datetime import datetime
+
+        if not (self.heure_arrivee and self.heure_depart):
+            return None
+        debut = datetime.combine(self.date, self.heure_arrivee)
+        fin = datetime.combine(self.date, self.heure_depart)
+        if fin <= debut:
+            # Depart avant l'arrivee : une saisie a revoir, pas une duree.
+            return None
+        return fin - debut
+
+    @property
+    def duree_affichee(self):
+        """La duree, lisible : "7 h 25". Vide si elle n'est pas connue."""
+        duree = self.duree_presence
+        if duree is None:
+            return ""
+        minutes = int(duree.total_seconds() // 60)
+        return f"{minutes // 60} h {minutes % 60:02d}"
 
     def clean(self):
         super().clean()

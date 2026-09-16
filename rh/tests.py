@@ -806,3 +806,116 @@ class PresenceParLeLecteurTests(TestCase):
         bulletin = PayrollSlip.ensure_for_period(self.employe, self.today.year, self.today.month)
 
         self.assertEqual(bulletin.present_days, 1)
+
+
+
+class HeureDeDepartTests(TestCase):
+    """L'heure de sortie et la duree, quand le depart est connu."""
+
+    def setUp(self):
+        from rh.models import Attendance
+
+        self.Attendance = Attendance
+        self.organisation = Organization.objects.create(name="Org Depart", slug="org-depart")
+        self.gym = Gym.objects.create(
+            organization=self.organisation, name="Gym Depart",
+            slug="gym-depart", subdomain="gym-depart",
+        )
+        module, _ = Module.objects.get_or_create(code="RH", defaults={"name": "RH"})
+        GymModule.objects.get_or_create(gym=self.gym, module=module, defaults={"is_active": True})
+        self.employe = Employee.objects.create(
+            gym=self.gym, name="Paul Gardien", role="cleaner", daily_salary=Decimal("100.00"),
+        )
+        self.gerant = User.objects.create_user(username="gerant-depart", password="pass12345")
+        UserGymRole.objects.create(user=self.gerant, gym=self.gym, role="manager", is_active=True)
+        self.client.force_login(self.gerant)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+        self.today = timezone.localdate()
+
+    def _moment(self, heure, minute=0):
+        return timezone.make_aware(
+            datetime.combine(self.today, dt_time(heure, minute)),
+            timezone.get_current_timezone(),
+        )
+
+    def _pointer(self, heure, minute=0, sens="entree"):
+        from rh import presence
+
+        return presence.noter_passage(self.employe, self._moment(heure, minute), sens=sens)
+
+    def test_an_exit_fills_the_departure_hour(self):
+        self._pointer(8, 0)
+        self._pointer(17, 30, sens="sortie")
+
+        pointage = self.Attendance.objects.get(employee=self.employe)
+        self.assertEqual(pointage.heure_depart.strftime("%H:%M"), "17:30")
+
+    def test_the_last_exit_is_the_one_kept(self):
+        self._pointer(8, 0)
+        self._pointer(12, 0, sens="sortie")
+        self._pointer(17, 30, sens="sortie")
+
+        self.assertEqual(
+            self.Attendance.objects.get(employee=self.employe).heure_depart.strftime("%H:%M"),
+            "17:30",
+        )
+
+    def test_an_exit_alone_still_marks_the_day(self):
+        # Badge oublie le matin : le depart existe, l'arrivee reste inconnue.
+        self._pointer(17, 30, sens="sortie")
+
+        pointage = self.Attendance.objects.get(employee=self.employe)
+        self.assertEqual(pointage.status, "present")
+        self.assertIsNone(pointage.heure_arrivee)
+        self.assertEqual(pointage.duree_affichee, "")
+
+    def test_the_duration_is_the_time_between_the_two(self):
+        self._pointer(8, 5)
+        self._pointer(17, 30, sens="sortie")
+
+        self.assertEqual(
+            self.Attendance.objects.get(employee=self.employe).duree_affichee, "9 h 25"
+        )
+
+    def test_a_departure_before_the_arrival_gives_no_duration(self):
+        pointage = self.Attendance.objects.create(
+            gym=self.gym, employee=self.employe, date=self.today, status="present",
+            heure_arrivee=dt_time(17, 0), heure_depart=dt_time(8, 0),
+        )
+
+        self.assertIsNone(pointage.duree_presence)
+        self.assertEqual(pointage.duree_affichee, "")
+
+    def test_a_hand_written_presence_is_not_touched_by_an_exit(self):
+        self.Attendance.objects.create(
+            gym=self.gym, employee=self.employe, date=self.today,
+            status="absent", source=self.Attendance.SOURCE_MANUELLE,
+        )
+
+        self._pointer(17, 30, sens="sortie")
+
+        pointage = self.Attendance.objects.get(employee=self.employe)
+        self.assertEqual(pointage.status, "absent")
+        self.assertIsNone(pointage.heure_depart)
+
+    def test_the_screens_show_the_departure_and_the_duration(self):
+        self._pointer(8, 5)
+        self._pointer(17, 30, sens="sortie")
+
+        liste = self.client.get(reverse("rh:attendance_list"))
+        fiche = self.client.get(reverse("rh:detail", args=[self.employe.id]))
+
+        for reponse in (liste, fiche):
+            self.assertContains(reponse, "17:30")
+            self.assertContains(reponse, "9 h 25")
+        self.assertContains(liste, "Départ")
+        self.assertContains(liste, "Durée")
+
+    def test_without_an_exit_reader_nothing_is_invented(self):
+        self._pointer(8, 5)
+
+        pointage = self.Attendance.objects.get(employee=self.employe)
+        self.assertIsNone(pointage.heure_depart)
+        self.assertEqual(pointage.duree_affichee, "")

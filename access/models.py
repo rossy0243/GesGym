@@ -100,6 +100,26 @@ class AccessDevice(models.Model):
 
     door_number = models.PositiveSmallIntegerField(default=1)
 
+    # A quoi sert ce lecteur : faire entrer, ou constater les departs. Une
+    # salle avec une seule porte n'a que des entrees ; le jour ou un second
+    # terminal est pose a la sortie, il suffit de le declarer ici.
+    SENS_ENTREE = "entree"
+    SENS_SORTIE = "sortie"
+    SENS_CHOICES = (
+        (SENS_ENTREE, "Entree"),
+        (SENS_SORTIE, "Sortie"),
+    )
+    sens = models.CharField(
+        max_length=10,
+        choices=SENS_CHOICES,
+        default=SENS_ENTREE,
+        verbose_name="Sens du passage",
+        help_text=(
+            "Les passages lus par ce lecteur comptent comme des entrees, ou "
+            "comme des sorties."
+        ),
+    )
+
     open_on_granted = models.BooleanField(
         default=True,
         verbose_name="Ouvrir la porte sur acces autorise",
@@ -194,6 +214,16 @@ class AccessDevice(models.Model):
 
 class AccessLogQuerySet(models.QuerySet):
     """Les lectures du journal d'acces."""
+
+    def entrees(self):
+        """
+        Les passages qui font entrer quelqu'un.
+
+        Une sortie n'est pas une visite de plus : la compter doublerait la
+        frequentation le jour ou un lecteur de sortie sera pose. Toutes les
+        statistiques de passage partent d'ici.
+        """
+        return self.filter(sens=AccessLog.SENS_ENTREE)
 
     def hors_personnel(self):
         """
@@ -298,6 +328,21 @@ class AccessLog(models.Model):
         null=True,
         blank=True,
         related_name="access_scans"
+    )
+
+    # Entree ou sortie. Le sens vient du lecteur qui a lu le passage, ou de
+    # la touche pressee sur le terminal quand il sait la remonter.
+    SENS_ENTREE = "entree"
+    SENS_SORTIE = "sortie"
+    SENS_CHOICES = (
+        (SENS_ENTREE, "Entree"),
+        (SENS_SORTIE, "Sortie"),
+    )
+    sens = models.CharField(
+        max_length=10,
+        choices=SENS_CHOICES,
+        default=SENS_ENTREE,
+        db_index=True,
     )
 
     # Le personnel entre par la meme porte que les membres. Ses passages se

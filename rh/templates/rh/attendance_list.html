@@ -58,6 +58,8 @@
                             <th>Employé</th>
                             <th>Rôle</th>
                             <th>Arrivée</th>
+                            <th>Départ</th>
+                            <th>Durée</th>
                             <th>Origine</th>
                             <th>Statut</th>
                         </tr>
@@ -71,6 +73,8 @@
                             {% comment %} L'heure du premier passage. Aucun horaire de reference
                                n'existe : l'ecran montre, il ne juge pas. {% endcomment %}
                             <td>{% if attendance.heure_arrivee %}{{ attendance.heure_arrivee|time:"H:i" }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+                            <td>{% if attendance.heure_depart %}{{ attendance.heure_depart|time:"H:i" }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+                            <td>{% if attendance.duree_affichee %}{{ attendance.duree_affichee }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
                             <td class="small text-muted">{{ attendance.get_source_display }}</td>
                             <td>
                                 <span class="badge {% if attendance.status == 'present' %}bg-success{% else %}bg-danger{% endif %}">
@@ -80,7 +84,7 @@
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="6" class="text-center">Aucune présence enregistrée</td>
+                            <td colspan="8" class="text-center">Aucune présence enregistrée</td>
                         </tr>
                         {% endfor %}
                     </tbody>

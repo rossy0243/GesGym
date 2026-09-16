@@ -916,3 +916,31 @@ def _balanced_json(text, start):
             if depth == 0:
                 return text[start : index + 1]
     return ""
+
+
+# Ce que le terminal appelle une entree ou une sortie quand il sait marquer le
+# pointage. Les libelles varient d'un firmware a l'autre ; on ne retient que
+# ceux qui ne laissent aucun doute.
+STATUTS_ENTREE = frozenset({"checkin", "checkedin", "breakin", "overtimein"})
+STATUTS_SORTIE = frozenset({"checkout", "checkedout", "breakout", "overtimeout"})
+
+
+def sens_du_passage(evenement):
+    """
+    Entree ou sortie, si le terminal le dit. None sinon.
+
+    Certains terminaux permettent de presser une touche avant le visage pour
+    marquer un depart. Quand le firmware ne remonte rien, c'est le role du
+    lecteur qui tranche : l'application ne devine pas un depart.
+    """
+    if not isinstance(evenement, dict):
+        return None
+
+    for cle in ("attendanceStatus", "attendanceStatusValue", "labelName"):
+        valeur = str(evenement.get(cle) or "").strip().lower().replace("-", "").replace("_", "")
+        if valeur in STATUTS_SORTIE:
+            return "sortie"
+        if valeur in STATUTS_ENTREE:
+            return "entree"
+    return None
+

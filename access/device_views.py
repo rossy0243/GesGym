@@ -557,6 +557,7 @@ def device_webhook(request, token):
     access_granted, reason, log = _record_access(
         gym=device.gym,
         member=member,
+        sens=_sens_du_passage(device, parsed["event"]),
         user=None,
         method=_libelle_methode(device, nature, par_le_visage),
         # Un visage n'a pas de QR code : verifier sa peremption refuserait
@@ -635,7 +636,8 @@ def _journaliser_hors_membre(device, parsed, employee=None, libelle=""):
 
     # Lecture repetee de la meme personne : le passage deja enregistre fait foi.
     deja_vu = relectures.passage_recent(
-        device.gym, employee=employee, terminal_label=libelle
+        device.gym, employee=employee, terminal_label=libelle,
+        sens=_sens_du_passage(device, evenement),
     )
     if deja_vu is not None:
         return deja_vu
@@ -661,6 +663,7 @@ def _journaliser_hors_membre(device, parsed, employee=None, libelle=""):
     log = AccessLog.objects.create(
         gym=device.gym,
         device=device,
+        sens=_sens_du_passage(device, evenement),
         access_granted=accorde,
         is_return=deja_entre,
         denial_reason="Retour dans la salle" if deja_entre else motif,
@@ -674,9 +677,20 @@ def _journaliser_hors_membre(device, parsed, employee=None, libelle=""):
     if employee is not None and accorde:
         from rh import presence
 
-        presence.noter_passage(employee, log.check_in_time)
+        presence.noter_passage(employee, log.check_in_time, sens=log.sens)
 
     return log
+
+
+def _sens_du_passage(device, evenement):
+    """
+    Entree ou sortie : ce que le terminal marque, sinon le role du lecteur.
+
+    Tant qu'aucun lecteur de sortie n'existe et qu'aucune touche n'est pressee,
+    tout passage reste une entree - c'est-a-dire ce que la salle vit
+    aujourd'hui.
+    """
+    return hikvision.sens_du_passage(evenement) or device.sens
 
 
 def _resolve_employee(device, credential):

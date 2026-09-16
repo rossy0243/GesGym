@@ -25,7 +25,7 @@ RELECTURE_REASON = "Passage deja enregistre"
 
 
 def passage_recent(gym, *, member=None, employee=None, guest_pass=None,
-                   terminal_label="", moment=None):
+                   terminal_label="", moment=None, sens=None):
     """
     Le passage accorde de cette personne juste avant, s'il existe.
 
@@ -45,6 +45,10 @@ def passage_recent(gym, *, member=None, employee=None, guest_pass=None,
         return None
 
     moment = moment or timezone.now()
+    # Entrer puis sortir dans la minute, c'est possible - un employe qui a
+    # oublie quelque chose. Seules deux lectures de meme sens se regroupent.
+    if sens:
+        cible["sens"] = sens
 
     return (
         AccessLog.objects.filter(
