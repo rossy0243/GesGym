@@ -2871,3 +2871,59 @@ class HistoriqueDesCaissesTests(TestCase):
 
         self.assertEqual(reponse.context["sessions_trouvees"], 3)
         self.assertNotContains(reponse, "Suivante")
+
+
+
+class DetailDeCaisseTests(TestCase):
+    """Les mouvements d'une session se tournent page par page."""
+
+    def setUp(self):
+        self.organisation = Organization.objects.create(name="Org Detail", slug="org-detail")
+        self.gym = Gym.objects.create(
+            organization=self.organisation, name="Gym Detail",
+            slug="gym-detail", subdomain="gym-detail",
+        )
+        module, _ = Module.objects.get_or_create(code="POS", defaults={"name": "POS"})
+        GymModule.objects.get_or_create(gym=self.gym, module=module, defaults={"is_active": True})
+        self.gerant = User.objects.create_user(username="gerant-detail", password="pass12345")
+        UserGymRole.objects.create(user=self.gerant, gym=self.gym, role="manager", is_active=True)
+        self.caisse = CashRegister.objects.create(
+            gym=self.gym, opened_by=self.gerant,
+            opening_amount=Decimal("1000.00"), exchange_rate=Decimal("2800.00"),
+        )
+        self.client.force_login(self.gerant)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+        self.url = reverse("pos:register_detail", args=[self.caisse.id])
+
+    def _mouvements(self, combien):
+        for _ in range(combien):
+            record_expense(
+                gym=self.gym, amount=Decimal("500.00"), currency="CDF", method="cash",
+                category="expense", description="Achat", created_by=self.gerant,
+                source_app="pos", source_model="ManualExpense",
+            )
+
+    def test_a_busy_day_is_cut_into_pages(self):
+        self._mouvements(55)
+
+        reponse = self.client.get(self.url)
+
+        self.assertEqual(len(reponse.context["payments"]), 50)
+        self.assertEqual(reponse.context["mouvements_trouves"], 55)
+        self.assertContains(reponse, "Suivante")
+
+    def test_the_next_page_shows_the_rest(self):
+        self._mouvements(55)
+
+        reponse = self.client.get(self.url, {"page": "2"})
+
+        self.assertEqual(len(reponse.context["payments"]), 5)
+
+    def test_a_quiet_day_shows_no_pagination(self):
+        self._mouvements(3)
+
+        reponse = self.client.get(self.url)
+
+        self.assertNotContains(reponse, "Suivante")

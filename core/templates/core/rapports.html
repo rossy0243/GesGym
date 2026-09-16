@@ -394,7 +394,18 @@
                     </div>
 
                     <div class="card-footer d-flex justify-content-between align-items-center flex-wrap gap-2">
-                        <p class="fs-12 text-muted mb-0">Total : {{ transactions|length }} transaction{{ transactions|length|pluralize }}</p>
+                        <p class="fs-12 text-muted mb-0">
+                            {% if transactions_total > transactions_en_apercu %}
+                                Les {{ transactions_en_apercu }} plus récentes, sur {{ transactions_total }} transactions de la période.
+                                {% if request.gym %}
+                                <a href="{% url 'core:gym_dashboard' gym_id=request.gym.id %}?view=analytics&onglet=encaissements#operations">
+                                    Voir la liste complète
+                                </a>
+                                {% endif %}
+                            {% else %}
+                                Total : {{ transactions_total }} transaction{{ transactions_total|pluralize }}
+                            {% endif %}
+                        </p>
                         <div class="d-flex gap-2">
                             <button class="btn btn-sm btn-light" onclick="exportCurrentView('pdf')">
                                 <span class="material-icons me-1" style="font-size:16px;">download</span>Exporter

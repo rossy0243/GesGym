@@ -814,6 +814,10 @@ def _bilan_de_periode(gym, period_data):
 # reste une grille, meme sur une annee.
 OPERATIONS_PAR_PAGE = 25
 
+# Ce que la page des rapports montre du detail avant de renvoyer a la liste
+# complete.
+TRANSACTIONS_EN_APERCU = 50
+
 # Les tris proposes. Un parametre inconnu retombe sur le premier : l'URL est
 # modifiable a la main, et order_by ne doit jamais recevoir n'importe quoi.
 TRIS_OPERATIONS = {
@@ -2815,7 +2819,13 @@ def reports_dashboard(request):
         access_granted=True,
         guest_pass__isnull=False,
     ).count()
-    transactions = payments_period.select_related("member", "cash_register").order_by("-created_at")[:50]
+    # Un extrait, pas la liste : sur une periode chargee, la page annoncait
+    # "50 transactions" alors qu'il y en avait des centaines. Le nombre exact
+    # est dit, et la liste complete se lit dans la vue analytique, paginee.
+    transactions_total = payments_period.count()
+    transactions = payments_period.select_related("member", "cash_register").order_by("-created_at")[
+        :TRANSACTIONS_EN_APERCU
+    ]
 
     monthly_revenue = daily_revenue
     monthly_transactions = daily_transactions
@@ -2869,6 +2879,8 @@ def reports_dashboard(request):
         "denied_access": denied_access,
         "guest_visits": guest_visits,
         "transactions": transactions,
+        "transactions_total": transactions_total,
+        "transactions_en_apercu": TRANSACTIONS_EN_APERCU,
         "monthly_revenue": monthly_revenue,
         "monthly_new_members": monthly_new_members,
         "monthly_renewals": monthly_renewals,

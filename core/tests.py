@@ -7074,3 +7074,70 @@ class AnalyticsOperationsTableTests(TestCase):
         reponse = self._page(onglet="nimporte")
 
         self.assertEqual(reponse.context["operations_periode"]["onglet"], "encaissements")
+
+
+
+class RapportsHonnetesTests(TestCase):
+    """
+    La page des rapports montre un extrait, et le dit.
+
+    Elle affichait "Total : 50 transactions" alors que la periode en comptait
+    des centaines : le chiffre du bas contredisait celui du haut.
+    """
+
+    def setUp(self):
+        from decimal import Decimal as _Decimal
+
+        from pos.models import CashRegister, Payment
+
+        self.Payment = Payment
+        self.organisation = Organization.objects.create(name="Org Rapport", slug="org-rapport")
+        self.gym = Gym.objects.create(
+            organization=self.organisation, name="Gym Rapport",
+            slug="gym-rapport", subdomain="gym-rapport",
+        )
+        for code in ("POS", "MEMBERS"):
+            module, _ = Module.objects.get_or_create(code=code, defaults={"name": code})
+            GymModule.objects.get_or_create(gym=self.gym, module=module, defaults={"is_active": True})
+
+        self.proprietaire = User.objects.create_user(username="proprio-rapport", password="pass12345")
+        UserGymRole.objects.create(
+            user=self.proprietaire, gym=self.gym, role="owner", is_active=True
+        )
+        self.caisse = CashRegister.objects.create(
+            gym=self.gym, opened_by=self.proprietaire,
+            opening_amount=_Decimal("1000.00"), exchange_rate=_Decimal("2800.00"),
+        )
+        self.client.force_login(self.proprietaire)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _paiements(self, combien):
+        from decimal import Decimal as _Decimal
+
+        for _ in range(combien):
+            self.Payment.objects.create(
+                gym=self.gym, cash_register=self.caisse, amount=_Decimal("1000.00"),
+                currency="CDF", method="cash", type="in", status="success",
+                category="product",
+            )
+
+    def test_the_page_says_how_many_it_shows(self):
+        self._paiements(60)
+
+        reponse = self.client.get(reverse("core:rapport"))
+
+        self.assertEqual(reponse.context["transactions_total"], 60)
+        self.assertEqual(len(reponse.context["transactions"]), 50)
+        self.assertContains(reponse, "sur 60 transactions de la période")
+        self.assertContains(reponse, "Voir la liste complète")
+
+    def test_a_short_period_says_the_plain_total(self):
+        self._paiements(3)
+
+        reponse = self.client.get(reverse("core:rapport"))
+
+        self.assertEqual(reponse.context["transactions_total"], 3)
+        self.assertContains(reponse, "Total : 3 transactions")
+        self.assertNotContains(reponse, "Voir la liste complète")

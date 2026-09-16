@@ -43,6 +43,9 @@ DECAISSEMENTS_PAR_PAGE = 50
 # a couvrir un mois de trois caissiers.
 CAISSES_PAR_PAGE = 50
 
+# Les mouvements d'une seule session : cinquante par page, comme ailleurs.
+MOUVEMENTS_PAR_PAGE = 50
+
 
 def _media_url(request, file_field, fallback=""):
     if not file_field:
@@ -607,18 +610,25 @@ def register_history(request):
 @module_required("POS")
 def register_detail(request, register_id):
     register = get_object_or_404(CashRegister, id=register_id, gym=request.gym)
-    payments = (
+    mouvements = (
         Payment.objects.filter(gym=request.gym, cash_register=register)
         .select_related("member", "subscription", "subscription__plan", "product", "created_by")
         .order_by("-created_at")
     )
+
+    # Une journee chargee compte des centaines de mouvements : la page les
+    # deroulait tous.
+    pages = Paginator(mouvements, MOUVEMENTS_PAR_PAGE)
+    page = pages.get_page(request.GET.get("page"))
 
     return render(
         request,
         "pos/register_detail.html",
         {
             "register": register,
-            "payments": payments,
+            "payments": page,
+            "page": page,
+            "mouvements_trouves": pages.count,
         },
     )
 

@@ -2,7 +2,9 @@ import uuid
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 from django.db import transaction
+from django.db.models import Max
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -71,19 +73,38 @@ def notification_dashboard(request):
 
     # Les envois annules restent visibles ici : c'est la trace de ce que la
     # salle a diffuse, meme retire des boites de reception.
+    diffusees = Notification.objects.filter(
+        gym=gym,
+        channel=Notification.CHANNEL_IN_APP,
+        status__in=[Notification.STATUS_SENT, Notification.STATUS_CANCELLED],
+    )
+
+    # On tourne les pages par envoi, pas par message. Prendre les quarante
+    # derniers messages puis les grouper laissait un envoi a deux cents membres
+    # remplir la page a lui seul, et cachait tous les envois precedents.
+    lots = (
+        diffusees.values("batch_id")
+        .annotate(dernier=Max("created_at"))
+        .order_by("-dernier")
+    )
+    pages = Paginator(lots, ENVOIS_PAR_PAGE)
+    page = pages.get_page(request.GET.get("page"))
+
+    identifiants = [ligne["batch_id"] for ligne in page]
+    messages_du_lot = diffusees.filter(batch_id__in=[i for i in identifiants if i])
+    if any(identifiant is None for identifiant in identifiants):
+        # Les envois d'avant les lots : ils se regroupent sur leur contenu.
+        messages_du_lot = messages_du_lot | diffusees.filter(batch_id__isnull=True)
+
     notifications = list(
-        Notification.objects.filter(
-            gym=gym,
-            channel=Notification.CHANNEL_IN_APP,
-            status__in=[Notification.STATUS_SENT, Notification.STATUS_CANCELLED],
-        )
-        .select_related("member", "sent_by")
-        .order_by("-created_at")[:40]
+        messages_du_lot.select_related("member", "sent_by").order_by("-created_at")
     )
 
     context = {
         "form": form,
         "message_batches": _group_message_batches(notifications),
+        "page": page,
+        "envois_trouves": pages.count,
         "sent_count": Notification.objects.filter(
             gym=gym,
             channel=Notification.CHANNEL_IN_APP,
@@ -200,6 +221,11 @@ def _audience_cards(gym):
             }
         )
     return cards
+
+
+# Un envoi peut toucher des centaines de membres : dix par page suffisent a
+# relire ce qui a ete diffuse sans charger toute la base.
+ENVOIS_PAR_PAGE = 10
 
 
 def _group_message_batches(notifications):

@@ -623,3 +623,87 @@ class MessageBatchCancellationTests(TestCase):
 
         self.assertEqual(response.status_code, 405)
         self.assertEqual(Notification.objects.filter(gym=self.gym).count(), 3)
+
+
+
+class EnvoisPaginesTests(TestCase):
+    """
+    Les envois se tournent par lot, pas par message.
+
+    Prendre les quarante derniers messages puis les grouper laissait un envoi
+    a deux cents membres remplir la page a lui seul : tous les envois
+    precedents disparaissaient.
+    """
+
+    def setUp(self):
+        import uuid as _uuid
+
+        self._uuid = _uuid
+        self.compteur = 0
+        self.organisation = Organization.objects.create(name="Org Envois", slug="org-envois")
+        self.gym = Gym.objects.create(
+            organization=self.organisation, name="Gym Envois",
+            slug="gym-envois", subdomain="gym-envois",
+        )
+        module, _ = Module.objects.get_or_create(
+            code="NOTIFICATIONS", defaults={"name": "Notifications"}
+        )
+        GymModule.objects.get_or_create(gym=self.gym, module=module, defaults={"is_active": True})
+        self.gerant = User.objects.create_user(username="gerant-envois", password="pass12345")
+        UserGymRole.objects.create(user=self.gerant, gym=self.gym, role="manager", is_active=True)
+        self.client.force_login(self.gerant)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+        self.url = reverse("notifications:dashboard")
+
+    def _envoi(self, titre, destinataires):
+        lot = self._uuid.uuid4()
+        for numero in range(destinataires):
+            # Un numero par membre : la salle n'en accepte pas deux identiques.
+            self.compteur += 1
+            membre = Member.objects.create(
+                gym=self.gym, first_name=f"M{numero}", last_name=titre,
+                phone=f"+24386{self.compteur:07d}",
+            )
+            Notification.objects.create(
+                gym=self.gym, member=membre, title=titre, message="Bonjour",
+                channel=Notification.CHANNEL_IN_APP, status=Notification.STATUS_SENT,
+                sent_at=timezone.now(), sent_by=self.gerant, batch_id=lot,
+            )
+
+    def test_a_large_batch_no_longer_hides_the_others(self):
+        self._envoi("Ancien", 3)
+        self._envoi("Massif", 60)
+
+        reponse = self.client.get(self.url)
+
+        titres = [lot["title"] for lot in reponse.context["message_batches"]]
+        self.assertIn("Massif", titres)
+        self.assertIn("Ancien", titres)
+
+    def test_the_sendings_are_cut_into_pages(self):
+        for numero in range(12):
+            self._envoi(f"Envoi {numero:02d}", 1)
+
+        reponse = self.client.get(self.url)
+
+        self.assertEqual(reponse.context["envois_trouves"], 12)
+        self.assertEqual(len(reponse.context["message_batches"]), 10)
+        self.assertContains(reponse, "Suivants")
+
+    def test_the_next_page_shows_the_oldest(self):
+        for numero in range(12):
+            self._envoi(f"Envoi {numero:02d}", 1)
+
+        reponse = self.client.get(self.url, {"page": "2"})
+
+        self.assertEqual(len(reponse.context["message_batches"]), 2)
+
+    def test_a_single_sending_shows_no_pagination(self):
+        self._envoi("Unique", 2)
+
+        reponse = self.client.get(self.url)
+
+        self.assertEqual(reponse.context["envois_trouves"], 1)
+        self.assertNotContains(reponse, "Suivants")

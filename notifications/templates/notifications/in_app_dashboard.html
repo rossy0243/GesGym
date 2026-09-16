@@ -239,4 +239,27 @@
     toggleMemberField();
 })();
 </script>
+
+{% if page.paginator.num_pages > 1 %}
+{% comment %} On tourne par envoi : un envoi a deux cents membres ne doit pas
+   remplir la page a lui seul. {% endcomment %}
+<nav class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3"
+     aria-label="Pages des envois">
+    {% if page.has_previous %}
+        <a href="?page={{ page.previous_page_number }}" class="btn btn-sm btn-light">&larr; Précédents</a>
+    {% else %}
+        <span></span>
+    {% endif %}
+    <span class="text-muted small">
+        envois {{ page.start_index }}-{{ page.end_index }} sur {{ envois_trouves }}
+        &middot; page {{ page.number }} sur {{ page.paginator.num_pages }}
+    </span>
+    {% if page.has_next %}
+        <a href="?page={{ page.next_page_number }}" class="btn btn-sm btn-light">Suivants &rarr;</a>
+    {% else %}
+        <span></span>
+    {% endif %}
+</nav>
+{% endif %}
+
 {% endblock %}
