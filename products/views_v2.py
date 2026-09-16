@@ -11,8 +11,15 @@ from smartclub.decorators import module_required, role_required
 
 from .forms import ProductForm, StockMovementForm
 from .kpis import build_product_kpis, products_queryset, stock_value, movements_queryset
+from django.core.paginator import Paginator
+
 from .models import Product, StockMovement
 from .pricing import gym_exchange_rate
+
+
+# Assez pour parcourir un rayon d'un coup d'oeil, assez peu pour que la page
+# reste legere sur un telephone.
+PRODUITS_PAR_PAGE = 50
 
 
 @login_required
@@ -36,9 +43,20 @@ def product_list(request):
     if out_of_stock:
         products = products.filter(quantity=0, is_active=True)
 
+    # Un catalogue complet sur une seule page devenait interminable, et c'est
+    # ici qu'aboutissent les liens du tableau de bord.
+    pages = Paginator(products, PRODUITS_PAR_PAGE)
+    page = pages.get_page(request.GET.get("page"))
+
+    parametres = request.GET.copy()
+    parametres.pop("page", None)
+
     context = {
         "gym": gym,
-        "products": products,
+        "products": page,
+        "page": page,
+        "filtres_conserves": parametres.urlencode(),
+        "produits_trouves": pages.count,
         "active_filter": active_filter,
         "low_stock": low_stock,
         "out_of_stock": out_of_stock,

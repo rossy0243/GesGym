@@ -368,3 +368,110 @@ class ProductAuditTests(TestCase):
                 action="products.product_created"
             ).exists()
         )
+
+
+
+class ListesDuStockTests(TestCase):
+    """
+    Le tableau de bord du stock montre un apercu, pas tout le catalogue.
+
+    Une salle qui vend deroulait des centaines de lignes sur une page faite
+    pour se lire d'un coup d'oeil, et la liste complete n'etait pas paginee.
+    """
+
+    def setUp(self):
+        self.organisation = Organization.objects.create(name="Org Stock", slug="org-stock")
+        self.gym = Gym.objects.create(
+            organization=self.organisation, name="Gym Stock",
+            slug="gym-stock", subdomain="gym-stock",
+        )
+        module, _ = Module.objects.get_or_create(code="PRODUCTS", defaults={"name": "Products"})
+        GymModule.objects.get_or_create(gym=self.gym, module=module, defaults={"is_active": True})
+
+        self.gerant = User.objects.create_user(username="gerant-stock", password="pass12345")
+        UserGymRole.objects.create(user=self.gerant, gym=self.gym, role="manager", is_active=True)
+        self.client.force_login(self.gerant)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _produits(self, combien, quantite, prefixe):
+        for numero in range(combien):
+            Product.objects.create(
+                gym=self.gym, name=f"{prefixe} {numero:03d}",
+                price=Decimal("1000.00"), currency="CDF", quantity=quantite,
+            )
+
+    # --- Le tableau de bord ---------------------------------------------------------------
+
+    def test_the_dashboard_shows_only_a_preview(self):
+        self._produits(20, 2, "Bas")
+
+        reponse = self.client.get(reverse("products:stock_dashboard"))
+
+        self.assertEqual(len(reponse.context["low_stock_apercu"]), 8)
+        self.assertEqual(reponse.context["low_stock_count"], 20)
+
+    def test_the_dashboard_leads_to_the_whole_list(self):
+        self._produits(20, 2, "Bas")
+        self._produits(12, 0, "Rupture")
+
+        reponse = self.client.get(reverse("products:stock_dashboard"))
+
+        self.assertContains(reponse, "Voir les 20 produits en stock bas")
+        self.assertContains(reponse, "Voir les 12 produits en rupture")
+        self.assertContains(reponse, "?low_stock=1")
+        self.assertContains(reponse, "?out_of_stock=1")
+
+    def test_a_short_list_needs_no_link(self):
+        self._produits(3, 2, "Bas")
+
+        reponse = self.client.get(reverse("products:stock_dashboard"))
+
+        self.assertEqual(len(reponse.context["low_stock_apercu"]), 3)
+        self.assertNotContains(reponse, "Voir les 3 produits en stock bas")
+
+    def test_the_counters_still_count_everything(self):
+        self._produits(20, 2, "Bas")
+        self._produits(12, 0, "Rupture")
+
+        reponse = self.client.get(reverse("products:stock_dashboard"))
+
+        self.assertEqual(reponse.context["low_stock_count"], 20)
+        self.assertEqual(reponse.context["out_of_stock_count"], 12)
+
+    # --- La liste des produits ---------------------------------------------------------------
+
+    def test_the_product_list_is_cut_into_pages(self):
+        self._produits(55, 10, "Article")
+
+        reponse = self.client.get(reverse("products:list"))
+
+        self.assertEqual(len(reponse.context["products"]), 50)
+        self.assertEqual(reponse.context["produits_trouves"], 55)
+        self.assertContains(reponse, "Suivante")
+
+    def test_the_next_page_shows_the_rest(self):
+        self._produits(55, 10, "Article")
+
+        reponse = self.client.get(reverse("products:list"), {"page": "2"})
+
+        self.assertEqual(len(reponse.context["products"]), 5)
+
+    def test_turning_the_page_keeps_the_filter(self):
+        self._produits(55, 2, "Bas")
+        self._produits(5, 10, "Plein")
+
+        reponse = self.client.get(reverse("products:list"), {"low_stock": "1"})
+
+        self.assertEqual(reponse.context["produits_trouves"], 55)
+        self.assertIn("low_stock=1", reponse.context["filtres_conserves"])
+        self.assertNotIn("page=", reponse.context["filtres_conserves"])
+        self.assertContains(reponse, "?low_stock=1&page=2")
+
+    def test_a_short_catalogue_shows_no_pagination(self):
+        self._produits(4, 10, "Article")
+
+        reponse = self.client.get(reverse("products:list"))
+
+        self.assertNotContains(reponse, "Suivante")

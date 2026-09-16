@@ -132,5 +132,30 @@
         </div>
         {% endfor %}
     </div>
+
+    {% if page.paginator.num_pages > 1 %}
+    {% comment %} Tourner la page garde les filtres : sans cela, arriver du
+       tableau de bord sur les ruptures puis changer de page ramenait tout le
+       catalogue. {% endcomment %}
+    <nav class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3"
+         aria-label="Pages des produits">
+        {% if page.has_previous %}
+            <a href="?{{ filtres_conserves }}&page={{ page.previous_page_number }}"
+               class="btn btn-sm btn-light">&larr; Précédente</a>
+        {% else %}
+            <span></span>
+        {% endif %}
+        <span class="text-muted small">
+            {{ page.start_index }}-{{ page.end_index }} sur {{ produits_trouves }} produit{{ produits_trouves|pluralize }}
+            &middot; page {{ page.number }} sur {{ page.paginator.num_pages }}
+        </span>
+        {% if page.has_next %}
+            <a href="?{{ filtres_conserves }}&page={{ page.next_page_number }}"
+               class="btn btn-sm btn-light">Suivante &rarr;</a>
+        {% else %}
+            <span></span>
+        {% endif %}
+    </nav>
+    {% endif %}
 </div>
 {% endblock %}

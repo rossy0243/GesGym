@@ -194,11 +194,11 @@
                     <h5 class="card-title mb-1">Produits en stock bas</h5>
                     <small class="text-muted">Quantite inferieure ou egale a 5.</small>
                 </div>
-                <span class="badge bg-warning text-dark">{{ low_stock_products|length }}</span>
+                <span class="badge bg-warning text-dark">{{ low_stock_count }}</span>
             </div>
             <div class="card-body">
-                {% if low_stock_products %}
-                    {% for product in low_stock_products %}
+                {% if low_stock_apercu %}
+                    {% for product in low_stock_apercu %}
                     <div class="stock-list-item">
                         <div>
                             <a class="stock-product-link" href="{% url 'products:detail' product.id %}">
@@ -209,6 +209,11 @@
                         <span class="badge bg-warning text-dark">Stock {{ product.quantity }}</span>
                     </div>
                     {% endfor %}
+                    {% if low_stock_count > produits_en_apercu %}
+                    <a href="{% url 'products:list' %}?low_stock=1" class="btn btn-sm btn-light mt-2">
+                        Voir les {{ low_stock_count }} produits en stock bas
+                    </a>
+                    {% endif %}
                 {% else %}
                     <div class="stock-empty">
                         <span class="material-icons">check_circle</span>
@@ -227,11 +232,11 @@
                     <h5 class="card-title mb-1">Ruptures de stock</h5>
                     <small class="text-muted">Produits actifs avec quantite a zero.</small>
                 </div>
-                <span class="badge bg-danger">{{ out_of_stock_products|length }}</span>
+                <span class="badge bg-danger">{{ out_of_stock_count }}</span>
             </div>
             <div class="card-body">
-                {% if out_of_stock_products %}
-                    {% for product in out_of_stock_products %}
+                {% if out_of_stock_apercu %}
+                    {% for product in out_of_stock_apercu %}
                     <div class="stock-list-item">
                         <div>
                             <a class="stock-product-link" href="{% url 'products:detail' product.id %}">
@@ -245,6 +250,11 @@
                         </a>
                     </div>
                     {% endfor %}
+                    {% if out_of_stock_count > produits_en_apercu %}
+                    <a href="{% url 'products:list' %}?out_of_stock=1" class="btn btn-sm btn-light mt-2">
+                        Voir les {{ out_of_stock_count }} produits en rupture
+                    </a>
+                    {% endif %}
                 {% else %}
                     <div class="stock-empty">
                         <span class="material-icons">verified</span>

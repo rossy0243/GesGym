@@ -32,6 +32,11 @@ def stock_value(product, exchange_rate=None):
     return product.price_usd(exchange_rate) * product.quantity
 
 
+# Ce que le tableau de bord montre d'une liste, avant de renvoyer a la liste
+# complete.
+PRODUITS_EN_APERCU = 8
+
+
 def build_product_kpis(gym, period_data=None):
     today = timezone.localdate()
     period_data = period_data or {
@@ -80,6 +85,13 @@ def build_product_kpis(gym, period_data=None):
         "out_of_stock_count": out_of_stock_products.count(),
         "low_stock_products": low_stock_products,
         "out_of_stock_products": out_of_stock_products,
+        # Le tableau de bord montre un apercu : un catalogue fourni y
+        # deroulait des centaines de lignes, et le chiffre qui compte - le
+        # nombre - se lit deja dans le bandeau. La liste complete est a un
+        # clic, filtree.
+        "low_stock_apercu": low_stock_products.order_by("quantity", "name")[:PRODUITS_EN_APERCU],
+        "out_of_stock_apercu": out_of_stock_products.order_by("name")[:PRODUITS_EN_APERCU],
+        "produits_en_apercu": PRODUITS_EN_APERCU,
         "stock_movements_period": period_movements.count(),
         "stock_in_period": period_movements.filter(movement_type="in").aggregate(total=Sum("quantity"))["total"] or 0,
         "stock_out_period": period_movements.filter(movement_type="out").aggregate(total=Sum("quantity"))["total"] or 0,
