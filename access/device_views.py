@@ -23,7 +23,7 @@ from members.models import Member
 from smartclub.access_control import ACCESS_DEVICE_ROLES, ACCESS_DEVICE_USE_ROLES
 from smartclub.decorators import module_required, role_required
 
-from . import door, enrollment, hikvision
+from . import door, enrollment, hikvision, relectures
 from .models import AccessDevice, AccessLog
 from .views import enregistrer_passage_invite
 from .views import _record_access, _today_stats
@@ -632,6 +632,13 @@ def _journaliser_hors_membre(device, parsed, employee=None, libelle=""):
             return deja
 
     evenement = parsed.get("event") or {}
+
+    # Lecture repetee de la meme personne : le passage deja enregistre fait foi.
+    deja_vu = relectures.passage_recent(
+        device.gym, employee=employee, terminal_label=libelle
+    )
+    if deja_vu is not None:
+        return deja_vu
 
     # C'est le lecteur qui a tranche : son code d'evenement dit s'il a ouvert.
     # Sans code lisible, on s'en tient a ce qu'il signale le plus souvent.

@@ -11,7 +11,7 @@ from members import invitations
 from members.models import Member
 from smartclub.access_control import ACCESS_ROLES
 from smartclub.decorators import module_required, role_required
-from . import door
+from . import door, relectures
 from .models import AccessLog
 
 
@@ -146,6 +146,12 @@ def _record_access(
     refuse, sinon un membre ferait entrer un ami avec ses identifiants. Un
     visage, personne ne peut le presenter a votre place.
     """
+    # Le lecteur lit parfois deux fois de suite : le passage deja enregistre
+    # fait foi, et la porte s'ouvre sans qu'une seconde ligne apparaisse.
+    deja = relectures.passage_recent(gym, member=member)
+    if deja is not None:
+        return True, relectures.RELECTURE_REASON, deja
+
     with transaction.atomic():
         member = Member.objects.select_for_update().get(id=member.id, gym=gym)
         access_granted, reason = _member_has_valid_access(
@@ -336,6 +342,12 @@ def enregistrer_passage_invite(gym, carnet, user=None, device=None, methode=""):
     ou que l'invite se presente. La ligne de journal n'a pas de membre, comme
     une ouverture manuelle, mais porte le carnet : c'est ce qui les distingue.
     """
+    # Meme regle pour un invite - et ici, une relecture couterait en plus une
+    # seance du carnet.
+    deja = relectures.passage_recent(gym, guest_pass=carnet)
+    if deja is not None:
+        return True, relectures.RELECTURE_REASON, deja
+
     refus = invitations.refus_eventuel(carnet)
     if refus:
         log = AccessLog.objects.create(

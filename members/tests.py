@@ -3281,6 +3281,25 @@ class GuestPassLifeTests(TestCase):
         self.assertIn("deja ete invitee", str(capture.exception))
 
 
+def _vieillir_les_passages(minutes=5):
+    """
+    Recule les passages deja enregistres.
+
+    Le lecteur regroupe les lectures d'une meme personne faites dans la minute :
+    deux lignes a la meme seconde racontent une relecture, pas deux visites. Un
+    vrai retour dans la salle, lui, arrive plus tard - c'est ce que ces tests
+    veulent dire quand ils enchainent deux passages.
+    """
+    from datetime import timedelta as _timedelta
+
+    from access.models import AccessLog
+
+    for log in AccessLog.objects.all():
+        AccessLog.objects.filter(pk=log.pk).update(
+            check_in_time=log.check_in_time - _timedelta(minutes=minutes)
+        )
+
+
 class GuestEntryTests(TestCase):
     """L'invite se presente : ce qui le laisse entrer, ce qui l'arrete."""
 
@@ -3324,6 +3343,7 @@ class GuestEntryTests(TestCase):
         session.save()
 
     def _presenter(self, code=None):
+        _vieillir_les_passages()
         with patch.object(door, "open_doors", return_value=[]):
             return self.client.post(
                 reverse("access:member_access", args=[code or self.carnet.code])
@@ -3335,6 +3355,23 @@ class GuestEntryTests(TestCase):
         reponse = self._presenter()
 
         self.assertTrue(reponse.json()["access"])
+
+    def test_a_repeated_reading_costs_no_session(self):
+        # Le lecteur lit parfois deux fois : une seance perdue pour rien serait
+        # payee par l'invite, qui n'a rien demande.
+        self._presenter()
+        self.carnet.refresh_from_db()
+        consommees = self.carnet.sessions_used
+
+        with patch.object(door, "open_doors", return_value=[]):
+            reponse = self.client.post(
+                reverse("access:member_access", args=[self.carnet.code])
+            )
+
+        self.assertTrue(reponse.json()["access"])
+        self.carnet.refresh_from_db()
+        self.assertEqual(self.carnet.sessions_used, consommees)
+        self.assertEqual(AccessLog.objects.filter(guest_pass=self.carnet).count(), 1)
 
     def test_the_entry_consumes_one_session(self):
         self._presenter()
@@ -3668,6 +3705,7 @@ class GuestKpiTests(TestCase):
         session.save()
 
     def _passage_invite(self):
+        _vieillir_les_passages()
         with patch.object(door, "open_doors", return_value=[]):
             self.client.post(
                 reverse("access:member_access", args=[self.carnet.code])

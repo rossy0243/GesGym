@@ -23,7 +23,7 @@ from organizations.models import (
     SensitiveActivityLog,
 )
 from subscriptions.models import MemberSubscription, SubscriptionPlan
-from . import door, enrollment, hikvision
+from . import door, enrollment, hikvision, relectures
 from .device_views import (
     UNKNOWN_CREDENTIAL_REASON,
     _refresh_device_state,
@@ -38,6 +38,25 @@ from .views import (
     RETURN_LABEL,
     SHARED_CREDENTIAL_REASON,
 )
+
+
+def _vieillir_les_passages(minutes=5):
+    """
+    Recule les passages deja enregistres.
+
+    Le lecteur regroupe les lectures d'une meme personne faites dans la minute :
+    deux lignes a la meme seconde racontent une relecture, pas deux visites. Un
+    vrai retour dans la salle, lui, arrive plus tard - c'est ce que ces tests
+    veulent dire quand ils enchainent deux passages.
+    """
+    from datetime import timedelta as _timedelta
+
+    from access.models import AccessLog
+
+    for log in AccessLog.objects.all():
+        AccessLog.objects.filter(pk=log.pk).update(
+            check_in_time=log.check_in_time - _timedelta(minutes=minutes)
+        )
 
 
 class AccessControlTests(TestCase):
@@ -150,6 +169,7 @@ class AccessControlTests(TestCase):
         first_response = self.client.post(
             reverse("access:manual_access_entry", args=[self.member_a.id])
         )
+        _vieillir_les_passages()
         second_response = self.client.post(
             reverse("access:manual_access_entry", args=[self.member_a.id])
         )
@@ -176,6 +196,7 @@ class AccessControlTests(TestCase):
         first_response = self.client.post(
             reverse("access:member_access", args=[self.member_a.qr_code])
         )
+        _vieillir_les_passages()
         second_response = self.client.post(
             reverse("access:member_access", args=[self.member_a.qr_code])
         )
@@ -529,6 +550,7 @@ class AccessDeviceWebhookTests(TestCase):
         self.addCleanup(patcher.stop)
 
     def _post_scan(self, credential, token=None):
+        _vieillir_les_passages()
         payload = json.dumps({
             "eventType": "AccessControllerEvent",
             "AccessControllerEvent": {"QRCodeInfo": str(credential)},
@@ -717,6 +739,7 @@ class DashboardDoorOpeningTests(TestCase):
         self.addCleanup(patcher.stop)
 
     def _scan(self, qr_code):
+        _vieillir_les_passages()
         return self.client.post(reverse("access:member_access", args=[qr_code]))
 
     def test_valid_qr_opens_the_door(self):
@@ -768,6 +791,7 @@ class DashboardDoorOpeningTests(TestCase):
     # --- Pointage manuel ---------------------------------------------------
 
     def _manual_entry(self, member):
+        _vieillir_les_passages()
         return self.client.post(
             reverse("access:manual_access_entry", args=[member.id])
         )
@@ -1952,6 +1976,7 @@ class ReturnPassageTests(TestCase):
         self.addCleanup(patcher.stop)
 
     def _passage(self):
+        _vieillir_les_passages()
         charge = {
             "AccessControllerEvent": {
                 "employeeNoString": enrollment.employee_no(self.member),
@@ -2138,6 +2163,7 @@ class ReturnOnlyByFaceTests(TestCase):
 
     def _passage(self, mode):
         """Passage remonte par le lecteur, dans le mode indique."""
+        _vieillir_les_passages()
         evenement = {"employeeNoString": enrollment.employee_no(self.member)}
         if mode is not None:
             evenement["currentVerifyMode"] = mode
@@ -2947,6 +2973,7 @@ class RepeatedDeviceEventTests(TestCase):
         self.url = reverse("access:device_webhook", args=[self.device.webhook_token])
 
     def _pousser(self, serial, minor=75):
+        _vieillir_les_passages()
         charge = {
             "AccessControllerEvent": {
                 "employeeNoString": enrollment.employee_no(self.member),
@@ -3787,6 +3814,7 @@ class StaffAndTerminalPassageTests(TestCase):
 
     def test_a_second_passage_the_same_day_is_a_return(self):
         self._envoyer(employeeNoString="2", serialNo="1")
+        _vieillir_les_passages()
         self._envoyer(employeeNoString="2", serialNo="2")
 
         self.assertEqual(AccessLog.objects.filter(is_return=True).count(), 1)
@@ -4075,6 +4103,7 @@ class StaffFaceWebhookTests(TestCase):
     def test_a_second_passage_the_same_day_is_a_return(self):
         numero = enrollment.numero_personnel(self.employe)
         self._envoyer(employeeNoString=numero, serialNo="11")
+        _vieillir_les_passages()
         self._envoyer(employeeNoString=numero, serialNo="12")
 
         self.assertEqual(AccessLog.objects.filter(employee=self.employe, is_return=True).count(), 1)
@@ -5341,3 +5370,147 @@ class TerminalRecordLastPassageTests(TestCase):
         self.assertContains(reponse, "dernier passage le")
         self.assertContains(reponse, "jamais vu passer")
         self.assertContains(reponse, "Fiche sans nom ?")
+
+
+
+class RelecturesTests(TestCase):
+    """
+    Deux lectures de la meme personne dans la minute font un seul passage.
+
+    Le lecteur lit parfois plusieurs fois de suite : la frequentation du jour
+    doublait sans que personne ne soit entre deux fois.
+    """
+
+    def setUp(self):
+        (self.gym, self.device, self.member, self.employe,
+         _) = _salle_avec_personnel("relectures")
+        plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Mensuel", price=30, duration_days=30
+        )
+        today = timezone.localdate()
+        MemberSubscription.objects.create(
+            gym=self.gym, member=self.member, plan=plan,
+            start_date=today - timedelta(days=1), end_date=today + timedelta(days=29),
+            is_active=True,
+        )
+        self.url = reverse("access:device_webhook", args=[self.device.webhook_token])
+        patcher = patch("access.hikvision.HikvisionClient.open_door")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _envoyer(self, **evenement):
+        charge = {"AccessControllerEvent": {
+            "majorEventType": 5, "subEventType": 75,
+            "currentVerifyMode": "face", **evenement,
+        }}
+        return self.client.post(self.url, data=json.dumps(charge), content_type="application/json")
+
+    def _numero_membre(self):
+        return enrollment.employee_no(self.member)
+
+    # --- Le membre ------------------------------------------------------------------------
+
+    def test_two_readings_in_the_same_minute_make_one_passage(self):
+        self._envoyer(employeeNoString=self._numero_membre(), serialNo="1")
+        self._envoyer(employeeNoString=self._numero_membre(), serialNo="2")
+
+        self.assertEqual(AccessLog.objects.filter(member=self.member).count(), 1)
+
+    def test_the_door_still_opens_on_the_repeated_reading(self):
+        self._envoyer(employeeNoString=self._numero_membre(), serialNo="1")
+
+        reponse = self._envoyer(employeeNoString=self._numero_membre(), serialNo="2")
+
+        self.assertTrue(reponse.json()["access"])
+        self.assertEqual(reponse.json()["reason"], relectures.RELECTURE_REASON)
+
+    def test_the_daily_attendance_counts_one(self):
+        from .views import _today_stats
+
+        self._envoyer(employeeNoString=self._numero_membre(), serialNo="1")
+        self._envoyer(employeeNoString=self._numero_membre(), serialNo="2")
+
+        self.assertEqual(_today_stats(self.gym)["entries"], 1)
+
+    def test_a_later_passage_is_a_real_return(self):
+        self._envoyer(employeeNoString=self._numero_membre(), serialNo="1")
+        _vieillir_les_passages()
+
+        self._envoyer(employeeNoString=self._numero_membre(), serialNo="2")
+
+        self.assertEqual(AccessLog.objects.filter(member=self.member).count(), 2)
+        self.assertTrue(AccessLog.objects.filter(member=self.member, is_return=True).exists())
+
+    def test_two_different_people_are_two_passages(self):
+        # La regle regroupe une personne, pas la porte.
+        autre = Member.objects.create(
+            gym=self.gym, first_name="Bob", last_name="Kasa", phone="+243860000077",
+        )
+        plan = SubscriptionPlan.objects.get(gym=self.gym)
+        today = timezone.localdate()
+        MemberSubscription.objects.create(
+            gym=self.gym, member=autre, plan=plan, start_date=today,
+            end_date=today + timedelta(days=30), is_active=True,
+        )
+
+        self._envoyer(employeeNoString=self._numero_membre(), serialNo="1")
+        self._envoyer(employeeNoString=enrollment.employee_no(autre), serialNo="2")
+
+        self.assertEqual(AccessLog.objects.count(), 2)
+
+    def test_repeated_refusals_are_all_kept(self):
+        # Quelqu'un qui insiste doit se voir : c'est l'alerte "refuse 3 fois".
+        sans_droit = Member.objects.create(
+            gym=self.gym, first_name="Sans", last_name="Abonnement", phone="+243860000088",
+        )
+
+        self._envoyer(employeeNoString=enrollment.employee_no(sans_droit), serialNo="1")
+        self._envoyer(employeeNoString=enrollment.employee_no(sans_droit), serialNo="2")
+
+        self.assertEqual(AccessLog.objects.filter(member=sans_droit, access_granted=False).count(), 2)
+
+    # --- Le personnel et les fiches du terminal -------------------------------------------------
+
+    def test_an_employee_read_twice_passes_once(self):
+        numero = enrollment.numero_personnel(self.employe)
+
+        self._envoyer(employeeNoString=numero, serialNo="1")
+        self._envoyer(employeeNoString=numero, serialNo="2")
+
+        self.assertEqual(AccessLog.objects.filter(employee=self.employe).count(), 1)
+
+    def test_a_terminal_record_read_twice_passes_once(self):
+        self._envoyer(employeeNoString="7", name="Gardien", serialNo="1")
+        self._envoyer(employeeNoString="7", name="Gardien", serialNo="2")
+
+        self.assertEqual(AccessLog.objects.filter(terminal_label="Gardien").count(), 1)
+
+    # --- L'ouverture manuelle --------------------------------------------------------------------
+
+    def test_manual_openings_are_never_grouped(self):
+        # Une ouverture manuelle ne designe personne : deux gestes, deux lignes.
+        AccessLog.objects.create(gym=self.gym, access_granted=True)
+        AccessLog.objects.create(gym=self.gym, access_granted=True)
+
+        self.assertEqual(AccessLog.objects.filter(member__isnull=True, terminal_label="").count(), 2)
+
+    # --- Le rattrapage ------------------------------------------------------------------------------
+
+    def test_the_catch_up_does_not_recreate_a_reading(self):
+        import io
+
+        from django.core.management import call_command
+
+        from .management.commands.rattraper_passages import Command
+
+        maintenant = timezone.localtime().replace(microsecond=0)
+        evenements = [
+            {"employeeNoString": self._numero_membre(), "minor": 75, "serialNo": "801",
+             "time": maintenant.isoformat()},
+            {"employeeNoString": self._numero_membre(), "minor": 75, "serialNo": "802",
+             "time": (maintenant + timedelta(seconds=20)).isoformat()},
+        ]
+        with patch.object(Command, "_lire_evenements", return_value=evenements):
+            call_command("rattraper_passages", stdout=io.StringIO())
+
+        self.assertEqual(AccessLog.objects.filter(member=self.member).count(), 1)

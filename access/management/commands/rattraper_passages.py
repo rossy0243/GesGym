@@ -19,7 +19,7 @@ from datetime import datetime, timedelta
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
-from access import enrollment, hikvision
+from access import enrollment, hikvision, relectures
 from access.models import AccessDevice, AccessLog
 from members.models import Member
 
@@ -130,6 +130,11 @@ class Command(BaseCommand):
 
             horodatage = self._horodatage(evenement.get("time"))
             if horodatage is None:
+                ignores += 1
+                continue
+
+            # Deux lectures a la meme minute : un seul passage, comme en direct.
+            if relectures.passage_recent(device.gym, member=member, moment=horodatage):
                 ignores += 1
                 continue
 
