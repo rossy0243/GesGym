@@ -2600,3 +2600,96 @@ class EcartDeCaisseTests(TestCase):
         reponse = self.client.get(reverse("pos:register_history"))
 
         self.assertContains(reponse, "bg-warning text-dark px-3 py-2")
+
+
+
+class ColonnesDeCaisseTests(TestCase):
+    """
+    Le tableau des caisses se lit sans traduire.
+
+    "Theorique", "Compte", "Ecart" demandaient de deviner ; et "Clôture"
+    melangeait l'etat de la caisse avec l'heure de sa clôture.
+    """
+
+    def setUp(self):
+        self.organisation = Organization.objects.create(name="Org Colonnes", slug="org-colonnes")
+        self.gym = Gym.objects.create(
+            organization=self.organisation, name="Gym Colonnes",
+            slug="gym-colonnes", subdomain="gym-colonnes",
+        )
+        for code in ("POS", "MEMBERS"):
+            module, _ = Module.objects.get_or_create(code=code, defaults={"name": code})
+            GymModule.objects.get_or_create(gym=self.gym, module=module, defaults={"is_active": True})
+
+        self.proprietaire = User.objects.create_user(username="proprio-colonnes", password="pass12345")
+        UserGymRole.objects.create(user=self.proprietaire, gym=self.gym, role="owner", is_active=True)
+        self.caissiere = User.objects.create_user(username="caissiere-colonnes", password="pass12345")
+        UserGymRole.objects.create(user=self.caissiere, gym=self.gym, role="cashier", is_active=True)
+        self.caisse = CashRegister.objects.create(
+            gym=self.gym, opened_by=self.caissiere,
+            opening_amount=Decimal("10000.00"), exchange_rate=Decimal("2800.00"),
+        )
+
+        self.client.force_login(self.proprietaire)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _page(self):
+        return self.client.get(reverse("core:gym_dashboard", args=[self.gym.id]))
+
+    def _cloturer(self):
+        self.caisse.closing_amount = Decimal("10000.00")
+        self.caisse.difference = Decimal("0.00")
+        self.caisse.closed_by = self.caissiere
+        self.caisse.closed_at = timezone.now()
+        self.caisse.is_closed = True
+        self.caisse.save()
+        return self.caisse
+
+    def test_each_column_says_what_it_holds(self):
+        reponse = self._page()
+
+        for intitule in (
+            "Fonds initial",
+            "Solde théorique",
+            "Solde réellement compté",
+            "Écart constaté",
+            "Statut",
+            "Clôture",
+        ):
+            with self.subTest(intitule=intitule):
+                self.assertContains(reponse, intitule)
+
+    def test_an_open_session_is_in_progress_and_has_no_closing_time(self):
+        reponse = self._page()
+
+        self.assertContains(reponse, "En cours")
+        self.assertContains(reponse, "pas encore clôturée")
+
+    def test_a_closed_session_shows_its_real_closing_time(self):
+        caisse = self._cloturer()
+
+        reponse = self._page()
+
+        heure = timezone.localtime(caisse.closed_at).strftime("%d/%m %H:%M")
+        self.assertContains(reponse, heure)
+        self.assertContains(reponse, "Clôturée")
+        self.assertNotContains(reponse, "pas encore clôturée")
+
+    def test_the_status_no_longer_hides_in_the_closing_column(self):
+        # "En cours" appartient au statut : le laisser dans la colonne Clôture
+        # faisait lire une heure la ou il n'y en avait pas.
+        page = self._page().content.decode("utf-8")
+
+        entetes = page[page.index("<th>Statut</th>"):]
+        self.assertIn("En cours", entetes)
+        self.assertLess(page.index("<th>Statut</th>"), page.index("<th>Clôture</th>"))
+
+    def test_the_history_speaks_the_same_language(self):
+        reponse = self.client.get(reverse("pos:register_history"))
+
+        self.assertContains(reponse, "Fonds initial")
+        self.assertContains(reponse, "Solde réellement compté")
+        self.assertContains(reponse, "Écart constaté")
+        self.assertNotContains(reponse, "Total réel")

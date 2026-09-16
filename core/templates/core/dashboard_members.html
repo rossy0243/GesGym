@@ -313,10 +313,11 @@
                                     <th>Session</th>
                                     <th>Responsable</th>
                                     <th>Ouverte</th>
-                                    <th class="text-end">Fonds</th>
-                                    <th class="text-end">Theorique</th>
-                                    <th class="text-end">Compte</th>
-                                    <th class="text-end">Ecart</th>
+                                    <th class="text-end">Fonds initial</th>
+                                    <th class="text-end">Solde théorique</th>
+                                    <th class="text-end">Solde réellement compté</th>
+                                    <th class="text-end">Écart constaté</th>
+                                    <th>Statut</th>
                                     <th>Clôture</th>
                                 </tr>
                             </thead>
@@ -338,22 +339,31 @@
                                             <span class="text-muted">À déterminer</span>
                                         {% endif %}
                                     </td>
+                                    {% comment %} Deux questions differentes, deux colonnes : ou en
+                                       est cette caisse, et a quelle heure elle a ete clôturee. {% endcomment %}
                                     <td class="fs-12">
                                         {% if session.est_fermee %}
-                                            {{ session.fermee_a|date:"d/m H:i" }} - {{ session.fermee_par }}
+                                            <span class="badge bg-success">Clôturée</span>
                                             {% if session.cloture_forcee %}
                                                 <span class="badge bg-warning text-dark"
-                                                      title="Clôturee par quelqu'un d'autre que son titulaire.">forcee</span>
-                                            {% endif %}
-                                            {% if session.est_validee %}
-                                                <div class="fs-11 text-muted">validee par {{ session.validee_par }}</div>
-                                            {% else %}
-                                                <div class="fs-11 ton-attention">a contre-signer</div>
+                                                      title="Clôturee par quelqu'un d'autre que son titulaire.">clôture forcée</span>
                                             {% endif %}
                                         {% elif session.oubliee %}
-                                            <span class="badge bg-danger">ouverte depuis hier</span>
+                                            <span class="badge bg-danger">Ouverte depuis hier</span>
                                         {% else %}
-                                            <span class="badge bg-success">en cours</span>
+                                            <span class="badge bg-secondary">En cours</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="fs-12">
+                                        {% if session.est_fermee %}
+                                            {{ session.fermee_a|date:"d/m H:i" }} &mdash; {{ session.fermee_par }}
+                                            {% if session.est_validee %}
+                                                <div class="fs-11 text-muted">validée par {{ session.validee_par }}</div>
+                                            {% else %}
+                                                <div class="fs-11 ton-attention">à contre-signer</div>
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="text-muted">pas encore clôturée</span>
                                         {% endif %}
                                     </td>
                                 </tr>
