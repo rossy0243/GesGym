@@ -233,11 +233,28 @@
             </table>
         </div>
 
-        {% if total_count > 300 %}
-            <div class="p-3 border-top text-muted small">
-                Les 300 sorties les plus récentes sont affichées, sur {{ total_count }} au total.
-                Resserrez les dates pour voir les plus anciennes.
-            </div>
+        {% if page.paginator.num_pages > 1 %}
+            {% comment %} Tourner la page garde les filtres : sans cela, la page 2
+               repartait sur le mois en cours. {% endcomment %}
+            <nav class="d-flex flex-wrap justify-content-between align-items-center gap-2 p-3 border-top"
+                 aria-label="Pages des décaissements">
+                {% if page.has_previous %}
+                    <a href="?{{ filtres_conserves }}&page={{ page.previous_page_number }}"
+                       class="btn btn-sm btn-light">&larr; Précédente</a>
+                {% else %}
+                    <span></span>
+                {% endif %}
+                <span class="text-muted small">
+                    {{ page.start_index }}-{{ page.end_index }} sur {{ total_count }} décaissement{{ total_count|pluralize }}
+                    &middot; page {{ page.number }} sur {{ page.paginator.num_pages }}
+                </span>
+                {% if page.has_next %}
+                    <a href="?{{ filtres_conserves }}&page={{ page.next_page_number }}"
+                       class="btn btn-sm btn-light">Suivante &rarr;</a>
+                {% else %}
+                    <span></span>
+                {% endif %}
+            </nav>
         {% endif %}
     </div>
 </div>

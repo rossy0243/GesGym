@@ -4,6 +4,7 @@ from decimal import Decimal
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.paginator import Paginator
 from django.db.models import Count, Q, Sum
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -32,6 +33,11 @@ from .services import (
     record_product_sale,
     record_subscription_payment,
 )
+
+
+# Assez pour lire un mois d'un coup d'oeil, assez peu pour que la page reste
+# legere sur un telephone.
+DECAISSEMENTS_PAR_PAGE = 50
 
 
 def _media_url(request, file_field, fallback=""):
@@ -697,12 +703,27 @@ def expense_register(request):
         .order_by("-total")
     ]
 
+    # Une salle qui tourne sort de l'argent tous les jours : au bout de
+    # quelques mois, la liste se compte en centaines de lignes. Elle etait
+    # coupee aux 300 plus recentes, et les plus anciennes n'etaient atteignables
+    # qu'en resserrant les dates a l'aveugle.
+    pages = Paginator(depenses, DECAISSEMENTS_PAR_PAGE)
+    page = pages.get_page(request.GET.get("page"))
+
+    # Les liens de pagination gardent les filtres : tourner la page ne doit pas
+    # renvoyer au mois en cours.
+    parametres = request.GET.copy()
+    parametres.pop("page", None)
+    filtres_conserves = parametres.urlencode()
+
     return render(
         request,
         "pos/expense_register.html",
         {
-            "expenses": depenses[:300],
-            "total_count": depenses.count(),
+            "expenses": page,
+            "page": page,
+            "filtres_conserves": filtres_conserves,
+            "total_count": pages.count,
             "total_cdf": total,
             "total_brut_cdf": brut,
             "total_rendu_cdf": rendu_total,

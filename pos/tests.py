@@ -2693,3 +2693,105 @@ class ColonnesDeCaisseTests(TestCase):
         self.assertContains(reponse, "Solde réellement compté")
         self.assertContains(reponse, "Écart constaté")
         self.assertNotContains(reponse, "Total réel")
+
+
+
+class RegistreDesDecaissementsTests(TestCase):
+    """
+    Le registre se tourne page par page.
+
+    Il etait coupe aux 300 sorties les plus recentes : les plus anciennes
+    n'etaient atteignables qu'en resserrant les dates a l'aveugle.
+    """
+
+    def setUp(self):
+        self.organisation = Organization.objects.create(name="Org Registre", slug="org-registre")
+        self.gym = Gym.objects.create(
+            organization=self.organisation, name="Gym Registre",
+            slug="gym-registre", subdomain="gym-registre",
+        )
+        module, _ = Module.objects.get_or_create(code="POS", defaults={"name": "POS"})
+        GymModule.objects.get_or_create(gym=self.gym, module=module, defaults={"is_active": True})
+
+        self.gerant = User.objects.create_user(username="gerant-registre", password="pass12345")
+        UserGymRole.objects.create(user=self.gerant, gym=self.gym, role="manager", is_active=True)
+        self.caisse = CashRegister.objects.create(
+            gym=self.gym, opened_by=self.gerant,
+            opening_amount=Decimal("500000.00"), exchange_rate=Decimal("2800.00"),
+        )
+        self.client.force_login(self.gerant)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+        self.url = reverse("pos:expense_register")
+
+    def _decaissements(self, combien, motif="Achat", montant="1000.00"):
+        for numero in range(combien):
+            record_expense(
+                gym=self.gym, amount=Decimal(montant), currency="CDF", method="cash",
+                category="expense", description=f"{motif} {numero}",
+                created_by=self.gerant, source_app="pos", source_model="ManualExpense",
+            )
+
+    def test_a_short_list_shows_no_pagination(self):
+        self._decaissements(3)
+
+        reponse = self.client.get(self.url)
+
+        self.assertEqual(len(reponse.context["expenses"]), 3)
+        self.assertNotContains(reponse, "Suivante")
+
+    def test_a_long_list_is_cut_into_pages(self):
+        self._decaissements(55)
+
+        reponse = self.client.get(self.url)
+
+        self.assertEqual(len(reponse.context["expenses"]), 50)
+        self.assertEqual(reponse.context["total_count"], 55)
+        self.assertContains(reponse, "Suivante")
+        self.assertContains(reponse, "1-50 sur 55")
+
+    def test_the_next_page_shows_the_rest(self):
+        self._decaissements(55)
+
+        reponse = self.client.get(self.url, {"page": "2"})
+
+        self.assertEqual(len(reponse.context["expenses"]), 5)
+        self.assertContains(reponse, "Précédente")
+
+    def test_nothing_is_hidden_any_more(self):
+        # Au-dela de 300, les plus anciennes restaient inaccessibles.
+        self._decaissements(60)
+        vues = set()
+
+        for numero_page in (1, 2):
+            reponse = self.client.get(self.url, {"page": numero_page})
+            vues.update(depense.id for depense in reponse.context["expenses"])
+
+        self.assertEqual(len(vues), 60)
+
+    def test_turning_the_page_keeps_the_filters(self):
+        self._decaissements(55, motif="Carburant")
+        self._decaissements(3, motif="Eau")
+
+        reponse = self.client.get(self.url, {"search": "Carburant"})
+
+        self.assertEqual(reponse.context["total_count"], 55)
+        self.assertIn("search=Carburant", reponse.context["filtres_conserves"])
+        self.assertNotIn("page=", reponse.context["filtres_conserves"])
+        self.assertContains(reponse, "?search=Carburant&page=2")
+
+    def test_the_totals_cover_the_whole_period_not_the_page(self):
+        self._decaissements(55, montant="1000.00")
+
+        reponse = self.client.get(self.url)
+
+        self.assertEqual(reponse.context["total_cdf"], Decimal("55000.00"))
+
+    def test_an_impossible_page_falls_back_on_the_last_one(self):
+        self._decaissements(55)
+
+        reponse = self.client.get(self.url, {"page": "99"})
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertEqual(reponse.context["page"].number, 2)
