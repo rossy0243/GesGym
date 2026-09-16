@@ -355,6 +355,8 @@
                             <thead>
                                 <tr>
                                     <th>Date</th>
+                                    <th>Arrivée</th>
+                                    <th>Origine</th>
                                     <th>Statut</th>
                                 </tr>
                             </thead>
@@ -362,6 +364,8 @@
                                 {% for attendance in attendances %}
                                 <tr>
                                     <td>{{ attendance.date|date:"d/m/Y" }}</td>
+                                    <td>{% if attendance.heure_arrivee %}{{ attendance.heure_arrivee|time:"H:i" }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+                                    <td class="small text-muted">{{ attendance.get_source_display }}</td>
                                     <td>
                                         <span class="badge {% if attendance.status == 'present' %}bg-success{% else %}bg-danger{% endif %}">
                                             {{ attendance.get_status_display }}

@@ -90,6 +90,16 @@ class AttendanceForm(forms.ModelForm):
         if self.gym:
             self.fields["employee"].queryset = Employee.objects.filter(gym=self.gym, is_active=True)
 
+    def validate_unique(self):
+        """
+        Une presence deja enregistree ce jour-la n'est pas une erreur.
+
+        Depuis que le lecteur pointe tout seul, la saisie sert surtout a
+        corriger : badge oublie, employe envoye ailleurs. La vue met donc a
+        jour la ligne du jour au lieu d'en refuser une seconde.
+        """
+        return
+
 
 class BulkAttendanceForm(forms.Form):
     date = forms.DateField(widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}))

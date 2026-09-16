@@ -57,6 +57,8 @@
                             <th>Date</th>
                             <th>Employé</th>
                             <th>Rôle</th>
+                            <th>Arrivée</th>
+                            <th>Origine</th>
                             <th>Statut</th>
                         </tr>
                     </thead>
@@ -66,6 +68,10 @@
                             <td>{{ attendance.date|date:"d/m/Y" }}</td>
                             <td>{{ attendance.employee.name }}</td>
                             <td>{{ attendance.employee.get_role_display }}</td>
+                            {% comment %} L'heure du premier passage. Aucun horaire de reference
+                               n'existe : l'ecran montre, il ne juge pas. {% endcomment %}
+                            <td>{% if attendance.heure_arrivee %}{{ attendance.heure_arrivee|time:"H:i" }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+                            <td class="small text-muted">{{ attendance.get_source_display }}</td>
                             <td>
                                 <span class="badge {% if attendance.status == 'present' %}bg-success{% else %}bg-danger{% endif %}">
                                     {{ attendance.get_status_display }}
@@ -74,7 +80,7 @@
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="4" class="text-center">Aucune présence enregistrée</td>
+                            <td colspan="6" class="text-center">Aucune présence enregistrée</td>
                         </tr>
                         {% endfor %}
                     </tbody>

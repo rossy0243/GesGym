@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, time as dt_time, timedelta
 from decimal import Decimal
 
 from django.core import mail
@@ -651,3 +651,158 @@ class PaieReserveeAuProprietaireTests(TestCase):
         # Le reste du module RH ne bouge pas.
         self.assertIn("manager", RH_EMPLOYEE_ROLES)
         self.assertIn("manager", RH_ATTENDANCE_ROLES)
+
+
+
+class PresenceParLeLecteurTests(TestCase):
+    """
+    Le passage a la porte vaut pointage, la main garde le dernier mot.
+
+    Pointer a la main un employe qui vient de passer devant le lecteur
+    n'apprenait rien a personne ; mais un badge oublie, une journee en course
+    ou un employe envoye ailleurs ne se lisent pas a la porte.
+    """
+
+    def setUp(self):
+        from rh.models import Attendance
+
+        self.Attendance = Attendance
+        self.organisation = Organization.objects.create(name="Org Presence", slug="org-presence")
+        self.gym = Gym.objects.create(
+            organization=self.organisation, name="Gym Presence",
+            slug="gym-presence", subdomain="gym-presence",
+        )
+        module, _ = Module.objects.get_or_create(code="RH", defaults={"name": "RH"})
+        GymModule.objects.get_or_create(gym=self.gym, module=module, defaults={"is_active": True})
+
+        self.employe = Employee.objects.create(
+            gym=self.gym, name="Paul Gardien", role="cleaner", daily_salary=Decimal("100.00"),
+        )
+        self.gerant = User.objects.create_user(username="gerant-presence", password="pass12345")
+        UserGymRole.objects.create(user=self.gerant, gym=self.gym, role="manager", is_active=True)
+        self.client.force_login(self.gerant)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+        self.today = timezone.localdate()
+
+    def _moment(self, heure, minute=0):
+        return timezone.make_aware(
+            datetime.combine(self.today, dt_time(heure, minute)),
+            timezone.get_current_timezone(),
+        )
+
+    # --- Le passage vaut presence -----------------------------------------------------------
+
+    def test_a_passage_marks_the_day_present(self):
+        from rh import presence
+
+        presence.noter_passage(self.employe, self._moment(8, 5))
+
+        pointage = self.Attendance.objects.get(employee=self.employe, date=self.today)
+        self.assertEqual(pointage.status, "present")
+        self.assertEqual(pointage.source, self.Attendance.SOURCE_LECTEUR)
+        self.assertEqual(pointage.heure_arrivee.strftime("%H:%M"), "08:05")
+
+    def test_the_arrival_time_is_the_first_passage(self):
+        from rh import presence
+
+        presence.noter_passage(self.employe, self._moment(8, 5))
+        presence.noter_passage(self.employe, self._moment(13, 40))
+
+        pointage = self.Attendance.objects.get(employee=self.employe, date=self.today)
+        self.assertEqual(pointage.heure_arrivee.strftime("%H:%M"), "08:05")
+        self.assertEqual(self.Attendance.objects.count(), 1)
+
+    def test_an_earlier_passage_moves_the_arrival_time(self):
+        from rh import presence
+
+        presence.noter_passage(self.employe, self._moment(9, 0))
+        presence.noter_passage(self.employe, self._moment(7, 30))
+
+        pointage = self.Attendance.objects.get(employee=self.employe, date=self.today)
+        self.assertEqual(pointage.heure_arrivee.strftime("%H:%M"), "07:30")
+
+    # --- La main tranche ----------------------------------------------------------------------
+
+    def test_a_hand_written_absence_is_never_overwritten(self):
+        from rh import presence
+
+        self.Attendance.objects.create(
+            gym=self.gym, employee=self.employe, date=self.today,
+            status="absent", source=self.Attendance.SOURCE_MANUELLE,
+        )
+
+        presence.noter_passage(self.employe, self._moment(8, 5))
+
+        pointage = self.Attendance.objects.get(employee=self.employe, date=self.today)
+        self.assertEqual(pointage.status, "absent")
+        self.assertEqual(pointage.source, self.Attendance.SOURCE_MANUELLE)
+
+    def test_the_form_records_a_hand_written_presence(self):
+        self.client.post(
+            reverse("rh:attendance_create"),
+            {"employee": self.employe.id, "date": self.today.isoformat(), "status": "present"},
+        )
+
+        pointage = self.Attendance.objects.get(employee=self.employe, date=self.today)
+        self.assertEqual(pointage.source, self.Attendance.SOURCE_MANUELLE)
+
+    def test_the_bulk_screen_records_hand_written_presences(self):
+        self.client.post(
+            reverse("rh:attendance_bulk"),
+            {"date": self.today.isoformat(), f"attendance_{self.employe.id}": "absent"},
+        )
+
+        pointage = self.Attendance.objects.get(employee=self.employe, date=self.today)
+        self.assertEqual(pointage.status, "absent")
+        self.assertEqual(pointage.source, self.Attendance.SOURCE_MANUELLE)
+
+    def test_a_correction_survives_a_later_passage(self):
+        from rh import presence
+
+        presence.noter_passage(self.employe, self._moment(8, 5))
+        self.client.post(
+            reverse("rh:attendance_create"),
+            {"employee": self.employe.id, "date": self.today.isoformat(), "status": "absent"},
+        )
+
+        presence.noter_passage(self.employe, self._moment(18, 0))
+
+        self.assertEqual(
+            self.Attendance.objects.get(employee=self.employe, date=self.today).status, "absent"
+        )
+
+    # --- Les ecrans -----------------------------------------------------------------------------
+
+    def test_the_attendance_screen_shows_the_hour_and_its_origin(self):
+        from rh import presence
+
+        presence.noter_passage(self.employe, self._moment(8, 5))
+
+        reponse = self.client.get(reverse("rh:attendance_list"))
+
+        self.assertContains(reponse, "Arrivée")
+        self.assertContains(reponse, "08:05")
+        self.assertContains(reponse, "Passage au lecteur")
+
+    def test_the_employee_sheet_shows_the_hour(self):
+        from rh import presence
+
+        presence.noter_passage(self.employe, self._moment(8, 5))
+
+        reponse = self.client.get(reverse("rh:detail", args=[self.employe.id]))
+
+        self.assertContains(reponse, "08:05")
+
+    # --- La paie ----------------------------------------------------------------------------------
+
+    def test_a_passage_counts_as_a_worked_day(self):
+        from rh import presence
+        from rh.models import PayrollSlip
+
+        presence.noter_passage(self.employe, self._moment(8, 5))
+
+        bulletin = PayrollSlip.ensure_for_period(self.employe, self.today.year, self.today.month)
+
+        self.assertEqual(bulletin.present_days, 1)

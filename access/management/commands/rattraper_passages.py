@@ -277,4 +277,11 @@ class Command(BaseCommand):
             **personne,
         )
         AccessLog.objects.filter(pk=log.pk).update(check_in_time=horodatage)
+
+        # Meme regle qu'en direct : le passage rattrape vaut pointage.
+        if employe is not None and accorde:
+            from rh import presence
+
+            presence.noter_passage(employe, horodatage)
+
         return log

@@ -352,10 +352,23 @@ def attendance_create(request):
     if request.method == "POST":
         form = AttendanceForm(request.POST, gym=gym)
         if form.is_valid():
-            attendance = form.save(commit=False)
-            attendance.gym = gym
-            attendance.save()
-            messages.success(request, f"Presence enregistree pour {attendance.employee.name}.")
+            # Saisie a la main : elle corrige ce que le lecteur a constate, et
+            # l'emporte sur lui. Une presence existe deja pour ce jour ? Elle
+            # est mise a jour, pas doublee.
+            attendance, cree = Attendance.objects.update_or_create(
+                employee=form.cleaned_data["employee"],
+                date=form.cleaned_data["date"],
+                defaults={
+                    "gym": gym,
+                    "status": form.cleaned_data["status"],
+                    "source": Attendance.SOURCE_MANUELLE,
+                },
+            )
+            messages.success(
+                request,
+                f"Presence enregistree pour {attendance.employee.name}." if cree
+                else f"Presence corrigee pour {attendance.employee.name}.",
+            )
             return redirect("rh:attendance_list")
     else:
         form = AttendanceForm(gym=gym)
@@ -381,7 +394,11 @@ def attendance_bulk(request):
                     Attendance.objects.update_or_create(
                         employee=employee,
                         date=attendance_date,
-                        defaults={"status": status, "gym": gym},
+                        defaults={
+                            "status": status,
+                            "gym": gym,
+                            "source": Attendance.SOURCE_MANUELLE,
+                        },
                     )
                     count += 1
             messages.success(request, f"{count} presences enregistrees pour le {attendance_date}.")

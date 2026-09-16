@@ -180,10 +180,23 @@ class Attendance(models.Model):
         ("absent", "Absent"),
     )
 
+    # D'ou vient cette presence. Le lecteur constate, la main tranche : une
+    # correction manuelle n'est jamais recouverte par un passage suivant.
+    SOURCE_MANUELLE = "manuelle"
+    SOURCE_LECTEUR = "lecteur"
+    SOURCES = (
+        (SOURCE_MANUELLE, "Saisie a la main"),
+        (SOURCE_LECTEUR, "Passage au lecteur"),
+    )
+
     gym = models.ForeignKey(Gym, on_delete=models.CASCADE, related_name="attendances", db_index=True)
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name="attendances")
     date = models.DateField()
     status = models.CharField(max_length=10, choices=STATUS, default="present")
+    source = models.CharField(max_length=10, choices=SOURCES, default=SOURCE_MANUELLE)
+    # L'heure du premier passage du jour. Aucun horaire de reference n'existe :
+    # l'application montre l'heure, elle ne juge pas un retard.
+    heure_arrivee = models.TimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -5609,3 +5609,58 @@ class DetailDesPassagesTests(TestCase):
 
         self.assertContains(reponse, "Invités : 1")
         self.assertContains(reponse, "Ouvertures manuelles : 1")
+
+
+
+class PointageAuPassageTests(TestCase):
+    """Le passage d'un employe a la porte le pointe present, sans rien saisir."""
+
+    def setUp(self):
+        from rh.models import Attendance
+
+        self.Attendance = Attendance
+        (self.gym, self.device, self.member, self.employe,
+         _) = _salle_avec_personnel("pointage")
+        self.url = reverse("access:device_webhook", args=[self.device.webhook_token])
+        patcher = patch("access.hikvision.HikvisionClient.open_door")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _envoyer(self, **evenement):
+        charge = {"AccessControllerEvent": {"majorEventType": 5, "subEventType": 75, **evenement}}
+        return self.client.post(self.url, data=json.dumps(charge), content_type="application/json")
+
+    def test_a_staff_passage_writes_the_attendance(self):
+        self._envoyer(employeeNoString=enrollment.numero_personnel(self.employe))
+
+        pointage = self.Attendance.objects.get(employee=self.employe)
+        self.assertEqual(pointage.status, "present")
+        self.assertEqual(pointage.source, self.Attendance.SOURCE_LECTEUR)
+        self.assertIsNotNone(pointage.heure_arrivee)
+
+    def test_a_refused_passage_points_nobody(self):
+        self._envoyer(employeeNoString=enrollment.numero_personnel(self.employe), subEventType=9)
+
+        self.assertFalse(self.Attendance.objects.exists())
+
+    def test_a_member_passage_points_nobody(self):
+        self._envoyer(employeeNoString=enrollment.employee_no(self.member))
+
+        self.assertFalse(self.Attendance.objects.exists())
+
+    def test_the_catch_up_points_too(self):
+        import io
+
+        from django.core.management import call_command
+
+        from .management.commands.rattraper_passages import Command
+
+        evenements = [{
+            "employeeNoString": enrollment.numero_personnel(self.employe),
+            "minor": 75, "serialNo": "970",
+            "time": timezone.localtime().replace(microsecond=0).isoformat(),
+        }]
+        with patch.object(Command, "_lire_evenements", return_value=evenements):
+            call_command("rattraper_passages", stdout=io.StringIO())
+
+        self.assertTrue(self.Attendance.objects.filter(employee=self.employe).exists())

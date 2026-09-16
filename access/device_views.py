@@ -658,7 +658,7 @@ def _journaliser_hors_membre(device, parsed, employee=None, libelle=""):
         **personne,
     ).exists()
 
-    return AccessLog.objects.create(
+    log = AccessLog.objects.create(
         gym=device.gym,
         device=device,
         access_granted=accorde,
@@ -668,6 +668,15 @@ def _journaliser_hors_membre(device, parsed, employee=None, libelle=""):
         device_event_id=numero,
         **personne,
     )
+
+    # Un employe qui franchit la porte est present : son pointage se fait tout
+    # seul. Une presence saisie a la main reste prioritaire.
+    if employee is not None and accorde:
+        from rh import presence
+
+        presence.noter_passage(employee, log.check_in_time)
+
+    return log
 
 
 def _resolve_employee(device, credential):
