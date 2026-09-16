@@ -2442,3 +2442,161 @@ class AnnulationGesteOffertTests(TestCase):
         reponse = self.client.get(reverse("pos:cashier_dashboard"))
 
         self.assertNotContains(reponse, reverse("pos:annuler_offert", args=[paiement.id]))
+
+
+
+class EcartDeCaisseTests(TestCase):
+    """
+    Tant que le tiroir n'est pas compte, il n'y a pas d'ecart.
+
+    Afficher zero pendant la session laissait croire a un controle qui n'avait
+    pas eu lieu.
+    """
+
+    def setUp(self):
+        self.organisation = Organization.objects.create(name="Org Ecart", slug="org-ecart")
+        self.gym = Gym.objects.create(
+            organization=self.organisation, name="Gym Ecart",
+            slug="gym-ecart", subdomain="gym-ecart",
+        )
+        for code in ("POS", "MEMBERS"):
+            module, _ = Module.objects.get_or_create(code=code, defaults={"name": code})
+            GymModule.objects.get_or_create(gym=self.gym, module=module, defaults={"is_active": True})
+
+        self.proprietaire = User.objects.create_user(username="proprio-ecart", password="pass12345")
+        UserGymRole.objects.create(user=self.proprietaire, gym=self.gym, role="owner", is_active=True)
+        self.caissiere = User.objects.create_user(username="caissiere-ecart", password="pass12345")
+        UserGymRole.objects.create(user=self.caissiere, gym=self.gym, role="cashier", is_active=True)
+
+        self.caisse = CashRegister.objects.create(
+            gym=self.gym, opened_by=self.caissiere,
+            opening_amount=Decimal("10000.00"), exchange_rate=Decimal("2800.00"),
+        )
+        self.client.force_login(self.proprietaire)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _cloturer(self, ecart, caisse=None):
+        caisse = caisse or self.caisse
+        caisse.closing_amount = Decimal("10000.00") + ecart
+        caisse.difference = ecart
+        caisse.closed_by = self.caissiere
+        caisse.closed_at = timezone.now()
+        caisse.is_closed = True
+        caisse.save()
+        return caisse
+
+    def _tableau(self):
+        from core.views import _tableau_de_caisse
+
+        return _tableau_de_caisse(self.gym, timezone.localdate())
+
+    # --- La regle ---------------------------------------------------------------------------------
+
+    def test_an_open_session_has_no_variance_yet(self):
+        tableau = self._tableau()
+
+        self.assertFalse(tableau["ecart_connu"])
+        self.assertEqual(tableau["ton_ecart"], "neutre")
+        self.assertEqual(tableau["en_cours_non_comptees"], 1)
+
+    def test_a_counted_drawer_that_matches_is_green(self):
+        self._cloturer(Decimal("0.00"))
+
+        tableau = self._tableau()
+
+        self.assertTrue(tableau["ecart_connu"])
+        self.assertEqual(tableau["ton_ecart"], "normal")
+        self.assertEqual(tableau["ecart"], Decimal("0.00"))
+
+    def test_missing_money_is_red(self):
+        self._cloturer(Decimal("-2000.00"))
+
+        self.assertEqual(self._tableau()["ton_ecart"], "urgent")
+
+    def test_extra_money_is_orange(self):
+        self._cloturer(Decimal("2000.00"))
+
+        self.assertEqual(self._tableau()["ton_ecart"], "attention")
+
+    def test_one_counted_and_one_still_open(self):
+        autre = CashRegister.objects.create(
+            gym=self.gym, opened_by=self.proprietaire,
+            opening_amount=Decimal("5000.00"), exchange_rate=Decimal("2800.00"),
+        )
+        self._cloturer(Decimal("-1000.00"))
+
+        tableau = self._tableau()
+
+        self.assertTrue(tableau["ecart_connu"])
+        self.assertEqual(tableau["en_cours_non_comptees"], 1)
+        self.assertEqual(tableau["ecart"], Decimal("-1000.00"))
+        self.assertTrue(autre.pk)
+
+    def test_the_period_says_nothing_without_a_counted_drawer(self):
+        from core.views import _bilan_de_periode, _get_period_window
+
+        bilan = _bilan_de_periode(self.gym, _get_period_window("day", timezone.localdate()))
+
+        self.assertFalse(bilan["ecart_connu"])
+        self.assertEqual(bilan["ton_ecart"], "neutre")
+
+    def test_the_period_shows_the_variance_once_counted(self):
+        from core.views import _bilan_de_periode, _get_period_window
+
+        self._cloturer(Decimal("-2000.00"))
+
+        bilan = _bilan_de_periode(self.gym, _get_period_window("day", timezone.localdate()))
+
+        self.assertTrue(bilan["ecart_connu"])
+        self.assertEqual(bilan["ton_ecart"], "urgent")
+
+    # --- Les ecrans -------------------------------------------------------------------------------
+
+    def _page_tableau_de_bord(self):
+        return self.client.get(reverse("core:gym_dashboard", args=[self.gym.id]))
+
+    def test_the_dashboard_says_to_be_determined_during_the_session(self):
+        reponse = self._page_tableau_de_bord()
+
+        self.assertContains(reponse, "À déterminer")
+        self.assertContains(reponse, "pendant la session")
+
+    def test_the_dashboard_shows_the_amount_once_counted(self):
+        self._cloturer(Decimal("-2000.00"))
+
+        reponse = self._page_tableau_de_bord()
+
+        self.assertNotContains(reponse, "pendant la session")
+        self.assertContains(reponse, "ton-urgent")
+
+    def test_the_counted_column_stays_empty_until_counted(self):
+        contexte = self._page_tableau_de_bord().context
+
+        ligne = contexte["caisse"]["sessions"][0]
+        self.assertFalse(ligne["est_compte"])
+        self.assertFalse(ligne["ecart_connu"])
+
+    def test_the_history_shows_nothing_counted_for_an_open_session(self):
+        # L'historique ne liste les caisses ouvertes que sur demande.
+        reponse = self.client.get(reverse("pos:register_history"), {"status": "open"})
+
+        self.assertContains(reponse, "À déterminer")
+        # Le badge d'ecart nul ne doit pas apparaitre : rien n'a ete compte.
+        self.assertNotContains(reponse, 'px-3 py-2">0 CDF')
+
+    def test_the_history_colours_a_shortfall_in_red(self):
+        self._cloturer(Decimal("-2000.00"))
+
+        reponse = self.client.get(reverse("pos:register_history"))
+
+        self.assertContains(reponse, "bg-danger")
+        self.assertNotContains(reponse, "À déterminer")
+
+    def test_the_history_colours_a_surplus_in_orange(self):
+        self._cloturer(Decimal("2000.00"))
+
+        reponse = self.client.get(reverse("pos:register_history"))
+
+        self.assertContains(reponse, "bg-warning text-dark px-3 py-2")

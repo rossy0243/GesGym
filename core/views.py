@@ -264,6 +264,22 @@ def _personnes_distinctes(passages):
 MOTIFS_AFFICHES = 4
 
 
+def _ton_ecart(ecart, connu):
+    """
+    La couleur d'un ecart de caisse.
+
+    Tant que le caissier n'a pas compte le tiroir, il n'y a pas d'ecart a
+    montrer : afficher zero laisserait croire a un controle qui n'a pas eu
+    lieu. Une fois compte, un manque coute de l'argent - rouge ; un excedent
+    est anormal aussi, mais il ne fait perdre personne - orange.
+    """
+    if not connu:
+        return "neutre"
+    if ecart == 0:
+        return "normal"
+    return "urgent" if ecart < 0 else "attention"
+
+
 def _tableau_de_caisse(gym, today):
     """
     L'etat de la caisse aujourd'hui, salle d'abord puis caissier par caissier.
@@ -299,6 +315,9 @@ def _tableau_de_caisse(gym, today):
             "solde_theorique": zero,
             "ecart": zero,
             "a_un_ecart": False,
+            "ecart_connu": False,
+            "ton_ecart": "neutre",
+            "en_cours_non_comptees": 0,
             "oubliee_depuis_hier": 0,
             "par_methode": [],
             "offerts": 0,
@@ -369,6 +388,8 @@ def _tableau_de_caisse(gym, today):
     total_retours = total_apports = zero
     oubliee_depuis_hier = 0
     a_contre_signer = 0
+    comptees = 0
+    non_comptees = 0
     rangs = []
 
     hors_recette = Payment.CATEGORIES_HORS_RECETTE
@@ -401,6 +422,10 @@ def _tableau_de_caisse(gym, today):
         solde_theorique += attendu
         if session.is_closed and session.difference is not None:
             ecart += session.difference
+            comptees += 1
+        else:
+            # Tiroir pas encore compte : cette caisse ne dit rien de l'ecart.
+            non_comptees += 1
         if not session.is_closed and session.opened_at.date() < today:
             oubliee_depuis_hier += 1
         if session.validation_regime == CONTRESIGNATURE and not session.is_validated:
@@ -444,6 +469,11 @@ def _tableau_de_caisse(gym, today):
         "solde_theorique": solde_theorique,
         "ecart": ecart,
         "a_un_ecart": ecart != zero,
+        # Un ecart n'existe qu'apres comptage : sans caisse comptee, il n'y a
+        # rien a afficher, pas meme zero.
+        "ecart_connu": comptees > 0,
+        "ton_ecart": _ton_ecart(ecart, comptees > 0),
+        "en_cours_non_comptees": non_comptees,
         "oubliee_depuis_hier": oubliee_depuis_hier,
         "a_contre_signer": a_contre_signer,
         "motifs": motifs,
@@ -708,9 +738,12 @@ def _bilan_de_periode(gym, period_data):
     )
 
     # L'ecart se rattache au jour ou la caisse a ete comptee.
-    ecart = CashRegister.objects.filter(
-        gym=gym, is_closed=True, closed_at__date__range=(debut, fin)
-    ).aggregate(total=Sum("difference"))["total"] or zero
+    comptees_periode = CashRegister.objects.filter(
+        gym=gym, is_closed=True, closed_at__date__range=(debut, fin),
+        difference__isnull=False,
+    )
+    ecart = comptees_periode.aggregate(total=Sum("difference"))["total"] or zero
+    ecart_connu = comptees_periode.exists()
 
     # Plus de resume par methode ni de liste des plus grosses sorties : le
     # tableau des operations, juste en dessous, les detaille ligne a ligne.
@@ -726,6 +759,8 @@ def _bilan_de_periode(gym, period_data):
         "apports": apports,
         "ecart": ecart,
         "a_un_ecart": ecart != zero,
+        "ecart_connu": ecart_connu,
+        "ton_ecart": _ton_ecart(ecart, ecart_connu),
         "nombre_encaissements": recettes.count(),
         # Ni recette ni depense : ce que les avantages coutent en marchandise.
         "articles_offerts": _articles_offerts(gym, debut, fin),

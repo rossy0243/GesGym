@@ -257,8 +257,16 @@
                         </div>
                         <div class="col-lg-3 col-6">
                             <div class="fs-12 text-muted aide"
-                                 title="Difference entre le montant compte a la clôture et le solde theorique. Excedent en positif, deficit en negatif.">Ecart de caisse</div>
-                            <div class="chiffre-cle {% if caisse.a_un_ecart %}ton-urgent{% else %}ton-normal{% endif %}">{{ caisse.ecart|montant_signe }} CDF</div>
+                                 title="Difference entre le montant compte a la clôture et le solde theorique. Tant que le tiroir n'a pas ete compte, il n'y a pas d'ecart : la case reste « A determiner ». Compte : vert si rien ne manque, rouge s'il manque de l'argent, orange s'il y en a en trop.">Ecart de caisse</div>
+                            {% if caisse.ecart_connu %}
+                            <div class="chiffre-cle ton-{{ caisse.ton_ecart }}">{{ caisse.ecart|montant_signe }} CDF</div>
+                            {% if caisse.en_cours_non_comptees %}
+                            <div class="fs-12 text-muted">{{ caisse.en_cours_non_comptees }} caisse{{ caisse.en_cours_non_comptees|pluralize }} pas encore comptée{{ caisse.en_cours_non_comptees|pluralize }}</div>
+                            {% endif %}
+                            {% else %}
+                            <div class="chiffre-cle ton-neutre">À déterminer</div>
+                            <div class="fs-12 text-muted">pendant la session : le tiroir n'a pas encore été compté</div>
+                            {% endif %}
                         </div>
                     </div>
 
@@ -320,12 +328,14 @@
                                     <td class="fs-12">{{ session.ouverte_a|date:"d/m H:i" }}</td>
                                     <td class="text-end">{{ session.fonds_ouverture|montant }}</td>
                                     <td class="text-end {% if session.tresorerie_negative %}ton-urgent fw-semibold{% endif %}">{{ session.solde_theorique|montant }}</td>
-                                    <td class="text-end">{% if session.est_compte %}{{ session.solde_compte|montant }}{% else %}-{% endif %}</td>
+                                    {% comment %} Vide tant que le tiroir n'a pas ete compte : un
+                                       tiret se lit comme un zero compte. {% endcomment %}
+                                    <td class="text-end">{% if session.est_compte %}{{ session.solde_compte|montant }}{% endif %}</td>
                                     <td class="text-end">
                                         {% if session.ecart_connu %}
-                                            <span class="{% if session.ecart %}ton-urgent fw-semibold{% else %}ton-normal{% endif %}">{{ session.ecart|montant_signe }}</span>
+                                            <span class="{% if session.ecart < 0 %}ton-urgent fw-semibold{% elif session.ecart > 0 %}ton-attention fw-semibold{% else %}ton-normal{% endif %}">{{ session.ecart|montant_signe }}</span>
                                         {% else %}
-                                            -
+                                            <span class="text-muted">À déterminer</span>
                                         {% endif %}
                                     </td>
                                     <td class="fs-12">
@@ -596,8 +606,13 @@
                         </div>
                         <div class="col-lg-3 col-6">
                             <div class="fs-12 text-muted aide"
-                                 title="Somme des ecarts constates aux clôtures de caisse de la periode. Excedent en positif, deficit en negatif.">Ecart de caisse</div>
-                            <div class="chiffre-cle {% if bilan_periode.a_un_ecart %}ton-urgent{% else %}ton-normal{% endif %}">{{ bilan_periode.ecart|montant_signe }} CDF</div>
+                                 title="Somme des ecarts constates aux clôtures de caisse de la periode. Sans caisse comptee, il n'y a pas d'ecart a montrer. Vert si rien ne manque, rouge s'il manque de l'argent, orange s'il y en a en trop.">Ecart de caisse</div>
+                            {% if bilan_periode.ecart_connu %}
+                            <div class="chiffre-cle ton-{{ bilan_periode.ton_ecart }}">{{ bilan_periode.ecart|montant_signe }} CDF</div>
+                            {% else %}
+                            <div class="chiffre-cle ton-neutre">À déterminer</div>
+                            <div class="fs-11 text-muted">aucune caisse comptée sur la période</div>
+                            {% endif %}
                             <div class="fs-11 text-muted mt-1">cumule des clôtures</div>
                         </div>
                     </div>
