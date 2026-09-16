@@ -2795,3 +2795,79 @@ class RegistreDesDecaissementsTests(TestCase):
 
         self.assertEqual(reponse.status_code, 200)
         self.assertEqual(reponse.context["page"].number, 2)
+
+
+
+class HistoriqueDesCaissesTests(TestCase):
+    """L'historique des caisses se tourne page par page."""
+
+    def setUp(self):
+        self.organisation = Organization.objects.create(name="Org Caisses", slug="org-caisses")
+        self.gym = Gym.objects.create(
+            organization=self.organisation, name="Gym Caisses",
+            slug="gym-caisses", subdomain="gym-caisses",
+        )
+        module, _ = Module.objects.get_or_create(code="POS", defaults={"name": "POS"})
+        GymModule.objects.get_or_create(gym=self.gym, module=module, defaults={"is_active": True})
+        self.gerant = User.objects.create_user(username="gerant-caisses", password="pass12345")
+        UserGymRole.objects.create(user=self.gerant, gym=self.gym, role="manager", is_active=True)
+        self.client.force_login(self.gerant)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+        self.url = reverse("pos:register_history")
+
+    def _caisses(self, combien, ecart=Decimal("0.00")):
+        for numero in range(combien):
+            caisse = CashRegister.objects.create(
+                gym=self.gym, opened_by=self.gerant,
+                opening_amount=Decimal("1000.00"), exchange_rate=Decimal("2800.00"),
+            )
+            caisse.closing_amount = Decimal("1000.00") + ecart
+            caisse.difference = ecart
+            caisse.closed_by = self.gerant
+            caisse.closed_at = timezone.now() - timedelta(minutes=numero)
+            caisse.is_closed = True
+            caisse.save()
+
+    def test_a_long_history_is_cut_into_pages(self):
+        self._caisses(55)
+
+        reponse = self.client.get(self.url)
+
+        self.assertEqual(len(reponse.context["registers"]), 50)
+        self.assertEqual(reponse.context["sessions_trouvees"], 55)
+        self.assertContains(reponse, "1-50 sur 55")
+
+    def test_the_next_page_shows_the_rest(self):
+        self._caisses(55)
+
+        reponse = self.client.get(self.url, {"page": "2"})
+
+        self.assertEqual(len(reponse.context["registers"]), 5)
+
+    def test_nothing_is_lost_between_the_pages(self):
+        self._caisses(60)
+        vues = set()
+
+        for numero in (1, 2):
+            reponse = self.client.get(self.url, {"page": numero})
+            vues.update(caisse.id for caisse in reponse.context["registers"])
+
+        self.assertEqual(len(vues), 60)
+
+    def test_turning_the_page_keeps_the_filter(self):
+        self._caisses(55, ecart=Decimal("-100.00"))
+
+        reponse = self.client.get(self.url, {"status": "closed"})
+
+        self.assertIn("status=closed", reponse.context["filtres_conserves"])
+        self.assertNotIn("page=", reponse.context["filtres_conserves"])
+
+    def test_a_short_history_shows_no_pagination(self):
+        self._caisses(3)
+
+        reponse = self.client.get(self.url)
+
+        self.assertEqual(reponse.context["sessions_trouvees"], 3)
+        self.assertNotContains(reponse, "Suivante")

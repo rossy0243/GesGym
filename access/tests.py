@@ -5814,3 +5814,115 @@ class VerificationDuPointageTests(TestCase):
         texte = self._lancer(return_value='{"AttendanceMode": {"mode": "manual"}}')
 
         self.assertIn("role declare dans l'application", texte)
+
+
+
+class HistoriqueDesPassagesTests(TestCase):
+    """
+    L'historique se lit par periode, et se tourne.
+
+    Il portait les 200 derniers passages sans le dire : la page annoncait
+    "200 entrees" comme s'il n'y en avait que 200, et l'avant-veille etait
+    hors d'atteinte.
+    """
+
+    def setUp(self):
+        (self.gym, self.device, self.member, self.employe,
+         _) = _salle_avec_personnel("historique")
+        self.gerant = User.objects.create_user(username="gerant-historique", password="pass12345")
+        UserGymRole.objects.create(user=self.gerant, gym=self.gym, role="manager", is_active=True)
+        self.client.force_login(self.gerant)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+        self.url = reverse("access:acces_dashboard")
+        self.today = timezone.localdate()
+
+    def _passages(self, combien, il_y_a_jours=0):
+        crees = []
+        for _ in range(combien):
+            log = AccessLog.objects.create(
+                gym=self.gym, member=self.member, access_granted=True
+            )
+            if il_y_a_jours:
+                AccessLog.objects.filter(pk=log.pk).update(
+                    check_in_time=timezone.now() - timedelta(days=il_y_a_jours)
+                )
+            crees.append(log)
+        return crees
+
+    def test_the_week_is_shown_by_default(self):
+        self._passages(3)
+        self._passages(2, il_y_a_jours=30)
+
+        reponse = self.client.get(self.url)
+
+        self.assertEqual(reponse.context["history_total"], 3)
+        self.assertEqual(reponse.context["history_depuis"],
+                         (self.today - timedelta(days=6)).isoformat())
+
+    def test_an_older_period_can_be_asked_for(self):
+        self._passages(2, il_y_a_jours=30)
+        jour = (self.today - timedelta(days=30)).isoformat()
+
+        reponse = self.client.get(self.url, {"date_from": jour, "date_to": jour})
+
+        self.assertEqual(reponse.context["history_total"], 2)
+
+    def test_a_long_day_is_cut_into_pages(self):
+        self._passages(120)
+
+        reponse = self.client.get(self.url)
+
+        self.assertEqual(len(reponse.context["history_logs"]), 100)
+        self.assertEqual(reponse.context["history_total"], 120)
+        self.assertContains(reponse, "Suivante")
+
+    def test_the_next_page_shows_the_rest(self):
+        self._passages(120)
+
+        reponse = self.client.get(self.url, {"page": "2"})
+
+        self.assertEqual(len(reponse.context["history_logs"]), 20)
+
+    def test_the_period_is_kept_when_turning_the_page(self):
+        self._passages(120)
+        jour = self.today.isoformat()
+
+        reponse = self.client.get(self.url, {"date_from": jour, "date_to": jour})
+
+        self.assertIn(f"date_from={jour}", reponse.context["filtres_conserves"])
+        self.assertNotIn("page=", reponse.context["filtres_conserves"])
+
+    def test_an_unreadable_date_falls_back_on_the_week(self):
+        # L'adresse se modifie a la main : une date illisible ne doit pas
+        # casser la page.
+        self._passages(3)
+
+        reponse = self.client.get(self.url, {"date_from": "hier", "date_to": ""})
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertEqual(reponse.context["history_total"], 3)
+
+    def test_a_reversed_period_is_put_back_in_order(self):
+        self._passages(2, il_y_a_jours=3)
+
+        reponse = self.client.get(self.url, {
+            "date_from": self.today.isoformat(),
+            "date_to": (self.today - timedelta(days=5)).isoformat(),
+        })
+
+        self.assertEqual(reponse.context["history_total"], 2)
+
+    def test_the_agents_come_from_the_accounts_not_the_journal(self):
+        agent = User.objects.create_user(username="agent-historique", password="pass12345")
+        UserGymRole.objects.create(user=agent, gym=self.gym, role="reception", is_active=True)
+        for _ in range(5):
+            AccessLog.objects.create(
+                gym=self.gym, member=self.member, access_granted=True, scanned_by=agent
+            )
+
+        reponse = self.client.get(self.url)
+
+        agents = list(reponse.context["history_agents"])
+        self.assertEqual([a.username for a in agents], ["agent-historique"])

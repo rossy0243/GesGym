@@ -39,6 +39,10 @@ from .services import (
 # legere sur un telephone.
 DECAISSEMENTS_PAR_PAGE = 50
 
+# Une session de caisse tient sur une ligne large : cinquante par page suffisent
+# a couvrir un mois de trois caissiers.
+CAISSES_PAR_PAGE = 50
+
 
 def _media_url(request, file_field, fallback=""):
     if not file_field:
@@ -569,11 +573,23 @@ def register_history(request):
         registers = registers.order_by("-closed_at")
 
     all_registers = CashRegister.objects.filter(gym=request.gym)
+
+    # Une a trois sessions par jour : au bout d'un an, la page en deroulait des
+    # centaines, chacune sur onze colonnes.
+    pages = Paginator(registers, CAISSES_PAR_PAGE)
+    page = pages.get_page(request.GET.get("page"))
+
+    parametres = request.GET.copy()
+    parametres.pop("page", None)
+
     return render(
         request,
         "pos/register_history.html",
         {
-            "registers": registers,
+            "registers": page,
+            "page": page,
+            "filtres_conserves": parametres.urlencode(),
+            "sessions_trouvees": pages.count,
             "search": search,
             "status": status,
             "date_from": date_from,

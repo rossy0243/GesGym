@@ -11,6 +11,12 @@ from members import invitations
 from members.models import Member
 from smartclub.access_control import ACCESS_ROLES
 from smartclub.decorators import module_required, role_required
+from datetime import timedelta
+
+from django.core.paginator import Paginator
+
+from compte.models import User
+
 from . import door, relectures
 from .models import AccessLog
 
@@ -131,6 +137,39 @@ def _today_stats(gym):
         ).count(),
         "denied": logs_today.filter(access_granted=False).count(),
     }
+
+
+# Cent passages par page : une journee chargee tient sur une page ou deux.
+PASSAGES_PAR_PAGE = 100
+
+# Sans periode choisie, l'historique montre la semaine ecoulee : c'est la
+# question courante ("qui est passe ces jours-ci"), et cela borne la page.
+JOURS_HISTORIQUE_PAR_DEFAUT = 7
+
+
+def _fenetre_historique(request):
+    """
+    La periode couverte par l'historique, telle que demandee ou par defaut.
+
+    Une date illisible dans l'adresse ne doit pas casser la page : on retombe
+    sur la semaine ecoulee.
+    """
+    from datetime import date as _date
+
+    def _lire(valeur, defaut):
+        try:
+            return _date.fromisoformat((valeur or "").strip())
+        except ValueError:
+            return defaut
+
+    aujourd_hui = _today()
+    debut_defaut = aujourd_hui - timedelta(days=JOURS_HISTORIQUE_PAR_DEFAUT - 1)
+
+    depuis = _lire(request.GET.get("date_from"), debut_defaut)
+    jusqu_a = _lire(request.GET.get("date_to"), aujourd_hui)
+    if depuis > jusqu_a:
+        depuis, jusqu_a = jusqu_a, depuis
+    return depuis, jusqu_a
 
 
 def _record_access(
@@ -255,21 +294,34 @@ def acces_dashboard(request):
     recent_logs = AccessLog.objects.filter(
         gym=gym
     ).select_related("member", "scanned_by", "guest_pass", "employee").order_by("-check_in_time")[:10]
-    history_logs = AccessLog.objects.filter(
-        gym=gym
-    ).select_related("member", "scanned_by", "guest_pass", "employee").order_by("-check_in_time")[:200]
-    agents = (
-        AccessLog.objects.filter(gym=gym, scanned_by__isnull=False)
-        .select_related("scanned_by")
-        .order_by("scanned_by__first_name", "scanned_by__last_name", "scanned_by__username")
+    # L'historique portait les 200 derniers passages, sans le dire : la page
+    # annoncait "200 entrees" comme s'il n'y en avait que 200, et rien ne
+    # permettait de remonter plus loin. On borne par une periode - la semaine
+    # ecoulee par defaut - et on tourne les pages.
+    depuis, jusqu_a = _fenetre_historique(request)
+    historique = (
+        AccessLog.objects.filter(
+            gym=gym,
+            check_in_time__date__gte=depuis,
+            check_in_time__date__lte=jusqu_a,
+        )
+        .select_related("member", "scanned_by", "guest_pass", "employee")
+        .order_by("-check_in_time")
     )
-    unique_agents = []
-    seen_agent_ids = set()
-    for log in agents:
-        if log.scanned_by_id in seen_agent_ids:
-            continue
-        seen_agent_ids.add(log.scanned_by_id)
-        unique_agents.append(log.scanned_by)
+    pages = Paginator(historique, PASSAGES_PAR_PAGE)
+    page_historique = pages.get_page(request.GET.get("page"))
+
+    parametres = request.GET.copy()
+    parametres.pop("page", None)
+
+    # Les agents se lisent sur les comptes, pas en parcourant tout le journal :
+    # sur cinquante mille passages, l'ancien calcul chargeait cinquante mille
+    # lignes pour afficher cinq noms.
+    unique_agents = (
+        User.objects.filter(access_scans__gym=gym)
+        .distinct()
+        .order_by("first_name", "last_name", "username")
+    )
 
 
     return render(request, "access/acces.html", {
@@ -280,7 +332,12 @@ def acces_dashboard(request):
         "today_guests": stats["guests"],
         "section": section,
         "recent_logs": recent_logs,
-        "history_logs": history_logs,
+        "history_logs": page_historique,
+        "history_page": page_historique,
+        "history_total": pages.count,
+        "history_depuis": depuis.isoformat(),
+        "history_jusqu_a": jusqu_a.isoformat(),
+        "filtres_conserves": parametres.urlencode(),
         "history_agents": unique_agents,
     })
 

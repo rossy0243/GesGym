@@ -431,6 +431,20 @@
             </h5>
 
             <div class="d-flex flex-wrap align-items-center gap-2">
+                {% comment %} La periode est demandee au serveur : les filtres qui
+                   suivent affinent ce qu'elle a rendu. Sans elle, la page coupait
+                   aux 200 derniers passages sans le dire. {% endcomment %}
+                <form method="get" class="d-flex align-items-center gap-1">
+                    <input type="hidden" name="section" value="historique">
+                    <input type="date" name="date_from" value="{{ history_depuis }}"
+                           class="form-control form-control-sm" style="width:150px;"
+                           aria-label="Historique depuis">
+                    <input type="date" name="date_to" value="{{ history_jusqu_a }}"
+                           class="form-control form-control-sm" style="width:150px;"
+                           aria-label="Historique jusqu'au">
+                    <button type="submit" class="btn btn-sm btn-light-brand">Charger</button>
+                </form>
+
                 <div class="input-group input-group-sm" style="max-width:230px;">
                     <span class="input-group-text bg-white">
                         <span class="material-icons" style="font-size:16px;">search</span>
@@ -546,6 +560,24 @@
 
             <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
                 <span class="text-muted small" id="paginationInfo">{{ history_logs|length }} entree{{ history_logs|length|pluralize }}</span>
+                <span class="text-muted small ms-2">
+                    &middot; {{ history_page.start_index }}-{{ history_page.end_index }} sur
+                    {{ history_total }} passage{{ history_total|pluralize }} du
+                    {{ history_depuis }} au {{ history_jusqu_a }}
+                </span>
+                {% if history_page.paginator.num_pages > 1 %}
+                <span class="ms-2">
+                    {% if history_page.has_previous %}
+                    <a href="?{{ filtres_conserves }}&page={{ history_page.previous_page_number }}"
+                       class="btn btn-sm btn-light">&larr; Precedente</a>
+                    {% endif %}
+                    <span class="text-muted small mx-1">page {{ history_page.number }} sur {{ history_page.paginator.num_pages }}</span>
+                    {% if history_page.has_next %}
+                    <a href="?{{ filtres_conserves }}&page={{ history_page.next_page_number }}"
+                       class="btn btn-sm btn-light">Suivante &rarr;</a>
+                    {% endif %}
+                </span>
+                {% endif %}
                 <div class="pagination-custom d-flex align-items-center gap-1">
                     <button class="btn btn-sm btn-light" onclick="prevPage()">
                         <span class="material-icons" style="font-size:18px;">chevron_left</span>

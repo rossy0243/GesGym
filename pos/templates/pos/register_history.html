@@ -111,7 +111,7 @@
                 </div>
                 <div>
                     <div class="fs-12 text-muted">Total sessions</div>
-                    <h4 class="mb-0">{{ registers|length }}</h4>
+                    <h4 class="mb-0">{{ sessions_trouvees }}</h4>
                 </div>
             </div>
         </div>
@@ -441,7 +441,7 @@
     <div class="card-footer">
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
             <p class="fs-12 text-muted mb-0">
-                Total : {{ registers|length }} session{{ registers|length|pluralize }}
+                {{ page.start_index }}-{{ page.end_index }} sur {{ sessions_trouvees }} session{{ sessions_trouvees|pluralize }}
             </p>
 
             {% if page_obj %}
