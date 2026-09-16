@@ -249,13 +249,20 @@ class PaymentQuerySet(models.QuerySet):
         par ici - une lecture qui filtrerait ``type="in"`` a la main
         recompterait cet argent.
         """
-        return self.filter(type="in", status="success").exclude(
-            category__in=Payment.CATEGORIES_HORS_RECETTE
+        return (
+            self.filter(type="in", status="success")
+            .exclude(category__in=Payment.CATEGORIES_HORS_RECETTE)
+            # Un geste offert n'a rien rapporte : il vaut zero et se lit a part.
+            .exclude(offert=True)
         )
 
     def sorties(self):
         """Les decaissements, retours non deduits."""
         return self.filter(type="out", status="success")
+
+    def offerts(self):
+        """Les gestes offerts : un abonnement ou un produit donne, sans argent."""
+        return self.filter(offert=True, status="success")
 
     def retours(self):
         """Les sommes revenues dans le tiroir apres un decaissement."""
@@ -409,6 +416,21 @@ class Payment(models.Model):
         db_index=True
     )
 
+    # Un abonnement ou un produit donne. La ligne existe en caisse, a zero :
+    # la marchandise est bien sortie, et le geste doit se relire plus tard.
+    offert = models.BooleanField(default=False, verbose_name="Offert")
+
+    # Ce que le geste aurait rapporte au prix normal, en francs. Sans lui, un
+    # total d'offerts ne pourrait pas se calculer : les lignes valent zero.
+    valeur_offerte_cdf = models.DecimalField(
+        max_digits=15, decimal_places=2, default=0, verbose_name="Valeur offerte (CDF)"
+    )
+
+    motif_offert = models.CharField(max_length=255, blank=True, default="")
+
+    # A qui, quand ce n'est pas un membre inscrit.
+    beneficiaire = models.CharField(max_length=255, blank=True, default="")
+
     objects = PaymentQuerySet.as_manager()
 
     transaction_id = models.CharField(
@@ -477,7 +499,9 @@ class Payment(models.Model):
         if self.exchange_rate is not None and self.exchange_rate <= 0:
             raise ValidationError("Le taux de change doit etre superieur a zero.")
 
-        if self.amount <= 0:
+        # Un geste offert vaut zero : c'est ce qui le distingue d'une vente.
+        # Tout autre mouvement a zero reste une erreur de saisie.
+        if self.amount < 0 or (self.amount == 0 and not self.offert):
             raise ValidationError("Le montant doit etre superieur a zero.")
 
         if self.currency == "CDF":

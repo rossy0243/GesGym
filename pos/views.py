@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import Count, Q, Sum
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -13,7 +13,12 @@ from django.utils import timezone
 from members.models import Member
 from products.models import Product
 from subscriptions.models import SubscriptionPlan
-from smartclub.access_control import POS_CASHIER_ROLES, POS_HISTORY_ROLES, has_role
+from smartclub.access_control import (
+    POS_CASHIER_ROLES,
+    POS_HISTORY_ROLES,
+    SETTINGS_ORGANIZATION_ROLES,
+    has_role,
+)
 from smartclub.decorators import module_required, role_required
 from core.audit import log_sensitive_action
 
@@ -108,11 +113,19 @@ def cashier_dashboard(request):
     register = CashRegister.objects.filter(gym=gym, is_closed=False, opened_by=request.user).first()
 
     if request.method == "POST":
-        if not register:
+        # Offrir : aucun argent ne change de main, mais un abonnement ou une
+        # marchandise part. Le proprietaire seul en decide, et il n'a pas
+        # forcement de caisse a lui : le service prend alors celle qui est
+        # ouverte dans la salle, comme pour un apport de fonds.
+        offert = request.POST.get("offert") == "on"
+        if offert and not has_role(request, SETTINGS_ORGANIZATION_ROLES):
+            raise PermissionDenied
+
+        if not register and not offert:
             messages.error(request, "Aucune caisse ouverte.")
             return redirect("pos:cashier_dashboard")
 
-        if not register.exchange_rate:
+        if register and not register.exchange_rate:
             messages.error(
                 request,
                 "Cette session de caisse n'a pas de taux USD-CDF. Fermez-la puis ouvrez une nouvelle session.",
@@ -164,6 +177,8 @@ def cashier_dashboard(request):
             return redirect("pos:cashier_dashboard")
 
         sale_type = request.POST.get("sale_type", "subscription")
+        motif_offert = (request.POST.get("motif_offert") or "").strip()
+        beneficiaire = (request.POST.get("beneficiaire") or "").strip()
         currency = request.POST.get("currency", "USD")
         if currency not in {"USD", "CDF"}:
             messages.error(request, "Devise invalide.")
@@ -184,6 +199,9 @@ def cashier_dashboard(request):
                     currency=currency,
                     method=method,
                     created_by=request.user,
+                    offert=offert,
+                    motif=motif_offert,
+                    beneficiaire=beneficiaire,
                 )
                 log_sensitive_action(
                     request,
@@ -195,12 +213,22 @@ def cashier_dashboard(request):
                         "product_id": product.id,
                         "currency": payment.currency,
                         "amount": str(payment.amount),
+                        "offert": offert,
+                        "motif": motif_offert,
+                        "beneficiaire": beneficiaire,
                     },
                 )
-                messages.success(
-                    request,
-                    f"Vente produit enregistree: {payment.amount} {payment.currency}.",
-                )
+                if offert:
+                    messages.success(
+                        request,
+                        f"Produit offert : {product.name}. Aucun encaissement, "
+                        f"valeur {payment.valeur_offerte_cdf} CDF.",
+                    )
+                else:
+                    messages.success(
+                        request,
+                        f"Vente produit enregistree: {payment.amount} {payment.currency}.",
+                    )
             else:
                 member = get_object_or_404(Member, id=request.POST.get("member"), gym=gym, is_active=True)
                 plan = get_object_or_404(SubscriptionPlan, id=request.POST.get("plan"), gym=gym)
@@ -223,6 +251,8 @@ def cashier_dashboard(request):
                         request.POST.get("confirm_closed_period") == "on"
                     ),
                     created_by=request.user,
+                    offert=offert,
+                    motif=motif_offert,
                 )
                 log_sensitive_action(
                     request,
@@ -234,12 +264,22 @@ def cashier_dashboard(request):
                         "plan_id": plan.id,
                         "currency": payment.currency,
                         "amount": str(payment.amount),
+                        "offert": offert,
+                        "motif": motif_offert,
                     },
                 )
-                messages.success(
-                    request,
-                    f"Paiement abonnement enregistre: {payment.amount} {payment.currency}.",
-                )
+                if offert:
+                    messages.success(
+                        request,
+                        f"Abonnement offert a {member.first_name} {member.last_name} : "
+                        f"{plan.name}. Aucun encaissement, valeur "
+                        f"{payment.valeur_offerte_cdf} CDF.",
+                    )
+                else:
+                    messages.success(
+                        request,
+                        f"Paiement abonnement enregistre: {payment.amount} {payment.currency}.",
+                    )
         except ValidationError as exc:
             messages.error(request, _validation_message(exc))
             return redirect("pos:cashier_dashboard")
@@ -286,6 +326,7 @@ def cashier_dashboard(request):
             "non_cash_balance": non_cash_balance,
             "has_negative_cash": has_negative_cash,
             "latest_exchange_rate": latest_exchange_rate,
+            "peut_offrir": has_role(request, SETTINGS_ORGANIZATION_ROLES),
         },
     )
 

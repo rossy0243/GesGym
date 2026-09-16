@@ -301,6 +301,8 @@ def _tableau_de_caisse(gym, today):
             "a_un_ecart": False,
             "oubliee_depuis_hier": 0,
             "par_methode": [],
+            "offerts": 0,
+            "valeur_offerte": zero,
         }
 
     # Une seule requete pour toutes les ventilations : appeler expected_total()
@@ -354,6 +356,11 @@ def _tableau_de_caisse(gym, today):
         for sortie in sorties.order_by("-amount_cdf")[:MOTIFS_AFFICHES]
     ]
     autres_sorties = max(sorties.count() - MOTIFS_AFFICHES, 0)
+
+    # Les gestes offerts : des lignes a zero, dont seule la valeur parle.
+    offerts = Payment.objects.filter(
+        cash_register__in=sessions, gym=gym
+    ).offerts().aggregate(nombre=Count("id"), valeur=Sum("valeur_offerte_cdf"))
 
     libelles = dict(Payment.PAYMENT_METHODS)
     totaux_methode = {code: zero for code in libelles}
@@ -440,6 +447,8 @@ def _tableau_de_caisse(gym, today):
         "a_contre_signer": a_contre_signer,
         "motifs": motifs,
         "autres_sorties": autres_sorties,
+        "offerts": offerts["nombre"] or 0,
+        "valeur_offerte": offerts["valeur"] or zero,
         "par_methode": [
             {"code": code, "label": libelle, "total": totaux_methode[code]}
             for code, libelle in libelles.items()
@@ -823,13 +832,27 @@ def _operations_de_periode(request, gym, period_data):
         sortie.net_cdf = sortie.amount_cdf - sortie.rendu_cdf
     decaissements["page"].object_list = sorties
 
+    # Les gestes offerts ne sont ni des encaissements ni des decaissements :
+    # rien n'est entre, rien n'est sorti du tiroir. Ils ont leur propre liste.
+    offerts = _liste_paginee(
+        request,
+        paiements.offerts().select_related("member", "product", "created_by"),
+        "off",
+        "offerts",
+    )
+    valeur_offerte = paiements.offerts().aggregate(
+        total=Sum("valeur_offerte_cdf")
+    )["total"] or Decimal("0.00")
+
     onglet = request.GET.get("onglet")
-    if onglet not in {"encaissements", "decaissements"}:
+    if onglet not in {"encaissements", "decaissements", "offerts"}:
         onglet = "encaissements"
 
     return {
         "encaissements": encaissements,
         "decaissements": decaissements,
+        "offerts": offerts,
+        "valeur_offerte": valeur_offerte,
         "onglet": onglet,
     }
 

@@ -270,6 +270,16 @@
                     </div>
                     {% endif %}
 
+                    {% if caisse.offerts %}
+                    <div class="d-flex flex-wrap gap-3 mt-2 fs-12 text-muted">
+                        <span class="aide"
+                              title="Abonnements et produits offerts aujourd'hui. Aucun argent n'est entre : la valeur est ce qu'ils auraient rapporte au prix normal.">
+                            <strong>Offerts</strong> : {{ caisse.offerts }} geste{{ caisse.offerts|pluralize }}
+                            &mdash; valeur {{ caisse.valeur_offerte|montant }} CDF
+                        </span>
+                    </div>
+                    {% endif %}
+
                     {% if caisse.motifs %}
                     {% comment %} Un total de decaissements ne dit pas ou l'argent est
                        parti : c'est pourtant la question qu'on se pose en lisant le
@@ -635,6 +645,15 @@
                                 <span class="badge bg-light text-muted border ms-1">{{ operations_periode.decaissements.page.paginator.count }}</span>
                             </button>
                         </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link {% if operations_periode.onglet == "offerts" %}active{% endif %}"
+                                    id="onglet-offerts" data-bs-toggle="tab" data-bs-target="#liste-offerts"
+                                    type="button" role="tab" aria-controls="liste-offerts"
+                                    aria-selected="{% if operations_periode.onglet == "offerts" %}true{% else %}false{% endif %}">
+                                Offerts
+                                <span class="badge bg-light text-muted border ms-1">{{ operations_periode.offerts.page.paginator.count }}</span>
+                            </button>
+                        </li>
                     </ul>
 
                     <div class="tab-content pt-3">
@@ -725,6 +744,51 @@
                             </div>
                             {% if liste.page.paginator.num_pages > 1 %}
                             <nav class="d-flex justify-content-between align-items-center mt-2" aria-label="Pages des decaissements">
+                                {% if liste.precedente %}<a href="{{ liste.precedente }}" class="btn btn-sm btn-light">&larr; Precedente</a>{% else %}<span></span>{% endif %}
+                                <span class="fs-12 text-muted">{{ liste.page.start_index }}-{{ liste.page.end_index }} sur {{ liste.page.paginator.count }}</span>
+                                {% if liste.suivante %}<a href="{{ liste.suivante }}" class="btn btn-sm btn-light">Suivante &rarr;</a>{% else %}<span></span>{% endif %}
+                            </nav>
+                            {% endif %}
+                            {% endwith %}
+                        </div>
+
+                        <div class="tab-pane fade {% if operations_periode.onglet == "offerts" %}show active{% endif %}"
+                             id="liste-offerts" role="tabpanel" aria-labelledby="onglet-offerts">
+                            {% with liste=operations_periode.offerts %}
+                            <div class="d-flex flex-wrap justify-content-between gap-2 mb-2 fs-12 text-muted">
+                                <span class="aide" title="Ce que les gestes offerts auraient rapporte au prix normal. Ni une recette ni une depense : la salle a donne.">Valeur : <strong>{{ operations_periode.valeur_offerte|montant }} CDF</strong></span>
+                                <span>Page {{ liste.page.number }} sur {{ liste.page.paginator.num_pages }}</span>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th><a href="{{ liste.tri_date }}" class="text-reset text-decoration-none">Date{% if liste.tri == '-date' %} &darr;{% elif liste.tri == 'date' %} &uarr;{% endif %}</a></th>
+                                            <th>Beneficiaire</th>
+                                            <th>Operation</th>
+                                            <th>Motif</th>
+                                            <th>Offert par</th>
+                                            <th class="text-end">Valeur</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for geste in liste.page %}
+                                        <tr>
+                                            <td class="fs-12 text-nowrap">{{ geste.created_at|date:"d/m/Y H:i" }}</td>
+                                            <td>{% if geste.member %}{{ geste.member.first_name }} {{ geste.member.last_name }}{% elif geste.beneficiaire %}{{ geste.beneficiaire }}{% else %}Non precise{% endif %}</td>
+                                            <td class="fs-12">{{ geste.description }}</td>
+                                            <td class="fs-12">{{ geste.motif_offert|default:"Sans motif" }}</td>
+                                            <td class="fs-12">{% if geste.created_by %}{{ geste.created_by.get_full_name|default:geste.created_by.username }}{% else %}-{% endif %}</td>
+                                            <td class="text-end text-nowrap">{{ geste.valeur_offerte_cdf|montant }} CDF</td>
+                                        </tr>
+                                        {% empty %}
+                                        <tr><td colspan="6" class="text-center text-muted py-4">Aucun geste offert sur cette periode.</td></tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% if liste.page.paginator.num_pages > 1 %}
+                            <nav class="d-flex justify-content-between align-items-center mt-2" aria-label="Pages des gestes offerts">
                                 {% if liste.precedente %}<a href="{{ liste.precedente }}" class="btn btn-sm btn-light">&larr; Precedente</a>{% else %}<span></span>{% endif %}
                                 <span class="fs-12 text-muted">{{ liste.page.start_index }}-{{ liste.page.end_index }} sur {{ liste.page.paginator.count }}</span>
                                 {% if liste.suivante %}<a href="{{ liste.suivante }}" class="btn btn-sm btn-light">Suivante &rarr;</a>{% else %}<span></span>{% endif %}

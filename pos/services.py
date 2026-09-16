@@ -86,6 +86,10 @@ def record_payment(
     source_id=None,
     status="success",
     refund_of=None,
+    offert=False,
+    valeur_offerte_cdf=None,
+    motif_offert="",
+    beneficiaire="",
 ):
     register = register or get_open_register(gym, created_by)
     if register.gym_id != gym.id:
@@ -113,6 +117,10 @@ def record_payment(
         source_model=source_model,
         source_id=source_id,
         created_by=created_by,
+        offert=offert,
+        valeur_offerte_cdf=_to_decimal(valeur_offerte_cdf or 0, "Valeur offerte"),
+        motif_offert=motif_offert,
+        beneficiaire=beneficiaire,
     )
 
 
@@ -127,6 +135,8 @@ def record_subscription_payment(
     auto_renew=False,
     confirm_closed_period=False,
     created_by=None,
+    offert=False,
+    motif="",
 ):
     if member.gym_id != gym.id:
         raise ValidationError("Le membre n'appartient pas a ce gym.")
@@ -135,7 +145,14 @@ def record_subscription_payment(
     if not member.is_active:
         raise ValidationError("Le membre doit etre actif pour acheter un abonnement.")
 
-    register = get_open_register(gym, created_by)
+    if offert:
+        motif = (motif or "").strip()
+        if not motif:
+            raise ValidationError("Un abonnement offert demande un motif.")
+
+    # Un geste offert ne remplit aucun tiroir : celui qui l'accorde n'a pas
+    # forcement de caisse a lui, comme pour un apport de fonds.
+    register = _caisse_cible(gym, created_by) if offert else get_open_register(gym, created_by)
     today = timezone.localdate()
     start = start_date or today
 
@@ -199,6 +216,8 @@ def record_subscription_payment(
 
     amount_usd = _money(plan.price)
     amount = amount_usd if currency == "USD" else _money(amount_usd * register.exchange_rate)
+    # Offert : la ligne vaut zero et garde ce qu'elle aurait coute.
+    valeur_offerte = _money(amount_usd * register.exchange_rate) if offert else Decimal("0.00")
 
     with transaction.atomic():
         # On clot ce que le nouvel abonnement remplace : les periodes qui le
@@ -226,13 +245,18 @@ def record_subscription_payment(
             register=register,
             member=member,
             subscription=subscription,
-            amount=amount,
-            amount_usd=amount_usd,
-            currency=currency,
-            method=method,
+            amount=Decimal("0.00") if offert else amount,
+            amount_usd=None if offert else amount_usd,
+            currency="CDF" if offert else currency,
+            method="cash" if offert else method,
             transaction_type="in",
             category="subscription",
-            description=f"Abonnement: {plan.name}",
+            description=(
+                f"Offert : abonnement {plan.name}" if offert else f"Abonnement: {plan.name}"
+            ),
+            offert=offert,
+            valeur_offerte_cdf=valeur_offerte,
+            motif_offert=motif if offert else "",
             created_by=created_by,
             source_app="subscriptions",
             source_model="MemberSubscription",
@@ -271,7 +295,10 @@ def record_subscription_payment(
     return subscription, payment
 
 
-def record_product_sale(*, gym, product, quantity, currency, method, created_by=None, member=None):
+def record_product_sale(
+    *, gym, product, quantity, currency, method, created_by=None, member=None,
+    offert=False, motif="", beneficiaire="",
+):
     try:
         quantity = int(quantity)
     except (TypeError, ValueError) as exc:
@@ -279,7 +306,12 @@ def record_product_sale(*, gym, product, quantity, currency, method, created_by=
     if quantity <= 0:
         raise ValidationError("La quantite vendue doit etre superieure a zero.")
 
-    register = get_open_register(gym, created_by)
+    if offert:
+        motif = (motif or "").strip()
+        if not motif:
+            raise ValidationError("Un produit offert demande un motif.")
+
+    register = _caisse_cible(gym, created_by) if offert else get_open_register(gym, created_by)
 
     with transaction.atomic():
         try:
@@ -297,11 +329,17 @@ def record_product_sale(*, gym, product, quantity, currency, method, created_by=
         try:
             amount = _money(product.price_in(currency, register.exchange_rate) * quantity)
             amount_usd = _money(product.price_usd(register.exchange_rate) * quantity)
+            # Offert : la marchandise sort quand meme, et sa valeur est retenue.
+            valeur_offerte = (
+                _money(product.price_in("CDF", register.exchange_rate) * quantity)
+                if offert
+                else Decimal("0.00")
+            )
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
 
         try:
-            product.update_stock(quantity, "out", "Vente POS")
+            product.update_stock(quantity, "out", "Offert" if offert else "Vente POS")
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
 
@@ -310,13 +348,21 @@ def record_product_sale(*, gym, product, quantity, currency, method, created_by=
             register=register,
             member=member,
             product=product,
-            amount=amount,
-            amount_usd=amount_usd,
-            currency=currency,
-            method=method,
+            amount=Decimal("0.00") if offert else amount,
+            amount_usd=None if offert else amount_usd,
+            currency="CDF" if offert else currency,
+            method="cash" if offert else method,
             transaction_type="in",
             category="product",
-            description=f"Vente produit: {product.name} x{quantity}",
+            description=(
+                f"Offert : {product.name} x{quantity}"
+                if offert
+                else f"Vente produit: {product.name} x{quantity}"
+            ),
+            offert=offert,
+            valeur_offerte_cdf=valeur_offerte,
+            motif_offert=motif if offert else "",
+            beneficiaire=beneficiaire if offert else "",
             created_by=created_by,
             source_app="products",
             source_model="Product",

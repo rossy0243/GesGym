@@ -1893,3 +1893,280 @@ class ExpenseRegisterNetTests(TestCase):
 
         self.assertContains(reponse, "rendu")
         self.assertEqual(self._registre()["total_cdf"], Decimal("0.00"))
+
+
+
+class GestesOffertsTests(TestCase):
+    """
+    Offrir : un abonnement ou un produit donne, sans encaissement.
+
+    Rien n'entre dans le tiroir, mais la marchandise sort et l'acces s'ouvre :
+    la ligne existe donc en caisse, a zero, avec ce qu'elle aurait rapporte.
+    """
+
+    def setUp(self):
+        self.organisation = Organization.objects.create(name="Org Offerts", slug="org-offerts")
+        self.gym = Gym.objects.create(
+            organization=self.organisation, name="Gym Offerts",
+            slug="gym-offerts", subdomain="gym-offerts",
+        )
+        module, _ = Module.objects.get_or_create(code="POS", defaults={"name": "POS"})
+        GymModule.objects.get_or_create(gym=self.gym, module=module, defaults={"is_active": True})
+
+        self.proprietaire = User.objects.create_user(username="proprio-offert", password="pass12345")
+        UserGymRole.objects.create(user=self.proprietaire, gym=self.gym, role="owner", is_active=True)
+        self.caissiere = User.objects.create_user(username="caissiere-offert", password="pass12345")
+        UserGymRole.objects.create(user=self.caissiere, gym=self.gym, role="cashier", is_active=True)
+
+        self.membre = Member.objects.create(
+            gym=self.gym, first_name="Alice", last_name="Nzuzi", phone="+243870000001",
+        )
+        self.formule = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Premium", duration_days=30, price=Decimal("25.00"),
+        )
+        self.produit = Product.objects.create(
+            gym=self.gym, name="Eau", price=Decimal("2000.00"), currency="CDF", quantity=10,
+        )
+        # La caisse de la caissiere : c'est elle qui tient le tiroir.
+        self.caisse = CashRegister.objects.create(
+            gym=self.gym, opened_by=self.caissiere,
+            opening_amount=Decimal("10000.00"), exchange_rate=Decimal("2800.00"),
+        )
+        self.valeur_abonnement = Decimal("70000.00")  # 25 USD au taux de 2800
+
+    def _connecter(self, utilisateur):
+        self.client.force_login(utilisateur)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _offrir_abonnement(self, motif="Champion du club", par=None):
+        return record_subscription_payment(
+            gym=self.gym, member=self.membre, plan=self.formule,
+            currency="USD", method="cash", created_by=par or self.proprietaire,
+            offert=True, motif=motif,
+        )
+
+    def _offrir_produit(self, motif="Geste commercial", beneficiaire="Jean Passant"):
+        return record_product_sale(
+            gym=self.gym, product=self.produit, quantity=1, currency="CDF",
+            method="cash", created_by=self.proprietaire,
+            offert=True, motif=motif, beneficiaire=beneficiaire,
+        )
+
+    # --- L'abonnement offert ------------------------------------------------------------------
+
+    def test_an_offered_subscription_costs_nothing_and_keeps_its_value(self):
+        abonnement, paiement = self._offrir_abonnement()
+
+        self.assertEqual(paiement.amount, Decimal("0.00"))
+        self.assertEqual(paiement.amount_cdf, Decimal("0.00"))
+        self.assertTrue(paiement.offert)
+        self.assertEqual(paiement.valeur_offerte_cdf, self.valeur_abonnement)
+        self.assertEqual(paiement.motif_offert, "Champion du club")
+        self.assertTrue(abonnement.is_active)
+        self.assertEqual((abonnement.end_date - abonnement.start_date).days, 30)
+
+    def test_the_member_really_gets_the_access(self):
+        self._offrir_abonnement()
+        self.membre.refresh_from_db()
+
+        self.assertIsNotNone(self.membre.active_subscription)
+
+    def test_a_gift_is_not_revenue(self):
+        self._offrir_abonnement()
+
+        self.assertEqual(Payment.objects.recettes().count(), 0)
+        self.assertEqual(Payment.objects.offerts().count(), 1)
+
+    def test_the_drawer_is_untouched(self):
+        avant = self.caisse.expected_total()
+
+        self._offrir_abonnement()
+
+        self.caisse.refresh_from_db()
+        self.assertEqual(self.caisse.expected_total(), avant)
+
+    def test_a_gift_goes_to_the_open_register_even_without_ones_own(self):
+        # Le proprietaire n'a pas de caisse a lui : le geste rejoint celle qui
+        # est ouverte, comme un apport de fonds.
+        _, paiement = self._offrir_abonnement()
+
+        self.assertEqual(paiement.cash_register, self.caisse)
+
+    def test_a_subscription_gift_without_a_reason_is_refused(self):
+        with self.assertRaises(ValidationError):
+            self._offrir_abonnement(motif="   ")
+
+        self.assertEqual(Payment.objects.count(), 0)
+        self.assertEqual(MemberSubscription.objects.count(), 0)
+
+    def test_a_paid_subscription_is_unchanged(self):
+        _, paiement = record_subscription_payment(
+            gym=self.gym, member=self.membre, plan=self.formule,
+            currency="USD", method="cash", created_by=self.caissiere,
+        )
+
+        self.assertFalse(paiement.offert)
+        self.assertEqual(paiement.amount, Decimal("25.00"))
+        self.assertEqual(paiement.valeur_offerte_cdf, Decimal("0.00"))
+        self.assertEqual(Payment.objects.recettes().count(), 1)
+
+    # --- Le produit offert ---------------------------------------------------------------------
+
+    def test_an_offered_product_leaves_the_stock_and_keeps_its_value(self):
+        paiement = self._offrir_produit()
+
+        self.produit.refresh_from_db()
+        self.assertEqual(self.produit.quantity, 9)
+        self.assertEqual(paiement.amount, Decimal("0.00"))
+        self.assertEqual(paiement.valeur_offerte_cdf, Decimal("2000.00"))
+        self.assertEqual(paiement.beneficiaire, "Jean Passant")
+
+    def test_the_stock_movement_says_it_was_offered(self):
+        self._offrir_produit()
+
+        mouvement = StockMovement.objects.filter(product=self.produit).order_by("-id").first()
+        self.assertEqual(mouvement.reason, "Offert")
+
+    def test_a_product_gift_without_a_reason_is_refused(self):
+        with self.assertRaises(ValidationError):
+            self._offrir_produit(motif="")
+
+        self.produit.refresh_from_db()
+        self.assertEqual(self.produit.quantity, 10)
+        self.assertEqual(Payment.objects.count(), 0)
+
+    def test_a_product_can_be_offered_to_someone_who_is_not_a_member(self):
+        paiement = self._offrir_produit()
+
+        self.assertIsNone(paiement.member)
+        self.assertEqual(paiement.beneficiaire, "Jean Passant")
+
+    # --- Le montant nul -------------------------------------------------------------------------
+
+    def test_only_a_gift_may_cost_nothing(self):
+        vente = Payment(
+            gym=self.gym, cash_register=self.caisse, amount=Decimal("0.00"),
+            currency="CDF", method="cash", type="in", status="success",
+        )
+        with self.assertRaises(ValidationError):
+            vente.full_clean()
+
+        cadeau = Payment(
+            gym=self.gym, cash_register=self.caisse, amount=Decimal("0.00"),
+            currency="CDF", method="cash", type="in", status="success", offert=True,
+        )
+        cadeau.full_clean()
+
+    # --- Le comptoir -----------------------------------------------------------------------------
+
+    def _poster(self, **champs):
+        donnees = {
+            "sale_type": "subscription",
+            "member": self.membre.id,
+            "plan": self.formule.id,
+            "currency": "USD",
+            "method": "cash",
+            "offert": "on",
+            "motif_offert": "Champion du club",
+        }
+        donnees.update(champs)
+        return self.client.post(reverse("pos:cashier_dashboard"), donnees)
+
+    def test_the_owner_can_offer_from_the_counter(self):
+        self._connecter(self.proprietaire)
+
+        reponse = self._poster()
+
+        self.assertEqual(reponse.status_code, 302)
+        paiement = Payment.objects.offerts().get()
+        self.assertEqual(paiement.member, self.membre)
+        self.assertEqual(paiement.motif_offert, "Champion du club")
+
+    def test_the_owner_can_offer_a_product_from_the_counter(self):
+        self._connecter(self.proprietaire)
+
+        self._poster(
+            sale_type="product", product=self.produit.id, quantity="2",
+            currency="CDF", beneficiaire="Jean Passant",
+        )
+
+        paiement = Payment.objects.offerts().get()
+        self.assertEqual(paiement.valeur_offerte_cdf, Decimal("4000.00"))
+        self.produit.refresh_from_db()
+        self.assertEqual(self.produit.quantity, 8)
+
+    def test_a_cashier_cannot_offer(self):
+        self._connecter(self.caissiere)
+
+        reponse = self._poster()
+
+        self.assertEqual(reponse.status_code, 403)
+        self.assertFalse(Payment.objects.exists())
+
+    def test_a_manager_cannot_offer(self):
+        gerant = User.objects.create_user(username="gerant-offert", password="pass12345")
+        UserGymRole.objects.create(user=gerant, gym=self.gym, role="manager", is_active=True)
+        self._connecter(gerant)
+
+        reponse = self._poster()
+
+        self.assertEqual(reponse.status_code, 403)
+        self.assertFalse(Payment.objects.exists())
+
+    def test_the_counter_refuses_a_gift_without_a_reason(self):
+        self._connecter(self.proprietaire)
+
+        self._poster(motif_offert="")
+
+        self.assertFalse(Payment.objects.exists())
+
+    def test_a_normal_sale_still_needs_an_open_register(self):
+        # La caisse reste obligatoire pour encaisser : seul le geste offert,
+        # qui ne remplit aucun tiroir, s'en passe.
+        self._connecter(self.proprietaire)
+
+        self._poster(offert="")
+
+        self.assertFalse(Payment.objects.exists())
+
+    def test_the_box_is_shown_to_the_owner_only(self):
+        self._connecter(self.proprietaire)
+        self.assertContains(self.client.get(reverse("pos:cashier_dashboard")), 'name="offert"')
+
+        self._connecter(self.caissiere)
+        self.assertNotContains(self.client.get(reverse("pos:cashier_dashboard")), 'name="offert"')
+
+    # --- La caisse du jour et la periode -----------------------------------------------------------
+
+    def test_the_day_register_shows_the_gifts_apart(self):
+        from core.views import _tableau_de_caisse
+
+        self._offrir_abonnement()
+
+        caisse = _tableau_de_caisse(self.gym, timezone.localdate())
+
+        self.assertEqual(caisse["offerts"], 1)
+        self.assertEqual(caisse["valeur_offerte"], self.valeur_abonnement)
+        self.assertEqual(caisse["encaissements"], Decimal("0.00"))
+
+    def test_the_period_lists_the_gifts_apart(self):
+        from django.test import RequestFactory
+
+        from core.views import _get_period_window, _operations_de_periode
+
+        self._offrir_abonnement()
+        record_product_sale(
+            gym=self.gym, product=self.produit, quantity=1, currency="CDF",
+            method="cash", created_by=self.caissiere,
+        )
+
+        demande = RequestFactory().get("/")
+        operations = _operations_de_periode(
+            demande, self.gym, _get_period_window("day", timezone.localdate())
+        )
+
+        self.assertEqual(operations["offerts"]["page"].paginator.count, 1)
+        self.assertEqual(operations["encaissements"]["page"].paginator.count, 1)
+        self.assertEqual(operations["valeur_offerte"], self.valeur_abonnement)
