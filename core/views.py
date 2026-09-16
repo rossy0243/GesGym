@@ -664,10 +664,21 @@ def _alertes_urgentes(caisse, refus_repetes, expirations_48h, machines_hs,
         })
 
     if expirations_48h:
+        # L'alerte mene a la liste des membres concernes, d'ou l'equipe peut
+        # appeler, relancer sur WhatsApp ou ecrire. Une alerte sans geste
+        # possible ne fait qu'informer.
         alertes.append({
             "ton": "attention",
-            "titre": f"{expirations_48h} abonnement(s) a echeance sous 48 h",
-            "detail": "Passe ce delai, le membre trouvera porte close.",
+            "titre": (
+                f"{expirations_48h} abonnement"
+                f"{'s' if expirations_48h > 1 else ''} arrive"
+                f"{'nt' if expirations_48h > 1 else ''} a echeance sous 48 h"
+            ),
+            "detail": (
+                "Passe ce delai, l'acces des membres concernes sera "
+                "automatiquement bloque. Ouvrez la liste pour les appeler ou "
+                "les relancer."
+            ),
             "url": f'{reverse("members:member_list")}?status=expiring&expiring_days=2',
         })
 

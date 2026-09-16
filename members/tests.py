@@ -3768,3 +3768,136 @@ class GuestKpiTests(TestCase):
 
         self.assertContains(page, "todayGuests")
         self.assertContains(page, "Invités aujourd'hui")
+
+
+
+class RelanceDesEcheancesTests(TestCase):
+    """
+    Une alerte doit mener a un geste : appeler, relancer, ecrire.
+
+    Sans cela, elle ne fait qu'informer - et le membre trouve porte close.
+    """
+
+    def setUp(self):
+        self.organisation = Organization.objects.create(name="Org Relance", slug="org-relance")
+        self.gym = Gym.objects.create(
+            organization=self.organisation, name="Royal Gym",
+            slug="gym-relance", subdomain="gym-relance",
+        )
+        module, _ = Module.objects.get_or_create(code="MEMBERS", defaults={"name": "Members"})
+        GymModule.objects.get_or_create(gym=self.gym, module=module, defaults={"is_active": True})
+
+        self.membre = Member.objects.create(
+            gym=self.gym, first_name="Ada", last_name="Mbala",
+            phone="+243860000123", email="ada@example.com",
+        )
+        plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Mensuel", price=30, duration_days=30
+        )
+        self.abonnement = MemberSubscription.objects.create(
+            gym=self.gym, member=self.membre, plan=plan,
+            start_date=timezone.localdate() - timedelta(days=29),
+            end_date=timezone.localdate() + timedelta(days=1),
+            is_active=True,
+        )
+        self.gerant = User.objects.create_user(username="gerant-relance", password="pass12345")
+        UserGymRole.objects.create(user=self.gerant, gym=self.gym, role="manager", is_active=True)
+        self.client.force_login(self.gerant)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    # --- Les numeros ------------------------------------------------------------------------
+
+    def test_a_number_is_read_whatever_its_form(self):
+        from members.templatetags.contacts import numero_international
+
+        self.assertEqual(numero_international("+243860000123"), "243860000123")
+        self.assertEqual(numero_international("+243 86 000 0123"), "243860000123")
+        # Forme locale : l'indicatif du pays est ajoute, le zero initial tombe.
+        self.assertEqual(numero_international("0820000001"), "243820000001")
+        self.assertEqual(numero_international("243820000001"), "243820000001")
+        self.assertEqual(numero_international(""), "")
+        self.assertEqual(numero_international(None), "")
+
+    # --- Les liens ---------------------------------------------------------------------------
+
+    def test_the_call_link_dials_the_member(self):
+        from members.templatetags.contacts import lien_appel
+
+        self.assertEqual(lien_appel(self.membre), "tel:+243860000123")
+
+    def test_the_whatsapp_link_carries_the_message(self):
+        from members.templatetags.contacts import lien_whatsapp
+
+        lien = lien_whatsapp(self.membre, self.gym)
+
+        self.assertTrue(lien.startswith("https://wa.me/243860000123?text="))
+        self.assertIn("Ada", lien)
+        self.assertIn(self.abonnement.end_date.strftime("%d"), lien)
+        self.assertIn("Royal", lien)
+
+    def test_the_mail_link_is_prefilled(self):
+        from members.templatetags.contacts import lien_courriel
+
+        lien = lien_courriel(self.membre, self.gym)
+
+        self.assertTrue(lien.startswith("mailto:ada@example.com?subject="))
+        self.assertIn("Ada", lien)
+
+    def test_a_member_without_an_address_has_no_mail_link(self):
+        from members.templatetags.contacts import lien_courriel
+
+        self.membre.email = ""
+        self.membre.save()
+
+        self.assertEqual(lien_courriel(self.membre, self.gym), "")
+
+    def test_a_member_without_a_number_has_no_call_link(self):
+        from members.templatetags.contacts import lien_appel, lien_whatsapp
+
+        self.membre.phone = ""
+        self.membre.save()
+
+        self.assertEqual(lien_appel(self.membre), "")
+        self.assertEqual(lien_whatsapp(self.membre, self.gym), "")
+
+    # --- La liste ------------------------------------------------------------------------------
+
+    def test_the_list_offers_the_three_gestures(self):
+        reponse = self.client.get(reverse("members:member_list"), {"status": "expiring", "expiring_days": "2"})
+
+        self.assertContains(reponse, "https://wa.me/243860000123")
+        self.assertContains(reponse, "tel:+243860000123")
+        self.assertContains(reponse, "mailto:ada@example.com")
+
+    # --- L'alerte -------------------------------------------------------------------------------
+
+    def _alerte_echeance(self, combien):
+        from core.views import _alertes_urgentes
+
+        caisse = {
+            "oubliee_depuis_hier": 0,
+            "a_un_ecart": False,
+            "a_contre_signer": 0,
+        }
+        alertes = _alertes_urgentes(caisse, [], combien, 0, 0, 0)
+        return [alerte for alerte in alertes if "echeance" in alerte["titre"]][0]
+
+    def test_the_alert_says_what_will_happen(self):
+        alerte = self._alerte_echeance(2)
+
+        self.assertIn("2 abonnements arrivent a echeance sous 48 h", alerte["titre"])
+        self.assertIn("automatiquement bloque", alerte["detail"])
+
+    def test_the_alert_leads_to_the_two_members(self):
+        alerte = self._alerte_echeance(2)
+
+        self.assertIn(reverse("members:member_list"), alerte["url"])
+        self.assertIn("status=expiring", alerte["url"])
+        self.assertIn("expiring_days=2", alerte["url"])
+
+    def test_one_subscription_is_said_in_the_singular(self):
+        alerte = self._alerte_echeance(1)
+
+        self.assertIn("1 abonnement arrive a echeance", alerte["titre"])

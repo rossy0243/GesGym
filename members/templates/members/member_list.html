@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load contacts %}
 
 {% block page_titre %}Gestion des Membres{% endblock %}
 
@@ -405,6 +406,30 @@ body.members-screen .modal.show .modal-dialog {
                             {% if member.email %}
                             <small class="text-muted">{{ member.email }}</small>
                             {% endif %}
+                            {% comment %} Appeler, relancer sur WhatsApp, ecrire : le geste part
+                               d'ici, sans recopier un numero a la main. Rien n'est envoye par
+                               le serveur, l'equipe relit et envoie. {% endcomment %}
+                            {% lien_appel member as appel %}
+                            {% lien_whatsapp member gym as whatsapp %}
+                            {% lien_courriel member gym as courriel %}
+                            <div class="d-flex gap-1 mt-1">
+                                {% if appel %}
+                                <a href="{{ appel }}" class="btn btn-sm btn-light" title="Appeler {{ member.first_name }}">
+                                    <span class="material-icons" style="font-size:16px;">call</span>
+                                </a>
+                                {% endif %}
+                                {% if whatsapp %}
+                                <a href="{{ whatsapp }}" target="_blank" rel="noopener noreferrer"
+                                   class="btn btn-sm btn-light" title="Relancer sur WhatsApp">
+                                    <span class="material-icons" style="font-size:16px;">chat</span>
+                                </a>
+                                {% endif %}
+                                {% if courriel %}
+                                <a href="{{ courriel }}" class="btn btn-sm btn-light" title="Envoyer un e-mail de relance">
+                                    <span class="material-icons" style="font-size:16px;">mail</span>
+                                </a>
+                                {% endif %}
+                            </div>
                         </td>
 
                         <!-- Abonnement -->
