@@ -1725,6 +1725,15 @@ def member_list(request):
         expiring_days = 7
     limit = today + timedelta(days=expiring_days)
 
+    # Borne basse : le tableau de bord range les echeances en tranches qui ne
+    # se recouvrent pas. Sans elle, "dans 8 a 15 jours" ramenait aussi ceux qui
+    # expirent demain, et la liste ne correspondait plus au chiffre clique.
+    try:
+        expiring_from = max(int(request.GET.get("expiring_from") or 0), 0)
+    except (TypeError, ValueError):
+        expiring_from = 0
+    debut_fenetre = today + timedelta(days=min(expiring_from, expiring_days))
+
     active_subscription_exists = MemberSubscription.objects.filter(
         member=OuterRef("pk"),
         is_active=True,
@@ -1736,7 +1745,7 @@ def member_list(request):
         member=OuterRef("pk"),
         is_active=True,
         start_date__lte=today,
-        end_date__range=(today, limit),
+        end_date__range=(debut_fenetre, limit),
         is_paused=False,
     )
     # Date de fin de l'abonnement en cours : sert a trier du plus urgent au

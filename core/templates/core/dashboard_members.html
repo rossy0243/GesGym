@@ -612,7 +612,7 @@
                         </div>
                         <div class="col-lg-3 col-6">
                             <div class="fs-12 text-muted aide"
-                                 title="Encaissements moins decaissements : ce que la salle a gagne sur la periode. Les apports en caisse n'y comptent pas - ce n'est pas de l'argent gagne.">Resultat</div>
+                                 title="Encaissements moins decaissements : ce qui est entre dans les caisses moins ce qui en est sorti. Ce n'est pas un benefice : les charges non encore payees, les salaires a venir, l'amortissement du materiel et le stock consomme n'y figurent pas. Les apports en caisse non plus, ce n'est pas de l'argent gagne.">Flux net de tresorerie</div>
                             <div class="chiffre-cle {% if bilan_periode.resultat < 0 %}ton-urgent{% else %}ton-strategique{% endif %}">{{ bilan_periode.resultat|montant_signe }} CDF</div>
                             <div class="fs-11 text-muted mt-1">
                                 periode precedente {{ bilan_periode.resultat_precedent|montant_signe }} CDF
@@ -882,8 +882,8 @@
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted aide"
-                          title="Abonnements dont la date de fin tombe dans la periode.">Expirations {{ period_label_lower }}</span>
-                    <h3 class="mb-2 fw-bold">{{ expirations_period }}</h3>
+                          title="Abonnements dont la date de fin tombe dans la periode. Une expiration n'est pas une bonne nouvelle : la teinte ne passe jamais au vert.">Expirations {{ period_label_lower }}</span>
+                    <h3 class="mb-2 fw-bold {% if expirations_period %}ton-attention{% endif %}">{{ expirations_period }}</h3>
                     <span class="badge bg-soft-{{ expirations_trend.badge_class }} text-{{ expirations_trend.badge_class }}"
                           title="{{ expirations_trend.basis }}">{{ expirations_trend.display }}</span>
                     <div class="fs-11 text-muted mt-1">{{ expirations_trend.basis }}</div>
@@ -1067,9 +1067,11 @@
         </div>
         <div class="col-xxl col-md-4 col-sm-6">
             <div class="analytics-kpi-card">
-                <div class="analytics-kpi-card__label">A risque J-15</div>
-                <div class="analytics-kpi-card__value">{{ expiry_soon }}</div>
-                <div class="analytics-kpi-card__meta">J-7 {{ expiry_7_days }} | J-3 {{ expiry_3_days }}</div>
+                <div class="analytics-kpi-card__label">A relancer sous 15 jours</div>
+                <div class="analytics-kpi-card__value {% if expiry_soon %}ton-attention{% endif %}">{{ expiry_soon }}</div>
+                <div class="analytics-kpi-card__meta">
+                    {% for tranche in tranches_expiration %}{% if tranche.jusqu_a %}{{ tranche.libelle|lower }} : {{ tranche.nombre }}{% if not forloop.last %} &middot; {% endif %}{% endif %}{% endfor %}
+                </div>
             </div>
         </div>
         <div class="col-xxl col-md-4 col-sm-6">
@@ -1125,8 +1127,9 @@
                         <canvas id="expirationAlertsChart"></canvas>
                     </div>
                     <div class="d-flex justify-content-between text-muted fs-12 mt-3">
-                        <span>Demain {{ expiry_1_day }}</span>
-                        <span>Sous 15j {{ expiry_soon }}</span>
+                        <span class="aide"
+                              title="Chaque abonnement en cours figure dans une seule tranche : les totaux ne se recouvrent pas.">Tranches exclusives</span>
+                        <span>{{ expiry_soon }} sous 15 jours</span>
                     </div>
                 </div>
             </div>
@@ -1167,36 +1170,19 @@
                     <h5 class="card-title">Alertes membres</h5>
                 </div>
                 <div class="card-body">
-                    {% comment %} Ces paliers se recouvrent volontairement : un abonnement
-                       qui expire demain expire aussi sous 7 jours. Sans cette mention ils
-                       se lisent comme des groupes separes, et on croit compter quatre
-                       personnes la ou il n'y en a qu'une. {% endcomment %}
-                    <div class="fs-11 text-muted mb-2">Paliers cumulatifs : une meme personne figure dans chaque palier plus large.</div>
+                    {% comment %} Chaque abonnement figure dans une seule tranche : des
+                       paliers qui se recouvrent invitaient a additionner quatre fois la
+                       meme personne. {% endcomment %}
+                    <div class="fs-11 text-muted mb-2">Tranches exclusives : chaque abonnement n'est compté qu'une fois.</div>
                     <div class="vstack gap-3">
+                        {% for tranche in tranches_expiration %}
                         <a class="d-flex justify-content-between text-decoration-none text-body expiry-link"
-                           href="{% url 'members:member_list' %}?status=expiring&expiring_days=7"
-                           title="Voir la liste des membres a rappeler, du plus urgent au moins urgent">
-                            <span>Expire dans 7 jours <span class="material-icons align-middle" style="font-size:14px;">call</span></span>
-                            <strong>{{ expiry_7_days }}</strong>
+                           href="{% url 'members:member_list' %}?status=expiring&expiring_days={{ tranche.jusqu_a|default:365 }}&expiring_from={{ tranche.depuis }}"
+                           title="Voir la liste des membres de cette tranche, du plus urgent au moins urgent">
+                            <span>{{ tranche.libelle }} <span class="material-icons align-middle" style="font-size:14px;">call</span></span>
+                            <strong class="{% if tranche.nombre and tranche.urgent %}ton-urgent{% elif tranche.nombre and tranche.a_surveiller %}ton-attention{% endif %}">{{ tranche.nombre }}</strong>
                         </a>
-                        <a class="d-flex justify-content-between text-decoration-none text-body expiry-link"
-                           href="{% url 'members:member_list' %}?status=expiring&expiring_days=3"
-                           title="Voir la liste des membres a rappeler, du plus urgent au moins urgent">
-                            <span>Expire dans 3 jours <span class="material-icons align-middle" style="font-size:14px;">call</span></span>
-                            <strong>{{ expiry_3_days }}</strong>
-                        </a>
-                        <a class="d-flex justify-content-between text-decoration-none text-body expiry-link"
-                           href="{% url 'members:member_list' %}?status=expiring&expiring_days=1"
-                           title="Voir la liste des membres a rappeler, du plus urgent au moins urgent">
-                            <span>Expire demain <span class="material-icons align-middle" style="font-size:14px;">call</span></span>
-                            <strong>{{ expiry_1_day }}</strong>
-                        </a>
-                        <a class="d-flex justify-content-between text-decoration-none text-body expiry-link"
-                           href="{% url 'members:member_list' %}?status=expiring&expiring_days=15"
-                           title="Voir la liste des membres a rappeler, du plus urgent au moins urgent">
-                            <span>Expire sous 15 jours <span class="material-icons align-middle" style="font-size:14px;">call</span></span>
-                            <strong>{{ expiry_soon }}</strong>
-                        </a>
+                        {% endfor %}
                         <div class="d-flex justify-content-between">
                             <span>Paiements en attente</span>
                             <strong>{{ pending_count }} / {{ pending_total|montant }} CDF</strong>

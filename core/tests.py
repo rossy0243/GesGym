@@ -513,7 +513,17 @@ class AccountingReportExportTests(TestCase):
                     len(chart_data["attendance"]["labels"]),
                     len(chart_data["attendance"]["values"]),
                 )
-                self.assertEqual(chart_data["expirations"]["labels"], ["J-1", "J-3", "J-7", "J-15"])
+                # Les tranches ne se recouvrent plus : chaque abonnement en
+                # compte pour un, dans une seule.
+                self.assertEqual(
+                    chart_data["expirations"]["labels"],
+                    [
+                        "Aujourd'hui ou demain",
+                        "Dans 2 a 7 jours",
+                        "Dans 8 a 15 jours",
+                        "Au-dela de 15 jours",
+                    ],
+                )
 
     def test_journalier_report_defaults_to_today_period(self):
         response = self.client.get(reverse("core:rapport"), {"section": "journalier"})
@@ -4046,11 +4056,11 @@ class DashboardHonestyTests(TestCase):
 
     # --- Les definitions ------------------------------------------------------------------
 
-    def test_the_cumulative_thresholds_say_they_are_cumulative(self):
-        # Un abonnement qui expire demain est compte dans J-3, J-7 et sous 15
-        # jours : c'est voulu, mais rien ne le disait. Les quatre paliers ont
-        # rejoint la vue analytique ; l'explication les y a suivis.
-        self.assertContains(self._vue(analytique=True), "Paliers cumulatifs")
+    def test_the_thresholds_no_longer_overlap(self):
+        # Les paliers se recouvraient : un abonnement qui expire demain
+        # comptait aussi dans J-3, J-7 et J-15. On les lisait comme quatre
+        # personnes. Chaque abonnement ne figure plus que dans une tranche.
+        self.assertContains(self._vue(analytique=True), "Tranches exclusives")
 
     def test_the_overview_states_the_inclusion_in_words(self):
         # La vue d'ensemble ne montre qu'un palier et son sous-ensemble : le
@@ -7141,3 +7151,183 @@ class RapportsHonnetesTests(TestCase):
         self.assertEqual(reponse.context["transactions_total"], 3)
         self.assertContains(reponse, "Total : 3 transactions")
         self.assertNotContains(reponse, "Voir la liste complète")
+
+
+
+class TranchesDExpirationTests(TestCase):
+    """
+    Chaque abonnement figure dans une seule tranche d'echeance.
+
+    Les paliers cumulatifs comptaient la meme personne jusqu'a quatre fois :
+    on additionnait des chiffres qui se recouvraient.
+    """
+
+    def setUp(self):
+        self.organisation = Organization.objects.create(name="Org Tranches", slug="org-tranches")
+        self.gym = Gym.objects.create(
+            organization=self.organisation, name="Gym Tranches",
+            slug="gym-tranches", subdomain="gym-tranches",
+        )
+        for code in ("MEMBERS", "SUBSCRIPTIONS"):
+            module, _ = Module.objects.get_or_create(code=code, defaults={"name": code})
+            GymModule.objects.get_or_create(gym=self.gym, module=module, defaults={"is_active": True})
+        self.plan = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Mensuel", price=30, duration_days=30
+        )
+        self.today = timezone.localdate()
+        self.proprietaire = User.objects.create_user(
+            username="proprio-tranches", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.proprietaire, gym=self.gym, role="owner", is_active=True
+        )
+        self.client.force_login(self.proprietaire)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _abonne(self, fin_dans, nom="Membre"):
+        membre = Member.objects.create(
+            gym=self.gym, first_name=nom, last_name=str(fin_dans),
+            phone=f"+2438900{fin_dans:05d}",
+        )
+        MemberSubscription.objects.create(
+            gym=self.gym, member=membre, plan=self.plan,
+            start_date=self.today - timedelta(days=1),
+            end_date=self.today + timedelta(days=fin_dans),
+            is_active=True,
+        )
+        return membre
+
+    def _tranches(self):
+        from core.views import _expirations_par_tranche
+
+        return {
+            tranche["libelle"]: tranche["nombre"]
+            for tranche in _expirations_par_tranche(self.gym, self.today)
+        }
+
+    def test_each_subscription_falls_in_one_bucket_only(self):
+        self._abonne(0)
+        self._abonne(1)
+        self._abonne(5)
+        self._abonne(12)
+        self._abonne(40)
+
+        tranches = self._tranches()
+
+        self.assertEqual(tranches["Aujourd'hui ou demain"], 2)
+        self.assertEqual(tranches["Dans 2 a 7 jours"], 1)
+        self.assertEqual(tranches["Dans 8 a 15 jours"], 1)
+        self.assertEqual(tranches["Au-dela de 15 jours"], 1)
+
+    def test_the_buckets_add_up_to_the_active_subscriptions(self):
+        for fin in (0, 2, 9, 20, 31):
+            self._abonne(fin)
+
+        self.assertEqual(sum(self._tranches().values()), 5)
+
+    def test_the_boundaries_are_where_they_are_said_to_be(self):
+        self._abonne(2)
+        self._abonne(7)
+        self._abonne(8)
+        self._abonne(15)
+        self._abonne(16)
+
+        tranches = self._tranches()
+
+        self.assertEqual(tranches["Dans 2 a 7 jours"], 2)
+        self.assertEqual(tranches["Dans 8 a 15 jours"], 2)
+        self.assertEqual(tranches["Au-dela de 15 jours"], 1)
+
+    def test_an_ended_subscription_is_in_no_bucket(self):
+        membre = self._abonne(5)
+        MemberSubscription.objects.filter(member=membre).update(
+            end_date=self.today - timedelta(days=1)
+        )
+
+        self.assertEqual(sum(self._tranches().values()), 0)
+
+    def test_the_member_list_shows_exactly_one_bucket(self):
+        # Le chiffre clique et la liste ouverte doivent dire la meme chose.
+        self._abonne(1, nom="Urgent")
+        self._abonne(12, nom="Plus tard")
+
+        reponse = self.client.get(
+            reverse("members:member_list"),
+            {"status": "expiring", "expiring_days": "15", "expiring_from": "8"},
+        )
+
+        self.assertContains(reponse, "Plus tard")
+        self.assertNotContains(reponse, "Urgent")
+
+
+class VocabulaireDeLaTresorerieTests(TestCase):
+    """
+    Encaissements moins decaissements n'est pas un benefice.
+
+    Le mot "resultat" laissait croire a un benefice comptable, alors que ni
+    les charges a payer, ni les salaires a venir, ni l'amortissement n'y
+    figurent.
+    """
+
+    def setUp(self):
+        self.organisation = Organization.objects.create(name="Org Tresorerie", slug="org-tresorerie")
+        self.gym = Gym.objects.create(
+            organization=self.organisation, name="Gym Tresorerie",
+            slug="gym-tresorerie", subdomain="gym-tresorerie",
+        )
+        for code in ("MEMBERS", "POS"):
+            module, _ = Module.objects.get_or_create(code=code, defaults={"name": code})
+            GymModule.objects.get_or_create(gym=self.gym, module=module, defaults={"is_active": True})
+        self.proprietaire = User.objects.create_user(
+            username="proprio-tresorerie", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.proprietaire, gym=self.gym, role="owner", is_active=True
+        )
+        self.client.force_login(self.proprietaire)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _analytique(self):
+        return self.client.get(
+            reverse("core:gym_dashboard", args=[self.gym.id]), {"view": "analytics"}
+        )
+
+    def test_the_card_is_named_a_cash_flow(self):
+        reponse = self._analytique()
+
+        self.assertContains(reponse, "Flux net de tresorerie")
+        self.assertNotContains(reponse, ">Resultat<")
+
+    def test_the_definition_says_what_it_leaves_out(self):
+        reponse = self._analytique()
+
+        self.assertContains(reponse, "Ce n'est pas un benefice")
+        self.assertContains(reponse, "amortissement")
+
+
+class CouleurDesExpirationsTests(TestCase):
+    """Une expiration de plus n'est jamais une bonne nouvelle."""
+
+    def test_a_rise_in_expirations_is_never_green(self):
+        from core.views import _build_trend
+
+        tendance = _build_trend(5, 2, hausse_favorable=False)
+
+        self.assertEqual(tendance["badge_class"], "warning")
+
+    def test_a_fall_in_expirations_is_not_red(self):
+        from core.views import _build_trend
+
+        tendance = _build_trend(1, 4, hausse_favorable=False)
+
+        self.assertEqual(tendance["badge_class"], "secondary")
+
+    def test_revenue_keeps_its_own_reading(self):
+        from core.views import _build_trend
+
+        self.assertEqual(_build_trend(10, 5)["badge_class"], "success")
+        self.assertEqual(_build_trend(5, 10)["badge_class"], "danger")

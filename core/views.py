@@ -168,6 +168,55 @@ def _build_revenue_rows(payments_qs, period_data):
     return rows
 
 
+# Tranches d'expiration. Chaque abonnement tombe dans une seule : les paliers
+# cumulatifs d'avant - J-1, J-3, J-7, J-15 - comptaient la meme personne
+# quatre fois, et les chiffres s'additionnaient a tort dans la tete du lecteur.
+#
+# Les bornes sont des jours calendaires a partir d'aujourd'hui : "aujourd'hui
+# ou demain" couvre les quarante-huit heures qui viennent.
+TRANCHES_EXPIRATION = (
+    ("Aujourd'hui ou demain", 0, 1),
+    ("Dans 2 a 7 jours", 2, 7),
+    ("Dans 8 a 15 jours", 8, 15),
+    ("Au-dela de 15 jours", 16, None),
+)
+
+
+def _expirations_par_tranche(gym, today):
+    """
+    Les abonnements en cours, ranges par echeance, sans recouvrement.
+
+    Le total des tranches vaut le nombre d'abonnements en cours : c'est ce qui
+    rend la lecture sure, la ou des paliers qui se recouvrent invitaient a
+    additionner quatre fois la meme personne.
+    """
+    from datetime import timedelta as _timedelta
+
+    en_cours = MemberSubscription.objects.filter(
+        member__gym=gym,
+        is_active=True,
+        is_paused=False,
+        start_date__lte=today,
+        end_date__gte=today,
+    )
+
+    tranches = []
+    for libelle, depuis, jusqu_a in TRANCHES_EXPIRATION:
+        lignes = en_cours.filter(end_date__gte=today + _timedelta(days=depuis))
+        if jusqu_a is not None:
+            lignes = lignes.filter(end_date__lte=today + _timedelta(days=jusqu_a))
+        tranches.append({
+            "libelle": libelle,
+            "nombre": lignes.count(),
+            "depuis": depuis,
+            "jusqu_a": jusqu_a,
+            # Au-dela de quinze jours, rien n'est urgent : la teinte le dit.
+            "urgent": jusqu_a is not None and jusqu_a <= 1,
+            "a_surveiller": jusqu_a is not None and jusqu_a > 1,
+        })
+    return tranches
+
+
 def _build_dashboard_chart_data(
     *,
     revenue_rows,
@@ -176,10 +225,7 @@ def _build_dashboard_chart_data(
     status_chart_values,
     plan_labels,
     plan_values,
-    expiry_1_day,
-    expiry_3_days,
-    expiry_7_days,
-    expiry_soon,
+    tranches_expiration,
     visits_period,
     denied_period,
 ):
@@ -201,8 +247,8 @@ def _build_dashboard_chart_data(
             "values": [int(value) for value in plan_values],
         },
         "expirations": {
-            "labels": ["J-1", "J-3", "J-7", "J-15"],
-            "values": [expiry_1_day, expiry_3_days, expiry_7_days, expiry_soon],
+            "labels": [tranche["libelle"] for tranche in tranches_expiration],
+            "values": [int(tranche["nombre"]) for tranche in tranches_expiration],
         },
         "access": {
             "labels": ["Autorises", "Refuses"],
@@ -979,7 +1025,14 @@ def _format_period_range(start_date, end_date):
     return f"{start_date.strftime('%d/%m/%Y')} - {end_date.strftime('%d/%m/%Y')}"
 
 
-def _build_trend(current_value, previous_value):
+def _build_trend(current_value, previous_value, hausse_favorable=True):
+    """
+    L'evolution par rapport a la periode precedente.
+
+    ``hausse_favorable`` dit ce qu'une hausse signifie. Des expirations qui
+    augmentent ne sont pas une bonne nouvelle : les peindre en vert, comme un
+    chiffre d'affaires en hausse, disait l'inverse de ce qui se passe.
+    """
     delta = current_value - previous_value
     if previous_value:
         percent = round((delta / previous_value) * 100, 1)
@@ -990,11 +1043,11 @@ def _build_trend(current_value, previous_value):
 
     if delta > 0:
         direction = "up"
-        badge_class = "success"
+        badge_class = "success" if hausse_favorable else "warning"
         prefix = "+"
     elif delta < 0:
         direction = "down"
-        badge_class = "danger"
+        badge_class = "danger" if hausse_favorable else "secondary"
         prefix = ""
     else:
         direction = "flat"
@@ -2171,6 +2224,9 @@ def gym_dashboard(request, gym_id):
     expiry_3_days = _expiring_within(3)
     expiry_1_day = _expiring_within(1)
     expiry_soon = _expiring_within(15)
+    # Les memes echeances, rangees sans recouvrement : le graphique et le bloc
+    # d'alertes lisent celles-ci.
+    tranches_expiration = _expirations_par_tranche(gym, today)
 
     # Le personnel et les fiches du terminal n'entrent dans aucune
     # statistique des membres : visites, visiteurs, refus, heure de pointe.
@@ -2291,8 +2347,11 @@ def gym_dashboard(request, gym_id):
     # s'affichaient vides. On reconstitue la comparaison.
     new_members_trend = _build_trend(new_members_period, new_members_previous)
     renewals_trend = _build_trend(renewals_period, renewals_previous)
-    expirations_trend = _build_trend(expirations_period, expirations_previous)
-    expirations_trend = _build_trend(expirations_period, expirations_previous)
+    # Une expiration de plus n'est pas une amelioration : jamais de vert ici.
+    # (La ligne etait ecrite deux fois, sans effet : une seule suffit.)
+    expirations_trend = _build_trend(
+        expirations_period, expirations_previous, hausse_favorable=False
+    )
 
     plans_stats = MemberSubscription.objects.filter(
         member__gym=gym,
@@ -2319,10 +2378,7 @@ def gym_dashboard(request, gym_id):
         status_chart_values=status_chart_values,
         plan_labels=plan_labels,
         plan_values=plan_values,
-        expiry_1_day=expiry_1_day,
-        expiry_3_days=expiry_3_days,
-        expiry_7_days=expiry_7_days,
-        expiry_soon=expiry_soon,
+        tranches_expiration=tranches_expiration,
         visits_period=visits_period,
         denied_period=denied_period,
     )
@@ -2545,6 +2601,7 @@ def gym_dashboard(request, gym_id):
         "denied_period": denied_period,
         "denied_today": denied_today,
         "expiry_soon": expiry_soon,
+        "tranches_expiration": tranches_expiration,
         "expiry_7_days": expiry_7_days,
         "expiry_3_days": expiry_3_days,
         "expiry_1_day": expiry_1_day,
