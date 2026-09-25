@@ -5258,8 +5258,11 @@ class StaffTerminalAdoptionTests(TestCase):
         self.assertEqual(self.Fiche.objects.get().employee_no, "5")
         trace = SensitiveActivityLog.objects.get(action="access.staff_terminal_record_adopted")
         self.assertEqual(trace.metadata["employee_no"], "5")
-        self.assertContains(reponse, "Fiche du terminal rattach")
-        self.assertContains(reponse, "n° 5 sur Terminal")
+        # L'ecran dit desormais ou l'employe est inscrit, pas seulement qu'une
+        # fiche a ete rattachee.
+        self.assertContains(reponse, "Inscrit sur le lecteur")
+        self.assertContains(reponse, "fiche du terminal rattachée")
+        self.assertContains(reponse, "Terminal &mdash; n° 5")
 
     def test_a_receptionist_cannot_adopt(self):
         accueil = User.objects.create_user(username="accueil-adoption", password="pass12345")
@@ -6466,3 +6469,103 @@ class ErreurDePasserelleTests(TestCase):
         self.assertEqual(resultat["confirmees"], 0)
         self.assertEqual(len(resultat["restantes"]), 1)
         self.assertIn("injoignable", resultat["restantes"][0].derniere_erreur)
+
+
+
+class EtatDInscriptionTests(TestCase):
+    """
+    Porter un numero n'est pas etre inscrit.
+
+    L'ecran affichait "Identifiant sur le lecteur : 2000002" avant tout
+    enrolement et apres tout retrait : on croyait l'employe inscrit alors que
+    le lecteur ne portait rien pour lui.
+    """
+
+    def setUp(self):
+        (self.gym, self.device, self.member, self.employe,
+         _) = _salle_avec_personnel("etat-inscription")
+        _lecteur_sans_reste(self)
+        self.gerant = User.objects.create_user(username="gerant-etat", password="pass12345")
+        UserGymRole.objects.create(user=self.gerant, gym=self.gym, role="manager", is_active=True)
+        self.client.force_login(self.gerant)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+        self.url = reverse("access:staff_face_enrollment", args=[self.employe.id])
+
+    # --- Le service ---------------------------------------------------------------------------
+
+    def test_an_employee_without_a_record_is_not_enrolled(self):
+        from . import personnel
+
+        self.assertEqual(personnel.inscriptions(self.employe), [])
+
+    def test_an_enrolled_employee_says_where(self):
+        from . import personnel
+
+        personnel.noter_inscription(self.device, self.employe)
+
+        inscriptions = personnel.inscriptions(self.employe)
+
+        self.assertEqual(len(inscriptions), 1)
+        self.assertEqual(inscriptions[0]["device"], self.device)
+        self.assertEqual(inscriptions[0]["numero"], enrollment.numero_personnel(self.employe))
+        self.assertFalse(inscriptions[0]["adoptee"])
+        self.assertFalse(inscriptions[0]["retrait_demande"])
+
+    def test_an_attached_terminal_record_is_named_as_such(self):
+        from . import personnel
+
+        personnel.adopter_fiche(self.device, self.employe, "5")
+
+        self.assertTrue(personnel.inscriptions(self.employe)[0]["adoptee"])
+
+    def test_a_pending_removal_is_visible(self):
+        from . import personnel
+
+        personnel.noter_inscription(self.device, self.employe)
+        personnel.demander_retrait(self.employe)
+
+        self.assertTrue(personnel.inscriptions(self.employe)[0]["retrait_demande"])
+
+    # --- L'ecran -------------------------------------------------------------------------------
+
+    def test_the_card_says_the_number_is_reserved_not_used(self):
+        reponse = self.client.get(self.url)
+
+        self.assertContains(reponse, "Numéro qui lui est réservé")
+        self.assertContains(reponse, enrollment.numero_personnel(self.employe))
+        self.assertContains(reponse, "Pas inscrit sur un lecteur")
+
+    def test_the_card_says_where_he_is_enrolled(self):
+        from . import personnel
+
+        personnel.noter_inscription(self.device, self.employe)
+
+        reponse = self.client.get(self.url)
+
+        self.assertContains(reponse, "Inscrit sur le lecteur")
+        self.assertNotContains(reponse, "Pas inscrit sur un lecteur")
+
+    def test_after_a_removal_the_card_says_he_is_not_enrolled_any_more(self):
+        from . import personnel
+
+        personnel.noter_inscription(self.device, self.employe)
+        with patch.object(hikvision.HikvisionClient, "delete_user"):
+            self.client.post(reverse("access:staff_face_remove", args=[self.employe.id]))
+
+        reponse = self.client.get(self.url)
+
+        self.assertContains(reponse, "Pas inscrit sur un lecteur")
+        # Le numero, lui, ne bouge pas : c'est son identite.
+        self.assertContains(reponse, enrollment.numero_personnel(self.employe))
+
+    def test_a_pending_removal_is_shown_on_the_card(self):
+        from . import personnel
+
+        personnel.noter_inscription(self.device, self.employe)
+        personnel.demander_retrait(self.employe)
+
+        reponse = self.client.get(self.url)
+
+        self.assertContains(reponse, "Retrait demandé, pas encore confirmé")

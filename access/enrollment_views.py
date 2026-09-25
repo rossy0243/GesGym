@@ -290,6 +290,7 @@ def staff_face_enrollment(request, employee_id):
                 else None
             ),
             "fiches_adoptees": personnel.fiches_adoptees(employe),
+            "inscriptions": personnel.inscriptions(employe),
             # Le bouton n'apparait qu'a celui qui a le droit de s'en servir.
             "peut_liberer": has_role(request, SETTINGS_ORGANIZATION_ROLES),
         },

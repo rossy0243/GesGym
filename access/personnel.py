@@ -531,6 +531,29 @@ def adopter_fiche(device, employee, numero):
     )
 
 
+def inscriptions(employee):
+    """
+    Les lecteurs qui portent une fiche pour cet employe, et dans quel etat.
+
+    Le numero affiche sur sa fiche - 2 000 000 plus son identifiant - est une
+    identite, pas une presence : il existe avant tout enrolement et survit a
+    tout retrait. Sans cette lecture-la, l'ecran laissait croire qu'un employe
+    etait inscrit parce qu'il portait un numero.
+    """
+    return [
+        {
+            "device": fiche.device,
+            "numero": fiche.employee_no,
+            "adoptee": est_une_fiche_du_terminal(fiche.employee_no),
+            "retrait_demande": fiche.retrait_demande_le is not None,
+            "derniere_erreur": fiche.derniere_erreur,
+        }
+        for fiche in StaffReaderRecord.objects.filter(employee=employee)
+        .select_related("device")
+        .order_by("device__name")
+    ]
+
+
 def fiches_adoptees(employee):
     """Fiches du terminal rattachees a cet employe."""
     return [
