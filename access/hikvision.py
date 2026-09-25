@@ -14,6 +14,7 @@ Aucune dependance externe : uniquement la bibliotheque standard.
 import base64
 import ipaddress
 import json
+import re
 import socket
 import struct
 import time
@@ -68,15 +69,37 @@ class HikvisionUnreachable(HikvisionError):
 # n'est pas un refus, c'est une panne de chemin. Les confondre faisait annoncer
 # "le lecteur a refuse" pour un terminal eteint, et laissait continuer des
 # gestes qui n'avaient rien change.
-CODES_PASSERELLE = frozenset({502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 527})
+CODES_PASSERELLE = frozenset(
+    {502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 527, 530}
+)
+
+# Le tunnel numerote ses propres pannes dans le corps de la reponse. Les citer
+# tels quels - "error code: 1033" - n'aide personne : on les nomme.
+MOTIFS_TUNNEL = {
+    "1033": "le tunnel n'est pas demarre sur le poste de la salle",
+    "1016": "le tunnel ne sait pas ou joindre le lecteur (adresse introuvable)",
+    "1000": "le tunnel refuse cette adresse",
+    "1010": "le tunnel a refuse la signature du client",
+}
+
+
+def _motif_tunnel(corps):
+    """La panne du tunnel, en clair, si son numero est reconnu."""
+    trouve = re.search(r"error code:\s*(\d{4})", corps or "")
+    if not trouve:
+        return ""
+    return MOTIFS_TUNNEL.get(trouve.group(1), f"panne de tunnel n {trouve.group(1)}")
 
 
 def _erreur_http(code, chemin, exc):
     """Traduit une reponse HTTP en panne de chemin ou en refus du lecteur."""
     if code in CODES_PASSERELLE:
+        corps = _corps_erreur(exc)
+        motif = _motif_tunnel(corps)
         return HikvisionUnreachable(
-            f"le terminal n'a pas repondu (HTTP {code} rendu par le tunnel sur "
-            f"{chemin}). Verifiez qu'il est allume et que le tunnel est ouvert."
+            f"le terminal n'a pas repondu (HTTP {code} rendu par le tunnel)"
+            + (f" : {motif}." if motif else ".")
+            + " Verifiez que le terminal est allume et que le tunnel tourne."
         )
     return HikvisionError(f"HTTP {code} sur {chemin} : {_corps_erreur(exc)}")
 

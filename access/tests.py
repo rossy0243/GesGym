@@ -6392,6 +6392,37 @@ class ErreurDePasserelleTests(TestCase):
                 with self.assertRaises(hikvision.HikvisionUnreachable):
                     self._appeler(code)
 
+    def test_a_stopped_tunnel_is_named(self):
+        # "error code: 1033" ne dit rien a personne : c'est le tunnel qui ne
+        # tourne pas sur le poste de la salle.
+        client = hikvision.HikvisionClient.from_device(self.device, timeout=1)
+
+        with self._reponse_http(530, corps=b"error code: 1033"):
+            with self.assertRaises(hikvision.HikvisionUnreachable) as capture:
+                client.request("/ISAPI/AccessControl/UserInfo/Search?format=json")
+
+        message = str(capture.exception)
+        self.assertIn("tunnel n'est pas demarre", message)
+        self.assertNotIn("1033", message)
+
+    def test_an_unknown_tunnel_code_is_still_a_tunnel_failure(self):
+        client = hikvision.HikvisionClient.from_device(self.device, timeout=1)
+
+        with self._reponse_http(530, corps=b"error code: 1099"):
+            with self.assertRaises(hikvision.HikvisionUnreachable) as capture:
+                client.request("/ISAPI/AccessControl/UserInfo/Search?format=json")
+
+        self.assertIn("1099", str(capture.exception))
+
+    def test_an_unknown_address_is_named_too(self):
+        client = hikvision.HikvisionClient.from_device(self.device, timeout=1)
+
+        with self._reponse_http(530, corps=b"error code: 1016"):
+            with self.assertRaises(hikvision.HikvisionUnreachable) as capture:
+                client.request("/ISAPI/AccessControl/UserInfo/Search?format=json")
+
+        self.assertIn("adresse introuvable", str(capture.exception))
+
     def test_a_real_refusal_stays_a_refusal(self):
         with self.assertRaises(hikvision.HikvisionError) as capture:
             self._appeler(400)
