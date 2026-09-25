@@ -6341,3 +6341,97 @@ class RetraitCompletDuneFicheTests(TestCase):
         _, _, presence, _ = self._retirer()
 
         presence.assert_called_with(self.numero)
+
+
+
+class ErreurDePasserelleTests(TestCase):
+    """
+    Un 502 rendu par le tunnel ne dit rien du lecteur.
+
+    L'appel n'a jamais atteint le terminal. L'annoncer comme un refus faisait
+    lire "le lecteur a refuse la fiche" pour un terminal simplement eteint, et
+    laissait continuer des gestes qui n'avaient rien change.
+    """
+
+    def setUp(self):
+        (self.gym, self.device, self.member, self.employe,
+         _) = _salle_avec_personnel("passerelle")
+
+    def _reponse_http(self, code, corps=b"error code: 502"):
+        import io
+        from unittest.mock import Mock
+        from urllib.error import HTTPError
+
+        erreur = HTTPError(
+            url="https://tunnel.example/ISAPI/AccessControl/UserInfo/Modify?format=json",
+            code=code, msg="Bad Gateway", hdrs=None, fp=io.BytesIO(corps),
+        )
+        return patch.object(
+            hikvision.HikvisionClient, "_opener",
+            return_value=Mock(open=Mock(side_effect=erreur)),
+        )
+
+    def _appeler(self, code):
+        client = hikvision.HikvisionClient.from_device(self.device, timeout=1)
+        with self._reponse_http(code):
+            client.request("/ISAPI/AccessControl/UserInfo/Modify?format=json")
+
+    # --- Le classement ---------------------------------------------------------------------
+
+    def test_a_gateway_error_says_the_reader_never_answered(self):
+        with self.assertRaises(hikvision.HikvisionUnreachable) as capture:
+            self._appeler(502)
+
+        message = str(capture.exception)
+        self.assertIn("n'a pas repondu", message)
+        self.assertIn("tunnel", message)
+
+    def test_every_gateway_code_is_treated_the_same(self):
+        for code in (502, 503, 504, 521, 524):
+            with self.subTest(code=code):
+                with self.assertRaises(hikvision.HikvisionUnreachable):
+                    self._appeler(code)
+
+    def test_a_real_refusal_stays_a_refusal(self):
+        with self.assertRaises(hikvision.HikvisionError) as capture:
+            self._appeler(400)
+
+        self.assertNotIsInstance(capture.exception, hikvision.HikvisionUnreachable)
+        self.assertIn("HTTP 400", str(capture.exception))
+
+    # --- Ce que l'equipe lit ------------------------------------------------------------------
+
+    def test_an_enrolment_says_the_reader_is_unreachable(self):
+        with self._reponse_http(502):
+            with self.assertRaises(enrollment.EnrollmentError) as capture:
+                enrollment.inscrire_employe(self.device, self.employe)
+
+        message = str(capture.exception)
+        self.assertIn("injoignable", message)
+        self.assertNotIn("a refuse la fiche", message)
+
+    # --- Ce que l'application decide ---------------------------------------------------------------
+
+    def test_a_switch_changes_nothing_when_the_tunnel_is_down(self):
+        # Le retrait n'est pas passe : desactiver la fiche membre laisserait
+        # un membre sans acces et un visage toujours sur le lecteur.
+        from . import personnel
+
+        with self._reponse_http(502):
+            with self.assertRaises(enrollment.EnrollmentError):
+                personnel.basculer_membre(self.employe, self.member)
+
+        self.member.refresh_from_db()
+        self.assertTrue(self.member.is_active)
+
+    def test_a_departure_keeps_the_removal_pending(self):
+        from . import personnel
+
+        personnel.noter_inscription(self.device, self.employe)
+
+        with self._reponse_http(502):
+            resultat = personnel.retirer_des_lecteurs(self.employe)
+
+        self.assertEqual(resultat["confirmees"], 0)
+        self.assertEqual(len(resultat["restantes"]), 1)
+        self.assertIn("injoignable", resultat["restantes"][0].derniere_erreur)

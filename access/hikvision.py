@@ -63,6 +63,24 @@ class HikvisionUnreachable(HikvisionError):
     """Lecteur injoignable sur le reseau."""
 
 
+# Codes rendus par un intermediaire - tunnel, proxy, repartiteur - quand il n'a
+# pas pu joindre le lecteur. La requete n'est jamais arrivee au materiel : ce
+# n'est pas un refus, c'est une panne de chemin. Les confondre faisait annoncer
+# "le lecteur a refuse" pour un terminal eteint, et laissait continuer des
+# gestes qui n'avaient rien change.
+CODES_PASSERELLE = frozenset({502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 527})
+
+
+def _erreur_http(code, chemin, exc):
+    """Traduit une reponse HTTP en panne de chemin ou en refus du lecteur."""
+    if code in CODES_PASSERELLE:
+        return HikvisionUnreachable(
+            f"le terminal n'a pas repondu (HTTP {code} rendu par le tunnel sur "
+            f"{chemin}). Verifiez qu'il est allume et que le tunnel est ouvert."
+        )
+    return HikvisionError(f"HTTP {code} sur {chemin} : {_corps_erreur(exc)}")
+
+
 # ---------------------------------------------------------------------------
 # Decouverte SADP
 # ---------------------------------------------------------------------------
@@ -324,9 +342,7 @@ class HikvisionClient:
             return response.read().decode("utf-8", "replace")
         except urllib.error.HTTPError as exc:
             if exc.code != 401:
-                raise HikvisionError(
-                    f"HTTP {exc.code} sur {path} : {_corps_erreur(exc)}"
-                ) from exc
+                raise _erreur_http(exc.code, path, exc) from exc
             # Certains firmwares n'acceptent que le Basic preemptif.
             try:
                 response = urllib.request.urlopen(
@@ -338,9 +354,7 @@ class HikvisionClient:
                     raise HikvisionAuthError(
                         "Identifiants refuses par le lecteur."
                     ) from retry_exc
-                raise HikvisionError(
-                    f"HTTP {retry_exc.code} sur {path} : {_corps_erreur(retry_exc)}"
-                ) from retry_exc
+                raise _erreur_http(retry_exc.code, path, retry_exc) from retry_exc
             except urllib.error.URLError as retry_exc:
                 raise HikvisionUnreachable(str(retry_exc.reason)) from retry_exc
         except urllib.error.URLError as exc:
@@ -670,9 +684,7 @@ class HikvisionClient:
         except urllib.error.HTTPError as exc:
             if exc.code == 401:
                 raise HikvisionAuthError("Identifiants refuses par le lecteur.") from exc
-            raise HikvisionError(
-                f"HTTP {exc.code} sur {path} : {_corps_erreur(exc)}"
-            ) from exc
+            raise _erreur_http(exc.code, path, exc) from exc
         except urllib.error.URLError as exc:
             raise HikvisionUnreachable(str(exc.reason)) from exc
         except (socket.timeout, TimeoutError) as exc:
