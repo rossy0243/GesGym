@@ -164,7 +164,9 @@
                 </form>
                 {% endif %}
                 {% comment %} La sortie de secours : liberer le visage qu'une fiche
-                   retient, pour pouvoir le capturer ici. {% endcomment %}
+                   retient, pour pouvoir le capturer ici. Reserve au proprietaire :
+                   elle retire un visage a quelqu'un d'autre. {% endcomment %}
+                {% if peut_liberer %}
                 <form method="post" action="{% url 'access:staff_release_face' employee.id %}"
                       onsubmit="return confirm('Supprimer la fiche {{ fiche.nom|escapejs }} (n° {{ fiche.numero }}) du lecteur ? La personne qui la porte n\'entrera plus par le visage tant qu\'elle n\'est pas réinscrite.');">
                     {% csrf_token %}
@@ -173,6 +175,7 @@
                     <input type="hidden" name="porteur" value="{{ fiche.porteur|default:fiche.nom }}">
                     <button type="submit" class="btn btn-sm btn-outline-danger">Libérer</button>
                 </form>
+                {% endif %}
             </div>
             {% empty %}
             {% if not fiches_terminal.erreurs %}

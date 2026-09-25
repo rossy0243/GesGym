@@ -5946,6 +5946,14 @@ class InventaireDuLecteurTests(TestCase):
          self.employe_voisin) = _salle_avec_personnel("inventaire")
         self.gerant = User.objects.create_user(username="gerant-inventaire", password="pass12345")
         UserGymRole.objects.create(user=self.gerant, gym=self.gym, role="manager", is_active=True)
+        # Liberer un visage retire une fiche a quelqu'un d'autre : geste du
+        # proprietaire. Le reste de l'ecran reste au gerant.
+        self.proprietaire = User.objects.create_user(
+            username="proprio-inventaire", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.proprietaire, gym=self.gym, role="owner", is_active=True
+        )
         self._connecter(self.gerant)
         self.url = reverse("access:staff_face_enrollment", args=[self.employe.id])
         self.numero_membre = enrollment.employee_no(self.member)
@@ -6026,6 +6034,8 @@ class InventaireDuLecteurTests(TestCase):
     # --- L'ecran ---------------------------------------------------------------------------------
 
     def test_the_screen_shows_every_record_on_demand(self):
+        self._connecter(self.proprietaire)
+
         with patch.object(hikvision.HikvisionClient, "list_users", return_value=self._lues()):
             reponse = self.client.get(self.url, {"fiches": "1"})
 
@@ -6080,6 +6090,8 @@ class InventaireDuLecteurTests(TestCase):
     # --- Liberer un visage --------------------------------------------------------------------------
 
     def test_releasing_a_record_removes_it_from_the_reader(self):
+        self._connecter(self.proprietaire)
+
         with patch.object(hikvision.HikvisionClient, "delete_user") as retrait:
             reponse = self.client.post(
                 reverse("access:staff_release_face", args=[self.employe.id]),
@@ -6097,6 +6109,7 @@ class InventaireDuLecteurTests(TestCase):
         from . import personnel
 
         personnel.adopter_fiche(self.device, self.employe, "5")
+        self._connecter(self.proprietaire)
 
         with patch.object(hikvision.HikvisionClient, "delete_user"):
             self.client.post(
@@ -6107,6 +6120,8 @@ class InventaireDuLecteurTests(TestCase):
         self.assertFalse(self.Fiche.objects.filter(employee_no="5").exists())
 
     def test_an_unreachable_reader_says_so(self):
+        self._connecter(self.proprietaire)
+
         with patch.object(
             hikvision.HikvisionClient, "delete_user",
             side_effect=hikvision.HikvisionUnreachable("cable"),
@@ -6118,6 +6133,61 @@ class InventaireDuLecteurTests(TestCase):
             )
 
         self.assertContains(reponse, "injoignable")
+
+    # --- Le refus du lecteur --------------------------------------------------------------------
+
+    def _capturer_puis_valider(self, refus):
+        with patch.object(
+            hikvision.HikvisionClient, "capture_face", return_value=_image_jpeg()
+        ):
+            self.client.post(
+                reverse("access:staff_face_capture", args=[self.employe.id]),
+                {"device_id": self.device.id},
+            )
+
+        with patch.object(hikvision.HikvisionClient, "upsert_user"), patch.object(
+            hikvision.HikvisionClient, "set_face", side_effect=hikvision.HikvisionError(refus)
+        ):
+            return self.client.post(
+                reverse("access:staff_face_confirm", args=[self.employe.id]), follow=True
+            )
+
+    def test_a_face_already_taken_says_where_to_free_it(self):
+        # Le message disait pourquoi le lecteur refusait, jamais ou aller.
+        reponse = self._capturer_puis_valider(
+            '{"subStatusCode": "alreadyExistThisFace"}'
+        )
+
+        self.assertContains(reponse, "deja enregistre sous une autre fiche")
+        self.assertContains(reponse, "puis recommencez la capture")
+
+    def test_another_refusal_keeps_its_own_message(self):
+        reponse = self._capturer_puis_valider(
+            '{"subStatusCode": "lowScoreOfFaceQuality"}'
+        )
+
+        self.assertContains(reponse, "contre-jour")
+        # Le titre de la carte et le mot "reprenez-la" vivent deja sur la page :
+        # on verifie la phrase propre au conseil.
+        self.assertNotContains(reponse, "puis recommencez la capture")
+
+    def test_a_manager_reads_the_records_but_cannot_release(self):
+        # Le gerant garde la lecture, le rattachement et la bascule ; seule la
+        # suppression d'une fiche lui echappe.
+        with patch.object(hikvision.HikvisionClient, "list_users", return_value=self._lues()):
+            reponse = self.client.get(self.url, {"fiches": "1"})
+
+        self.assertContains(reponse, "Kevin Tassa")
+        self.assertNotContains(reponse, "Libérer")
+
+        with patch.object(hikvision.HikvisionClient, "delete_user") as retrait:
+            refus = self.client.post(
+                reverse("access:staff_release_face", args=[self.employe.id]),
+                {"device_id": self.device.id, "employee_no": "5"},
+            )
+
+        self.assertIn(refus.status_code, (302, 403))
+        retrait.assert_not_called()
 
     def test_a_receptionist_cannot_release(self):
         accueil = User.objects.create_user(username="accueil-inventaire", password="pass12345")
@@ -6134,6 +6204,7 @@ class InventaireDuLecteurTests(TestCase):
         retrait.assert_not_called()
 
     def test_a_reader_of_another_gym_is_out_of_reach(self):
+        self._connecter(self.proprietaire)
         ailleurs = AccessDevice.objects.create(
             gym=self.employe_voisin.gym, name="Ailleurs", host="10.0.0.8", password="secret"
         )

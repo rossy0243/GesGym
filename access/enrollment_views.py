@@ -32,6 +32,7 @@ from smartclub.access_control import (
     ACCESS_DEVICE_ROLES,
     ACCESS_DEVICE_USE_ROLES,
     RH_EMPLOYEE_ROLES,
+    SETTINGS_ORGANIZATION_ROLES,
     has_role,
 )
 from smartclub.decorators import module_required, role_required
@@ -235,6 +236,11 @@ def face_remove(request, member_id):
 
 CLE_SESSION_PERSONNEL = "enrolement_visage_personnel"
 
+# Ce que le lecteur repond quand le visage est deja sur une autre fiche. Le
+# texte vient de enrollment.REFUS_VISAGE : on s'y raccroche pour ajouter la
+# marche a suivre, propre a l'ecran du personnel.
+MOTIF_VISAGE_DEJA_PRIS = "deja enregistre sous une autre fiche"
+
 
 def _employe_de(request, employee_id):
     from rh.models import Employee
@@ -284,6 +290,8 @@ def staff_face_enrollment(request, employee_id):
                 else None
             ),
             "fiches_adoptees": personnel.fiches_adoptees(employe),
+            # Le bouton n'apparait qu'a celui qui a le droit de s'en servir.
+            "peut_liberer": has_role(request, SETTINGS_ORGANIZATION_ROLES),
         },
     )
 
@@ -345,6 +353,17 @@ def staff_face_confirm(request, employee_id):
         resultat = enrollment.inscrire_employe(lecteur, employe, image)
     except enrollment.EnrollmentError as exc:
         messages.error(request, str(exc))
+        # Le refus le plus frequent : le visage est deja sur une autre fiche -
+        # presque toujours la fiche membre de la personne. Dire pourquoi ne
+        # suffit pas, il faut dire ou aller.
+        if MOTIF_VISAGE_DEJA_PRIS in str(exc):
+            messages.info(
+                request,
+                "Ouvrez « Fiches présentes sur le lecteur » sur cette page : "
+                "la fiche qui porte ce visage y est nommée. Si c'est sa fiche "
+                "membre, reprenez-la (son historique est conservé) ; sinon, "
+                "libérez-la, puis recommencez la capture.",
+            )
         return redirect("access:staff_face_enrollment", employee_id=employe.id)
 
     # Retenir le lecteur : c'est ce qui permettra d'en retirer le visage au
@@ -470,7 +489,7 @@ def staff_switch_from_member(request, employee_id):
 
 @login_required
 @module_required("ACCESS")
-@role_required(RH_EMPLOYEE_ROLES)
+@role_required(SETTINGS_ORGANIZATION_ROLES)
 @require_POST
 def staff_release_face(request, employee_id):
     """
@@ -479,6 +498,10 @@ def staff_release_face(request, employee_id):
     Le lecteur refuse d'attacher un meme visage a deux fiches. Quand la fiche
     qui le porte n'est plus utile - membre parti, essai, enrolement rate - il
     faut pouvoir la liberer sans passer par l'ecran du terminal.
+
+    Reserve au proprietaire : c'est le seul geste de cet ecran qui retire un
+    visage a quelqu'un d'autre, souvent un membre. Le gerant lit les fiches,
+    rattache et bascule, mais ne supprime pas.
     """
     employe = _employe_de(request, employee_id)
     try:
