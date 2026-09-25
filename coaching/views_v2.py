@@ -17,6 +17,7 @@ from smartclub.decorators import module_required, role_required
 from subscriptions.models import SubscriptionPlan
 
 from .forms import CoachForm, CoachMemberForm, CoachingFollowUpForm, GroupCoachingProgramForm
+from .eligibilite import filtre_abonnement_en_cours, filtre_groupe, filtre_individuel
 from .kpis import build_coaching_kpis, coaches_queryset
 from .models import Coach, CoachAssignment, CoachingFeedback, CoachingFollowUp, GroupCoachingProgram
 
@@ -69,37 +70,36 @@ def _coach_profile_missing_response(request):
 
 
 def _filter_members_with_current_coaching_access(queryset, coaching_modes):
-    today = timezone.localdate()
-    access_filter = Q()
-    if any(mode in coaching_modes for mode in [SubscriptionPlan.COACHING_MODE_INDIVIDUAL, SubscriptionPlan.COACHING_MODE_BOTH]):
-        access_filter |= Q(
-            subscriptions__plan__coaching_mode__in=[
-                SubscriptionPlan.COACHING_MODE_INDIVIDUAL,
-                SubscriptionPlan.COACHING_MODE_BOTH,
-            ]
-        ) | Q(
-            subscriptions__plan__offers__is_active=True,
-            subscriptions__plan__offers__grants_individual_coaching=True,
-        )
-    if any(mode in coaching_modes for mode in [SubscriptionPlan.COACHING_MODE_GROUP, SubscriptionPlan.COACHING_MODE_BOTH]):
-        access_filter |= Q(
-            subscriptions__plan__coaching_mode__in=[
-                SubscriptionPlan.COACHING_MODE_GROUP,
-                SubscriptionPlan.COACHING_MODE_BOTH,
-            ]
-        ) | Q(
-            subscriptions__plan__offers__is_active=True,
-            subscriptions__plan__offers__grants_group_coaching=True,
-        )
+    """
+    Les membres de ce lot dont l'abonnement en cours donne droit au coaching.
+
+    La regle vit dans ``coaching.eligibilite`` : les compteurs, le formulaire
+    d'affectation et ce portail la lisent au meme endroit. Les trois
+    conditions tiennent dans un seul filtre, pour qu'un abonnement termine ne
+    puisse pas preter son droit a un abonnement en cours qui ne l'a pas.
+    """
+    individuel = any(
+        mode in coaching_modes
+        for mode in [SubscriptionPlan.COACHING_MODE_INDIVIDUAL, SubscriptionPlan.COACHING_MODE_BOTH]
+    )
+    groupe = any(
+        mode in coaching_modes
+        for mode in [SubscriptionPlan.COACHING_MODE_GROUP, SubscriptionPlan.COACHING_MODE_BOTH]
+    )
+
+    droit = Q()
+    if individuel:
+        droit |= filtre_individuel()
+    if groupe:
+        droit |= filtre_groupe()
+    if not droit:
+        return queryset.none()
 
     return queryset.filter(
-        is_active=True,
-        status="active",
-        subscriptions__is_active=True,
-        subscriptions__is_paused=False,
-        subscriptions__start_date__lte=today,
-        subscriptions__end_date__gte=today,
-    ).filter(access_filter).distinct()
+        Q(is_active=True, status="active")
+        & filtre_abonnement_en_cours()
+        & droit
+    ).distinct()
 
 
 def _coach_portal_member_queryset(request, coach):

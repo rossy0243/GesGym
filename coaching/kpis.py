@@ -6,6 +6,7 @@ from django.utils import timezone
 
 from members.models import Member
 
+from .eligibilite import membres_avec_droit
 from .models import Coach, CoachAssignment, CoachingFeedback, CoachingFollowUp
 
 
@@ -27,6 +28,18 @@ def build_coaching_kpis(gym, period_data=None):
     active_members = Member.objects.filter(gym=gym, is_active=True)
     assigned_member_ids = active_coaches.values_list("members__id", flat=True)
     assigned_members = active_members.filter(id__in=assigned_member_ids).distinct()
+
+    # La politique de la salle : le coaching appartient aux formules qui y
+    # donnent droit. L'ancien compteur retranchait les membres suivis de toute
+    # la salle et appelait le reste "membres sans coach" : un abonne Standard
+    # y figurait comme un membre a repartir entre les coaches.
+    membres_avec_acces = membres_avec_droit(gym, today=today)
+    ids_avec_acces = set(membres_avec_acces.values_list("id", flat=True))
+    ids_suivis = set(assigned_members.values_list("id", flat=True))
+    # Un membre suivi dont l'abonnement ne donne plus droit au coaching existe :
+    # son abonnement a change ou s'est termine. Le taire ferait disparaitre
+    # une affectation a regulariser.
+    suivis_sans_acces = len(ids_suivis - ids_avec_acces)
     active_assignments = CoachAssignment.objects.filter(gym=gym, ended_at__isnull=True)
     new_coaches_period = coaches.filter(
         created_at__date__range=(period_data["start_date"], period_data["end_date"])
@@ -133,7 +146,13 @@ def build_coaching_kpis(gym, period_data=None):
         "active_coaches": total_active_coaches,
         "inactive_coaches": coaches.filter(is_active=False).count(),
         "assigned_members_count": assigned_count,
-        "unassigned_members_count": active_members.exclude(id__in=assigned_member_ids).count(),
+        "coaching_eligible_count": len(ids_avec_acces),
+        "coaching_eligible_with_coach_count": len(ids_avec_acces & ids_suivis),
+        "coaching_eligible_without_coach_count": len(ids_avec_acces - ids_suivis),
+        "coached_without_access_count": suivis_sans_acces,
+        "group_eligible_count": membres_avec_droit(
+            gym, individuel=False, groupe=True, today=today
+        ).count(),
         "members_without_follow_up_count": members_without_follow_up,
         "first_contact_overdue_count": first_contact_overdue_count,
         "stale_follow_up_members_count": stale_follow_up_members_count,

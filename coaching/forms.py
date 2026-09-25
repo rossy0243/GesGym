@@ -1,12 +1,10 @@
 from django import forms
 
 from compte.models import User
-from django.db.models import Q
-from django.utils import timezone
 
 from members.models import Member
-from subscriptions.models import SubscriptionPlan
 
+from .eligibilite import membres_avec_droit
 from .models import Coach, CoachSpecialty, CoachingFeedback, CoachingFollowUp, GroupCoachingProgram
 
 
@@ -94,25 +92,11 @@ class CoachMemberForm(forms.Form):
         coach = kwargs.pop("coach", None)
         super().__init__(*args, **kwargs)
         if coach:
-            today = timezone.localdate()
-            individual_filter = Q(
-                subscriptions__plan__coaching_mode__in=[
-                    SubscriptionPlan.COACHING_MODE_INDIVIDUAL,
-                    SubscriptionPlan.COACHING_MODE_BOTH,
-                ]
-            ) | Q(
-                subscriptions__plan__offers__is_active=True,
-                subscriptions__plan__offers__grants_individual_coaching=True,
+            # Le droit au coaching se lit dans ``coaching.eligibilite``, comme
+            # dans les compteurs et le portail du coach.
+            self.fields["member"].queryset = membres_avec_droit(coach.gym).exclude(
+                id__in=coach.members.all()
             )
-            self.fields["member"].queryset = Member.objects.filter(
-                gym=coach.gym,
-                is_active=True,
-                status="active",
-                subscriptions__is_active=True,
-                subscriptions__is_paused=False,
-                subscriptions__start_date__lte=today,
-                subscriptions__end_date__gte=today,
-            ).filter(individual_filter).exclude(id__in=coach.members.all()).distinct()
 
 
 class GroupCoachingProgramForm(forms.ModelForm):

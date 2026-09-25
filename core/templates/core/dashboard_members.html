@@ -1482,13 +1482,23 @@
                             <strong>{{ active_coaches|default:0 }} / {{ total_coaches|default:0 }}</strong>
                         </div>
                         <div class="d-flex justify-content-between">
-                            <span>Membres assignes</span>
-                            <strong>{{ assigned_members_count|default:0 }}</strong>
+                            <span>Membres Premium actifs</span>
+                            <strong>{{ coaching_eligible_count|default:0 }}</strong>
                         </div>
                         <div class="d-flex justify-content-between">
-                            <span>Membres sans coach</span>
-                            <strong>{{ unassigned_members_count|default:0 }}</strong>
+                            <span>Premium avec coach</span>
+                            <strong>{{ coaching_eligible_with_coach_count|default:0 }}</strong>
                         </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Premium sans coach</span>
+                            <strong class="{% if coaching_eligible_without_coach_count %}ton-attention{% endif %}">{{ coaching_eligible_without_coach_count|default:0 }}</strong>
+                        </div>
+                        {% if coached_without_access_count %}
+                        <div class="d-flex justify-content-between">
+                            <span>Suivis sans droit actif</span>
+                            <strong class="ton-attention">{{ coached_without_access_count }}</strong>
+                        </div>
+                        {% endif %}
                         <div class="d-flex justify-content-between">
                             <span>Moyenne / coach</span>
                             <strong>{{ average_members_per_coach|default:0 }}</strong>
@@ -1505,7 +1515,7 @@
             <div class="card stretch stretch-full">
                 <div class="card-header d-flex align-items-center justify-content-between">
                     <h5 class="card-title mb-0">Graphique coaching</h5>
-                    <span class="badge bg-light text-dark">Charge membres</span>
+                    <span class="badge bg-light text-dark">Membres suivis par coach</span>
                 </div>
                 <div class="card-body">
                     <div class="row g-3 align-items-center">

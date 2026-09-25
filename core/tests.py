@@ -2459,7 +2459,13 @@ class DashboardKpiCoverageMatrixTests(TestCase):
         self.assertEqual(kpis["active_coaches"], 1)
         self.assertEqual(kpis["inactive_coaches"], 1)
         self.assertEqual(kpis["assigned_members_count"], 2)
-        self.assertEqual(kpis["unassigned_members_count"], 1)
+        # Aucun membre de cette salle n'a d'abonnement : personne n'a droit au
+        # coaching. L'ancien compteur annoncait pourtant "1 membre sans coach",
+        # et les deux membres suivis le sont sans droit actif.
+        self.assertEqual(kpis["coaching_eligible_count"], 0)
+        self.assertEqual(kpis["coaching_eligible_with_coach_count"], 0)
+        self.assertEqual(kpis["coaching_eligible_without_coach_count"], 0)
+        self.assertEqual(kpis["coached_without_access_count"], 2)
         self.assertEqual(kpis["members_without_follow_up_count"], 1)
         self.assertEqual(kpis["first_contact_overdue_count"], 1)
         self.assertEqual(kpis["stale_follow_up_members_count"], 1)

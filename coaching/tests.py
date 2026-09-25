@@ -134,7 +134,7 @@ class CoachingTenantTests(TestCase):
         self.assertContains(response, "Coach A")
         self.assertNotContains(response, "Coach B")
         self.assertContains(response, "Coachs actifs")
-        self.assertContains(response, "Membres sans coach")
+        self.assertContains(response, "Premium sans coach")
         self.assertContains(response, "Nouveau workflow de pilotage")
 
     def test_coach_list_search_filters_results(self):
@@ -952,3 +952,171 @@ class CoachProfileBindingTests(TestCase):
             coach_user.username,
             [user.username for user in form.fields["user"].queryset],
         )
+
+
+
+class PolitiquePremiumTests(TestCase):
+    """
+    Le coaching appartient aux formules qui y donnent droit.
+
+    Le compteur prenait tous les membres actifs, retranchait ceux qui ont un
+    coach, et appelait le reste "membres sans coach" : un abonne Standard y
+    figurait comme un membre a repartir entre les coaches.
+    """
+
+    def setUp(self):
+        self.organisation = Organization.objects.create(
+            name="Org Premium", slug="org-premium"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organisation,
+            name="Gym Premium",
+            slug="gym-premium",
+            subdomain="gym-premium",
+        )
+        for code in ("MEMBERS", "SUBSCRIPTIONS", "COACHING"):
+            module, _ = Module.objects.get_or_create(code=code, defaults={"name": code})
+            GymModule.objects.get_or_create(
+                gym=self.gym, module=module, defaults={"is_active": True}
+            )
+
+        self.plan_premium = SubscriptionPlan.objects.create(
+            gym=self.gym,
+            name="Premium",
+            duration_days=30,
+            price=60,
+            coaching_mode=SubscriptionPlan.COACHING_MODE_INDIVIDUAL,
+        )
+        self.plan_standard = SubscriptionPlan.objects.create(
+            gym=self.gym,
+            name="Standard",
+            duration_days=30,
+            price=25,
+            coaching_mode=SubscriptionPlan.COACHING_MODE_NONE,
+        )
+        # Une formule peut aussi donner le droit par une offre attachee.
+        self.plan_avec_offre = SubscriptionPlan.objects.create(
+            gym=self.gym,
+            name="Standard + coach",
+            duration_days=30,
+            price=35,
+            coaching_mode=SubscriptionPlan.COACHING_MODE_NONE,
+        )
+        offre = SubscriptionOffer.objects.create(
+            gym=self.gym,
+            name="Acces coach",
+            category=SubscriptionOffer.CATEGORY_COACHING,
+            grants_individual_coaching=True,
+        )
+        self.plan_avec_offre.offers.add(offre)
+
+        self.coach = Coach.objects.create(
+            gym=self.gym, name="Coach Premium", phone="3000", specialty="Musculation"
+        )
+        self.today = timezone.localdate()
+
+    def _membre(self, prenom, telephone):
+        return Member.objects.create(
+            gym=self.gym,
+            first_name=prenom,
+            last_name="Premium",
+            phone=telephone,
+            status="active",
+            is_active=True,
+        )
+
+    def _abonner(self, membre, plan, debut=None, fin=None):
+        return MemberSubscription.objects.create(
+            gym=self.gym,
+            member=membre,
+            plan=plan,
+            start_date=debut or self.today - timedelta(days=1),
+            end_date=fin or self.today + timedelta(days=29),
+            is_active=True,
+        )
+
+    def _compteurs(self):
+        from .kpis import build_coaching_kpis
+
+        return build_coaching_kpis(self.gym)
+
+    def test_a_standard_member_is_not_a_member_without_a_coach(self):
+        self._abonner(self._membre("Claire", "701"), self.plan_standard)
+
+        compteurs = self._compteurs()
+
+        self.assertEqual(compteurs["coaching_eligible_count"], 0)
+        self.assertEqual(compteurs["coaching_eligible_without_coach_count"], 0)
+
+    def test_a_premium_member_without_a_coach_is_counted(self):
+        self._abonner(self._membre("Bruno", "702"), self.plan_premium)
+
+        compteurs = self._compteurs()
+
+        self.assertEqual(compteurs["coaching_eligible_count"], 1)
+        self.assertEqual(compteurs["coaching_eligible_without_coach_count"], 1)
+        self.assertEqual(compteurs["coaching_eligible_with_coach_count"], 0)
+
+    def test_a_premium_member_with_a_coach_is_counted_on_the_other_side(self):
+        alice = self._membre("Alice", "703")
+        self._abonner(alice, self.plan_premium)
+        self.coach.members.add(alice)
+
+        compteurs = self._compteurs()
+
+        self.assertEqual(compteurs["coaching_eligible_count"], 1)
+        self.assertEqual(compteurs["coaching_eligible_with_coach_count"], 1)
+        self.assertEqual(compteurs["coaching_eligible_without_coach_count"], 0)
+
+    def test_an_offer_grants_the_right_as_well_as_the_plan(self):
+        self._abonner(self._membre("Frank", "704"), self.plan_avec_offre)
+
+        self.assertEqual(self._compteurs()["coaching_eligible_count"], 1)
+
+    def test_an_expired_premium_does_not_lend_its_right_to_a_current_standard(self):
+        # Le piege : deux abonnements, l'un donne le droit, l'autre couvre la
+        # date. Filtres separement, ils se completaient et le membre passait
+        # pour un abonne au coaching.
+        david = self._membre("David", "705")
+        self._abonner(
+            david,
+            self.plan_premium,
+            debut=self.today - timedelta(days=90),
+            fin=self.today - timedelta(days=60),
+        )
+        self._abonner(david, self.plan_standard)
+
+        self.assertEqual(self._compteurs()["coaching_eligible_count"], 0)
+
+    def test_a_coached_member_without_the_right_is_named(self):
+        eve = self._membre("Eve", "706")
+        self._abonner(eve, self.plan_standard)
+        self.coach.members.add(eve)
+
+        compteurs = self._compteurs()
+
+        self.assertEqual(compteurs["coached_without_access_count"], 1)
+        self.assertEqual(compteurs["coaching_eligible_count"], 0)
+
+    def test_a_paused_subscription_grants_nothing(self):
+        gerard = self._membre("Gerard", "707")
+        abonnement = self._abonner(gerard, self.plan_premium)
+        MemberSubscription.objects.filter(pk=abonnement.pk).update(is_paused=True)
+
+        self.assertEqual(self._compteurs()["coaching_eligible_count"], 0)
+
+    def test_the_group_right_is_counted_apart(self):
+        plan_groupe = SubscriptionPlan.objects.create(
+            gym=self.gym,
+            name="Groupe",
+            duration_days=30,
+            price=30,
+            coaching_mode=SubscriptionPlan.COACHING_MODE_GROUP,
+        )
+        self._abonner(self._membre("Helene", "708"), plan_groupe)
+        self._abonner(self._membre("Ines", "709"), self.plan_premium)
+
+        compteurs = self._compteurs()
+
+        self.assertEqual(compteurs["group_eligible_count"], 1)
+        self.assertEqual(compteurs["coaching_eligible_count"], 1)
