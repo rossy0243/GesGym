@@ -19,6 +19,7 @@ import struct
 import time
 import urllib.error
 import urllib.request
+import time
 import uuid
 import xml.etree.ElementTree as ET
 from urllib.parse import urlparse
@@ -493,6 +494,61 @@ class HikvisionClient:
                 }
             },
         )
+
+    def user_exists(self, employee_no):
+        """
+        Dit si le lecteur porte encore cette fiche.
+
+        Supprimer et croire que c'est fait ne suffit pas : selon le firmware,
+        l'ancienne commande de suppression repond "ok" sans rien effacer. On
+        verifie donc en demandant la fiche.
+        """
+        data = self._json(
+            "/ISAPI/AccessControl/UserInfo/Search?format=json",
+            method="POST",
+            payload={
+                "UserInfoSearchCond": {
+                    "searchID": str(uuid.uuid4()),
+                    "searchResultPosition": 0,
+                    "maxResults": 1,
+                    "EmployeeNoList": [{"employeeNo": str(employee_no)}],
+                }
+            },
+        )
+        bloc = data.get("UserInfoSearch", {})
+        fiches = bloc.get("UserInfo", []) or []
+        return any(
+            str(fiche.get("employeeNo") or "").strip() == str(employee_no).strip()
+            for fiche in fiches
+        )
+
+    def delete_user_detail(self, employee_no, tentatives=5):
+        """
+        Supprime une fiche par la commande recente, puis attend la fin.
+
+        Les firmwares recents suppriment en tache de fond : la reponse
+        immediate ne dit rien, c'est l'etat du traitement qu'il faut lire.
+        """
+        self._json(
+            "/ISAPI/AccessControl/UserInfoDetail/Delete?format=json",
+            method="PUT",
+            payload={
+                "UserInfoDetail": {
+                    "mode": "byEmployeeNo",
+                    "EmployeeNoList": [{"employeeNo": str(employee_no)}],
+                }
+            },
+        )
+
+        for _ in range(tentatives):
+            etat = self._json("/ISAPI/AccessControl/UserInfoDetail/DeleteProcess?format=json")
+            statut = str(
+                (etat.get("UserInfoDetailDeleteProcess") or {}).get("status", "")
+            ).lower()
+            if statut and statut != "processing":
+                return etat
+            time.sleep(0.4)
+        return {"status": "processing"}
 
     def set_face(self, employee_no, image_bytes, filename="visage.jpg"):
         """

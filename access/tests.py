@@ -3985,6 +3985,20 @@ def _salle_avec_personnel(suffixe):
     return salle, lecteur, membre, employe, employe_voisin
 
 
+def _lecteur_sans_reste(test):
+    """
+    Le lecteur ne dit rien de plus que ce que le test simule.
+
+    Retirer une fiche enleve d'abord le visage, puis verifie que la fiche a
+    bien disparu. Ces deux appels-la n'apprennent rien aux tests qui portent
+    sur autre chose : on les fait taire.
+    """
+    for methode, valeur in (("delete_face", None), ("user_exists", False)):
+        patcher = patch.object(hikvision.HikvisionClient, methode, return_value=valeur)
+        patcher.start()
+        test.addCleanup(patcher.stop)
+
+
 def _image_jpeg():
     tampon = BytesIO()
     Image.new("RGB", (352, 432), (90, 90, 90)).save(tampon, format="JPEG")
@@ -3996,6 +4010,7 @@ class StaffFaceNumberingTests(TestCase):
 
     def setUp(self):
         self.gym, self.device, self.member, self.employe, _ = _salle_avec_personnel("numeros")
+        _lecteur_sans_reste(self)
 
     def test_an_employee_number_is_in_the_staff_range(self):
         self.assertEqual(
@@ -4218,6 +4233,7 @@ class StaffFaceScreenTests(TestCase):
          self.employe_voisin) = _salle_avec_personnel("ecran-personnel")
         self.gerant = self._utilisateur("gerant-ecran-personnel", "manager")
         self._connecter(self.gerant)
+        _lecteur_sans_reste(self)
 
     def _utilisateur(self, nom, role):
         utilisateur = User.objects.create_user(username=nom, password="pass12345")
@@ -4350,6 +4366,7 @@ class StaffDepartureTests(TestCase):
         self._connecter(self.gerant)
         self.numero = enrollment.numero_personnel(self.employe)
         self.Fiche = StaffReaderRecord
+        _lecteur_sans_reste(self)
 
     def _connecter(self, utilisateur):
         self.client.force_login(utilisateur)
@@ -4980,6 +4997,7 @@ class StaffTerminalAdoptionTests(TestCase):
         self._connecter(self.gerant)
         self.url_ecran = reverse("access:staff_face_enrollment", args=[self.employe.id])
         self.url_adopter = reverse("access:staff_adopt_terminal_record", args=[self.employe.id])
+        _lecteur_sans_reste(self)
 
     def _connecter(self, utilisateur):
         self.client.force_login(utilisateur)
@@ -5958,6 +5976,7 @@ class InventaireDuLecteurTests(TestCase):
         self.url = reverse("access:staff_face_enrollment", args=[self.employe.id])
         self.numero_membre = enrollment.employee_no(self.member)
         self.numero_employe = enrollment.numero_personnel(self.employe)
+        _lecteur_sans_reste(self)
 
     def _connecter(self, utilisateur):
         self.client.force_login(utilisateur)
@@ -6240,3 +6259,85 @@ class InventaireDuLecteurTests(TestCase):
 
         self.assertContains(reponse, "n&#x27;a pas confirme la suppression")
         self.assertContains(reponse, "liberez la fiche")
+
+
+
+class RetraitCompletDuneFicheTests(TestCase):
+    """
+    Supprimer une fiche du lecteur, vraiment.
+
+    Trois pieges vus sur ce materiel : le visage survit a sa fiche dans la
+    bibliotheque du lecteur ; l'ancienne commande repond "ok" sans rien
+    effacer ; la commande recente travaille en tache de fond.
+    """
+
+    def setUp(self):
+        (self.gym, self.device, self.member, self.employe,
+         _) = _salle_avec_personnel("retrait-complet")
+        self.numero = enrollment.employee_no(self.member)
+
+    def _retirer(self, **patches):
+        defauts = {
+            "delete_face": {"return_value": None},
+            "delete_user": {"return_value": None},
+            "user_exists": {"return_value": False},
+            "delete_user_detail": {"return_value": None},
+        }
+        defauts.update(patches)
+
+        with patch.object(hikvision.HikvisionClient, "delete_face", **defauts["delete_face"]) as visage, \
+             patch.object(hikvision.HikvisionClient, "delete_user", **defauts["delete_user"]) as fiche, \
+             patch.object(hikvision.HikvisionClient, "user_exists", **defauts["user_exists"]) as presence, \
+             patch.object(hikvision.HikvisionClient, "delete_user_detail", **defauts["delete_user_detail"]) as seconde:
+            enrollment.retirer_fiche(self.device, self.numero)
+        return visage, fiche, presence, seconde
+
+    def test_the_face_is_removed_before_the_record(self):
+        # Le visage vit dans une bibliotheque a part : le laisser la ferait
+        # refuser tout nouvel enrolement, sans fiche pour l'expliquer.
+        visage, fiche, _, _ = self._retirer()
+
+        visage.assert_called_once_with(self.numero)
+        fiche.assert_called_once_with(self.numero)
+
+    def test_a_missing_face_does_not_stop_the_removal(self):
+        visage, fiche, _, _ = self._retirer(
+            delete_face={"side_effect": hikvision.HikvisionError("FDID introuvable")}
+        )
+
+        fiche.assert_called_once_with(self.numero)
+
+    def test_a_record_that_survives_is_deleted_the_other_way(self):
+        # L'ancienne commande repond "ok" sans rien faire : la fiche est
+        # toujours la, on passe a la commande recente.
+        _, _, _, seconde = self._retirer(user_exists={"side_effect": [True, False]})
+
+        seconde.assert_called_once_with(self.numero)
+
+    def test_a_record_that_never_leaves_is_said_plainly(self):
+        with patch.object(hikvision.HikvisionClient, "delete_face"), patch.object(
+            hikvision.HikvisionClient, "delete_user"
+        ), patch.object(
+            hikvision.HikvisionClient, "user_exists", return_value=True
+        ), patch.object(hikvision.HikvisionClient, "delete_user_detail"):
+            with self.assertRaises(enrollment.EnrollmentError) as capture:
+                enrollment.retirer_fiche(self.device, self.numero)
+
+        message = str(capture.exception)
+        self.assertIn("toujours presente", message)
+        self.assertIn("ecran", message)
+
+    def test_an_unreachable_reader_is_named_as_such(self):
+        with patch.object(
+            hikvision.HikvisionClient, "delete_face",
+            side_effect=hikvision.HikvisionUnreachable("cable arrache"),
+        ):
+            with self.assertRaises(enrollment.EnrollmentError) as capture:
+                enrollment.retirer_fiche(self.device, self.numero)
+
+        self.assertIn("injoignable", str(capture.exception))
+
+    def test_the_reader_is_asked_whether_the_record_is_still_there(self):
+        _, _, presence, _ = self._retirer()
+
+        presence.assert_called_with(self.numero)

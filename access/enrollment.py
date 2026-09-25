@@ -340,14 +340,54 @@ def retirer_employe(device, employee):
 
 
 def retirer_fiche(device, numero):
-    """Supprime une fiche du lecteur par son numero."""
+    """
+    Supprime une fiche du lecteur, visage compris, et verifie que c'est fait.
+
+    Trois pieges, tous vus sur ce materiel :
+
+    * le visage vit dans une bibliotheque a part. Supprimer la fiche sans lui
+      laisse un visage orphelin, et le lecteur refuse ensuite de l'attacher
+      ailleurs - "ce visage existe deja" - sans qu'aucune fiche ne l'explique ;
+    * l'ancienne commande de suppression repond "ok" sans rien effacer sur
+      certains firmwares : la fiche reapparait au rafraichissement ;
+    * la commande recente travaille en tache de fond : il faut attendre la fin.
+
+    On enleve donc le visage, puis la fiche, on verifie, et on reessaie par
+    l'autre commande avant d'abandonner en le disant.
+    """
+    numero = str(numero)
     client = hikvision.HikvisionClient.from_device(device, timeout=25)
+
+    def _tolerer(action, quoi):
+        """Un refus n'est pas un echec : la fiche ou le visage peut deja manquer."""
+        try:
+            action()
+        except hikvision.HikvisionUnreachable:
+            raise
+        except hikvision.HikvisionError as exc:
+            logger.info("%s de %s sur %s refuse : %s", quoi, numero, device.name, exc)
+
     try:
-        client.delete_user(str(numero))
+        _tolerer(lambda: client.delete_face(numero), "Retrait du visage")
+        _tolerer(lambda: client.delete_user(numero), "Retrait de la fiche")
+
+        if not client.user_exists(numero):
+            return
+
+        # La fiche est toujours la : l'autre commande, puis on verifie encore.
+        _tolerer(lambda: client.delete_user_detail(numero), "Retrait (seconde methode)")
+        if not client.user_exists(numero):
+            return
     except hikvision.HikvisionUnreachable as exc:
         raise EnrollmentError(f"Lecteur injoignable ({device.host}).") from exc
     except hikvision.HikvisionError as exc:
         raise EnrollmentError(f"Le lecteur a refuse le retrait : {exc}") from exc
+
+    raise EnrollmentError(
+        f"La fiche {numero} est toujours presente sur {device.name} apres "
+        "suppression. Le lecteur l'a peut-etre verrouillee : supprimez-la "
+        "depuis son ecran (Gestion des personnes), puis revenez ici."
+    )
 
 
 def lecteurs_de(gym):
