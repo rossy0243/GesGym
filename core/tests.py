@@ -7337,3 +7337,88 @@ class CouleurDesExpirationsTests(TestCase):
 
         self.assertEqual(_build_trend(10, 5)["badge_class"], "success")
         self.assertEqual(_build_trend(5, 10)["badge_class"], "danger")
+
+
+
+class LibellesDuStockTests(TestCase):
+    """
+    Trois nombres justes qui semblaient se contredire.
+
+    1 103 entrees, 62 sorties et 58 mouvements : les deux premiers comptent des
+    unites, le troisieme des operations. Rien ne le disait, et la valeur du
+    stock ne disait pas non plus a quel prix elle etait comptee.
+    """
+
+    def setUp(self):
+        self.organisation = Organization.objects.create(
+            name="Org Stock", slug="org-stock-libelles"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organisation,
+            name="Gym Stock",
+            slug="gym-stock-libelles",
+            subdomain="gym-stock-libelles",
+        )
+        for code in ("MEMBERS", "PRODUCTS"):
+            module, _ = Module.objects.get_or_create(code=code, defaults={"name": code})
+            GymModule.objects.get_or_create(
+                gym=self.gym, module=module, defaults={"is_active": True}
+            )
+        self.proprietaire = User.objects.create_user(
+            username="proprio-stock-libelles", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.proprietaire, gym=self.gym, role="owner", is_active=True
+        )
+        self.client.force_login(self.proprietaire)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _analytique(self):
+        return self.client.get(
+            reverse("core:gym_dashboard", args=[self.gym.id]), {"view": "analytics"}
+        )
+
+    def test_the_stock_value_says_which_price_it_uses(self):
+        reponse = self._analytique()
+
+        self.assertContains(reponse, "(prix de vente)")
+
+    def test_units_and_operations_are_named(self):
+        reponse = self._analytique()
+
+        self.assertContains(reponse, "unités")
+        self.assertContains(reponse, "opérations")
+        self.assertContains(reponse, "ne se comparent pas entre eux")
+
+    def test_the_almost_always_green_pie_is_gone(self):
+        # Un camembert vert a nonante-huit pour cent ne demande aucune
+        # decision ; les produits qui manquent en demandent une.
+        reponse = self._analytique()
+
+        self.assertNotContains(reponse, "stockStatusChart")
+
+    def test_the_products_running_out_are_named(self):
+        Product.objects.create(
+            gym=self.gym, name="Whey rupture", price=20, quantity=0, is_active=True
+        )
+        Product.objects.create(
+            gym=self.gym, name="Barre presque finie", price=2, quantity=3, is_active=True
+        )
+        Product.objects.create(
+            gym=self.gym, name="Eau bien fournie", price=1, quantity=200, is_active=True
+        )
+
+        reponse = self._analytique()
+
+        self.assertContains(reponse, "Whey rupture")
+        self.assertContains(reponse, "Barre presque finie")
+        self.assertContains(reponse, "Proches de la rupture")
+
+    def test_a_full_stock_says_so_plainly(self):
+        Product.objects.create(
+            gym=self.gym, name="Eau bien fournie", price=1, quantity=200, is_active=True
+        )
+
+        self.assertContains(self._analytique(), "Aucun produit proche de la rupture")

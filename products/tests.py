@@ -108,7 +108,7 @@ class ProductsTenantTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "KPI produits")
-        self.assertContains(response, "Graphique du stock")
+        self.assertContains(response, "Valeur du stock et ruptures")
         self.assertContains(response, "Valeur du stock")
         self.assertContains(response, "1000 USD")
         self.assertContains(response, "stockValueChart")

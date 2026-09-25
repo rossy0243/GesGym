@@ -2484,6 +2484,8 @@ def gym_dashboard(request, gym_id):
         "stock_out_period": 0,
         "top_value_products": [],
         "recent_stock_movements": [],
+        "low_stock_apercu": [],
+        "out_of_stock_apercu": [],
         "stock_status_chart_labels": [],
         "stock_status_chart_values": [],
         "stock_value_chart_labels": [],

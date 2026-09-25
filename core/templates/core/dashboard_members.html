@@ -1207,8 +1207,9 @@
                             <span>Produits actifs</span>
                             <strong>{{ total_products|default:0 }}</strong>
                         </div>
-                        <div class="d-flex justify-content-between">
-                            <span>Valeur du stock</span>
+                        <div class="d-flex justify-content-between"
+                             title="Quantité en stock multipliée par le prix de vente. Le prix d'achat n'est pas enregistré : la marge ne peut donc pas être calculée.">
+                            <span>Valeur du stock <span class="fs-11 text-muted">(prix de vente)</span></span>
                             <strong>{{ stock_value_total|default:0|floatformat:0 }} USD</strong>
                         </div>
                         <div class="d-flex justify-content-between">
@@ -1224,7 +1225,7 @@
                             <strong>{{ out_of_stock_count|default:0 }}</strong>
                         </div>
                         <div class="d-flex justify-content-between">
-                            <span>Sorties {{ period_label_lower }}</span>
+                            <span>Sorties {{ period_label_lower }} <span class="fs-11 text-muted">(unités)</span></span>
                             <strong>{{ stock_out_period|default:0 }}</strong>
                         </div>
                     </div>
@@ -1234,14 +1235,35 @@
         <div class="col-xl-8">
             <div class="card stretch stretch-full">
                 <div class="card-header d-flex align-items-center justify-content-between">
-                    <h5 class="card-title mb-0">Graphique du stock</h5>
+                    <h5 class="card-title mb-0">Valeur du stock et ruptures</h5>
                     <span class="badge bg-light text-dark">Valeur USD</span>
                 </div>
                 <div class="card-body">
                     <div class="row g-3 align-items-center">
+                        {% comment %} Le camembert "Stock OK" affichait nonante-huit pour cent
+                           de vert : il disait que tout va bien, ce qui ne demande aucune
+                           decision. Les produits qui manquent, eux, en demandent une. {% endcomment %}
                         <div class="col-lg-4">
-                            <div class="member-analytics-chart compact">
-                                <canvas id="stockStatusChart"></canvas>
+                            <div class="vstack gap-2">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="fs-12 text-muted">Proches de la rupture</span>
+                                    <a href="{% url 'products:list' %}" class="fs-11">Voir le stock</a>
+                                </div>
+                                {% for produit in out_of_stock_apercu %}
+                                <div class="d-flex justify-content-between align-items-center gap-2">
+                                    <span class="text-truncate" title="{{ produit.name }}">{{ produit.name }}</span>
+                                    <strong class="ton-urgent">Rupture</strong>
+                                </div>
+                                {% endfor %}
+                                {% for produit in low_stock_apercu %}
+                                <div class="d-flex justify-content-between align-items-center gap-2">
+                                    <span class="text-truncate" title="{{ produit.name }}">{{ produit.name }}</span>
+                                    <strong class="ton-attention">{{ produit.quantity }} restant{{ produit.quantity|pluralize }}</strong>
+                                </div>
+                                {% endfor %}
+                                {% if not out_of_stock_count and not low_stock_count %}
+                                <div class="fs-12 text-muted">Aucun produit proche de la rupture.</div>
+                                {% endif %}
                             </div>
                         </div>
                         <div class="col-lg-8">
@@ -1251,10 +1273,11 @@
                         </div>
                     </div>
                     <div class="d-flex justify-content-between text-muted fs-12 mt-3 flex-wrap gap-2">
-                        <span>Entrées {{ period_label_lower }}: <strong>{{ stock_in_period|default:0 }}</strong></span>
-                        <span>Sorties {{ period_label_lower }}: <strong>{{ stock_out_period|default:0 }}</strong></span>
-                        <span>Mouvements: <strong>{{ stock_movements_period|default:0 }}</strong></span>
+                        <span>Entrées {{ period_label_lower }}: <strong>{{ stock_in_period|default:0 }}</strong> unités</span>
+                        <span>Sorties {{ period_label_lower }}: <strong>{{ stock_out_period|default:0 }}</strong> unités</span>
+                        <span>Mouvements: <strong>{{ stock_movements_period|default:0 }}</strong> opérations</span>
                     </div>
+                    <div class="fs-11 text-muted mt-2">Une opération peut porter sur plusieurs unités : les trois nombres ne se comparent pas entre eux.</div>
                 </div>
             </div>
         </div>
@@ -1779,13 +1802,6 @@ renderBarChart(
     series("expirations.values", []),
     "Expirations",
     "rgba(255, 162, 29, 0.78)"
-);
-
-renderDoughnutChart(
-    "stockStatusChart",
-    {{ stock_status_chart_labels_json|default:"[]"|safe }},
-    {{ stock_status_chart_values_json|default:"[]"|safe }},
-    "Aucun stock"
 );
 
 renderDoughnutChart(
