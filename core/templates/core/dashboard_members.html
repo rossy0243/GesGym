@@ -2,7 +2,7 @@
 {% load static %}
 {% load formats %}
 
-{% block page_titre %}{% if context_view == "analytics" %}Analytics membres{% else %}Tableau de bord{% endif %}{% endblock %}
+{% block page_titre %}{% if context_view == "analytics" %}Vue analytique{% else %}Tableau de bord{% endif %}{% endblock %}
 
 {% block content %}
 <style>
@@ -168,7 +168,7 @@
 <div class="page-header">
     <div class="page-header-left d-flex align-items-center">
         <div class="page-header-title">
-            <h5 class="m-b-10">{% if context_view == "analytics" %}Vue analytique membres{% else %}Tableau de bord{% endif %}</h5>
+            <h5 class="m-b-10">{% if context_view == "analytics" %}Vue analytique de {{ gym.name }}{% else %}Tableau de bord{% endif %}</h5>
             <div class="fs-12 text-muted">{{ gym.name }} - {{ period_label }} : {{ period_range_label }}</div>
         </div>
     </div>
@@ -176,12 +176,12 @@
         <div class="page-header-right-items">
             <form method="get" class="d-flex align-items-center gap-2">
                 <input type="hidden" name="view" value="{{ context_view }}">
-                <label for="period" class="fs-12 text-muted mb-0">Periode</label>
+                <label for="period" class="fs-12 text-muted mb-0">Période</label>
                 <select class="form-select form-select-sm" id="period" name="period" onchange="this.form.submit()">
                     <option value="day" {% if selected_period == "day" %}selected{% endif %}>Jour</option>
                     <option value="week" {% if selected_period == "week" %}selected{% endif %}>Semaine</option>
                     <option value="month" {% if selected_period == "month" %}selected{% endif %}>Mois</option>
-                    <option value="year" {% if selected_period == "year" %}selected{% endif %}>Annee</option>
+                    <option value="year" {% if selected_period == "year" %}selected{% endif %}>Année</option>
                 </select>
             </form>
         </div>
@@ -194,7 +194,7 @@
             <div class="dashboard-context-card py-2">
                 <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
                     <div class="d-flex flex-wrap align-items-center gap-2">
-                        <strong>{% if context_view == "analytics" %}Pilotage analytique{% else %}Vue operationnelle{% endif %}</strong>
+                        <strong>{% if context_view == "analytics" %}Pilotage analytique{% else %}Vue opérationnelle{% endif %}</strong>
                         <span class="dashboard-context-chip">
                             <span class="material-icons fs-6">storefront</span>
                             {{ gym.name }}
@@ -228,11 +228,11 @@
                     </h5>
                     <div class="d-flex align-items-center gap-2">
                         {% if caisse.oubliee_depuis_hier %}
-                            <span class="badge bg-danger"
-                                  title="Caisse ouverte la veille et jamais clôturee : son solde theorique court toujours.">{{ caisse.oubliee_depuis_hier }} non clôturee{{ caisse.oubliee_depuis_hier|pluralize }}</span>
+                            <span class="badge badge-ton-urgent"
+                                  title="Caisse ouverte la veille et jamais clôturée : son solde théorique court toujours.">{{ caisse.oubliee_depuis_hier }} non clôturée{{ caisse.oubliee_depuis_hier|pluralize }}</span>
                         {% endif %}
                         {% if caisse.ouvertes %}
-                            <span class="badge bg-success">{{ caisse.ouvertes }} ouverte{{ caisse.ouvertes|pluralize }}</span>
+                            <span class="badge badge-ton-normal">{{ caisse.ouvertes }} ouverte{{ caisse.ouvertes|pluralize }}</span>
                         {% else %}
                             <span class="badge bg-secondary">Aucune caisse ouverte</span>
                         {% endif %}
@@ -242,22 +242,22 @@
                     <div class="row g-3">
                         <div class="col-lg-3 col-6">
                             <div class="fs-12 text-muted aide"
-                                 title="Tout ce qui est entre aujourd'hui, toutes methodes confondues.">Encaissements</div>
+                                 title="Tout ce qui est entré aujourd'hui, toutes méthodes confondues.">Encaissements</div>
                             <div class="chiffre-cle ton-normal">{{ caisse.encaissements|montant }} CDF</div>
                         </div>
                         <div class="col-lg-3 col-6">
                             <div class="fs-12 text-muted aide"
-                                 title="Sorties de caisse : depenses, salaires, avances.">Decaissements</div>
+                                 title="Sorties de caisse : dépenses, salaires, avances.">Décaissements</div>
                             <div class="chiffre-cle ton-neutre">{{ caisse.decaissements|montant }} CDF</div>
                         </div>
                         <div class="col-lg-3 col-6">
                             <div class="fs-12 text-muted aide"
-                                 title="Ce que le caissier doit trouver dans le tiroir : fonds d'ouverture, plus les especes encaissees, moins les especes sorties. Le mobile money et les virements n'y figurent pas - ces billets ne sont jamais passes entre ses mains.">Solde theorique</div>
+                                 title="Ce que le caissier doit trouver dans le tiroir : fonds d'ouverture, plus les espèces encaissées, moins les espèces sorties. Le mobile money et les virements n'y figurent pas - ces billets ne sont jamais passés entre ses mains.">Solde théorique</div>
                             <div class="chiffre-cle {% if caisse.solde_theorique < 0 %}ton-urgent{% else %}ton-strategique{% endif %}">{{ caisse.solde_theorique|montant }} CDF</div>
                         </div>
                         <div class="col-lg-3 col-6">
                             <div class="fs-12 text-muted aide"
-                                 title="Difference entre le montant compte a la clôture et le solde theorique. Tant que le tiroir n'a pas ete compte, il n'y a pas d'ecart : la case reste « A determiner ». Compte : vert si rien ne manque, rouge s'il manque de l'argent, orange s'il y en a en trop.">Ecart de caisse</div>
+                                 title="Différence entre le montant compté à la clôture et le solde théorique. Tant que le tiroir n'a pas été compté, il n'y a pas d'écart : la case reste « À déterminer ». Compté : vert si rien ne manque, rouge s'il manque de l'argent, orange s'il y en a en trop.">Écart de caisse</div>
                             {% if caisse.ecart_connu %}
                             <div class="chiffre-cle ton-{{ caisse.ton_ecart }}">{{ caisse.ecart|montant_signe }} CDF</div>
                             {% if caisse.en_cours_non_comptees %}
@@ -281,7 +281,7 @@
                     {% if caisse.offerts %}
                     <div class="d-flex flex-wrap gap-3 mt-2 fs-12 text-muted">
                         <span class="aide"
-                              title="Abonnements et produits offerts aujourd'hui. Aucun argent n'est entre : la valeur est ce qu'ils auraient rapporte au prix normal.">
+                              title="Abonnements et produits offerts aujourd'hui. Aucun argent n'est entré : la valeur est ce qu'ils auraient rapporté au prix normal.">
                             <strong>Offerts</strong> : {{ caisse.offerts }} geste{{ caisse.offerts|pluralize }}
                             &mdash; valeur {{ caisse.valeur_offerte|montant }} CDF
                         </span>
@@ -306,7 +306,7 @@
 
                 {% if caisse.sessions %}
                 <div class="card-body pt-0">
-                    <div class="table-responsive">
+                    <div class="table-responsive table-lisible">
                         <table class="table table-sm table-hover mb-0">
                             <thead>
                                 <tr>
@@ -343,13 +343,13 @@
                                        est cette caisse, et a quelle heure elle a ete clôturee. {% endcomment %}
                                     <td class="fs-12">
                                         {% if session.est_fermee %}
-                                            <span class="badge bg-success">Clôturée</span>
+                                            <span class="badge badge-ton-normal">Clôturée</span>
                                             {% if session.cloture_forcee %}
-                                                <span class="badge bg-warning text-dark"
+                                                <span class="badge badge-ton-attention"
                                                       title="Clôturee par quelqu'un d'autre que son titulaire.">clôture forcée</span>
                                             {% endif %}
                                         {% elif session.oubliee %}
-                                            <span class="badge bg-danger">Ouverte depuis hier</span>
+                                            <span class="badge badge-ton-urgent">Ouverte depuis hier</span>
                                         {% else %}
                                             <span class="badge bg-secondary">En cours</span>
                                         {% endif %}
@@ -383,9 +383,9 @@
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted aide"
-                          title="Chaque passage compte une fois. Un retour le meme jour n'est pas recompte. Ce n'est pas le nombre de personnes presentes en ce moment : aucune sortie n'est enregistree.">Passages aujourd'hui</span>
+                          title="Chaque passage compte une fois. Un retour le même jour n'est pas recompté. Ce n'est pas le nombre de personnes présentes en ce moment : aucune sortie n'est enregistrée.">Passages aujourd'hui</span>
                     <div class="chiffre-cle">{{ today_checkins }}</div>
-                    <div class="fs-12 text-muted">Refuses : {{ denied_today }}</div>
+                    <div class="fs-12 text-muted">Refusés : {{ denied_today }}</div>
                     {% comment %} Le personnel a sa ligne dans la carte voisine, avec le
                        reste du detail : le repeter ici ferait lire deux fois le meme
                        chiffre. {% endcomment %}
@@ -396,7 +396,7 @@
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted aide"
-                          title="Membres differents entres aujourd'hui, chacun compte une fois. Ce qui entre par la meme porte sans etre un membre - invites, personnel, ouvertures manuelles - est nomme en dessous.">Membres différents</span>
+                          title="Membres différents entrés aujourd'hui, chacun compte une fois. Ce qui entre par la même porte sans être un membre - invités, personnel, ouvertures manuelles - est nommé en dessous.">Membres différents</span>
                     <div class="chiffre-cle">{{ passages_detail.membres }}</div>
                     <div class="fs-12 text-muted">
                         {% if passages_detail.invites %}Invités : {{ passages_detail.invites }}<br>{% endif %}
@@ -411,7 +411,7 @@
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted aide"
-                          title="Creneau horaire ou les passages sont les plus nombreux sur la periode selectionnee.">Heure de pointe</span>
+                          title="Créneau horaire où les passages sont les plus nombreux sur la période sélectionnée.">Heure de pointe</span>
                     <div class="chiffre-cle ton-strategique">{% if peak_hour.has_data %}{{ peak_hour.label }}{% else %}-{% endif %}</div>
                     <div class="fs-12 text-muted">{% if peak_hour.has_data %}{{ peak_hour.count }} passage{{ peak_hour.count|pluralize }}{% else %}Pas encore de donnees{% endif %}</div>
                 </div>
@@ -421,7 +421,7 @@
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted aide"
-                          title="Disponibilite du parc : machines en service sur le total.">Machines en service</span>
+                          title="Disponibilité du parc : machines en service sur le total.">Machines en service</span>
                     <div class="chiffre-cle {% if machines_broken %}ton-attention{% else %}ton-normal{% endif %}">{{ machines_ok|default:0 }} / {{ total_machines|default:0 }}</div>
                     <div class="fs-12 text-muted">{{ availability_rate|default:0 }}% disponible</div>
                 </div>
@@ -436,7 +436,7 @@
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted aide"
-                          title="Membres au statut actif dont un abonnement couvre la date du jour. C'est une photographie d'aujourd'hui, pas un cumul de la periode : un nouveau membre pas encore abonne n'y figure pas.">Abonnements actifs</span>
+                          title="Membres au statut actif dont un abonnement couvre la date du jour. C'est une photographie d'aujourd'hui, pas un cumul de la période : un nouveau membre pas encore abonné n'y figure pas.">Abonnements actifs</span>
                     <div class="chiffre-cle ton-normal">{{ active_members }}</div>
                     <div class="fs-12 text-muted">{{ active_member_rate }}% du portefeuille</div>
                 </div>
@@ -446,7 +446,7 @@
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted aide"
-                          title="Fiches membres creees pendant la periode, abonnees ou non.">Nouveaux membres</span>
+                          title="Fiches membres créées pendant la période, abonnées ou non.">Nouveaux membres</span>
                     <div class="chiffre-cle">{{ new_members_period }}</div>
                     <div class="fs-11 text-muted">{{ new_members_trend.basis }}</div>
                 </div>
@@ -467,9 +467,9 @@
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted aide"
-                          title="Paiements enregistres mais non encaisses : ce qui reste a regulariser.">Impayes</span>
+                          title="Paiements enregistrés mais non encaissés : ce qui reste à régulariser.">Impayés</span>
                     <div class="chiffre-cle {% if pending_count %}ton-attention{% endif %}">{{ pending_count }}</div>
-                    <div class="fs-12 text-muted">{{ pending_total|montant }} CDF a regulariser</div>
+                    <div class="fs-12 text-muted">{{ pending_total|montant }} CDF à régulariser</div>
                 </div>
             </div>
         </div>
@@ -489,9 +489,9 @@
                         Alertes urgentes
                     </h5>
                     {% if alertes_urgentes %}
-                        <span class="badge bg-danger">{{ alertes_urgentes|length }}</span>
+                        <span class="badge badge-ton-urgent">{{ alertes_urgentes|length }}</span>
                     {% else %}
-                        <span class="badge bg-success">Rien a signaler</span>
+                        <span class="badge badge-ton-normal">Rien a signaler</span>
                     {% endif %}
                 </div>
                 {% if alertes_urgentes %}
@@ -556,12 +556,12 @@
                         <span class="material-icons" style="font-size:16px;">point_of_sale</span>Encaisser
                     </a>
                     <a href="{% url 'pos:cashier_dashboard' %}?ouvrir=decaissement" class="btn btn-outline-danger btn-sm d-inline-flex align-items-center gap-1">
-                        <span class="material-icons" style="font-size:16px;">remove_circle</span>Enregistrer une depense
+                        <span class="material-icons" style="font-size:16px;">remove_circle</span>Enregistrer une dépense
                     </a>
                     {% endif %}
                     {% if module_access and can_access %}
                     <a href="{% url 'access:acces_dashboard' %}?section=scan" class="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-1">
-                        <span class="material-icons" style="font-size:16px;">qr_code_scanner</span>Scanner un acces
+                        <span class="material-icons" style="font-size:16px;">qr_code_scanner</span>Scanner un accès
                     </a>
                     {% endif %}
                 </div>
@@ -581,7 +581,7 @@
                 <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                     <h5 class="card-title mb-0 d-flex align-items-center gap-2">
                         <span class="material-icons" style="font-size:20px;">account_balance_wallet</span>
-                        Revenus de la periode
+                        Revenus de la période
                     </h5>
                     <span class="dashboard-context-chip">
                         <span class="material-icons fs-6">calendar_month</span>
@@ -592,15 +592,15 @@
                     <div class="row g-3">
                         <div class="col-lg-3 col-6">
                             <div class="fs-12 text-muted aide"
-                                 title="Ce que la salle a gagne sur la periode : abonnements, ventes, toutes methodes. L'argent rendu apres un decaissement et les apports n'y figurent pas.">Encaissements</div>
+                                 title="Ce que la salle a gagné sur la période : abonnements, ventes, toutes méthodes. L'argent rendu après un décaissement et les apports n'y figurent pas.">Encaissements</div>
                             <div class="chiffre-cle ton-normal">{{ bilan_periode.encaissements|montant }} CDF</div>
                             <div class="fs-11 text-muted mt-1">
-                                {{ bilan_periode.tendance.display }} - periode precedente {{ bilan_periode.encaissements_precedents|montant }} CDF
+                                {{ bilan_periode.tendance.display }} - période précédente {{ bilan_periode.encaissements_precedents|montant }} CDF
                             </div>
                         </div>
                         <div class="col-lg-3 col-6">
                             <div class="fs-12 text-muted aide"
-                                 title="Ce que la salle a reellement depense : les sorties de la periode, moins l'argent revenu en caisse sur ces depenses.">Decaissements</div>
+                                 title="Ce que la salle a réellement dépensé : les sorties de la période, moins l'argent revenu en caisse sur ces dépenses.">Décaissements</div>
                             <div class="chiffre-cle ton-neutre">{{ bilan_periode.decaissements|montant }} CDF</div>
                             <div class="fs-11 text-muted mt-1">
                                 {% if bilan_periode.retours %}
@@ -612,15 +612,15 @@
                         </div>
                         <div class="col-lg-3 col-6">
                             <div class="fs-12 text-muted aide"
-                                 title="Encaissements moins decaissements : ce qui est entre dans les caisses moins ce qui en est sorti. Ce n'est pas un benefice : les charges non encore payees, les salaires a venir, l'amortissement du materiel et le stock consomme n'y figurent pas. Les apports en caisse non plus, ce n'est pas de l'argent gagne.">Flux net de tresorerie</div>
+                                 title="Encaissements moins décaissements : ce qui est entré dans les caisses moins ce qui en est sorti. Ce n'est pas un bénéfice : les charges non encore payées, les salaires à venir, l'amortissement du matériel et le stock consommé n'y figurent pas. Les apports en caisse non plus, ce n'est pas de l'argent gagne.">Flux net de trésorerie</div>
                             <div class="chiffre-cle {% if bilan_periode.resultat < 0 %}ton-urgent{% else %}ton-strategique{% endif %}">{{ bilan_periode.resultat|montant_signe }} CDF</div>
                             <div class="fs-11 text-muted mt-1">
-                                periode precedente {{ bilan_periode.resultat_precedent|montant_signe }} CDF
+                                période précédente {{ bilan_periode.resultat_precedent|montant_signe }} CDF
                             </div>
                         </div>
                         <div class="col-lg-3 col-6">
                             <div class="fs-12 text-muted aide"
-                                 title="Somme des ecarts constates aux clôtures de caisse de la periode. Sans caisse comptee, il n'y a pas d'ecart a montrer. Vert si rien ne manque, rouge s'il manque de l'argent, orange s'il y en a en trop.">Ecart de caisse</div>
+                                 title="Somme des écarts constatés aux clôtures de caisse de la période. Sans caisse comptée, il n'y a pas d'écart à montrer. Vert si rien ne manque, rouge s'il manque de l'argent, orange s'il y en a en trop.">Écart de caisse</div>
                             {% if bilan_periode.ecart_connu %}
                             <div class="chiffre-cle ton-{{ bilan_periode.ton_ecart }}">{{ bilan_periode.ecart|montant_signe }} CDF</div>
                             {% else %}
@@ -633,14 +633,14 @@
 
                     {% if bilan_periode.apports %}
                     <div class="fs-12 text-muted mt-3">
-                        <span class="aide" title="De l'argent mis dans les caisses, qui n'est pas une recette : il n'entre ni dans les encaissements ni dans le resultat.">
+                        <span class="aide" title="De l'argent mis dans les caisses, qui n'est pas une recette : il n'entre ni dans les encaissements ni dans le résultat.">
                             <strong>Apports en caisse</strong> : {{ bilan_periode.apports|montant }} CDF
                         </span>
                     </div>
                     {% endif %}
                     {% if bilan_periode.articles_offerts.articles %}
                     <div class="fs-12 text-muted mt-2">
-                        <span class="aide" title="Articles du stock remis avec une formule sur la periode. Ni une recette ni une depense : ce que les avantages coutent en marchandise, au prix de vente.">
+                        <span class="aide" title="Articles du stock remis avec une formule sur la période. Ni une recette ni une dépense : ce que les avantages coûtent en marchandise, au prix de vente.">
                             <strong>Articles offerts</strong> :
                             {% for article in bilan_periode.articles_offerts.articles %}{{ article.quantite }} {{ article.nom }}{% if not forloop.last %}, {% endif %}{% endfor %}
                             {% if bilan_periode.articles_offerts.valeur_cdf %}&mdash; valeur {{ bilan_periode.articles_offerts.valeur_cdf|montant }} CDF{% if not bilan_periode.articles_offerts.valeur_complete %} (hors articles sans taux de change){% endif %}{% endif %}
@@ -670,7 +670,7 @@
                                     id="onglet-decaissements" data-bs-toggle="tab" data-bs-target="#liste-decaissements"
                                     type="button" role="tab" aria-controls="liste-decaissements"
                                     aria-selected="{% if operations_periode.onglet == "decaissements" %}true{% else %}false{% endif %}">
-                                Decaissements
+                                Décaissements
                                 <span class="badge bg-light text-muted border ms-1">{{ operations_periode.decaissements.page.paginator.count }}</span>
                             </button>
                         </li>
@@ -693,14 +693,14 @@
                                 <span>Total : <strong class="ton-normal">{{ bilan_periode.encaissements|montant }} CDF</strong></span>
                                 <span>Page {{ liste.page.number }} sur {{ liste.page.paginator.num_pages }}</span>
                             </div>
-                            <div class="table-responsive">
+                            <div class="table-responsive table-lisible">
                                 <table class="table table-sm table-hover mb-0">
                                     <thead>
                                         <tr>
                                             <th class=""><a href="{{ liste.tri_date }}" class="text-reset text-decoration-none">Date{% if liste.tri == '-date' %} &darr;{% elif liste.tri == 'date' %} &uarr;{% endif %}</a></th>
-                                            <th>Operation</th>
-                                            <th>Categorie</th>
-                                            <th>Methode</th>
+                                            <th>Opération</th>
+                                            <th>Catégorie</th>
+                                            <th>Méthode</th>
                                             <th class="text-end"><a href="{{ liste.tri_montant }}" class="text-reset text-decoration-none">Montant{% if liste.tri == '-montant' %} &darr;{% elif liste.tri == 'montant' %} &uarr;{% endif %}</a></th>
                                         </tr>
                                     </thead>
@@ -717,14 +717,14 @@
                                             <td class="text-end text-nowrap ton-normal">{{ paiement.amount_cdf|montant }} CDF</td>
                                         </tr>
                                         {% empty %}
-                                        <tr><td colspan="5" class="text-center text-muted py-4">Aucun encaissement sur cette periode.</td></tr>
+                                        <tr><td colspan="5" class="text-center text-muted py-4">Aucun encaissement sur cette période.</td></tr>
                                         {% endfor %}
                                     </tbody>
                                 </table>
                             </div>
                             {% if liste.page.paginator.num_pages > 1 %}
                             <nav class="d-flex justify-content-between align-items-center mt-2" aria-label="Pages des encaissements">
-                                {% if liste.precedente %}<a href="{{ liste.precedente }}" class="btn btn-sm btn-light">&larr; Precedente</a>{% else %}<span></span>{% endif %}
+                                {% if liste.precedente %}<a href="{{ liste.precedente }}" class="btn btn-sm btn-light">&larr; Précédente</a>{% else %}<span></span>{% endif %}
                                 <span class="fs-12 text-muted">{{ liste.page.start_index }}-{{ liste.page.end_index }} sur {{ liste.page.paginator.count }}</span>
                                 {% if liste.suivante %}<a href="{{ liste.suivante }}" class="btn btn-sm btn-light">Suivante &rarr;</a>{% else %}<span></span>{% endif %}
                             </nav>
@@ -736,16 +736,16 @@
                              id="liste-decaissements" role="tabpanel" aria-labelledby="onglet-decaissements">
                             {% with liste=operations_periode.decaissements %}
                             <div class="d-flex flex-wrap justify-content-between gap-2 mb-2 fs-12 text-muted">
-                                <span class="aide" title="Le total net : les sorties de la periode, moins l'argent revenu en caisse sur ces depenses. C'est le chiffre de la grille.">Total net : <strong class="ton-neutre">{{ bilan_periode.decaissements|montant }} CDF</strong></span>
+                                <span class="aide" title="Le total net : les sorties de la période, moins l'argent revenu en caisse sur ces dépenses. C'est le chiffre de la grille.">Total net : <strong class="ton-neutre">{{ bilan_periode.decaissements|montant }} CDF</strong></span>
                                 <span>Page {{ liste.page.number }} sur {{ liste.page.paginator.num_pages }}</span>
                             </div>
-                            <div class="table-responsive">
+                            <div class="table-responsive table-lisible">
                                 <table class="table table-sm table-hover mb-0">
                                     <thead>
                                         <tr>
                                             <th class=""><a href="{{ liste.tri_date }}" class="text-reset text-decoration-none">Date{% if liste.tri == '-date' %} &darr;{% elif liste.tri == 'date' %} &uarr;{% endif %}</a></th>
                                             <th>Motif</th>
-                                            <th>Categorie</th>
+                                            <th>Catégorie</th>
                                             <th>Saisi par</th>
                                             <th class="text-end"><a href="{{ liste.tri_montant }}" class="text-reset text-decoration-none">Montant{% if liste.tri == '-montant' %} &darr;{% elif liste.tri == 'montant' %} &uarr;{% endif %}</a></th>
                                         </tr>
@@ -766,14 +766,14 @@
                                             </td>
                                         </tr>
                                         {% empty %}
-                                        <tr><td colspan="5" class="text-center text-muted py-4">Aucun decaissement sur cette periode.</td></tr>
+                                        <tr><td colspan="5" class="text-center text-muted py-4">Aucun décaissement sur cette période.</td></tr>
                                         {% endfor %}
                                     </tbody>
                                 </table>
                             </div>
                             {% if liste.page.paginator.num_pages > 1 %}
                             <nav class="d-flex justify-content-between align-items-center mt-2" aria-label="Pages des decaissements">
-                                {% if liste.precedente %}<a href="{{ liste.precedente }}" class="btn btn-sm btn-light">&larr; Precedente</a>{% else %}<span></span>{% endif %}
+                                {% if liste.precedente %}<a href="{{ liste.precedente }}" class="btn btn-sm btn-light">&larr; Précédente</a>{% else %}<span></span>{% endif %}
                                 <span class="fs-12 text-muted">{{ liste.page.start_index }}-{{ liste.page.end_index }} sur {{ liste.page.paginator.count }}</span>
                                 {% if liste.suivante %}<a href="{{ liste.suivante }}" class="btn btn-sm btn-light">Suivante &rarr;</a>{% else %}<span></span>{% endif %}
                             </nav>
@@ -785,16 +785,16 @@
                              id="liste-offerts" role="tabpanel" aria-labelledby="onglet-offerts">
                             {% with liste=operations_periode.offerts %}
                             <div class="d-flex flex-wrap justify-content-between gap-2 mb-2 fs-12 text-muted">
-                                <span class="aide" title="Ce que les gestes offerts auraient rapporte au prix normal. Ni une recette ni une depense : la salle a donne.">Valeur : <strong>{{ operations_periode.valeur_offerte|montant }} CDF</strong></span>
+                                <span class="aide" title="Ce que les gestes offerts auraient rapporté au prix normal. Ni une recette ni une dépense : la salle a donné.">Valeur : <strong>{{ operations_periode.valeur_offerte|montant }} CDF</strong></span>
                                 <span>Page {{ liste.page.number }} sur {{ liste.page.paginator.num_pages }}</span>
                             </div>
-                            <div class="table-responsive">
+                            <div class="table-responsive table-lisible">
                                 <table class="table table-sm table-hover mb-0">
                                     <thead>
                                         <tr>
                                             <th><a href="{{ liste.tri_date }}" class="text-reset text-decoration-none">Date{% if liste.tri == '-date' %} &darr;{% elif liste.tri == 'date' %} &uarr;{% endif %}</a></th>
                                             <th>Beneficiaire</th>
-                                            <th>Operation</th>
+                                            <th>Opération</th>
                                             <th>Motif</th>
                                             <th>Offert par</th>
                                             <th class="text-end">Valeur</th>
@@ -817,14 +817,14 @@
                                             <td class="text-end text-nowrap">{{ geste.valeur_offerte_cdf|montant }} CDF</td>
                                         </tr>
                                         {% empty %}
-                                        <tr><td colspan="6" class="text-center text-muted py-4">Aucun geste offert sur cette periode.</td></tr>
+                                        <tr><td colspan="6" class="text-center text-muted py-4">Aucun geste offert sur cette période.</td></tr>
                                         {% endfor %}
                                     </tbody>
                                 </table>
                             </div>
                             {% if liste.page.paginator.num_pages > 1 %}
                             <nav class="d-flex justify-content-between align-items-center mt-2" aria-label="Pages des gestes offerts">
-                                {% if liste.precedente %}<a href="{{ liste.precedente }}" class="btn btn-sm btn-light">&larr; Precedente</a>{% else %}<span></span>{% endif %}
+                                {% if liste.precedente %}<a href="{{ liste.precedente }}" class="btn btn-sm btn-light">&larr; Précédente</a>{% else %}<span></span>{% endif %}
                                 <span class="fs-12 text-muted">{{ liste.page.start_index }}-{{ liste.page.end_index }} sur {{ liste.page.paginator.count }}</span>
                                 {% if liste.suivante %}<a href="{{ liste.suivante }}" class="btn btn-sm btn-light">Suivante &rarr;</a>{% else %}<span></span>{% endif %}
                             </nav>
@@ -848,7 +848,7 @@
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted aide"
-                          title="Membres au statut actif dont un abonnement couvre la date du jour. C'est une photographie d'aujourd'hui, pas un cumul de la periode : un nouveau membre pas encore abonne n'y figure pas.">Membres actifs</span>
+                          title="Membres au statut actif dont un abonnement couvre la date du jour. C'est une photographie d'aujourd'hui, pas un cumul de la période : un nouveau membre pas encore abonné n'y figure pas.">Membres actifs</span>
                     <h3 class="mb-2 fw-bold">{{ active_members }}</h3>
                     <div class="fs-12 text-muted">{{ active_member_rate }}% du portefeuille</div>
                 </div>
@@ -858,7 +858,7 @@
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted aide"
-                          title="Fiches membres creees pendant la periode, abonnees ou non.">Nouveaux membres</span>
+                          title="Fiches membres créées pendant la période, abonnées ou non.">Nouveaux membres</span>
                     <h3 class="mb-2 fw-bold">{{ new_members_period }}</h3>
                     <span class="badge bg-soft-{{ new_members_trend.badge_class }} text-{{ new_members_trend.badge_class }}"
                           title="{{ new_members_trend.basis }}">{{ new_members_trend.display }}</span>
@@ -870,7 +870,7 @@
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted aide"
-                          title="Abonnements demarres pendant la periode par un membre qui en avait deja eu un auparavant.">Renouvellements</span>
+                          title="Abonnements démarrés pendant la période par un membre qui en avait déjà eu un auparavant.">Renouvellements</span>
                     <h3 class="mb-2 fw-bold">{{ renewals_period }}</h3>
                     <span class="badge bg-soft-{{ renewals_trend.badge_class }} text-{{ renewals_trend.badge_class }}"
                           title="{{ renewals_trend.basis }}">{{ renewals_trend.display }}</span>
@@ -882,7 +882,7 @@
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted aide"
-                          title="Abonnements dont la date de fin tombe dans la periode. Une expiration n'est pas une bonne nouvelle : la teinte ne passe jamais au vert.">Expirations {{ period_label_lower }}</span>
+                          title="Abonnements dont la date de fin tombe dans la période. Une expiration n'est pas une bonne nouvelle : la teinte ne passe jamais au vert.">Expirations {{ period_label_lower }}</span>
                     <h3 class="mb-2 fw-bold {% if expirations_period %}ton-attention{% endif %}">{{ expirations_period }}</h3>
                     <span class="badge bg-soft-{{ expirations_trend.badge_class }} text-{{ expirations_trend.badge_class }}"
                           title="{{ expirations_trend.basis }}">{{ expirations_trend.display }}</span>
@@ -894,7 +894,7 @@
             <div class="card stretch stretch-full stat-card">
                 <div class="card-body">
                     <span class="fs-12 fw-medium text-muted aide"
-                          title="Passages accordes pendant la periode, retours du meme jour exclus.">Visites {{ period_label_lower }}</span>
+                          title="Passages accordés pendant la période, retours du même jour exclus.">Visites {{ period_label_lower }}</span>
                     <h3 class="mb-2 fw-bold">{{ visits_period }}</h3>
                     <span class="badge bg-soft-{{ visits_trend.badge_class }} text-{{ visits_trend.badge_class }}"
                           title="{{ visits_trend.basis }}">{{ visits_trend.display }}</span>
@@ -910,7 +910,7 @@
                 <div class="card-body">
                     <div class="fs-12 text-muted">Total membres</div>
                     <div class="fs-3 fw-bold">{{ total_members }}</div>
-                    <div class="fs-12 text-muted">Actifs {{ active_members }} - Expires {{ expired_members }} - Suspendus {{ suspended_members }}</div>
+                    <div class="fs-12 text-muted">Actifs {{ active_members }} - Expirés {{ expired_members }} - Suspendus {{ suspended_members }}</div>
                 </div>
             </div>
         </div>
@@ -918,10 +918,10 @@
             <div class="card stretch stretch-full">
                 <div class="card-body">
                     <div class="fs-12 text-muted aide"
-                         title="Personnes differentes entrees pendant la periode : membres et invites. Les ouvertures manuelles, qui n'identifient personne, en sont exclues.">Visiteurs uniques</div>
+                         title="Personnes différentes entrées pendant la période : membres et invités. Les ouvertures manuelles, qui n'identifient personne, en sont exclues.">Visiteurs uniques</div>
                     <div class="fs-3 fw-bold">{{ unique_visitors_period }}</div>
                     <div class="fs-12 text-muted aide"
-                         title="Part des membres actifs venus au moins une fois pendant la periode. Meme population au numerateur et au denominateur : ce taux ne peut pas depasser 100 %.">Assiduite {{ attendance_rate }}% - {{ active_members_seen }} actif{{ active_members_seen|pluralize }} sur {{ active_members }} venu{{ active_members_seen|pluralize }}</div>
+                         title="Part des membres actifs venus au moins une fois pendant la période. Même population au numérateur et au dénominateur : ce taux ne peut pas dépasser 100 %.">Assiduité {{ attendance_rate }}% - {{ active_members_seen }} actif{{ active_members_seen|pluralize }} sur {{ active_members }} venu{{ active_members_seen|pluralize }}</div>
                 </div>
             </div>
         </div>
@@ -929,16 +929,16 @@
             <div class="card stretch stretch-full">
                 <div class="card-body">
                     <div class="fs-12 text-muted aide"
-                         title="Visites de la periode divisees par les jours deja ecoules, et non par la periode entiere : au 11 du mois, diviser par 30 compterait 19 jours qui n'ont pas eu lieu.">Moyenne journalière</div>
+                         title="Visites de la période divisées par les jours déjà écoulés, et non par la période entière : au 11 du mois, diviser par 30 compterait 19 jours qui n'ont pas eu lieu.">Moyenne journalière</div>
                     <div class="fs-3 fw-bold">{{ average_daily_visits }}</div>
-                    <div class="fs-12 text-muted">visites sur {{ elapsed_days }} jour{{ elapsed_days|pluralize }} ecoule{{ elapsed_days|pluralize }}</div>
+                    <div class="fs-12 text-muted">visites sur {{ elapsed_days }} jour{{ elapsed_days|pluralize }} écoulé{{ elapsed_days|pluralize }}</div>
                 </div>
             </div>
         </div>
         <div class="col-lg-3 col-md-6">
             <div class="card stretch stretch-full">
                 <div class="card-body">
-                    <div class="fs-12 text-muted">Acces refuses</div>
+                    <div class="fs-12 text-muted">Accès refusés</div>
                     <div class="fs-3 fw-bold">{{ denied_period }}</div>
                     <div class="fs-12 text-muted">Aujourd'hui: {{ denied_today }}</div>
                 </div>
@@ -952,10 +952,10 @@
         <div class="col-xl-6">
             <div class="card stretch stretch-full">
                 <div class="card-header">
-                    <h5 class="card-title">Derniers acces</h5>
+                    <h5 class="card-title">Derniers accès</h5>
                 </div>
                 <div class="card-body p-0">
-                    <div class="table-responsive">
+                    <div class="table-responsive table-lisible">
                         <table class="table table-hover mb-0">
                             <thead>
                                 <tr>
@@ -970,16 +970,16 @@
                                     <td>{{ access.nom_affiche }}</td>
                                     <td>
                                         {% if access.access_granted %}
-                                        <span class="badge bg-success">Autorise</span>
+                                        <span class="badge badge-ton-normal">Autorisé</span>
                                         {% else %}
-                                        <span class="badge bg-danger">Refuse</span>
+                                        <span class="badge badge-ton-urgent">Refusé</span>
                                         {% endif %}
                                     </td>
                                     <td>{{ access.check_in_time|date:"d/m H:i" }}</td>
                                 </tr>
                                 {% empty %}
                                 <tr>
-                                    <td colspan="3" class="text-center text-muted">Aucun acces recent</td>
+                                    <td colspan="3" class="text-center text-muted">Aucun accès récent</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -994,13 +994,13 @@
                     <h5 class="card-title">Derniers paiements</h5>
                 </div>
                 <div class="card-body p-0">
-                    <div class="table-responsive">
+                    <div class="table-responsive table-lisible">
                         <table class="table table-hover mb-0">
                             <thead>
                                 <tr>
-                                    <th>Operation</th>
+                                    <th>Opération</th>
                                     <th class="text-end">Montant</th>
-                                    <th>Methode</th>
+                                    <th>Méthode</th>
                                     <th>Date</th>
                                 </tr>
                             </thead>
@@ -1013,7 +1013,7 @@
                                        caisse : c'est le sens du mouvement qui tranche. {% endcomment %}
                                     <td>
                                         {% if payment.type == "out" %}
-                                            <span class="ton-neutre fw-semibold">Decaissement</span>
+                                            <span class="ton-neutre fw-semibold">Décaissement</span>
                                             {% if payment.description %}<div class="fs-11 text-muted">{{ payment.description }}</div>{% endif %}
                                         {% elif payment.member %}
                                             {{ payment.member.first_name }} {{ payment.member.last_name }}
@@ -1030,7 +1030,7 @@
                                 </tr>
                                 {% empty %}
                                 <tr>
-                                    <td colspan="4" class="text-center text-muted">Aucun paiement recent</td>
+                                    <td colspan="4" class="text-center text-muted">Aucun paiement récent</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -1046,7 +1046,7 @@
     <div class="row g-3 mb-4">
         <div class="col-xxl col-md-4 col-sm-6">
             <div class="analytics-kpi-card">
-                <div class="analytics-kpi-card__label">Entrees QR</div>
+                <div class="analytics-kpi-card__label">Entrées QR</div>
                 <div class="analytics-kpi-card__value">{{ visits_period }}</div>
                 <div class="analytics-kpi-card__meta">{{ unique_visitors_period }} visiteur(s) unique(s)</div>
             </div>
@@ -1076,7 +1076,7 @@
         </div>
         <div class="col-xxl col-md-4 col-sm-6">
             <div class="analytics-kpi-card">
-                <div class="analytics-kpi-card__label">Refus d'acces</div>
+                <div class="analytics-kpi-card__label">Refus d'accès</div>
                 <div class="analytics-kpi-card__value">{{ denied_period }}</div>
                 <div class="analytics-kpi-card__meta">Aujourd'hui {{ denied_today }}</div>
             </div>
@@ -1095,7 +1095,7 @@
                     </div>
                     <div class="d-flex justify-content-between text-muted fs-12 mt-3">
                         <span>Actifs {{ active_members }}</span>
-                        <span>Expires {{ expired_members }}</span>
+                        <span>Expirés {{ expired_members }}</span>
                         <span>Suspendus {{ suspended_members }}</span>
                     </div>
                 </div>
@@ -1104,15 +1104,15 @@
         <div class="col-xl-3">
             <div class="card stretch stretch-full">
                 <div class="card-header">
-                    <h5 class="card-title">Acces QR {{ period_label_lower }}</h5>
+                    <h5 class="card-title">Accès QR {{ period_label_lower }}</h5>
                 </div>
                 <div class="card-body">
                     <div class="member-analytics-chart compact">
                         <canvas id="accessDecisionChart"></canvas>
                     </div>
                     <div class="d-flex justify-content-between text-muted fs-12 mt-3">
-                        <span>Autorises {{ visits_period }}</span>
-                        <span>Refuses {{ denied_period }}</span>
+                        <span>Autorisés {{ visits_period }}</span>
+                        <span>Refusés {{ denied_period }}</span>
                     </div>
                 </div>
             </div>
@@ -1155,7 +1155,7 @@
         <div class="col-xl-8">
             <div class="card stretch stretch-full">
                 <div class="card-header">
-                    <h5 class="card-title">Evolution des revenus</h5>
+                    <h5 class="card-title">Évolution des revenus</h5>
                 </div>
                 <div class="card-body">
                     <div class="member-analytics-chart">
@@ -1293,10 +1293,10 @@
         <div class="col-xl-4">
             <div class="card stretch stretch-full">
                 <div class="card-header">
-                    <h5 class="card-title">Repartition des abonnements</h5>
+                    <h5 class="card-title">Répartition des abonnements</h5>
                 </div>
                 <div class="card-body p-0">
-                    <div class="table-responsive">
+                    <div class="table-responsive table-lisible">
                         <table class="table table-hover mb-0">
                             <thead>
                                 <tr>
@@ -1326,7 +1326,7 @@
         <div class="col-xl-4">
             <div class="card stretch stretch-full">
                 <div class="card-header">
-                    <h5 class="card-title">Frequentation {{ period_label_lower }}</h5>
+                    <h5 class="card-title">Fréquentation {{ period_label_lower }}</h5>
                 </div>
                 <div class="card-body">
                     <div class="peak-hour-card mb-4">
@@ -1338,9 +1338,9 @@
                                 <div class="fs-12 text-muted">Heure de pointe</div>
                                 <div class="fs-4 fw-bold text-dark">{{ peak_hour.label }}</div>
                                 {% if peak_hour.has_data %}
-                                <div class="fs-12 text-muted">{{ peak_hour.count }} passage{{ peak_hour.count|pluralize }} autorise{{ peak_hour.count|pluralize }} sur la periode</div>
+                                <div class="fs-12 text-muted">{{ peak_hour.count }} passage{{ peak_hour.count|pluralize }} autorisé{{ peak_hour.count|pluralize }} sur la période</div>
                                 {% else %}
-                                <div class="fs-12 text-muted">Aucun passage autorise sur la periode</div>
+                                <div class="fs-12 text-muted">Aucun passage autorisé sur la période</div>
                                 {% endif %}
                             </div>
                         </div>
@@ -1354,7 +1354,7 @@
                             <span>{{ row.label }}</span>
                             <div class="flex-grow-1">
                                 <div class="progress" style="height: 8px;">
-                                    <div class="progress-bar bg-primary" style="width: {{ row.percent }}%"></div>
+                                    <div class="progress-bar barre-strategique" style="width: {{ row.percent }}%"></div>
                                 </div>
                             </div>
                             <strong>{{ row.count }}</strong>
@@ -1372,7 +1372,7 @@
                     <h5 class="card-title">Derniers accès</h5>
                 </div>
                 <div class="card-body p-0">
-                    <div class="table-responsive">
+                    <div class="table-responsive table-lisible">
                         <table class="table table-hover mb-0">
                             <thead>
                                 <tr>
@@ -1387,9 +1387,9 @@
                                     <td>{{ access.nom_affiche }}</td>
                                     <td>
                                         {% if access.access_granted %}
-                                        <span class="badge bg-success">Autorise</span>
+                                        <span class="badge badge-ton-normal">Autorisé</span>
                                         {% else %}
-                                        <span class="badge bg-danger">Refuse</span>
+                                        <span class="badge badge-ton-urgent">Refusé</span>
                                         {% endif %}
                                     </td>
                                     <td>{{ access.check_in_time|date:"d/m H:i" }}</td>
@@ -1414,13 +1414,13 @@
                     <h5 class="card-title">Derniers paiements</h5>
                 </div>
                 <div class="card-body p-0">
-                    <div class="table-responsive">
+                    <div class="table-responsive table-lisible">
                         <table class="table table-hover mb-0">
                             <thead>
                                 <tr>
-                                    <th>Operation</th>
+                                    <th>Opération</th>
                                     <th class="text-end">Montant</th>
-                                    <th>Methode</th>
+                                    <th>Méthode</th>
                                     <th>Date</th>
                                 </tr>
                             </thead>
@@ -1433,7 +1433,7 @@
                                        caisse : c'est le sens du mouvement qui tranche. {% endcomment %}
                                     <td>
                                         {% if payment.type == "out" %}
-                                            <span class="ton-neutre fw-semibold">Decaissement</span>
+                                            <span class="ton-neutre fw-semibold">Décaissement</span>
                                             {% if payment.description %}<div class="fs-11 text-muted">{{ payment.description }}</div>{% endif %}
                                         {% elif payment.member %}
                                             {{ payment.member.first_name }} {{ payment.member.last_name }}
@@ -1467,7 +1467,7 @@
                 <div class="card-body">
                     <div class="vstack gap-3">
                         <div class="d-flex justify-content-between">
-                            <span>Disponibilite du parc</span>
+                            <span>Disponibilité du parc</span>
                             <strong>{{ availability_rate|default:0 }}%</strong>
                         </div>
                         <div class="d-flex justify-content-between">
@@ -1483,7 +1483,7 @@
                             <strong>{{ period_maintenances|default:0 }}</strong>
                         </div>
                         <div class="d-flex justify-content-between">
-                            <span>Cout maintenance</span>
+                            <span>Coût maintenance</span>
                             <strong>{{ period_maintenance_cost|default:0|floatformat:0 }} CDF</strong>
                         </div>
                     </div>
@@ -1554,7 +1554,7 @@
                         </div>
                     </div>
                     <div class="fs-12 text-muted mt-3">
-                        Top coaches par nombre de membres assignes, toujours limite au gym courant.
+                        Top coaches par nombre de membres assignés, toujours limité au gym courant.
                     </div>
                 </div>
             </div>

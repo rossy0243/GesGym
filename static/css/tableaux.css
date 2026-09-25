@@ -1,0 +1,33 @@
+/**
+ * Des tableaux qui tiennent dans leur carte.
+ *
+ * POURQUOI CE FICHIER
+ * Le theme impose a chaque cellule d'un tableau responsive de tenir sur une
+ * seule ligne, avec quinze pixels de marge de chaque cote :
+ *
+ *     .table-responsive .table tr td { padding: 15px 15px; white-space: nowrap; }
+ *
+ * Passe six colonnes - l'historique des caisses en compte huit - le tableau
+ * depasse la largeur de la carte, et il faut le faire defiler lateralement
+ * pour lire un montant. Un chiffre qu'on ne voit pas est un chiffre qu'on ne
+ * verifie pas.
+ *
+ * La classe ci-dessous rend aux cellules le droit de passer a la ligne. Elle
+ * ne masque aucune colonne : tout reste lisible, plus bas au lieu d'etre plus
+ * loin. Cette feuille se charge apres le theme : elle gagne.
+ */
+
+.table-lisible .table tr td,
+.table-lisible .table tr th {
+    white-space: normal;
+    padding: 10px 8px;
+    vertical-align: middle;
+}
+
+/* Les montants et les dates restent d'un seul tenant : couper "12 500 CDF"
+   en deux lignes rend le nombre plus difficile a lire, pas moins. */
+.table-lisible .table tr td.text-end,
+.table-lisible .table tr th.text-end,
+.table-lisible .table .sans-coupure {
+    white-space: nowrap;
+}

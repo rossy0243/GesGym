@@ -371,7 +371,7 @@ class AccountingReportExportTests(TestCase):
         content = response.content.decode("utf-8")
         self.assertIn("Heure de pointe", content)
         self.assertIn("18h-19h", content)
-        self.assertIn("3 passages autorises", content)
+        self.assertIn("3 passages autorisés", content)
         self.assertNotIn("20h-21h", content)
 
     def test_csv_export_is_accounting_file_scoped_to_current_gym(self):
@@ -4079,7 +4079,7 @@ class DashboardHonestyTests(TestCase):
     def test_the_daily_average_explains_its_divisor(self):
         # La carte est passee en vue analytique avec les autres KPI de
         # periode ; sa definition ne l'a pas quittee.
-        self.assertContains(self._vue(analytique=True), "jours deja ecoules")
+        self.assertContains(self._vue(analytique=True), "jours déjà écoulés")
 
 
 class MontantFilterTests(SimpleTestCase):
@@ -4430,7 +4430,7 @@ GROUPE = "1" + chr(0xA0) + "599" + chr(0xA0) + "739"
 
 # Le ton est neutre, pas rouge : une sortie d'argent ordinaire n'est pas une
 # anomalie, et le rouge est reserve a ce qui appelle un geste aujourd'hui.
-MARQUEUR_DECAISSEMENT = '<span class="ton-neutre fw-semibold">Decaissement</span>'
+MARQUEUR_DECAISSEMENT = '<span class="ton-neutre fw-semibold">Décaissement</span>'
 
 
 class PaymentOperationColumnTests(TestCase):
@@ -4477,7 +4477,7 @@ class PaymentOperationColumnTests(TestCase):
         return self.client.get(reverse("core:gym_dashboard", args=[self.gym.id]))
 
     def test_the_column_is_no_longer_called_member(self):
-        self.assertContains(self._page(), "<th>Operation</th>", html=False)
+        self.assertContains(self._page(), "<th>Opération</th>", html=False)
 
     def test_a_disbursement_shows_its_reason(self):
         record_payment(
@@ -4607,7 +4607,7 @@ class DashboardLayoutTests(TestCase):
         self.assertContains(self._vue(), "Heure de pointe")
 
     def test_recording_an_expense_is_one_of_the_quick_actions(self):
-        self.assertContains(self._vue(), "Enregistrer une depense")
+        self.assertContains(self._vue(), "Enregistrer une dépense")
 
     # --- Ce qui quitte la vue d'ensemble -----------------------------------------
 
@@ -6143,8 +6143,8 @@ class IndicatorHelpTests(TestCase):
         page = self._page()
 
         self.assertContains(page, "photographie d'aujourd'hui")
-        self.assertContains(page, "n'est pas recompte")
-        self.assertContains(page, "jamais passes entre ses mains")
+        self.assertContains(page, "n'est pas recompté")
+        self.assertContains(page, "jamais passés entre ses mains")
 
     # --- Elles se signalent ---------------------------------------------------------
 
@@ -6675,20 +6675,20 @@ class AnalyticsRevenueGridTests(TestCase):
     def test_the_grid_opens_the_analytics_view(self):
         page = self._page().content.decode("utf-8")
 
-        self.assertIn("Revenus de la periode", page)
-        self.assertLess(page.index("Revenus de la periode"), page.index("Renouvellements"))
+        self.assertIn("Revenus de la période", page)
+        self.assertLess(page.index("Revenus de la période"), page.index("Renouvellements"))
 
     def test_the_overview_does_not_carry_it(self):
         # La vue d'ensemble a sa caisse du jour : la grille de periode releve
         # de l'analyse.
-        self.assertNotContains(self._page(vue="dashboard"), "Revenus de la periode")
+        self.assertNotContains(self._page(vue="dashboard"), "Revenus de la période")
 
     def test_the_revenue_is_stated_once_in_analytics(self):
         # Les deux cartes qui repetaient ce chiffre ont disparu : la grille est
         # sa seule place.
         page = self._page().content.decode("utf-8")
 
-        self.assertEqual(page.count("Revenus de la periode"), 1)
+        self.assertEqual(page.count("Revenus de la période"), 1)
         self.assertNotIn("Revenus periode", page)
 
     # --- Le revenu reflete le total ----------------------------------------------------
@@ -6937,7 +6937,7 @@ class AnalyticsOperationsTableTests(TestCase):
         page = self._page().content.decode("utf-8")
 
         position = page.index('id="operations"')
-        self.assertLess(page.index("Revenus de la periode"), position)
+        self.assertLess(page.index("Revenus de la période"), position)
         self.assertLess(position, page.index("Renouvellements"))
 
     def test_the_overview_computes_no_table(self):
@@ -7305,13 +7305,13 @@ class VocabulaireDeLaTresorerieTests(TestCase):
     def test_the_card_is_named_a_cash_flow(self):
         reponse = self._analytique()
 
-        self.assertContains(reponse, "Flux net de tresorerie")
+        self.assertContains(reponse, "Flux net de trésorerie")
         self.assertNotContains(reponse, ">Resultat<")
 
     def test_the_definition_says_what_it_leaves_out(self):
         reponse = self._analytique()
 
-        self.assertContains(reponse, "Ce n'est pas un benefice")
+        self.assertContains(reponse, "Ce n'est pas un bénéfice")
         self.assertContains(reponse, "amortissement")
 
 
@@ -7422,3 +7422,94 @@ class LibellesDuStockTests(TestCase):
         )
 
         self.assertContains(self._analytique(), "Aucun produit proche de la rupture")
+
+
+
+class FinitionsDeLaVueAnalytiqueTests(TestCase):
+    """
+    Ce qui se lit doit s'ecrire correctement.
+
+    La page melangeait les mots accentues et les mots nus, annoncait les
+    membres alors qu'elle porte aussi les finances, le stock et le coaching,
+    et tirait ses badges d'une palette voisine de celle des tons.
+    """
+
+    def setUp(self):
+        self.organisation = Organization.objects.create(
+            name="Org Finitions", slug="org-finitions"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organisation,
+            name="Royal Gym Finitions",
+            slug="gym-finitions",
+            subdomain="gym-finitions",
+        )
+        for code in ("MEMBERS", "POS", "ACCESS"):
+            module, _ = Module.objects.get_or_create(code=code, defaults={"name": code})
+            GymModule.objects.get_or_create(
+                gym=self.gym, module=module, defaults={"is_active": True}
+            )
+        self.proprietaire = User.objects.create_user(
+            username="proprio-finitions", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.proprietaire, gym=self.gym, role="owner", is_active=True
+        )
+        self.client.force_login(self.proprietaire)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _analytique(self):
+        return self.client.get(
+            reverse("core:gym_dashboard", args=[self.gym.id]), {"view": "analytics"}
+        )
+
+    def test_the_page_is_named_after_the_gym_not_after_one_module(self):
+        reponse = self._analytique()
+
+        self.assertContains(reponse, "Vue analytique de Royal Gym Finitions")
+        self.assertNotContains(reponse, "Vue analytique membres")
+
+    def test_the_words_carry_their_accents(self):
+        reponse = self._analytique()
+
+        for mot in ("Période", "Décaissements", "Catégorie", "Opération", "Méthode"):
+            self.assertContains(reponse, mot)
+
+    def test_the_unaccented_spellings_are_gone(self):
+        reponse = self._analytique()
+
+        for mot in (">Periode<", ">Decaissements<", "<th>Categorie</th>", "<th>Operation</th>"):
+            self.assertNotContains(reponse, mot)
+
+    def test_the_badges_use_the_tones_that_carry_a_meaning(self):
+        # Deux verts differents sur la meme page ne veulent plus rien dire.
+        # Le gabarit est lu directement : l'en-tete commun a toutes les pages
+        # garde ses propres badges, et il n'est pas le sujet ici.
+        gabarit = (
+            Path(settings.BASE_DIR) / "core" / "templates" / "core" / "dashboard_members.html"
+        ).read_text(encoding="utf-8")
+
+        for couleur in ("badge bg-success", "badge bg-danger", "badge bg-warning"):
+            self.assertNotIn(couleur, gabarit)
+        for ton in ("badge-ton-normal", "badge-ton-attention", "badge-ton-urgent"):
+            self.assertIn(ton, gabarit)
+
+    def test_the_tables_may_wrap_instead_of_scrolling_sideways(self):
+        reponse = self._analytique()
+
+        self.assertContains(reponse, "table-responsive table-lisible")
+        self.assertContains(reponse, "css/tableaux.css")
+
+    def test_the_flat_tone_is_dark_enough_to_carry_white_text(self):
+        palette = Path(settings.BASE_DIR) / "static" / "css" / "palette.css"
+
+        self.assertIn("--ton-urgent-aplat", palette.read_text(encoding="utf-8"))
+
+    def test_the_theme_rule_that_forced_one_line_is_answered(self):
+        feuille = Path(settings.BASE_DIR) / "static" / "css" / "tableaux.css"
+        regle = feuille.read_text(encoding="utf-8")
+
+        self.assertIn(".table-lisible", regle)
+        self.assertIn("white-space: normal", regle)

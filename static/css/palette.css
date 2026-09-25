@@ -38,6 +38,7 @@
     --ton-normal: #17c666;
     --ton-attention: #ffa21d;
     --ton-urgent: #ea4d4d;
+    --ton-urgent-aplat: #c8262c;
     --ton-neutre: #334155;
 
     --chiffre-cle: #0B0B0B;
@@ -62,6 +63,24 @@ html.app-skin-dark {
 .ton-urgent { color: var(--ton-urgent) !important; }
 .ton-neutre { color: var(--ton-neutre) !important; }
 .ton-strategique { color: var(--royal-or-texte) !important; }
+
+/* ========== Les memes tons, en aplat ========== */
+
+/* Un badge dit un etat : il doit porter le sens du ton, pas une autre couleur.
+   Les badges du theme tiraient leur vert et leur rouge d'une palette voisine ;
+   deux verts differents sur la meme page ne veulent plus rien dire.
+
+   Le rouge est assombri pour les aplats : sur #ea4d4d, un texte blanc tombe a
+   3,5:1 - sous le seuil de lisibilite. Ce n'est pas un autre rouge, c'est le
+   meme, rendu lisible sous du texte. */
+.badge-ton-normal { background-color: var(--ton-normal) !important; color: #06240f !important; }
+.badge-ton-attention { background-color: var(--ton-attention) !important; color: #3a2400 !important; }
+.badge-ton-urgent { background-color: var(--ton-urgent-aplat) !important; color: #ffffff !important; }
+.badge-ton-strategique { background-color: var(--royal-or) !important; color: var(--royal-noir) !important; }
+
+/* Une barre de proportion n'annonce aucune anomalie : elle porte l'or de la
+   marque plutot que le bleu du theme. */
+.barre-strategique { background-color: var(--royal-or) !important; }
 
 /* ========== Les chiffres principaux ========== */
 

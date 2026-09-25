@@ -124,7 +124,7 @@ class MachinesTenantTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "KPI machines")
-        self.assertContains(response, "Disponibilite du parc")
+        self.assertContains(response, "Disponibilité du parc")
         self.assertContains(response, "1 / 1")
         self.assertContains(response, "75 CDF")
         self.assertNotContains(response, "999 CDF")
