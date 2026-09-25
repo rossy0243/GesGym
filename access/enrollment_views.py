@@ -279,7 +279,7 @@ def staff_face_enrollment(request, employee_id):
             ),
             "recherche_fiche": recherche_fiche,
             "fiches_terminal": (
-                personnel.fiches_du_terminal(request.gym, recherche_fiche)
+                personnel.fiches_du_lecteur(request.gym, recherche_fiche)
                 if afficher_fiches and employe.is_active
                 else None
             ),
@@ -440,6 +440,16 @@ def staff_switch_from_member(request, employee_id):
         request,
         f"La fiche membre de {nom_membre} est desactivee ; son historique est conserve.",
     )
+    if resultat["non_retirees"]:
+        # C'est ce qui produit ensuite "ce visage existe deja" sans qu'on sache
+        # ou le chercher : autant le dire tout de suite, et dire quoi faire.
+        messages.warning(
+            request,
+            "Le lecteur n'a pas confirme la suppression de l'ancienne fiche "
+            + " ".join(resultat["non_retirees"])
+            + ". Si la capture est refusee (« visage deja enregistre »), ouvrez "
+            "« Fiches presentes sur le lecteur » et liberez la fiche qui le porte.",
+        )
     if resultat["echecs"]:
         messages.warning(
             request, "Le lecteur n'a pas tout accepte. " + " ".join(resultat["echecs"])
@@ -455,6 +465,55 @@ def staff_switch_from_member(request, employee_id):
             request, f"Visage repris : {employe.name} entre desormais comme personnel."
         )
 
+    return redirect("access:staff_face_enrollment", employee_id=employe.id)
+
+
+@login_required
+@module_required("ACCESS")
+@role_required(RH_EMPLOYEE_ROLES)
+@require_POST
+def staff_release_face(request, employee_id):
+    """
+    Supprime du lecteur une fiche qui bloque un visage.
+
+    Le lecteur refuse d'attacher un meme visage a deux fiches. Quand la fiche
+    qui le porte n'est plus utile - membre parti, essai, enrolement rate - il
+    faut pouvoir la liberer sans passer par l'ecran du terminal.
+    """
+    employe = _employe_de(request, employee_id)
+    try:
+        device_id = int(request.POST.get("device_id", ""))
+    except (TypeError, ValueError):
+        raise Http404
+    lecteur = get_object_or_404(AccessDevice, id=device_id, gym=request.gym, is_active=True)
+    numero = (request.POST.get("employee_no") or "").strip()
+    porteur = (request.POST.get("porteur") or "").strip()[:255]
+
+    try:
+        personnel.liberer_fiche(lecteur, numero)
+    except enrollment.EnrollmentError as exc:
+        messages.error(request, str(exc))
+        return redirect("access:staff_face_enrollment", employee_id=employe.id)
+
+    log_sensitive_action(
+        request,
+        "access.reader_record_released",
+        "AccessDevice",
+        lecteur.name,
+        metadata={
+            "employee_no": numero,
+            "porteur": porteur,
+            "demande_pour": employe.name,
+            "employee_id": employe.id,
+        },
+        gym=request.gym,
+    )
+    messages.success(
+        request,
+        f"Fiche n° {numero} supprimee de {lecteur.name}"
+        + (f" ({porteur})." if porteur else ".")
+        + " Le visage est libere : vous pouvez le capturer.",
+    )
     return redirect("access:staff_face_enrollment", employee_id=employe.id)
 
 

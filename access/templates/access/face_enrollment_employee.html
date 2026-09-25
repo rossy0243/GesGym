@@ -114,19 +114,19 @@
         </div>
 
         <div class="etape-carte p-4 mb-3" id="fiche-terminal">
-            <h6 class="fw-bold mb-2">Visage déjà sur le terminal ?</h6>
+            <h6 class="fw-bold mb-2">Fiches présentes sur le lecteur</h6>
             <p class="small text-muted">
-                Si cet employé a été créé directement sur le terminal, le lecteur
-                refuse une nouvelle capture (« visage déjà enregistré »). Rattachez
-                plutôt sa fiche : il garde le même visage, et ses passages sont
-                journalisés à son nom.
+                Le lecteur refuse d'attacher un même visage à deux fiches
+                (« visage déjà enregistré »). Cette liste dit ce que porte chaque
+                fiche : un membre, un employé, ou une fiche créée à la main.
+                Rattachez celle de cet employé, ou libérez celle qui bloque.
             </p>
             <p class="small text-muted">
                 Fiche sans nom ? Faites passer l'employé à la porte, puis lisez les
                 fiches : celle qui vient de passer arrive en tête de liste.
             </p>
             {% if fiches_terminal is None %}
-            <a href="?fiches=1#fiche-terminal" class="btn btn-sm btn-outline-secondary">Lire les fiches du terminal</a>
+            <a href="?fiches=1#fiche-terminal" class="btn btn-sm btn-outline-secondary">Lire les fiches du lecteur</a>
             {% else %}
             <form method="get" action="#fiche-terminal" class="d-flex gap-2 mb-2">
                 <input type="hidden" name="fiches" value="1">
@@ -142,10 +142,18 @@
                 <div class="flex-grow-1 small">
                     <strong class="d-block">{{ fiche.nom }}</strong>
                     <span class="text-muted">n° {{ fiche.numero }}{% if devices|length > 1 %} — {{ fiche.device.name }}{% endif %}</span>
-                    <span class="d-block {% if fiche.passe_aujourdhui %}ton-normal fw-semibold{% else %}text-muted{% endif %}">
-                        {% if fiche.passe_aujourdhui %}passé aujourd'hui à {{ fiche.dernier_passage|date:"H:i" }}{% elif fiche.dernier_passage %}dernier passage le {{ fiche.dernier_passage|date:"d/m/Y à H:i" }}{% else %}jamais vu passer{% endif %}
-                    </span>
+                    {% if fiche.nature == "membre" %}
+                        <span class="d-block text-muted">Fiche membre : {{ fiche.porteur }}</span>
+                    {% elif fiche.nature == "personnel" %}
+                        <span class="d-block text-muted">Fiche du personnel : {{ fiche.porteur }}</span>
+                    {% else %}
+                        <span class="d-block {% if fiche.passe_aujourdhui %}ton-normal fw-semibold{% else %}text-muted{% endif %}">
+                            Créée à la main &mdash;
+                            {% if fiche.passe_aujourdhui %}passé aujourd'hui à {{ fiche.dernier_passage|date:"H:i" }}{% elif fiche.dernier_passage %}dernier passage le {{ fiche.dernier_passage|date:"d/m/Y à H:i" }}{% else %}jamais vu passer{% endif %}
+                        </span>
+                    {% endif %}
                 </div>
+                {% if fiche.adoptable %}
                 <form method="post" action="{% url 'access:staff_adopt_terminal_record' employee.id %}"
                       onsubmit="return confirm('Rattacher la fiche {{ fiche.nom|escapejs }} du terminal à cet employé ?');">
                     {% csrf_token %}
@@ -154,10 +162,21 @@
                     <input type="hidden" name="nom" value="{{ fiche.nom }}">
                     <button type="submit" class="btn btn-sm btn-outline-primary">Rattacher</button>
                 </form>
+                {% endif %}
+                {% comment %} La sortie de secours : liberer le visage qu'une fiche
+                   retient, pour pouvoir le capturer ici. {% endcomment %}
+                <form method="post" action="{% url 'access:staff_release_face' employee.id %}"
+                      onsubmit="return confirm('Supprimer la fiche {{ fiche.nom|escapejs }} (n° {{ fiche.numero }}) du lecteur ? La personne qui la porte n\'entrera plus par le visage tant qu\'elle n\'est pas réinscrite.');">
+                    {% csrf_token %}
+                    <input type="hidden" name="device_id" value="{{ fiche.device.id }}">
+                    <input type="hidden" name="employee_no" value="{{ fiche.numero }}">
+                    <input type="hidden" name="porteur" value="{{ fiche.porteur|default:fiche.nom }}">
+                    <button type="submit" class="btn btn-sm btn-outline-danger">Libérer</button>
+                </form>
             </div>
             {% empty %}
             {% if not fiches_terminal.erreurs %}
-            <p class="small text-muted mb-0">Aucune fiche créée à la main {% if recherche_fiche %}ne correspond{% else %}n'est libre sur le lecteur{% endif %}.</p>
+            <p class="small text-muted mb-0">Aucune fiche {% if recherche_fiche %}ne correspond à cette recherche{% else %}sur le lecteur{% endif %}.</p>
             {% endif %}
             {% endfor %}
             {% endif %}

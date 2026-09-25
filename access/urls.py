@@ -32,6 +32,7 @@ urlpatterns = [
         path("personnel/<int:employee_id>/visage/retirer/", enrollment_views.staff_face_remove, name="staff_face_remove"),
         path("personnel/<int:employee_id>/visage/depuis-membre/", enrollment_views.staff_switch_from_member, name="staff_switch_from_member"),
         path("personnel/<int:employee_id>/visage/adopter-fiche/", enrollment_views.staff_adopt_terminal_record, name="staff_adopt_terminal_record"),
+        path("personnel/<int:employee_id>/visage/liberer-fiche/", enrollment_views.staff_release_face, name="staff_release_face"),
         path("personnel/retraits/<int:record_id>/reessayer/", enrollment_views.staff_removal_retry, name="staff_removal_retry"),
 
         # Messages affiches sur l'ecran du lecteur.

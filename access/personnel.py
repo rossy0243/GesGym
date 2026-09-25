@@ -256,6 +256,7 @@ def basculer_membre(employee, member):
     numero_membre = enrollment.employee_no(member)
 
     retires = []
+    non_retirees = []
     for device in lecteurs:
         client = hikvision.HikvisionClient.from_device(device, timeout=25)
         try:
@@ -267,8 +268,12 @@ def basculer_membre(employee, member):
                 "reessayez quand le lecteur est joignable."
             ) from exc
         except hikvision.HikvisionError as exc:
-            # Un refus sans panne vient le plus souvent d'une fiche absente de
-            # ce lecteur. Si elle y est encore, la pose du visage le dira.
+            # Le plus souvent, la fiche n'etait pas sur ce lecteur : bloquer la
+            # bascule pour cela empecherait un cas parfaitement legitime. Mais
+            # si elle y est restee, le visage aussi, et la capture echouera
+            # plus loin sur "ce visage existe deja". On le dit donc, au lieu de
+            # le taire comme avant.
+            non_retirees.append(f"{device.name} : {exc}")
             logger.info(
                 "Retrait de la fiche membre %s sur %s refuse : %s",
                 numero_membre, device.name, exc,
@@ -288,7 +293,12 @@ def basculer_membre(employee, member):
                 continue
         noter_inscription(device, employee)
 
-    return {"photo": photo is not None, "lecteurs": len(lecteurs), "echecs": echecs}
+    return {
+        "photo": photo is not None,
+        "lecteurs": len(lecteurs),
+        "echecs": echecs,
+        "non_retirees": non_retirees,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -350,19 +360,23 @@ def libelle_de_la_fiche(nom, numero):
     return ((nom or "").strip() or f"Fiche {str(numero).strip()}")[:128]
 
 
-def fiches_du_terminal(gym, recherche=""):
+def fiches_du_lecteur(gym, recherche=""):
     """
-    Fiches creees a la main sur les lecteurs actifs, et pas encore adoptees.
+    Tout ce que portent les lecteurs actifs, et a qui chaque fiche correspond.
 
-    Chaque fiche porte son dernier passage connu : une fiche sans nom se
-    reconnait en faisant passer la personne a la porte, puis en prenant celle
-    qui vient de passer. Les plus recentes viennent donc en tete.
+    Le lecteur ne connait que des numeros. Sans cette lecture, un visage
+    refuse - "ce visage existe deja" - ne se retrouvait nulle part : ni dans
+    les fiches du terminal, qui ecartent les numeros de l'application, ni dans
+    les membres, dont la fiche n'apparait pas sur cet ecran.
 
-    Interroge chaque lecteur : a n'appeler que sur demande. Un lecteur
-    injoignable est signale sans empecher de lire les autres.
+    Chaque fiche dit donc sa nature : membre, personnel, ou fiche creee a la
+    main. Un lecteur injoignable est signale sans empecher de lire les autres.
     """
     from django.db.models import Max
     from django.utils import timezone
+
+    from members.models import Member
+    from rh.models import Employee
 
     from . import hikvision
 
@@ -376,8 +390,10 @@ def fiches_du_terminal(gym, recherche=""):
             resultat["erreurs"].append(f"{device.name} : {exc}")
             continue
 
-        adoptees = set(
-            StaffReaderRecord.objects.filter(device=device).values_list("employee_no", flat=True)
+        adoptees = dict(
+            StaffReaderRecord.objects.filter(device=device)
+            .select_related("employee")
+            .values_list("employee_no", "employee__name")
         )
         # Une requete par lecteur, quel que soit le nombre de fiches.
         derniers_passages = dict(
@@ -387,28 +403,57 @@ def fiches_du_terminal(gym, recherche=""):
             .annotate(dernier=Max("check_in_time"))
             .values_list("terminal_label", "dernier")
         )
+
         for fiche in lues:
             numero = str(fiche.get("employeeNo") or "").strip()
-            if (
-                not numero
-                or not est_une_fiche_du_terminal(numero)
-                or numero in adoptees
-            ):
+            if not numero:
                 continue
             nom = str(fiche.get("name") or "").strip()
             if recherche and recherche not in nom.lower() and recherche not in numero:
                 continue
-            dernier = derniers_passages.get(libelle_de_la_fiche(nom, numero))
-            resultat["fiches"].append({
+
+            ligne = {
                 "device": device,
                 "numero": numero,
                 "nom": nom or f"Fiche {numero}",
-                "dernier_passage": dernier,
-                "passe_aujourdhui": (
+                "nature": "manuelle",
+                "porteur": "",
+                "membre_id": None,
+                "adoptable": False,
+                "dernier_passage": None,
+                "passe_aujourdhui": False,
+            }
+
+            member_id = enrollment.member_id_depuis(numero)
+            employee_id = enrollment.employee_id_depuis(numero)
+
+            if member_id is not None:
+                membre = Member.objects.filter(gym=gym, id=member_id).first()
+                ligne["nature"] = "membre"
+                ligne["membre_id"] = member_id
+                ligne["porteur"] = (
+                    f"{membre.first_name} {membre.last_name}".strip()
+                    + ("" if membre.is_active else " (fiche desactivee)")
+                    if membre
+                    else "membre supprime de l'application"
+                )
+            elif employee_id is not None:
+                employe = Employee.objects.filter(gym=gym, id=employee_id).first()
+                ligne["nature"] = "personnel"
+                ligne["porteur"] = employe.name if employe else "employe supprime de l'application"
+            elif numero in adoptees:
+                ligne["nature"] = "personnel"
+                ligne["porteur"] = adoptees[numero] or "employe supprime de l'application"
+            else:
+                ligne["adoptable"] = True
+                dernier = derniers_passages.get(libelle_de_la_fiche(nom, numero))
+                ligne["dernier_passage"] = dernier
+                ligne["passe_aujourdhui"] = (
                     dernier is not None
                     and timezone.localtime(dernier).date() == timezone.localdate()
-                ),
-            })
+                )
+
+            resultat["fiches"].append(ligne)
 
     # La fiche qui vient de passer en tete ; les fiches jamais vues a la fin.
     resultat["fiches"].sort(
@@ -419,6 +464,39 @@ def fiches_du_terminal(gym, recherche=""):
         )
     )
     return resultat
+
+
+def fiches_du_terminal(gym, recherche=""):
+    """
+    Les seules fiches rattachables : creees a la main, pas encore adoptees.
+
+    L'inventaire complet sert a comprendre ; celui-ci sert a agir.
+    """
+    inventaire = fiches_du_lecteur(gym, recherche)
+    return {
+        "erreurs": inventaire["erreurs"],
+        "fiches": [fiche for fiche in inventaire["fiches"] if fiche["adoptable"]],
+    }
+
+
+def liberer_fiche(device, numero):
+    """
+    Supprime du lecteur la fiche qui porte ce numero, quelle qu'elle soit.
+
+    C'est la sortie de secours quand le lecteur refuse un visage deja
+    enregistre ailleurs : membre parti, fiche d'essai, enrolement rate. La
+    personne qui la porte ne passera plus par le visage tant qu'elle n'est pas
+    reinscrite - le message de confirmation doit le dire.
+    """
+    numero = str(numero or "").strip()
+    if not numero.isdigit():
+        raise enrollment.EnrollmentError("Numero de fiche illisible.")
+    if not device.is_active:
+        raise enrollment.EnrollmentError("Ce lecteur n'est pas actif.")
+
+    enrollment.retirer_fiche(device, numero)
+    StaffReaderRecord.objects.filter(device=device, employee_no=numero).delete()
+    return numero
 
 
 def adopter_fiche(device, employee, numero):

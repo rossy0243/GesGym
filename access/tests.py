@@ -5217,7 +5217,7 @@ class StaffTerminalAdoptionTests(TestCase):
             reponse = self.client.get(self.url_ecran)
 
         lecture.assert_not_called()
-        self.assertContains(reponse, "Lire les fiches du terminal")
+        self.assertContains(reponse, "Lire les fiches du lecteur")
 
     def test_the_screen_lists_terminal_records_on_demand(self):
         with patch.object(
@@ -5926,3 +5926,246 @@ class HistoriqueDesPassagesTests(TestCase):
 
         agents = list(reponse.context["history_agents"])
         self.assertEqual([a.username for a in agents], ["agent-historique"])
+
+
+
+class InventaireDuLecteurTests(TestCase):
+    """
+    L'ecran dit ce que porte chaque fiche du lecteur, et permet de la liberer.
+
+    Le lecteur ne connait que des numeros. Un visage refuse - "ce visage
+    existe deja" - ne se retrouvait nulle part : les fiches membres etaient
+    ecartees de la liste, et la fiche du membre n'apparait pas sur cet ecran.
+    """
+
+    def setUp(self):
+        from .models import StaffReaderRecord
+
+        self.Fiche = StaffReaderRecord
+        (self.gym, self.device, self.member, self.employe,
+         self.employe_voisin) = _salle_avec_personnel("inventaire")
+        self.gerant = User.objects.create_user(username="gerant-inventaire", password="pass12345")
+        UserGymRole.objects.create(user=self.gerant, gym=self.gym, role="manager", is_active=True)
+        self._connecter(self.gerant)
+        self.url = reverse("access:staff_face_enrollment", args=[self.employe.id])
+        self.numero_membre = enrollment.employee_no(self.member)
+        self.numero_employe = enrollment.numero_personnel(self.employe)
+
+    def _connecter(self, utilisateur):
+        self.client.force_login(utilisateur)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _lues(self):
+        return [
+            {"employeeNo": self.numero_membre, "name": "Kevin Tassa"},
+            {"employeeNo": self.numero_employe, "name": "Paul Gardien"},
+            {"employeeNo": "5", "name": "Gardien de nuit"},
+        ]
+
+    def _inventaire(self, recherche=""):
+        from . import personnel
+
+        with patch.object(hikvision.HikvisionClient, "list_users", return_value=self._lues()):
+            return personnel.fiches_du_lecteur(self.gym, recherche)["fiches"]
+
+    # --- Ce que porte chaque fiche ------------------------------------------------------------
+
+    def test_every_record_says_what_it_holds(self):
+        fiches = {fiche["numero"]: fiche for fiche in self._inventaire()}
+
+        self.assertEqual(fiches[self.numero_membre]["nature"], "membre")
+        self.assertIn("Alice", fiches[self.numero_membre]["porteur"])
+        self.assertEqual(fiches[self.numero_employe]["nature"], "personnel")
+        self.assertEqual(fiches[self.numero_employe]["porteur"], "Paul Gardien")
+        self.assertEqual(fiches["5"]["nature"], "manuelle")
+
+    def test_only_a_manual_record_can_be_attached(self):
+        fiches = {fiche["numero"]: fiche for fiche in self._inventaire()}
+
+        self.assertTrue(fiches["5"]["adoptable"])
+        self.assertFalse(fiches[self.numero_membre]["adoptable"])
+        self.assertFalse(fiches[self.numero_employe]["adoptable"])
+
+    def test_a_deactivated_member_is_named_as_such(self):
+        self.member.is_active = False
+        self.member.save()
+
+        fiches = {fiche["numero"]: fiche for fiche in self._inventaire()}
+
+        self.assertIn("desactivee", fiches[self.numero_membre]["porteur"])
+
+    def test_a_record_of_a_deleted_member_is_still_shown(self):
+        # Le cas qui bloque un visage sans qu'on sache pourquoi.
+        numero = str(enrollment.PLAGE_APPLICATION + 999_999)
+        with patch.object(
+            hikvision.HikvisionClient, "list_users",
+            return_value=[{"employeeNo": numero, "name": "Inconnu"}],
+        ):
+            from . import personnel
+
+            fiches = personnel.fiches_du_lecteur(self.gym)["fiches"]
+
+        self.assertEqual(fiches[0]["nature"], "membre")
+        self.assertIn("supprime", fiches[0]["porteur"])
+
+    def test_the_attachable_list_keeps_only_manual_records(self):
+        from . import personnel
+
+        with patch.object(hikvision.HikvisionClient, "list_users", return_value=self._lues()):
+            adoptables = personnel.fiches_du_terminal(self.gym)["fiches"]
+
+        self.assertEqual([fiche["numero"] for fiche in adoptables], ["5"])
+
+    def test_the_search_finds_a_member_record(self):
+        fiches = self._inventaire("kevin")
+
+        self.assertEqual([fiche["numero"] for fiche in fiches], [self.numero_membre])
+
+    # --- L'ecran ---------------------------------------------------------------------------------
+
+    def test_the_screen_shows_every_record_on_demand(self):
+        with patch.object(hikvision.HikvisionClient, "list_users", return_value=self._lues()):
+            reponse = self.client.get(self.url, {"fiches": "1"})
+
+        self.assertContains(reponse, "Kevin Tassa")
+        self.assertContains(reponse, "Fiche membre")
+        self.assertContains(reponse, "Libérer")
+        self.assertContains(reponse, reverse("access:staff_release_face", args=[self.employe.id]))
+
+    # --- La commande ---------------------------------------------------------------------------------
+
+    def _inspecter(self, lues=None, **options):
+        import io
+
+        from django.core.management import call_command
+
+        sortie = io.StringIO()
+        with patch.object(
+            hikvision.HikvisionClient, "list_users",
+            return_value=self._lues() if lues is None else lues,
+        ):
+            call_command("inspecter_lecteur", stdout=sortie, **options)
+        return sortie.getvalue()
+
+    def test_the_command_says_what_each_record_holds(self):
+        texte = self._inspecter()
+
+        self.assertIn("fiche membre", texte)
+        self.assertIn("Alice", texte)
+        self.assertIn("fiche du personnel", texte)
+        self.assertIn("creee a la main", texte)
+
+    def test_the_command_can_look_for_one_name(self):
+        texte = self._inspecter(chercher="kevin")
+
+        self.assertIn(self.numero_membre, texte)
+        self.assertNotIn("Gardien de nuit", texte)
+
+    def test_an_unreachable_reader_is_reported_by_the_command(self):
+        import io
+
+        from django.core.management import call_command
+
+        sortie = io.StringIO()
+        with patch.object(
+            hikvision.HikvisionClient, "list_users",
+            side_effect=hikvision.HikvisionUnreachable("cable arrache"),
+        ):
+            call_command("inspecter_lecteur", stdout=sortie)
+
+        self.assertIn("injoignable", sortie.getvalue())
+
+    # --- Liberer un visage --------------------------------------------------------------------------
+
+    def test_releasing_a_record_removes_it_from_the_reader(self):
+        with patch.object(hikvision.HikvisionClient, "delete_user") as retrait:
+            reponse = self.client.post(
+                reverse("access:staff_release_face", args=[self.employe.id]),
+                {"device_id": self.device.id, "employee_no": self.numero_membre,
+                 "porteur": "Kevin Tassa"},
+                follow=True,
+            )
+
+        retrait.assert_called_once_with(self.numero_membre)
+        self.assertContains(reponse, "Le visage est libere")
+        trace = SensitiveActivityLog.objects.get(action="access.reader_record_released")
+        self.assertEqual(trace.metadata["employee_no"], self.numero_membre)
+
+    def test_releasing_also_forgets_an_attached_record(self):
+        from . import personnel
+
+        personnel.adopter_fiche(self.device, self.employe, "5")
+
+        with patch.object(hikvision.HikvisionClient, "delete_user"):
+            self.client.post(
+                reverse("access:staff_release_face", args=[self.employe.id]),
+                {"device_id": self.device.id, "employee_no": "5"},
+            )
+
+        self.assertFalse(self.Fiche.objects.filter(employee_no="5").exists())
+
+    def test_an_unreachable_reader_says_so(self):
+        with patch.object(
+            hikvision.HikvisionClient, "delete_user",
+            side_effect=hikvision.HikvisionUnreachable("cable"),
+        ):
+            reponse = self.client.post(
+                reverse("access:staff_release_face", args=[self.employe.id]),
+                {"device_id": self.device.id, "employee_no": "5"},
+                follow=True,
+            )
+
+        self.assertContains(reponse, "injoignable")
+
+    def test_a_receptionist_cannot_release(self):
+        accueil = User.objects.create_user(username="accueil-inventaire", password="pass12345")
+        UserGymRole.objects.create(user=accueil, gym=self.gym, role="reception", is_active=True)
+        self._connecter(accueil)
+
+        with patch.object(hikvision.HikvisionClient, "delete_user") as retrait:
+            reponse = self.client.post(
+                reverse("access:staff_release_face", args=[self.employe.id]),
+                {"device_id": self.device.id, "employee_no": "5"},
+            )
+
+        self.assertIn(reponse.status_code, (302, 403))
+        retrait.assert_not_called()
+
+    def test_a_reader_of_another_gym_is_out_of_reach(self):
+        ailleurs = AccessDevice.objects.create(
+            gym=self.employe_voisin.gym, name="Ailleurs", host="10.0.0.8", password="secret"
+        )
+
+        reponse = self.client.post(
+            reverse("access:staff_release_face", args=[self.employe.id]),
+            {"device_id": ailleurs.id, "employee_no": "5"},
+        )
+
+        self.assertEqual(reponse.status_code, 404)
+
+    # --- La bascule le dit ----------------------------------------------------------------------------
+
+    def test_a_switch_warns_when_the_old_record_was_not_removed(self):
+        from django.core.files.base import ContentFile
+
+        membre = Member.objects.create(
+            gym=self.gym, first_name="Kevin", last_name="Tassa", phone="+243821331784",
+        )
+        membre.photo.save(f"visage_membre_{membre.id}.jpg", ContentFile(_image_jpeg()), save=True)
+
+        with patch.object(
+            hikvision.HikvisionClient, "delete_user",
+            side_effect=hikvision.HikvisionError("fiche verrouillee"),
+        ), patch.object(hikvision.HikvisionClient, "upsert_user"), patch.object(
+            hikvision.HikvisionClient, "set_face"
+        ):
+            reponse = self.client.post(
+                reverse("access:staff_switch_from_member", args=[self.employe.id]),
+                {"member_id": membre.id},
+                follow=True,
+            )
+
+        self.assertContains(reponse, "n&#x27;a pas confirme la suppression")
+        self.assertContains(reponse, "liberez la fiche")
