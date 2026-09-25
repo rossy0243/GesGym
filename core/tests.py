@@ -7513,3 +7513,134 @@ class FinitionsDeLaVueAnalytiqueTests(TestCase):
 
         self.assertIn(".table-lisible", regle)
         self.assertIn("white-space: normal", regle)
+
+
+
+class PeriodesComparablesTests(SimpleTestCase):
+    """
+    Une periode en cours ne se compare pas a une periode entiere.
+
+    Au 16 septembre, le tableau opposait seize jours de septembre aux trente
+    et un jours d'aout : le chiffre d'affaires paraissait s'effondrer chaque
+    debut de mois, et remonter tout seul a la fin.
+    """
+
+    def _fenetre(self, cle, reference):
+        from core.views import _get_period_window
+
+        return _get_period_window(cle, reference)
+
+    def test_a_month_in_progress_is_compared_to_the_same_days_before(self):
+        fenetre = self._fenetre("month", date(2026, 9, 16))
+
+        self.assertEqual(fenetre["start_date"], date(2026, 9, 1))
+        self.assertEqual(fenetre["effective_end"], date(2026, 9, 16))
+        self.assertEqual(fenetre["previous_start"], date(2026, 8, 1))
+        self.assertEqual(fenetre["previous_end"], date(2026, 8, 16))
+
+    def test_both_windows_cover_the_same_number_of_days(self):
+        fenetre = self._fenetre("month", date(2026, 9, 16))
+
+        ecoules = (fenetre["effective_end"] - fenetre["start_date"]).days + 1
+        compares = (fenetre["previous_end"] - fenetre["previous_start"]).days + 1
+
+        self.assertEqual(ecoules, 16)
+        self.assertEqual(compares, 16)
+
+    def test_a_shorter_previous_month_is_not_overrun(self):
+        # Le 31 mars n'a pas d'equivalent en fevrier : la fenetre precedente
+        # s'arrete au dernier jour qui existe, elle ne deborde pas sur mars.
+        fenetre = self._fenetre("month", date(2026, 3, 31))
+
+        self.assertEqual(fenetre["previous_start"], date(2026, 2, 1))
+        self.assertEqual(fenetre["previous_end"], date(2026, 2, 28))
+
+    def test_a_week_is_compared_to_the_same_days_of_the_week_before(self):
+        # Le 16 septembre 2026 est un mercredi.
+        fenetre = self._fenetre("week", date(2026, 9, 16))
+
+        self.assertEqual(fenetre["start_date"], date(2026, 9, 14))
+        self.assertEqual(fenetre["previous_start"], date(2026, 9, 7))
+        self.assertEqual(fenetre["previous_end"], date(2026, 9, 9))
+
+    def test_a_year_is_compared_to_the_same_months_of_the_year_before(self):
+        fenetre = self._fenetre("year", date(2026, 9, 16))
+
+        self.assertEqual(fenetre["previous_start"], date(2025, 1, 1))
+        self.assertEqual(fenetre["previous_end"], date(2025, 9, 16))
+
+    def test_a_day_is_compared_to_the_day_before(self):
+        fenetre = self._fenetre("day", date(2026, 9, 16))
+
+        self.assertEqual(fenetre["previous_start"], date(2026, 9, 15))
+        self.assertEqual(fenetre["previous_end"], date(2026, 9, 15))
+
+
+class CourbesSansSemainesFuturesTests(TestCase):
+    """
+    Une semaine qui n'a pas commence n'est pas une semaine a zero.
+
+    Les courbes dessinaient le mois entier des le 1er : quatre semaines vides
+    suivaient la premiere, et la lecture etait celle d'un effondrement.
+    """
+
+    def setUp(self):
+        self.organisation = Organization.objects.create(
+            name="Org Courbes", slug="org-courbes"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organisation,
+            name="Gym Courbes",
+            slug="gym-courbes",
+            subdomain="gym-courbes",
+        )
+
+    def _fenetre(self, cle, reference):
+        from core.views import _get_period_window
+
+        return _get_period_window(cle, reference)
+
+    def _revenus(self, fenetre):
+        from core.views import _build_revenue_rows
+
+        return _build_revenue_rows(Payment.objects.none(), fenetre)
+
+    def test_a_month_in_progress_draws_only_the_weeks_that_started(self):
+        rows = self._revenus(self._fenetre("month", date(2026, 9, 16)))
+
+        self.assertEqual([row["label"] for row in rows], ["Semaine 1", "Semaine 2", "Semaine 3"])
+
+    def test_a_finished_month_keeps_all_its_weeks(self):
+        fenetre = self._fenetre("month", date(2026, 9, 30))
+
+        self.assertEqual(len(self._revenus(fenetre)), 5)
+
+    def test_a_week_in_progress_stops_at_today(self):
+        from core.views import _build_attendance_rows
+
+        # Mercredi : lundi, mardi, mercredi, et rien apres.
+        rows = _build_attendance_rows(self.gym, self._fenetre("week", date(2026, 9, 16)))
+
+        self.assertEqual([row["label"] for row in rows], ["Lundi", "Mardi", "Mercredi"])
+
+    def test_a_year_in_progress_stops_at_the_current_month(self):
+        rows = self._revenus(self._fenetre("year", date(2026, 9, 16)))
+
+        self.assertEqual(len(rows), 9)
+
+    def test_a_period_without_a_cutoff_draws_everything(self):
+        # Une fenetre construite a la main, sans date d'arret : le dessin va
+        # jusqu'au bout plutot que de disparaitre.
+        fenetre = dict(self._fenetre("month", date(2026, 9, 16)))
+        fenetre.pop("effective_end")
+
+        self.assertEqual(len(self._revenus(fenetre)), 5)
+
+    def test_the_member_growth_curve_stops_too(self):
+        from core.views import _build_member_growth_rows
+
+        rows = _build_member_growth_rows(
+            Member.objects.filter(gym=self.gym), self._fenetre("month", date(2026, 9, 16))
+        )
+
+        self.assertEqual(len(rows), 3)

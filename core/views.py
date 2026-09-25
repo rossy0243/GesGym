@@ -130,6 +130,8 @@ def _build_revenue_rows(payments_qs, period_data):
         weekdays = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
         for index in range(7):
             current_day = period_data["start_date"] + timedelta(days=index)
+            if current_day > _fin_utile(period_data):
+                break
             rows.append({"label": weekdays[index], "total": totals_by_day.get(current_day, 0)})
 
     elif period_key == "month":
@@ -141,8 +143,8 @@ def _build_revenue_rows(payments_qs, period_data):
         }
         week_start = period_data["start_date"]
         week_index = 1
-        while week_start <= period_data["end_date"]:
-            week_end = min(week_start + timedelta(days=6), period_data["end_date"])
+        while week_start <= _fin_utile(period_data):
+            week_end = min(week_start + timedelta(days=6), _fin_utile(period_data))
             total = 0
             current_day = week_start
             while current_day <= week_end:
@@ -159,7 +161,12 @@ def _build_revenue_rows(payments_qs, period_data):
             .values("month")
             .annotate(total=Sum("amount_cdf"))
         }
-        for month_number in range(1, 13):
+        dernier_mois = (
+            _fin_utile(period_data).month
+            if _fin_utile(period_data).year == period_data["start_date"].year
+            else 12
+        )
+        for month_number in range(1, dernier_mois + 1):
             rows.append({
                 "label": MONTH_LABELS[month_number],
                 "total": totals_by_month.get(month_number, 0),
@@ -1005,18 +1012,50 @@ def _get_period_window(period_key, reference_date):
         end_date = next_month - timedelta(days=1)
 
     period_days = (end_date - start_date).days + 1
-    previous_end = start_date - timedelta(days=1)
-    previous_start = previous_end - timedelta(days=period_days - 1)
+
+    # Une periode en cours n'a pas encore eu lieu en entier. Le 16 du mois, la
+    # comparer au mois precedent complet revenait a opposer seize jours a
+    # trente et un : le chiffre d'affaires paraissait s'effondrer chaque debut
+    # de mois. On s'arrete a aujourd'hui, et on compare la meme duree.
+    effective_end = min(end_date, reference_date)
+    jours_ecoules = max((effective_end - start_date).days + 1, 1)
+
+    if period_key == "day":
+        previous_start = start_date - timedelta(days=1)
+    elif period_key == "week":
+        previous_start = start_date - timedelta(days=7)
+    elif period_key == "year":
+        previous_start = start_date.replace(year=start_date.year - 1)
+    else:
+        dernier_du_mois_precedent = start_date - timedelta(days=1)
+        previous_start = dernier_du_mois_precedent.replace(day=1)
+
+    # La periode precedente s'arrete au meme avancement, sans deborder sur la
+    # suivante : un 31 janvier n'a pas d'equivalent en fevrier.
+    fin_de_la_periode_precedente = start_date - timedelta(days=1)
+    previous_end = min(
+        previous_start + timedelta(days=jours_ecoules - 1),
+        fin_de_la_periode_precedente,
+    )
 
     return {
         "key": period_key,
         "label": PERIOD_LABELS[period_key],
         "start_date": start_date,
         "end_date": end_date,
+        # La derniere date qui a eu lieu : les graphiques n'en dessinent pas
+        # au-dela, et une semaine a venir n'apparait pas a zero.
+        "effective_end": effective_end,
         "previous_start": previous_start,
         "previous_end": previous_end,
         "days": period_days,
+        "jours_ecoules": jours_ecoules,
     }
+
+
+def _fin_utile(period_data):
+    """La derniere date a dessiner : ce qui n'a pas eu lieu n'est pas un creux."""
+    return period_data.get("effective_end") or period_data["end_date"]
 
 
 def _format_period_range(start_date, end_date):
@@ -1136,6 +1175,8 @@ def _build_attendance_rows(gym, period_data):
         weekdays = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
         for index in range(7):
             current_day = period_data["start_date"] + timedelta(days=index)
+            if current_day > _fin_utile(period_data):
+                break
             rows.append({"label": weekdays[index], "count": counts_by_day.get(current_day, 0)})
 
     elif period_key == "month":
@@ -1147,8 +1188,8 @@ def _build_attendance_rows(gym, period_data):
         }
         week_start = period_data["start_date"]
         week_index = 1
-        while week_start <= period_data["end_date"]:
-            week_end = min(week_start + timedelta(days=6), period_data["end_date"])
+        while week_start <= _fin_utile(period_data):
+            week_end = min(week_start + timedelta(days=6), _fin_utile(period_data))
             total = 0
             current_day = week_start
             while current_day <= week_end:
@@ -1165,7 +1206,12 @@ def _build_attendance_rows(gym, period_data):
             .values("month")
             .annotate(count=Count("id"))
         }
-        for month_number in range(1, 13):
+        dernier_mois = (
+            _fin_utile(period_data).month
+            if _fin_utile(period_data).year == period_data["start_date"].year
+            else 12
+        )
+        for month_number in range(1, dernier_mois + 1):
             rows.append({
                 "label": calendar.month_abbr[month_number],
                 "count": counts_by_month.get(month_number, 0),
@@ -1208,6 +1254,8 @@ def _build_member_growth_rows(members_qs, period_data):
         weekdays = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
         for index in range(7):
             current_day = period_data["start_date"] + timedelta(days=index)
+            if current_day > _fin_utile(period_data):
+                break
             rows.append({"label": weekdays[index], "count": counts_by_day.get(current_day, 0)})
 
     elif period_key == "month":
@@ -1219,8 +1267,8 @@ def _build_member_growth_rows(members_qs, period_data):
         }
         week_start = period_data["start_date"]
         week_index = 1
-        while week_start <= period_data["end_date"]:
-            week_end = min(week_start + timedelta(days=6), period_data["end_date"])
+        while week_start <= _fin_utile(period_data):
+            week_end = min(week_start + timedelta(days=6), _fin_utile(period_data))
             total = 0
             current_day = week_start
             while current_day <= week_end:
@@ -1237,7 +1285,12 @@ def _build_member_growth_rows(members_qs, period_data):
             .values("month")
             .annotate(count=Count("id"))
         }
-        for month_number in range(1, 13):
+        dernier_mois = (
+            _fin_utile(period_data).month
+            if _fin_utile(period_data).year == period_data["start_date"].year
+            else 12
+        )
+        for month_number in range(1, dernier_mois + 1):
             rows.append({
                 "label": MONTH_LABELS[month_number],
                 "count": counts_by_month.get(month_number, 0),
