@@ -33,6 +33,11 @@ class Employee(models.Model):
     # compte - hors proprietaire, qui n'est pas sur la feuille de paie - sans
     # quoi une personne peut avoir un acces a l'application et rester
     # impossible a inscrire au personnel. Le commercial etait dans ce cas.
+    #
+    # L'inverse n'est pas vrai, et n'a pas a le devenir : un poste peut exister
+    # sans role de compte. Les agents d'entretien n'ouvrent pas l'application ;
+    # leur donner un compte pour la symetrie leur ouvrirait des ecrans dont ils
+    # n'ont pas besoin.
     ROLE_CHOICES = (
         ("manager", "Manager"),
         ("coach", "Coach"),

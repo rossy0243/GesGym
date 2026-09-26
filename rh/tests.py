@@ -970,6 +970,9 @@ class PostesDuPersonnelTests(TestCase):
         # Garde-fou pour le prochain role ajoute : un role de compte sans poste
         # correspondant laisse une personne sans fiche, sans presence et sans
         # paie. Le proprietaire est la seule exception : il n'est pas salarie.
+        #
+        # Le sens inverse n'est pas verifie, et ne doit pas l'etre : les agents
+        # d'entretien tiennent un poste sans ouvrir l'application.
         from compte.models import UserGymRole
 
         roles_de_compte = {
