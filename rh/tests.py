@@ -919,3 +919,66 @@ class HeureDeDepartTests(TestCase):
         pointage = self.Attendance.objects.get(employee=self.employe)
         self.assertIsNone(pointage.heure_depart)
         self.assertEqual(pointage.duree_affichee, "")
+
+
+
+class PostesDuPersonnelTests(TestCase):
+    """
+    Les postes du personnel couvrent tous les roles de compte.
+
+    Le commercial pouvait recevoir un acces a l'application sans pouvoir etre
+    inscrit au personnel : son poste n'existait pas dans la liste RH. Il
+    restait donc hors des presences, hors de la paie, et hors du pointage.
+    """
+
+    def setUp(self):
+        self.organisation = Organization.objects.create(
+            name="Org Postes", slug="org-postes"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organisation,
+            name="Gym Postes",
+            slug="gym-postes",
+            subdomain="gym-postes",
+        )
+
+    def test_the_sales_role_is_one_of_the_staff_positions(self):
+        postes = dict(Employee.ROLE_CHOICES)
+
+        self.assertIn("commercial", postes)
+        self.assertEqual(postes["commercial"], "Commercial")
+
+    def test_a_commercial_can_be_recorded_as_staff(self):
+        employe = Employee.objects.create(
+            gym=self.gym,
+            name="Sarah Commerciale",
+            role="commercial",
+            daily_salary=Decimal("150.00"),
+        )
+        employe.full_clean()
+
+        self.assertEqual(employe.get_role_display(), "Commercial")
+
+    def test_the_form_offers_the_position(self):
+        from rh.forms import EmployeeForm
+
+        valeurs = [valeur for valeur, _ in EmployeeForm().fields["role"].choices if valeur]
+
+        self.assertIn("commercial", valeurs)
+
+    def test_every_account_role_but_the_owner_is_a_staff_position(self):
+        # Garde-fou pour le prochain role ajoute : un role de compte sans poste
+        # correspondant laisse une personne sans fiche, sans presence et sans
+        # paie. Le proprietaire est la seule exception : il n'est pas salarie.
+        from compte.models import UserGymRole
+
+        roles_de_compte = {
+            valeur for valeur, _ in UserGymRole.ROLE_CHOICES if valeur != "owner"
+        }
+        postes = {valeur for valeur, _ in Employee.ROLE_CHOICES}
+
+        self.assertEqual(
+            roles_de_compte - postes,
+            set(),
+            "Ces roles de compte n'ont pas de poste correspondant au personnel.",
+        )

@@ -29,11 +29,16 @@ def month_bounds(year, month):
 class Employee(models.Model):
     """Employe RH rattache a un gym."""
 
+    # Les postes tenus dans la salle. Ils doivent couvrir tous les roles de
+    # compte - hors proprietaire, qui n'est pas sur la feuille de paie - sans
+    # quoi une personne peut avoir un acces a l'application et rester
+    # impossible a inscrire au personnel. Le commercial etait dans ce cas.
     ROLE_CHOICES = (
         ("manager", "Manager"),
         ("coach", "Coach"),
         ("reception", "Accueil"),
         ("cashier", "Caissier"),
+        ("commercial", "Commercial"),
         ("cleaner", "Agent d'entretien"),
     )
 
