@@ -49,29 +49,10 @@ class EmployeeForm(forms.ModelForm):
             "is_active": "Actif",
         }
 
-    def clean_daily_salary(self):
-        daily_salary = self.cleaned_data.get("daily_salary")
-        if daily_salary is not None and daily_salary < 0:
-            raise forms.ValidationError("Le salaire journalier ne peut pas etre negatif.")
-        return daily_salary
-
-    def clean_monthly_salary(self):
-        monthly_salary = self.cleaned_data.get("monthly_salary")
-        if monthly_salary is not None and monthly_salary < 0:
-            raise forms.ValidationError("Le salaire mensuel ne peut pas etre negatif.")
-        return monthly_salary
-
-    def clean(self):
-        cleaned_data = super().clean()
-        compensation_type = cleaned_data.get("compensation_type")
-        daily_salary = cleaned_data.get("daily_salary")
-        monthly_salary = cleaned_data.get("monthly_salary")
-
-        if compensation_type == Employee.COMPENSATION_DAILY and (daily_salary is None or daily_salary <= 0):
-            self.add_error("daily_salary", "Le salaire journalier doit etre superieur a zero.")
-        if compensation_type == Employee.COMPENSATION_MONTHLY and (monthly_salary is None or monthly_salary <= 0):
-            self.add_error("monthly_salary", "Le salaire mensuel doit etre superieur a zero.")
-        return cleaned_data
+    # Les regles de salaire ne sont pas repetees ici. Elles vivent dans
+    # ``Employee.clean``, que ce formulaire declenche deja, et une copie a
+    # oublie l'exception du proprietaire : le modele l'acceptait sans salaire,
+    # l'ecran la refusait encore.
 
 
 class AttendanceForm(forms.ModelForm):

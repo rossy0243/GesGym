@@ -966,18 +966,99 @@ class PostesDuPersonnelTests(TestCase):
 
         self.assertIn("commercial", valeurs)
 
-    def test_every_account_role_but_the_owner_is_a_staff_position(self):
+    def test_the_owner_is_a_staff_position_too(self):
+        # Il n'est pas salarie, mais il franchit la porte : sans fiche de
+        # personnel, son visage ne peut pas etre enrole au lecteur.
+        postes = dict(Employee.ROLE_CHOICES)
+
+        self.assertIn("owner", postes)
+        self.assertEqual(postes["owner"], "Proprietaire")
+
+    def test_the_owner_is_the_only_one_allowed_a_zero_salary(self):
+        # Sa fiche existe pour la porte et les presences, pas pour la paie.
+        proprietaire = Employee.objects.create(
+            gym=self.gym, name="Jordan Proprietaire", role="owner",
+        )
+        proprietaire.full_clean()
+
+        self.assertEqual(proprietaire.daily_salary, Decimal("0"))
+
+        with self.assertRaises(ValidationError):
+            Employee.objects.create(gym=self.gym, name="Coach sans salaire", role="coach")
+
+    def test_the_owner_adds_nothing_to_the_payroll(self):
+        from rh.kpis import build_rh_kpis
+
+        Employee.objects.create(
+            gym=self.gym, name="Alice Coach", role="coach",
+            daily_salary=Decimal("100.00"),
+        )
+        avant = build_rh_kpis(self.gym)["monthly_payroll"]
+
+        Employee.objects.create(gym=self.gym, name="Jordan Proprietaire", role="owner")
+
+        self.assertEqual(build_rh_kpis(self.gym)["monthly_payroll"], avant)
+
+    def test_the_form_accepts_an_owner_without_a_salary(self):
+        from rh.forms import EmployeeForm
+
+        formulaire = EmployeeForm(data={
+            "name": "Jordan Proprietaire",
+            "role": "owner",
+            "phone": "+243810000999",
+            "email": "",
+            "compensation_type": Employee.COMPENSATION_DAILY,
+            "daily_salary": "0",
+            "monthly_salary": "0",
+            "is_active": "on",
+        })
+
+        self.assertTrue(formulaire.is_valid(), formulaire.errors.as_text())
+
+    def test_the_form_still_refuses_a_coach_without_a_salary(self):
+        from rh.forms import EmployeeForm
+
+        formulaire = EmployeeForm(data={
+            "name": "Coach sans salaire",
+            "role": "coach",
+            "phone": "+243810000998",
+            "email": "",
+            "compensation_type": Employee.COMPENSATION_DAILY,
+            "daily_salary": "0",
+            "monthly_salary": "0",
+            "is_active": "on",
+        })
+
+        self.assertFalse(formulaire.is_valid())
+        self.assertIn("daily_salary", formulaire.errors)
+
+    def test_the_form_still_refuses_a_negative_salary(self):
+        from rh.forms import EmployeeForm
+
+        formulaire = EmployeeForm(data={
+            "name": "Coach en negatif",
+            "role": "coach",
+            "phone": "+243810000997",
+            "email": "",
+            "compensation_type": Employee.COMPENSATION_DAILY,
+            "daily_salary": "-50",
+            "monthly_salary": "0",
+            "is_active": "on",
+        })
+
+        self.assertFalse(formulaire.is_valid())
+        self.assertIn("daily_salary", formulaire.errors)
+
+    def test_every_account_role_is_a_staff_position(self):
         # Garde-fou pour le prochain role ajoute : un role de compte sans poste
         # correspondant laisse une personne sans fiche, sans presence et sans
-        # paie. Le proprietaire est la seule exception : il n'est pas salarie.
+        # visage au lecteur.
         #
         # Le sens inverse n'est pas verifie, et ne doit pas l'etre : les agents
         # d'entretien tiennent un poste sans ouvrir l'application.
         from compte.models import UserGymRole
 
-        roles_de_compte = {
-            valeur for valeur, _ in UserGymRole.ROLE_CHOICES if valeur != "owner"
-        }
+        roles_de_compte = {valeur for valeur, _ in UserGymRole.ROLE_CHOICES}
         postes = {valeur for valeur, _ in Employee.ROLE_CHOICES}
 
         self.assertEqual(

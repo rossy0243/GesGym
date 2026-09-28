@@ -30,15 +30,23 @@ class Employee(models.Model):
     """Employe RH rattache a un gym."""
 
     # Les postes tenus dans la salle. Ils doivent couvrir tous les roles de
-    # compte - hors proprietaire, qui n'est pas sur la feuille de paie - sans
-    # quoi une personne peut avoir un acces a l'application et rester
-    # impossible a inscrire au personnel. Le commercial etait dans ce cas.
+    # compte, sans quoi une personne peut avoir un acces a l'application et
+    # rester impossible a inscrire au personnel. Le commercial etait dans ce
+    # cas.
+    #
+    # Le proprietaire y figure aussi. Il n'est pas salarie, mais il franchit la
+    # porte comme les autres : sans fiche de personnel, son visage ne peut pas
+    # etre enrole au lecteur, et il reste dehors. Son salaire vaut zero tant
+    # que personne ne lui en saisit un - la paie n'en parle donc pas.
     #
     # L'inverse n'est pas vrai, et n'a pas a le devenir : un poste peut exister
     # sans role de compte. Les agents d'entretien n'ouvrent pas l'application ;
     # leur donner un compte pour la symetrie leur ouvrirait des ecrans dont ils
     # n'ont pas besoin.
+    ROLE_PROPRIETAIRE = "owner"
+
     ROLE_CHOICES = (
+        (ROLE_PROPRIETAIRE, "Proprietaire"),
         ("manager", "Manager"),
         ("coach", "Coach"),
         ("reception", "Accueil"),
@@ -78,10 +86,18 @@ class Employee(models.Model):
             raise ValidationError({"daily_salary": "Le salaire journalier ne peut pas etre negatif."})
         if self.monthly_salary is not None and self.monthly_salary < 0:
             raise ValidationError({"monthly_salary": "Le salaire mensuel ne peut pas etre negatif."})
-        if self.compensation_type == self.COMPENSATION_DAILY and self.daily_salary <= 0:
-            raise ValidationError({"daily_salary": "Le salaire journalier doit etre superieur a zero."})
-        if self.compensation_type == self.COMPENSATION_MONTHLY and self.monthly_salary <= 0:
-            raise ValidationError({"monthly_salary": "Le salaire mensuel doit etre superieur a zero."})
+        # Un employe sans salaire est une fiche a moitie saisie : le bulletin
+        # sortirait a zero sans que personne ne s'en apercoive.
+        #
+        # Le proprietaire echappe a cette regle. Sa fiche existe pour la porte
+        # et pour les presences, pas pour la paie : il ne se verse pas un
+        # salaire par ce module. Lui en imposer un ferait grossir la masse
+        # salariale d'un montant que la salle ne doit a personne.
+        if self.role != self.ROLE_PROPRIETAIRE:
+            if self.compensation_type == self.COMPENSATION_DAILY and self.daily_salary <= 0:
+                raise ValidationError({"daily_salary": "Le salaire journalier doit etre superieur a zero."})
+            if self.compensation_type == self.COMPENSATION_MONTHLY and self.monthly_salary <= 0:
+                raise ValidationError({"monthly_salary": "Le salaire mensuel doit etre superieur a zero."})
 
     def save(self, *args, **kwargs):
         self.full_clean()
