@@ -455,8 +455,11 @@ def _tableau_de_caisse(gym, today):
         retours = _somme(session.id, "in", categories={"expense_refund"})
         apports = _somme(session.id, "in", categories={"cash_injection"})
         # Depense reellement : une sortie de 50 000 dont 20 000 sont revenus a
-        # coute 30 000.
-        sorties = _somme(session.id, "out") - retours
+        # coute 30 000. Une correction de vente n'est pas une depense : elle
+        # retire une recette jamais versee, elle n'achete rien.
+        sorties = (
+            _somme(session.id, "out", hors=Payment.CATEGORIES_HORS_DECAISSEMENT) - retours
+        )
         especes_entrees = _somme(session.id, "in", CashRegister.CASH_METHOD)
         especes_sorties = _somme(session.id, "out", CashRegister.CASH_METHOD)
         # Seules les especes transitent par le tiroir : c'est deja la regle de

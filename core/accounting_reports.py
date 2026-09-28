@@ -199,6 +199,13 @@ def accounts_for_payment(payment):
         counterpart = CATEGORY_INCOME_ACCOUNTS.get(payment.category, CATEGORY_INCOME_ACCOUNTS["other"])
         return treasury_account, counterpart
 
+    # Une correction de vente sort de la tresorerie sans etre une charge : elle
+    # annule une vente trop haute. Sa contrepartie est donc le compte de vente
+    # d'origine, qu'elle vient diminuer - la porter en charges ferait apparaitre
+    # une depense que la salle n'a jamais engagee.
+    if payment.category == "sale_correction":
+        return CATEGORY_INCOME_ACCOUNTS["subscription"], treasury_account
+
     counterpart = CATEGORY_EXPENSE_ACCOUNTS.get(payment.category, CATEGORY_EXPENSE_ACCOUNTS["other"])
     return counterpart, treasury_account
 

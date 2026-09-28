@@ -257,8 +257,16 @@ class PaymentQuerySet(models.QuerySet):
         )
 
     def sorties(self):
-        """Les decaissements, retours non deduits."""
-        return self.filter(type="out", status="success")
+        """
+        Les decaissements, retours non deduits.
+
+        Une correction de vente n'en est pas un : elle retire des comptes une
+        recette qui n'a jamais ete versee, elle ne sort rien du tiroir.
+        """
+        return (
+            self.filter(type="out", status="success")
+            .exclude(category__in=Payment.CATEGORIES_HORS_DECAISSEMENT)
+        )
 
     def offerts(self):
         """
@@ -312,6 +320,7 @@ class Payment(models.Model):
         ("expense", "Depense"),
         ("expense_refund", "Retour de decaissement"),
         ("cash_injection", "Apport en caisse"),
+        ("sale_correction", "Correction de vente"),
         ("other", "Autre"),
     )
 
@@ -326,6 +335,19 @@ class Payment(models.Model):
     # Toute lecture du chiffre d'affaires passe par ``Payment.objects.recettes``
     # et ecarte ces categories. C'est le seul endroit ou la regle est ecrite.
     CATEGORIES_HORS_RECETTE = frozenset({"expense_refund", "cash_injection"})
+
+    # De l'argent qui sort des comptes sans sortir du tiroir.
+    #
+    # Une vente enregistree au mauvais prix - une formule annuelle saisie pour
+    # une mensuelle - a inscrit une recette que personne n'a versee. La ligne
+    # d'origine reste dans sa journee, comptee comme elle l'a ete ; une ligne
+    # de correction retire l'ecart aujourd'hui. Ce n'est pas une depense : la
+    # salle n'a rien achete, et la compter comme telle ferait apparaitre une
+    # sortie d'argent qui n'a pas eu lieu.
+    #
+    # Toute lecture des decaissements passe par ``Payment.objects.sorties`` et
+    # ecarte ces categories.
+    CATEGORIES_HORS_DECAISSEMENT = frozenset({"sale_correction"})
 
     gym = models.ForeignKey(
         Gym,
@@ -355,6 +377,18 @@ class Payment(models.Model):
         blank=True,
         related_name="refunds",
         verbose_name="Retour sur ce decaissement",
+    )
+
+    # La vente que cette ligne corrige. Meme raisonnement que ci-dessus : la
+    # vente d'origine reste telle qu'elle a ete enregistree et comptee, la
+    # correction s'y rattache.
+    vente_corrigee = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="corrections",
+        verbose_name="Correction de cette vente",
     )
 
     member = models.ForeignKey(

@@ -665,8 +665,12 @@ def expense_register(request):
     methode = (request.GET.get("method") or "").strip()
     recherche = (request.GET.get("search") or "").strip()
 
+    # ``sorties()`` plutot qu'un filtre a la main : une correction de vente
+    # sort bien de l'argent des comptes, mais n'achete rien. La faire figurer
+    # dans les depenses inventerait un achat.
     depenses = (
-        Payment.objects.filter(gym=request.gym, type="out")
+        Payment.objects.filter(gym=request.gym)
+        .sorties()
         .select_related("created_by", "cash_register")
         .order_by("-created_at")
     )
@@ -866,8 +870,10 @@ def refund_expense(request, payment_id):
     course a coute 30 000, il rend 20 000. Le decaissement d'origine n'est pas
     touche - il a bien eu lieu.
     """
+    # Une correction de vente n'est pas une depense : rien n'en revient, car
+    # rien n'en est parti. ``sorties()`` l'ecarte donc de ce geste aussi.
     depense = get_object_or_404(
-        Payment, id=payment_id, gym=request.gym, type="out"
+        Payment.objects.filter(gym=request.gym).sorties(), id=payment_id
     )
 
     try:

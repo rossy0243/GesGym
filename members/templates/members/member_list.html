@@ -1087,6 +1087,56 @@ body.members-screen .modal.show .modal-dialog {
         </div>
     </div>
 </div>
+
+<!-- MODAL DE CORRECTION DE FORMULE -->
+<div class="modal fade" id="correctPlanModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title d-flex align-items-center gap-2">
+                    <span class="material-icons ton-attention" style="font-size:22px;">sync_alt</span>
+                    Corriger la formule
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-3">
+                    La fin se recalcule sur la durée de la nouvelle formule, depuis le
+                    même début. La vente d'origine n'est pas réécrite : une ligne de
+                    correction retire des comptes ce qui a été enregistré en trop.
+                </p>
+                <div class="alert alert-light border small">
+                    <div class="fw-semibold" id="planCurrentName">-</div>
+                    <div class="text-muted">Période actuelle : <span id="planCurrentPeriod">-</span></div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Formule réellement vendue</label>
+                    <select class="form-select" id="planChoice">
+                        {% for formule in plans %}
+                        <option value="{{ formule.id }}">{{ formule.name }} - {{ formule.duration_days }} jours</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label fw-semibold">Motif</label>
+                    <input type="text" class="form-control" id="planReason"
+                           maxlength="255" placeholder="Ex : annuelle saisie au lieu de la mensuelle">
+                    <div class="form-text">
+                        Obligatoire : c'est ce que le propriétaire lira.
+                    </div>
+                </div>
+                <div class="alert alert-danger d-none" id="planError"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-warning" id="planSubmit"
+                        onclick="submitPlanCorrection()">
+                    <span class="material-icons me-2" style="font-size:18px;">check</span>Corriger
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -1504,7 +1554,9 @@ body.members-screen .modal.show .modal-dialog {
     // ni dans les listes, ni dans les acces. Cet historique est le seul endroit
     // d'ou on peut encore l'atteindre - et donc le corriger.
     const CORRECTION_URL_MODELE = "{% url 'subscriptions:correct_subscription' 0 %}";
+    const CORRECTION_FORMULE_URL_MODELE = "{% url 'subscriptions:correct_subscription_plan' 0 %}";
     let correctionCible = null;
+    let planCible = null;
 
     const ETAT_BADGE = {
         "En cours": "bg-success",
@@ -1527,20 +1579,35 @@ body.members-screen .modal.show .modal-dialog {
             const badge = ETAT_BADGE[abo.state] || "bg-secondary";
 
             const traces = (abo.corrections || []).map(function (t) {
+                // Une correction de formule porte les deux formules ; une
+                // correction de periode n'en porte aucune.
+                const change = t.previous_plan
+                    ? ' - formule : ' + escapeHtml(t.previous_plan) + ' → ' + escapeHtml(t.new_plan)
+                    : ' - était du ' + escapeHtml(t.previous);
                 return '<div class="text-muted small fst-italic">'
                      + '<span class="material-icons" style="font-size:14px;vertical-align:-2px;">history</span> '
-                     + 'Corrige le ' + escapeHtml(t.at)
+                     + 'Corrigé le ' + escapeHtml(t.at)
                      + (t.by ? ' par ' + escapeHtml(t.by) : '')
-                     + ' - etait du ' + escapeHtml(t.previous)
+                     + change
                      + ' - ' + escapeHtml(t.reason)
                      + '</div>';
             }).join("");
 
-            const bouton = abo.can_correct
+            const boutonPeriode = abo.can_correct
                 ? '<button type="button" class="btn btn-sm btn-outline-warning"'
                   + ' onclick="openSubscriptionCorrection(' + abo.id + ')">'
                   + '<span class="material-icons me-1" style="font-size:15px;vertical-align:-3px;">event_repeat</span>'
-                  + 'Corriger la periode</button>'
+                  + 'Corriger la période</button>'
+                : '';
+            const boutonFormule = abo.can_correct_plan
+                ? '<button type="button" class="btn btn-sm btn-outline-warning"'
+                  + ' onclick="openPlanCorrection(' + abo.id + ')">'
+                  + '<span class="material-icons me-1" style="font-size:15px;vertical-align:-3px;">sync_alt</span>'
+                  + 'Corriger la formule</button>'
+                : '';
+            const bouton = boutonPeriode || boutonFormule
+                ? '<div class="d-flex flex-column gap-1 align-items-end">'
+                  + boutonPeriode + boutonFormule + '</div>'
                 : '';
 
             return '<div class="timeline-item border-start ps-3 pb-3">'
@@ -1575,6 +1642,63 @@ body.members-screen .modal.show .modal-dialog {
         const fiche = bootstrap.Modal.getInstance(document.getElementById("viewMemberModal"));
         if (fiche) { fiche.hide(); }
         new bootstrap.Modal(document.getElementById("correctSubscriptionModal")).show();
+    }
+
+    function openPlanCorrection(subscriptionId) {
+        const lignes = (currentMemberData && currentMemberData.subscriptions) || [];
+        planCible = lignes.find(function (a) { return a.id === subscriptionId; });
+        if (!planCible) { return; }
+
+        document.getElementById("planCurrentName").innerText = planCible.plan;
+        document.getElementById("planCurrentPeriod").innerText =
+            "du " + planCible.start_date + " au " + planCible.end_date;
+        const choix = document.getElementById("planChoice");
+        if (planCible.plan_id) { choix.value = String(planCible.plan_id); }
+        document.getElementById("planReason").value = "";
+        const erreur = document.getElementById("planError");
+        erreur.classList.add("d-none");
+        erreur.innerText = "";
+
+        const fiche = bootstrap.Modal.getInstance(document.getElementById("viewMemberModal"));
+        if (fiche) { fiche.hide(); }
+        new bootstrap.Modal(document.getElementById("correctPlanModal")).show();
+    }
+
+    function submitPlanCorrection() {
+        if (!planCible) { return; }
+
+        const erreur = document.getElementById("planError");
+        const bouton = document.getElementById("planSubmit");
+        erreur.classList.add("d-none");
+        bouton.disabled = true;
+
+        const corps = new FormData();
+        corps.append("plan", document.getElementById("planChoice").value);
+        corps.append("reason", document.getElementById("planReason").value);
+
+        fetch(CORRECTION_FORMULE_URL_MODELE.replace("/0/", "/" + planCible.id + "/"), {
+            method: "POST",
+            headers: {
+                "X-CSRFToken": document.querySelector("[name=csrfmiddlewaretoken]").value,
+                "X-Requested-With": "XMLHttpRequest"
+            },
+            body: corps
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (donnees) {
+                if (donnees.success) {
+                    window.location.reload();
+                    return;
+                }
+                erreur.innerText = donnees.error || "La correction a ete refusee.";
+                erreur.classList.remove("d-none");
+                bouton.disabled = false;
+            })
+            .catch(function () {
+                erreur.innerText = "La correction n'a pas pu etre envoyee.";
+                erreur.classList.remove("d-none");
+                bouton.disabled = false;
+            });
     }
 
     function submitSubscriptionCorrection() {

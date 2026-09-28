@@ -2091,7 +2091,11 @@ def _subscription_history(request, member):
 
     abonnements = (
         member.subscriptions.select_related("plan")
-        .prefetch_related("corrections__corrected_by")
+        .prefetch_related(
+            "corrections__corrected_by",
+            "corrections__previous_plan",
+            "corrections__new_plan",
+        )
         .order_by("-start_date", "-id")
     )
 
@@ -2112,6 +2116,12 @@ def _subscription_history(request, member):
                 "previous": (
                     f"{trace.previous_start:%d/%m/%Y} - {trace.previous_end:%d/%m/%Y}"
                 ),
+                # Vide pour une correction de periode : c'est ce qui distingue
+                # les deux gestes dans le meme journal.
+                "previous_plan": (
+                    trace.previous_plan.name if trace.previous_plan else ""
+                ),
+                "new_plan": trace.new_plan.name if trace.new_plan else "",
                 "reason": trace.reason,
                 "by": (auteur.get_full_name() or auteur.username) if auteur else "",
                 "at": timezone.localtime(trace.corrected_at).strftime("%d/%m/%Y"),
@@ -2125,9 +2135,13 @@ def _subscription_history(request, member):
             "start_iso": abonnement.start_date.isoformat(),
             "state": etat,
             "is_current": etat == "En cours",
+            "plan_id": abonnement.plan_id,
             # Une formule supprimee n'a plus de duree : la fin ne peut plus se
-            # recalculer, donc la correction n'est pas proposee.
+            # recalculer, donc la correction de periode n'est pas proposee.
             "can_correct": peut_corriger and abonnement.plan is not None,
+            # Corriger la formule, en revanche, reste possible sans elle : c'est
+            # meme le seul moyen d'en redonner une a un abonnement orphelin.
+            "can_correct_plan": peut_corriger,
             "corrections": traces,
         })
 

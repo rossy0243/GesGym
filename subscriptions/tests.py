@@ -2173,3 +2173,367 @@ class SubscriptionPaymentPathTests(TestCase):
         from subscriptions import views as vues
 
         self.assertFalse(hasattr(vues, "create_member_subscription"))
+
+
+
+class CorrectionDeFormuleTests(TestCase):
+    """
+    Une annuelle vendue a la place d'une mensuelle.
+
+    Le montant d'une vente d'abonnement n'est pas saisi : il vient du prix de
+    la formule. Se tromper de formule inscrit donc une recette que personne n'a
+    versee, et la caisse se retrouve en ecart sans que rien ne l'explique.
+    """
+
+    def setUp(self):
+        self.organisation = Organization.objects.create(
+            name="Org Formule", slug="org-formule"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organisation, name="Gym Formule",
+            slug="gym-formule", subdomain="gym-formule",
+        )
+        for code in ("MEMBERS", "SUBSCRIPTIONS", "POS"):
+            module, _ = Module.objects.get_or_create(code=code, defaults={"name": code})
+            GymModule.objects.get_or_create(
+                gym=self.gym, module=module, defaults={"is_active": True}
+            )
+
+        self.mensuel = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Mensuel", price=Decimal("30.00"), duration_days=30
+        )
+        self.annuel = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Annuel", price=Decimal("300.00"), duration_days=365
+        )
+        self.member = Member.objects.create(
+            gym=self.gym, first_name="Ada", last_name="Formule",
+            phone="+243870004444",
+        )
+        self.proprietaire = User.objects.create_user(
+            username="proprio-formule", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.proprietaire, gym=self.gym, role="owner", is_active=True
+        )
+        self.gerant = User.objects.create_user(
+            username="gerant-formule", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.gerant, gym=self.gym, role="manager", is_active=True
+        )
+
+        self.taux = Decimal("2800.00")
+        self.caisse = CashRegister.objects.create(
+            gym=self.gym, opened_by=self.gerant,
+            opening_amount=Decimal("0.00"), exchange_rate=self.taux,
+        )
+        # L'erreur : le gerant vend l'annuelle.
+        self.abonnement, self.vente = record_subscription_payment(
+            gym=self.gym, member=self.member, plan=self.annuel,
+            currency="USD", method="cash", created_by=self.gerant,
+        )
+
+    def _corriger(self, plan=None, motif="Annuelle saisie au lieu de la mensuelle", par=None):
+        return corrections.corriger_formule(
+            self.abonnement, plan or self.mensuel, motif, par or self.proprietaire,
+            acquitte=True,
+        )
+
+    def _correction_de_caisse(self):
+        return Payment.objects.filter(gym=self.gym, category="sale_correction").first()
+
+    # --- L'abonnement ----------------------------------------------------------------
+
+    def test_the_plan_becomes_the_right_one(self):
+        self._corriger()
+
+        self.abonnement.refresh_from_db()
+        self.assertEqual(self.abonnement.plan, self.mensuel)
+
+    def test_the_end_follows_the_new_duration_from_the_same_start(self):
+        debut = self.abonnement.start_date
+
+        self._corriger()
+
+        self.abonnement.refresh_from_db()
+        self.assertEqual(self.abonnement.start_date, debut)
+        self.assertEqual(self.abonnement.end_date, debut + timedelta(days=30))
+
+    def test_the_trace_carries_both_plans(self):
+        trace = self._corriger()
+
+        self.assertEqual(trace.previous_plan, self.annuel)
+        self.assertEqual(trace.new_plan, self.mensuel)
+        self.assertEqual(trace.reason, "Annuelle saisie au lieu de la mensuelle")
+
+    # --- L'argent --------------------------------------------------------------------
+
+    def test_the_original_sale_is_never_rewritten(self):
+        avant = self.vente.amount_cdf
+
+        self._corriger()
+
+        self.vente.refresh_from_db()
+        self.assertEqual(self.vente.amount_cdf, avant)
+        self.assertIsNone(self.vente.annule_le)
+
+    def test_a_single_correction_line_carries_the_difference(self):
+        self._corriger()
+
+        correction = self._correction_de_caisse()
+        self.assertIsNotNone(correction)
+        # 300 USD enregistres, 30 dus : 270 USD de trop, au taux de la vente.
+        self.assertEqual(correction.amount_cdf, Decimal("270.00") * self.taux)
+        self.assertEqual(correction.type, "out")
+        self.assertEqual(correction.method, self.vente.method)
+        self.assertEqual(correction.vente_corrigee, self.vente)
+
+    def test_the_correction_travels_by_the_same_channel(self):
+        # Vente en mobile money : le tiroir n'a jamais vu cet argent, la
+        # correction ne doit pas le lui retirer.
+        autre = Member.objects.create(
+            gym=self.gym, first_name="Nina", last_name="Formule",
+            phone="+243870004447",
+        )
+        abonnement, _ = record_subscription_payment(
+            gym=self.gym, member=autre, plan=self.annuel,
+            currency="USD", method="mobile_money", created_by=self.gerant,
+        )
+
+        corrections.corriger_formule(
+            abonnement, self.mensuel, "Erreur de formule", self.proprietaire,
+            acquitte=True,
+        )
+
+        correction = Payment.objects.filter(
+            gym=self.gym, category="sale_correction", subscription=abonnement
+        ).first()
+        self.assertEqual(correction.method, "mobile_money")
+
+    def test_the_correction_is_never_read_as_an_expense(self):
+        # La salle n'a rien achete : la porter en depense inventerait un achat.
+        self._corriger()
+
+        self.assertFalse(
+            Payment.objects.filter(gym=self.gym).sorties()
+            .filter(category="sale_correction").exists()
+        )
+
+    def test_the_correction_lowers_what_the_drawer_should_hold(self):
+        attendu_avant = self.caisse.expected_total()
+
+        self._corriger()
+
+        self.assertEqual(
+            self.caisse.expected_total(),
+            attendu_avant - Decimal("270.00") * self.taux,
+        )
+
+    def test_the_same_day_correction_stays_in_the_same_register(self):
+        # Caisse encore ouverte : tout se neutralise sans laisser d'ecart.
+        self._corriger()
+
+        self.assertEqual(self._correction_de_caisse().cash_register, self.caisse)
+
+    def test_a_closed_register_sends_the_correction_to_today(self):
+        self.caisse.is_closed = True
+        self.caisse.closing_amount = Decimal("0.00")
+        self.caisse.save(update_fields=["is_closed", "closing_amount"])
+        caisse_du_jour = CashRegister.objects.create(
+            gym=self.gym, opened_by=self.proprietaire,
+            opening_amount=Decimal("0.00"), exchange_rate=self.taux,
+        )
+
+        self._corriger()
+
+        self.assertEqual(self._correction_de_caisse().cash_register, caisse_du_jour)
+
+    def test_a_dearer_plan_creates_no_revenue_out_of_thin_air(self):
+        # Mensuelle vendue a la place de l'annuelle : personne n'a verse la
+        # difference, on ne l'inscrit pas.
+        autre = Member.objects.create(
+            gym=self.gym, first_name="Zoe", last_name="Formule",
+            phone="+243870004445",
+        )
+        abonnement, _ = record_subscription_payment(
+            gym=self.gym, member=autre, plan=self.mensuel,
+            currency="USD", method="cash", created_by=self.gerant,
+        )
+
+        trace = corrections.corriger_formule(
+            abonnement, self.annuel, "Mensuelle saisie au lieu de l'annuelle",
+            self.proprietaire, acquitte=True,
+        )
+
+        self.assertIsNone(getattr(trace, "correction_de_caisse", None))
+        self.assertEqual(trace.reste_a_encaisser, Decimal("270.00") * self.taux)
+
+    def test_the_accounting_books_it_against_the_sales_account(self):
+        from core.accounting_reports import accounts_for_payment
+
+        self._corriger()
+
+        debit, credit = accounts_for_payment(self._correction_de_caisse())
+        self.assertEqual(debit, ("7060", "Ventes abonnements"))
+        self.assertEqual(credit[0], "5710")
+
+    # --- Ce que la correction refuse --------------------------------------------------
+
+    def test_a_correction_without_a_reason_is_refused(self):
+        with self.assertRaises(ValidationError):
+            self._corriger(motif="   ")
+
+        self.abonnement.refresh_from_db()
+        self.assertEqual(self.abonnement.plan, self.annuel)
+
+    def test_correcting_towards_the_same_plan_is_refused(self):
+        with self.assertRaises(ValidationError):
+            self._corriger(plan=self.annuel)
+
+    def test_a_plan_from_another_gym_is_refused(self):
+        ailleurs = Gym.objects.create(
+            organization=self.organisation, name="Gym Voisine",
+            slug="gym-voisine-formule", subdomain="gym-voisine-formule",
+        )
+        plan_voisin = SubscriptionPlan.objects.create(
+            gym=ailleurs, name="Mensuel voisin", price=Decimal("30.00"), duration_days=30
+        )
+
+        with self.assertRaises(ValidationError):
+            self._corriger(plan=plan_voisin)
+
+    def test_an_overlapping_period_is_refused(self):
+        # Le piege n'apparait qu'en allongeant : une formule plus longue vient
+        # mordre sur l'abonnement suivant, deja paye.
+        autre = Member.objects.create(
+            gym=self.gym, first_name="Luc", last_name="Formule",
+            phone="+243870004446",
+        )
+        court, _ = record_subscription_payment(
+            gym=self.gym, member=autre, plan=self.mensuel,
+            currency="USD", method="cash", created_by=self.gerant,
+        )
+        MemberSubscription.objects.create(
+            gym=self.gym, member=autre, plan=self.mensuel,
+            start_date=court.end_date + timedelta(days=1),
+            end_date=court.end_date + timedelta(days=31),
+            is_active=True,
+        )
+
+        with self.assertRaises(ValidationError):
+            corrections.corriger_formule(
+                court, self.annuel, "Mensuelle saisie au lieu de l'annuelle",
+                self.proprietaire, acquitte=True,
+            )
+
+    def test_nothing_moves_when_the_correction_is_refused(self):
+        avant = Payment.objects.filter(gym=self.gym).count()
+
+        with self.assertRaises(ValidationError):
+            self._corriger(motif="")
+
+        self.assertEqual(Payment.objects.filter(gym=self.gym).count(), avant)
+
+
+class CorrectionDeFormuleVueTests(TestCase):
+    """L'ecran : le proprietaire seul, et ce qu'il lit apres coup."""
+
+    def setUp(self):
+        self.organisation = Organization.objects.create(
+            name="Org Formule Vue", slug="org-formule-vue"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organisation, name="Gym Formule Vue",
+            slug="gym-formule-vue", subdomain="gym-formule-vue",
+        )
+        for code in ("MEMBERS", "SUBSCRIPTIONS", "POS"):
+            module, _ = Module.objects.get_or_create(code=code, defaults={"name": code})
+            GymModule.objects.get_or_create(
+                gym=self.gym, module=module, defaults={"is_active": True}
+            )
+        self.mensuel = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Mensuel", price=Decimal("30.00"), duration_days=30
+        )
+        self.annuel = SubscriptionPlan.objects.create(
+            gym=self.gym, name="Annuel", price=Decimal("300.00"), duration_days=365
+        )
+        self.member = Member.objects.create(
+            gym=self.gym, first_name="Bob", last_name="Formule",
+            phone="+243870005555",
+        )
+        self.proprietaire = User.objects.create_user(
+            username="proprio-formule-vue", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.proprietaire, gym=self.gym, role="owner", is_active=True
+        )
+        self.gerant = User.objects.create_user(
+            username="gerant-formule-vue", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.gerant, gym=self.gym, role="manager", is_active=True
+        )
+        self.caisse = CashRegister.objects.create(
+            gym=self.gym, opened_by=self.gerant,
+            opening_amount=Decimal("0.00"), exchange_rate=Decimal("2800.00"),
+        )
+        self.abonnement, self.vente = record_subscription_payment(
+            gym=self.gym, member=self.member, plan=self.annuel,
+            currency="USD", method="cash", created_by=self.gerant,
+        )
+
+    def _connecter(self, utilisateur):
+        self.client.force_login(utilisateur)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _envoyer(self, plan=None, motif="Erreur de formule"):
+        return self.client.post(
+            reverse("subscriptions:correct_subscription_plan", args=[self.abonnement.id]),
+            {"plan": (plan or self.mensuel).id, "reason": motif},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+    def test_a_manager_cannot_correct_a_plan(self):
+        self._connecter(self.gerant)
+
+        self.assertEqual(self._envoyer().status_code, 403)
+        self.abonnement.refresh_from_db()
+        self.assertEqual(self.abonnement.plan, self.annuel)
+
+    def test_the_owner_corrects_and_reads_what_was_removed(self):
+        self._connecter(self.proprietaire)
+
+        reponse = self._envoyer()
+
+        self.assertTrue(reponse.json()["success"])
+        self.assertIn("Mensuel", reponse.json()["message"])
+        self.abonnement.refresh_from_db()
+        self.assertEqual(self.abonnement.plan, self.mensuel)
+
+    def test_a_missing_reason_is_refused_by_the_screen(self):
+        self._connecter(self.proprietaire)
+
+        reponse = self._envoyer(motif="  ")
+
+        self.assertEqual(reponse.status_code, 400)
+        self.assertIn("motif", reponse.json()["error"].lower())
+
+    def test_the_member_sheet_offers_the_correction_to_the_owner(self):
+        self._connecter(self.proprietaire)
+
+        reponse = self.client.get(
+            reverse("members:member_detail", args=[self.member.id])
+        )
+
+        self.assertTrue(reponse.json()["subscriptions"][0]["can_correct_plan"])
+
+    def test_the_member_sheet_hides_it_from_a_manager(self):
+        self._connecter(self.gerant)
+
+        reponse = self.client.get(
+            reverse("members:member_detail", args=[self.member.id])
+        )
+
+        self.assertFalse(reponse.json()["subscriptions"][0]["can_correct_plan"])

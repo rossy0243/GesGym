@@ -458,6 +458,26 @@ class SubscriptionCorrection(models.Model):
         related_name="corrections",
     )
 
+    # La formule, quand c'est elle qui a ete corrigee. Vides pour une simple
+    # correction de periode : ces deux gestes se lisent dans le meme journal,
+    # et distinguer l'un de l'autre se fait a ces champs.
+    previous_plan = models.ForeignKey(
+        "subscriptions.SubscriptionPlan",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="corrections_depuis",
+        verbose_name="Ancienne formule",
+    )
+    new_plan = models.ForeignKey(
+        "subscriptions.SubscriptionPlan",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="corrections_vers",
+        verbose_name="Nouvelle formule",
+    )
+
     previous_start = models.DateField(verbose_name="Ancien debut")
     previous_end = models.DateField(verbose_name="Ancienne fin")
     new_start = models.DateField(verbose_name="Nouveau debut")

@@ -521,6 +521,80 @@ def correct_subscription(request, subscription_id):
 @login_required
 @module_required("SUBSCRIPTIONS")
 @require_POST
+def correct_subscription_plan(request, subscription_id):
+    """
+    Repose la formule d'un abonnement vendu sous la mauvaise.
+
+    Une annuelle saisie pour une mensuelle a inscrit une recette que personne
+    n'a versee : le montant vient de la formule, pas du tiroir. La vente
+    d'origine n'est pas reecrite - elle a ete comptee dans sa journee - une
+    ligne de correction retire la difference.
+    """
+    _require_gym_role(request, SETTINGS_ORGANIZATION_ROLES)
+
+    abonnement = get_object_or_404(
+        MemberSubscription, id=subscription_id, gym=request.gym
+    )
+    plan = SubscriptionPlan.objects.filter(
+        id=(request.POST.get("plan") or "").strip() or 0, gym=request.gym
+    ).first()
+    motif = request.POST.get("reason") or ""
+
+    try:
+        trace = corrections.corriger_formule(
+            abonnement, plan, motif, request.user, acquitte=True
+        )
+    except ValidationError as exc:
+        message = exc.messages[0]
+        if _wants_json(request):
+            return JsonResponse({"success": False, "error": message}, status=400)
+        messages.error(request, message)
+        return redirect(request.META.get("HTTP_REFERER", "members:member_list"))
+
+    correction_de_caisse = getattr(trace, "correction_de_caisse", None)
+    log_sensitive_action(
+        request,
+        "subscription.plan_corrected",
+        "MemberSubscription",
+        f"{abonnement.member.first_name} {abonnement.member.last_name}",
+        metadata={
+            "subscription_id": abonnement.id,
+            "avant": trace.previous_plan.name if trace.previous_plan else "",
+            "apres": trace.new_plan.name if trace.new_plan else "",
+            "fin": f"{trace.previous_end} -> {trace.new_end}",
+            "correction_caisse": (
+                str(correction_de_caisse.amount_cdf) if correction_de_caisse else "0"
+            ),
+            "reste_a_encaisser": str(getattr(trace, "reste_a_encaisser", 0)),
+            "motif": trace.reason,
+        },
+    )
+
+    reussite = (
+        f"Formule corrigee : {trace.new_plan.name}, jusqu'au "
+        f"{trace.new_end:%d/%m/%Y}."
+    )
+    if correction_de_caisse is not None:
+        reussite += (
+            f" {correction_de_caisse.amount_cdf:.0f} CDF de trop ont ete retires "
+            "des comptes."
+        )
+    elif getattr(trace, "reste_a_encaisser", 0) > 0:
+        reussite += (
+            f" Il reste {trace.reste_a_encaisser:.0f} CDF a encaisser : "
+            "enregistrez le paiement quand le membre l'aura verse."
+        )
+
+    if _wants_json(request):
+        return JsonResponse({"success": True, "message": reussite})
+
+    messages.success(request, reussite)
+    return redirect(request.META.get("HTTP_REFERER", "members:member_list"))
+
+
+@login_required
+@module_required("SUBSCRIPTIONS")
+@require_POST
 def acknowledge_correction(request, correction_id):
     """
     Le proprietaire declare avoir vu une correction.

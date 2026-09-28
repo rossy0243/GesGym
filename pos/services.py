@@ -42,7 +42,7 @@ def get_open_register(gym, user=None):
     return register
 
 
-def _caisse_cible(gym, utilisateur):
+def caisse_cible(gym, utilisateur):
     """
     La caisse dans laquelle cet argent va physiquement entrer.
 
@@ -90,6 +90,7 @@ def record_payment(
     source_id=None,
     status="success",
     refund_of=None,
+    vente_corrigee=None,
     offert=False,
     valeur_offerte_cdf=None,
     motif_offert="",
@@ -106,6 +107,7 @@ def record_payment(
         gym=gym,
         cash_register=register,
         refund_of=refund_of,
+        vente_corrigee=vente_corrigee,
         member=member,
         subscription=subscription,
         product=product,
@@ -158,7 +160,7 @@ def record_subscription_payment(
 
     # Un geste offert ne remplit aucun tiroir : celui qui l'accorde n'a pas
     # forcement de caisse a lui, comme pour un apport de fonds.
-    register = _caisse_cible(gym, created_by) if offert else get_open_register(gym, created_by)
+    register = caisse_cible(gym, created_by) if offert else get_open_register(gym, created_by)
     today = timezone.localdate()
     start = start_date or today
 
@@ -317,7 +319,7 @@ def record_product_sale(
         if not motif:
             raise ValidationError("Un produit offert demande un motif.")
 
-    register = _caisse_cible(gym, created_by) if offert else get_open_register(gym, created_by)
+    register = caisse_cible(gym, created_by) if offert else get_open_register(gym, created_by)
 
     with transaction.atomic():
         try:
@@ -449,7 +451,7 @@ def record_expense_refund(
     if amount <= 0:
         raise ValidationError("Le montant rendu doit etre superieur a zero.")
 
-    register = _caisse_cible(gym, created_by)
+    register = caisse_cible(gym, created_by)
 
     montant_cdf = (
         amount if currency == "CDF" else _money(amount * register.exchange_rate)
@@ -513,7 +515,7 @@ def record_cash_injection(
             "caissier devra retrouver dans le tiroir."
         )
 
-    register = _caisse_cible(gym, created_by)
+    register = caisse_cible(gym, created_by)
 
     return record_payment(
         gym=gym,
