@@ -12,7 +12,7 @@
 <div class="alert alert-danger d-flex align-items-start gap-3 mb-4 mx-2">
     <span class="material-icons" style="font-size:26px;">trending_down</span>
     <div>
-        <strong>Solde especes negatif : {{ today_total }} CDF</strong>
+        <strong>Solde especes negatif : {{ today_total|montant }} CDF</strong>
         <p class="mb-0">
             Vous avez decaisse plus d'especes que la caisse n'en contenait. Signalez-le
             a votre responsable : soit un apport de fonds n'a pas ete enregistre, soit
@@ -47,7 +47,7 @@
                 </span>
 
                 <span class="badge bg-light text-dark px-3 py-2">
-                    1 USD = {{ register.exchange_rate }} CDF
+                    1 USD = {{ register.exchange_rate|montant }} CDF
                 </span>
 
                 <button class="btn btn-primary d-flex align-items-center gap-1"
@@ -249,13 +249,13 @@
                     <div>
                         <div class="fs-12 text-muted">Especes en caisse</div>
                         <h4 class="mb-0 {% if has_negative_cash %}text-danger{% endif %}">
-                            {% if register %}{{ today_total }}{% else %}0{% endif %} CDF
+                            {% if register %}{{ today_total|montant }}{% else %}0{% endif %} CDF
                         </h4>
                         {% if register %}
-                            <small class="text-muted">Fonds ouverture : {{ register.opening_amount }} CDF</small>
+                            <small class="text-muted">Fonds ouverture : {{ register.opening_amount|montant }} CDF</small>
                             {% if non_cash_balance %}
                                 <small class="d-block text-muted">
-                                    Hors tiroir : {{ non_cash_balance }} CDF
+                                    Hors tiroir : {{ non_cash_balance|montant }} CDF
                                 </small>
                             {% endif %}
                         {% endif %}
@@ -273,7 +273,7 @@
                     <div>
                         <div class="fs-12 text-muted">Entrées aujourd'hui</div>
                         <h4 class="mb-0">
-                            {% if register %}{{ today_entries }}{% else %}0{% endif %} CDF
+                            {% if register %}{{ today_entries|montant }}{% else %}0{% endif %} CDF
                         </h4>
                     </div>
                 </div>
@@ -289,7 +289,7 @@
                     <div>
                         <div class="fs-12 text-muted">Sorties aujourd'hui</div>
                         <h4 class="mb-0">
-                            {% if register %}{{ today_exits }}{% else %}0{% endif %} CDF
+                            {% if register %}{{ today_exits|montant }}{% else %}0{% endif %} CDF
                         </h4>
                     </div>
                 </div>
@@ -391,7 +391,7 @@
                             <td>{% if geste.member %}{{ geste.member.first_name }} {{ geste.member.last_name }}{% elif geste.beneficiaire %}{{ geste.beneficiaire }}{% else %}Non precise{% endif %}</td>
                             <td>{{ geste.description }}</td>
                             <td class="text-muted">{{ geste.motif_offert|default:"-" }}</td>
-                            <td class="text-end">{{ geste.valeur_offerte_cdf }} CDF</td>
+                            <td class="text-end">{{ geste.valeur_offerte_cdf|montant }} CDF</td>
                             <td class="text-end">
                                 {% if geste.annule_le %}
                                     <span class="badge bg-secondary">Annulé</span>
@@ -556,17 +556,17 @@
 
                             <td>
                                 <div class="fw-semibold montant-mouvement">
-                                    {% if payment.type == 'out' %}&minus;{% else %}+{% endif %}{{ payment.amount }} {{ payment.currency }}
+                                    {% if payment.type == 'out' %}&minus;{% else %}+{% endif %}{% if payment.currency == 'USD' %}{{ payment.amount|montant:2 }}{% else %}{{ payment.amount|montant }}{% endif %} {{ payment.currency }}
                                 </div>
                                 {% if payment.offert %}
                                     <span class="badge bg-info text-dark">Offert</span>
-                                    <small class="text-muted d-block">valeur {{ payment.valeur_offerte_cdf }} CDF</small>
+                                    <small class="text-muted d-block">valeur {{ payment.valeur_offerte_cdf|montant }} CDF</small>
                                     {% if payment.motif_offert %}<small class="text-muted d-block">{{ payment.motif_offert }}</small>{% endif %}
                                     {% if payment.annule_le %}<span class="badge bg-secondary">Annulé</span>{% endif %}
                                 {% endif %}
-                                <small class="text-muted d-block">{{ payment.amount_cdf }} CDF comptable</small>
+                                <small class="text-muted d-block">{{ payment.amount_cdf|montant }} CDF comptable</small>
                                 {% if payment.amount_usd %}
-                                    <small class="d-block text-muted">Référence : {{ payment.amount_usd }} USD</small>
+                                    <small class="d-block text-muted">Référence : {{ payment.amount_usd|montant:2 }} USD</small>
                                 {% endif %}
                             </td>
 
@@ -808,7 +808,7 @@
                                         data-price="{{ p.price|unlocalize }}"
                                         data-duration="{{ p.duration_days }}"
                                         data-currency="USD">
-                                    {{ p.name }} - {{ p.price }} USD ({{ p.duration_days }} jours){% if p.guest_invitation_label %} - invitation incluse{% endif %}
+                                    {{ p.name }} - {{ p.price|montant:2 }} USD ({{ p.duration_days }} jours){% if p.guest_invitation_label %} - invitation incluse{% endif %}
                                 </option>
                             {% endfor %}
                         </select>

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
+{% load formats %}
 
 {% block page_titre %}Clôture de caisse{% endblock %}
 
@@ -76,7 +77,7 @@
                 </div>
                 <div>
                     <div class="fs-12 text-muted">Fonds ouverture</div>
-                    <h4 class="mb-0">{{ register.opening_amount }} CDF</h4>
+                    <h4 class="mb-0">{{ register.opening_amount|montant }} CDF</h4>
                 </div>
             </div>
         </div>
@@ -90,7 +91,7 @@
                 </div>
                 <div>
                     <div class="fs-12 text-muted">Entrées</div>
-                    <h4 class="mb-0">{{ entries }} CDF</h4>
+                    <h4 class="mb-0">{{ entries|montant }} CDF</h4>
                 </div>
             </div>
         </div>
@@ -104,7 +105,7 @@
                 </div>
                 <div>
                     <div class="fs-12 text-muted">Sorties</div>
-                    <h4 class="mb-0">{{ exits }} CDF</h4>
+                    <h4 class="mb-0">{{ exits|montant }} CDF</h4>
                 </div>
             </div>
         </div>
@@ -118,7 +119,7 @@
                 </div>
                 <div>
                     <div class="fs-12 text-muted">Especes attendues</div>
-                    <h4 class="mb-0 {% if has_negative_cash %}text-danger{% endif %}">{{ expected_total }} CDF</h4>
+                    <h4 class="mb-0 {% if has_negative_cash %}text-danger{% endif %}">{{ expected_total|montant }} CDF</h4>
                     <div class="fs-12 text-muted">C'est ce que vous devez compter</div>
                 </div>
             </div>
@@ -138,13 +139,13 @@
         </p>
         <div class="d-flex flex-wrap gap-3">
             <span class="badge bg-success-subtle text-success border px-3 py-2">
-                Encaisse : {{ non_cash_entries }} CDF
+                Encaisse : {{ non_cash_entries|montant }} CDF
             </span>
             <span class="badge bg-danger-subtle text-danger border px-3 py-2">
-                Decaisse : {{ non_cash_exits }} CDF
+                Decaisse : {{ non_cash_exits|montant }} CDF
             </span>
             <span class="badge bg-secondary px-3 py-2">
-                Solde a rapprocher : {{ non_cash_balance }} CDF
+                Solde a rapprocher : {{ non_cash_balance|montant }} CDF
             </span>
         </div>
     </div>
@@ -193,7 +194,7 @@
         <div class="alert alert-light border d-flex align-items-center gap-2 warning-box mb-4">
             <span class="material-icons">currency_exchange</span>
             <div>
-                Taux de session : <strong>1 USD = {{ register.exchange_rate }} CDF</strong>
+                Taux de session : <strong>1 USD = {{ register.exchange_rate|montant }} CDF</strong>
             </div>
         </div>
 
@@ -222,7 +223,7 @@
 
             <div class="mb-4">
                 <div class="small text-muted mb-2">Total attendu</div>
-                <span class="amount-display">{{ expected_total }} CDF</span>
+                <span class="amount-display">{{ expected_total|montant }} CDF</span>
             </div>
 
             <div class="d-flex flex-wrap gap-2">

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
+{% load formats %}
 
 {% block page_titre %}Registre des décaissements{% endblock %}
 
@@ -64,7 +65,7 @@
     <div class="col-md-4">
         <div class="depense-stat">
             <div class="fs-12 text-muted">Total décaissé</div>
-            <div class="valeur text-danger">{{ total_cdf }} CDF</div>
+            <div class="valeur text-danger">{{ total_cdf|montant }} CDF</div>
             <small class="text-muted">sur la période affichée</small>
         </div>
     </div>
@@ -82,7 +83,7 @@
                 {% for ligne in by_category %}
                     <div class="d-flex justify-content-between align-items-center small mt-1">
                         <span>{{ ligne.libelle }}</span>
-                        <span class="fw-semibold">{{ ligne.total }} CDF</span>
+                        <span class="fw-semibold">{{ ligne.total|montant }} CDF</span>
                     </div>
                 {% endfor %}
             {% else %}
@@ -171,15 +172,15 @@
                                 {% endif %}
                             </td>
                             <td class="text-end">
-                                <div class="montant-sortie">&minus;{{ depense.amount }} {{ depense.currency }}</div>
+                                <div class="montant-sortie">&minus;{% if depense.currency == 'USD' %}{{ depense.amount|montant:2 }}{% else %}{{ depense.amount|montant }}{% endif %} {{ depense.currency }}</div>
                                 {% if depense.est_rendu %}
                                     {% comment %} La sortie d'origine n'est pas corrigee : elle a bien
                                        eu lieu. On montre ce qui est revenu, et ce que la depense a
                                        reellement coute. {% endcomment %}
-                                    <small class="d-block text-success">{{ depense.montant_rendu|floatformat:0 }} CDF rendus</small>
-                                    <small class="d-block text-muted">net {{ depense.montant_net|floatformat:0 }} CDF</small>
+                                    <small class="d-block text-success">{{ depense.montant_rendu|montant }} CDF rendus</small>
+                                    <small class="d-block text-muted">net {{ depense.montant_net|montant }} CDF</small>
                                 {% else %}
-                                    <small class="text-muted">{{ depense.amount_cdf }} CDF comptable</small>
+                                    <small class="text-muted">{{ depense.amount_cdf|montant }} CDF comptable</small>
                                 {% endif %}
                             </td>
                             <td>{{ depense.get_method_display }}</td>

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
+{% load formats %}
 
 {% block page_titre %}Historique des caisses{% endblock %}
 
@@ -319,12 +320,12 @@
                         </td>
 
                         <td class="text-center">
-                            <span class="amount-badge">{{ r.opening_amount }} CDF</span>
+                            <span class="amount-badge">{{ r.opening_amount|montant }} CDF</span>
                         </td>
 
                         <td class="text-center">
                             <span class="badge bg-light text-dark px-3 py-2">
-                                1 USD = {{ r.exchange_rate }} CDF
+                                1 USD = {{ r.exchange_rate|montant }} CDF
                             </span>
                         </td>
 
@@ -332,7 +333,7 @@
                             {% comment %} Une caisse ouverte n'a pas ete comptee : afficher
                                « 0 CDF » ferait croire a un tiroir vide. {% endcomment %}
                             {% if r.closing_amount is not None %}
-                                <span class="amount-badge">{{ r.closing_amount }} CDF</span>
+                                <span class="amount-badge">{{ r.closing_amount|montant }} CDF</span>
                             {% else %}
                                 <span class="text-muted">À déterminer</span>
                             {% endif %}
@@ -342,9 +343,9 @@
                             {% if r.difference is None %}
                                 <span class="text-muted">À déterminer</span>
                             {% elif r.difference < 0 %}
-                                <span class="badge bg-danger px-3 py-2">{{ r.difference }} CDF</span>
+                                <span class="badge bg-danger px-3 py-2">{{ r.difference|montant_signe }} CDF</span>
                             {% elif r.difference > 0 %}
-                                <span class="badge bg-warning text-dark px-3 py-2">+{{ r.difference }} CDF</span>
+                                <span class="badge bg-warning text-dark px-3 py-2">{{ r.difference|montant_signe }} CDF</span>
                             {% else %}
                                 <span class="badge bg-success px-3 py-2">0 CDF</span>
                             {% endif %}

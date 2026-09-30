@@ -1,5 +1,8 @@
 from datetime import date, timedelta
 from decimal import Decimal
+from pathlib import Path
+
+from django.conf import settings
 
 from django.core.exceptions import ValidationError
 from django.test import Client, TestCase
@@ -1891,8 +1894,9 @@ class ExpenseRegisterNetTests(TestCase):
 
         reponse = self.client.get(reverse("pos:expense_register"))
 
-        self.assertContains(reponse, "20000 CDF rendus")
-        self.assertContains(reponse, "net 30000 CDF")
+        # Les milliers sont groupes par une espace insecable.
+        self.assertContains(reponse, "20 000 CDF rendus")
+        self.assertContains(reponse, "net 30 000 CDF")
 
     def test_a_fully_returned_expense_offers_no_more_returns(self):
         depense = self._sortie("Plomberie", "50000")
@@ -3128,3 +3132,99 @@ class ProvenanceDuFondsTests(TestCase):
         ancienne = self._veille()
 
         self.assertEqual(ancienne.provenance_fonds, CashRegister.PROVENANCE_INCONNUE)
+
+
+
+class MontantsLisiblesTests(TestCase):
+    """
+    "192000,00 CDF" oblige l'oeil a compter les chiffres.
+
+    Le filtre qui groupe les milliers existait et servait au tableau de bord ;
+    aucun des cinq ecrans de caisse ne l'appelait.
+    """
+
+    GABARITS = (
+        "cashier.html",
+        "close_register.html",
+        "expense_register.html",
+        "register_detail.html",
+        "register_history.html",
+    )
+
+    def setUp(self):
+        self.organisation = Organization.objects.create(
+            name="Org Montants", slug="org-montants"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organisation, name="Gym Montants",
+            slug="gym-montants", subdomain="gym-montants",
+        )
+        module, _ = Module.objects.get_or_create(code="POS", defaults={"name": "POS"})
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=module, defaults={"is_active": True}
+        )
+        self.caissiere = User.objects.create_user(
+            username="caisse-montants", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.caissiere, gym=self.gym, role="cashier", is_active=True
+        )
+        self.caisse = CashRegister.objects.create(
+            gym=self.gym, opened_by=self.caissiere,
+            opening_amount=Decimal("192000.00"), exchange_rate=Decimal("2800.00"),
+        )
+        self.client.force_login(self.caissiere)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def test_the_cashier_screen_groups_the_thousands(self):
+        reponse = self.client.get(reverse("pos:cashier_dashboard"))
+
+        self.assertContains(reponse, "192\u00a0000")
+        self.assertNotContains(reponse, "192000,00")
+
+    def test_the_closing_screen_groups_them_too(self):
+        reponse = self.client.get(reverse("pos:close_register", args=[self.caisse.id]))
+
+        self.assertContains(reponse, "192\u00a0000")
+        self.assertNotContains(reponse, "192000,00")
+
+    def test_every_cash_screen_loads_the_filter(self):
+        # Un gabarit qui l'oublie affiche des montants bruts sans rien signaler.
+        dossier = Path(settings.BASE_DIR) / "pos" / "templates" / "pos"
+
+        for nom in self.GABARITS:
+            with self.subTest(gabarit=nom):
+                self.assertIn(
+                    "{% load formats %}",
+                    (dossier / nom).read_text(encoding="utf-8"),
+                )
+
+    def test_no_amount_is_printed_raw_any_more(self):
+        import re
+
+        dossier = Path(settings.BASE_DIR) / "pos" / "templates" / "pos"
+        nu = re.compile(r"\{\{\s*[A-Za-z_][\w.]*\s*\}\}\s*(CDF|USD)\b")
+
+        for nom in self.GABARITS:
+            with self.subTest(gabarit=nom):
+                self.assertIsNone(nu.search((dossier / nom).read_text(encoding="utf-8")))
+
+    def test_a_shortfall_keeps_a_single_sign(self):
+        # Le filtre porte le signe ; un "+" ecrit dans le gabarit ferait double.
+        gabarit = (
+            Path(settings.BASE_DIR) / "pos" / "templates" / "pos" / "register_history.html"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn(">+{{ r.difference|montant_signe }}", gabarit)
+
+    def test_the_form_fields_are_left_alone(self):
+        # Une espace insecable dans un champ de saisie casserait l'envoi.
+        gabarit = (
+            Path(settings.BASE_DIR) / "pos" / "templates" / "pos" / "cashier.html"
+        ).read_text(encoding="utf-8")
+
+        for ligne in gabarit.splitlines():
+            if 'value="' in ligne and "|montant" in ligne:
+                self.fail(f"Un champ de saisie a ete mis en forme : {ligne.strip()}")
