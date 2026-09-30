@@ -293,7 +293,11 @@ class PosAccountingTests(TestCase):
 
         response = self.client.post(
             reverse("pos:open_register"),
-            {"opening_amount": "100.00", "exchange_rate": "2800.00"},
+            {
+                "opening_amount": "100.00",
+                "exchange_rate": "2800.00",
+                "provenance_fonds": "apport",
+            },
         )
 
         self.assertEqual(response.status_code, 302)
@@ -634,7 +638,11 @@ class ForcedRegisterClosureTests(TestCase):
 
         response = self._as(self.cashier).post(
             reverse("pos:open_register"),
-            {"opening_amount": "5000", "exchange_rate": "2800"},
+            {
+                "opening_amount": "5000",
+                "exchange_rate": "2800",
+                "provenance_fonds": "apport",
+            },
             follow=True,
         )
 
@@ -2927,3 +2935,196 @@ class DetailDeCaisseTests(TestCase):
         reponse = self.client.get(self.url)
 
         self.assertNotContains(reponse, "Suivante")
+
+
+
+class ProvenanceDuFondsTests(TestCase):
+    """
+    Le fonds d'ouverture n'est pas de l'argent neuf.
+
+    Une salle ouvre avec ce que la veille a laisse. Le systeme comptait ce
+    fonds comme une somme qui apparait : la meme somme se lisait deux fois
+    d'une journee a l'autre, et un tiroir jamais vide affichait un excedent a
+    chaque clôture.
+    """
+
+    def setUp(self):
+        self.organisation = Organization.objects.create(
+            name="Org Fonds", slug="org-fonds"
+        )
+        self.gym = Gym.objects.create(
+            organization=self.organisation, name="Gym Fonds",
+            slug="gym-fonds", subdomain="gym-fonds",
+        )
+        module, _ = Module.objects.get_or_create(code="POS", defaults={"name": "POS"})
+        GymModule.objects.get_or_create(
+            gym=self.gym, module=module, defaults={"is_active": True}
+        )
+        self.caissiere = User.objects.create_user(
+            username="caisse-fonds", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=self.caissiere, gym=self.gym, role="cashier", is_active=True
+        )
+        self.client.force_login(self.caissiere)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+    def _veille(self, compte="100000.00"):
+        """La caisse d'hier, clôturee et comptee."""
+        caisse = CashRegister.objects.create(
+            gym=self.gym, opened_by=self.caissiere,
+            opening_amount=Decimal("0.00"), exchange_rate=Decimal("2800.00"),
+        )
+        caisse.closing_amount = Decimal(compte)
+        caisse.difference = Decimal("0.00")
+        caisse.closed_by = self.caissiere
+        caisse.closed_at = timezone.now()
+        caisse.is_closed = True
+        caisse.save()
+        return caisse
+
+    def _ouvrir(self, montant="50000", provenance="reprise"):
+        donnees = {"opening_amount": montant, "exchange_rate": "2800"}
+        if provenance is not None:
+            donnees["provenance_fonds"] = provenance
+        return self.client.post(reverse("pos:open_register"), donnees, follow=True)
+
+    def _ouverte(self):
+        return CashRegister.objects.filter(
+            gym=self.gym, is_closed=False
+        ).order_by("-id").first()
+
+    # --- La question est posee ---------------------------------------------------
+
+    def test_a_float_without_an_origin_is_refused(self):
+        self._veille()
+
+        reponse = self._ouvrir(provenance=None)
+
+        self.assertIn("d'ou vient ce fonds", str(list(reponse.context["messages"])[0]).lower())
+        self.assertIsNone(self._ouverte())
+
+    def test_opening_at_zero_asks_nothing(self):
+        # Rien dans le tiroir, rien a expliquer.
+        reponse = self._ouvrir(montant="0", provenance=None)
+
+        self.assertIsNotNone(self._ouverte())
+        self.assertEqual(self._ouverte().fonds_explique, "")
+
+    # --- Un fonds repris -----------------------------------------------------------
+
+    def test_a_carried_float_names_the_register_it_comes_from(self):
+        veille = self._veille()
+
+        self._ouvrir()
+
+        ouverte = self._ouverte()
+        self.assertEqual(ouverte.provenance_fonds, CashRegister.PROVENANCE_REPRISE)
+        self.assertEqual(ouverte.caisse_source, veille)
+        self.assertIn(veille.session_code, ouverte.fonds_explique)
+
+    def test_a_carried_float_cannot_exceed_what_was_counted(self):
+        # Au-dela, cet argent vient d'ailleurs - et cela doit se dire.
+        self._veille(compte="100000.00")
+
+        reponse = self._ouvrir(montant="150000")
+
+        self.assertIn("100000", str(list(reponse.context["messages"])[0]))
+        self.assertIsNone(self._ouverte())
+
+    def test_nothing_to_carry_from_when_no_register_was_closed(self):
+        reponse = self._ouvrir()
+
+        self.assertIn("aucune caisse", str(list(reponse.context["messages"])[0]).lower())
+        self.assertIsNone(self._ouverte())
+
+    # --- Un apport exterieur -------------------------------------------------------
+
+    def test_an_outside_contribution_is_recorded_as_such(self):
+        self._veille()
+
+        self._ouvrir(provenance="apport")
+
+        ouverte = self._ouverte()
+        self.assertEqual(ouverte.provenance_fonds, CashRegister.PROVENANCE_APPORT)
+        self.assertIsNone(ouverte.caisse_source)
+        self.assertEqual(ouverte.fonds_explique, "Apporte de l'exterieur")
+
+    def test_an_outside_contribution_is_not_capped(self):
+        # Il n'y a rien a depasser : cet argent ne vient pas de la veille.
+        self._veille(compte="1000.00")
+
+        self._ouvrir(montant="500000", provenance="apport")
+
+        self.assertIsNotNone(self._ouverte())
+
+    # --- Ce que le modele refuse ----------------------------------------------------
+
+    def test_a_carried_float_without_a_source_is_refused_by_the_model(self):
+        caisse = CashRegister(
+            gym=self.gym, opened_by=self.caissiere,
+            opening_amount=Decimal("5000.00"), exchange_rate=Decimal("2800.00"),
+            provenance_fonds=CashRegister.PROVENANCE_REPRISE,
+        )
+
+        with self.assertRaises(ValidationError):
+            caisse.full_clean()
+
+    def test_a_source_from_another_gym_is_refused(self):
+        ailleurs = Gym.objects.create(
+            organization=self.organisation, name="Gym Voisine",
+            slug="gym-voisine-fonds", subdomain="gym-voisine-fonds",
+        )
+        etrangere = CashRegister.objects.create(
+            gym=ailleurs, opened_by=self.caissiere,
+            opening_amount=Decimal("0.00"), exchange_rate=Decimal("2800.00"),
+        )
+
+        caisse = CashRegister(
+            gym=self.gym, opened_by=self.caissiere,
+            opening_amount=Decimal("5000.00"), exchange_rate=Decimal("2800.00"),
+            provenance_fonds=CashRegister.PROVENANCE_REPRISE,
+            caisse_source=etrangere,
+        )
+
+        with self.assertRaises(ValidationError):
+            caisse.full_clean()
+
+    # --- Ce que l'ecran montre --------------------------------------------------------
+
+    def test_the_opening_screen_recalls_what_the_previous_register_left(self):
+        self._veille(compte="123000.00")
+
+        reponse = self.client.get(reverse("pos:cashier_dashboard"))
+
+        # Le filtre groupe les milliers avec une espace insecable.
+        self.assertContains(reponse, "123 000")
+        self.assertContains(reponse, "Repris de la caisse précédente")
+
+    def test_the_dashboard_says_where_the_float_came_from(self):
+        veille = self._veille()
+        self._ouvrir()
+        proprietaire = User.objects.create_user(
+            username="proprio-fonds", password="pass12345"
+        )
+        UserGymRole.objects.create(
+            user=proprietaire, gym=self.gym, role="owner", is_active=True
+        )
+        self.client.force_login(proprietaire)
+        session = self.client.session
+        session["current_gym_id"] = self.gym.id
+        session.save()
+
+        reponse = self.client.get(reverse("core:gym_dashboard", args=[self.gym.id]))
+
+        self.assertContains(reponse, f"Repris de {veille.session_code}")
+
+    # --- Les anciennes sessions ---------------------------------------------------------
+
+    def test_older_registers_are_left_unexplained_rather_than_guessed(self):
+        # Une reponse inventee vaudrait moins que l'absence de reponse.
+        ancienne = self._veille()
+
+        self.assertEqual(ancienne.provenance_fonds, CashRegister.PROVENANCE_INCONNUE)

@@ -493,6 +493,10 @@ def _tableau_de_caisse(gym, today):
             "responsable": _nom_utilisateur(session.opened_by),
             "ouverte_a": session.opened_at,
             "fonds_ouverture": session.opening_amount,
+            # D'ou vient ce fonds : repris de la veille, ou apporte. Sans cette
+            # ligne, le meme argent se lit comme une somme nouvelle a chaque
+            # journee.
+            "fonds_explique": session.fonds_explique,
             "encaissements": entrees,
             "decaissements": sorties,
             "solde_theorique": attendu,

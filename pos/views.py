@@ -27,6 +27,7 @@ from .models import CashRegister, ExchangeRate, Payment
 from . import validation
 from .services import (
     annuler_geste_offert,
+    derniere_cloture,
     record_cash_injection,
     record_expense,
     record_expense_refund,
@@ -355,6 +356,9 @@ def cashier_dashboard(request):
             "non_cash_balance": non_cash_balance,
             "has_negative_cash": has_negative_cash,
             "latest_exchange_rate": latest_exchange_rate,
+            # Ce que la caisse precedente a laisse : c'est la reference de
+            # l'ouverture, et le meilleur rappel que cet argent existe deja.
+            "derniere_cloture": derniere_cloture(gym),
             "peut_offrir": peut_offrir,
         },
     )
@@ -405,6 +409,9 @@ def open_register(request):
         messages.warning(request, "Vous avez deja une caisse ouverte.")
         return redirect("pos:cashier_dashboard")
 
+    provenance = (request.POST.get("provenance_fonds") or "").strip()
+    derniere = derniere_cloture(request.gym)
+
     try:
         opening_amount = _to_decimal(request.POST.get("opening_amount"), "Fonds d'ouverture")
         exchange_rate = _to_decimal(request.POST.get("exchange_rate"), "Taux USD-CDF")
@@ -412,6 +419,31 @@ def open_register(request):
             raise ValidationError("Le fonds d'ouverture ne peut pas etre negatif.")
         if exchange_rate <= 0:
             raise ValidationError("Le taux USD-CDF doit etre superieur a zero.")
+
+        # Un fonds sans provenance laissait croire a de l'argent neuf. Il n'est
+        # demande que s'il y a un fonds : ouvrir a zero ne pose pas la question.
+        if opening_amount > 0 and provenance not in {
+            CashRegister.PROVENANCE_REPRISE, CashRegister.PROVENANCE_APPORT
+        }:
+            raise ValidationError(
+                "Dites d'ou vient ce fonds : repris de la caisse precedente, "
+                "ou apporte de l'exterieur."
+            )
+
+        if provenance == CashRegister.PROVENANCE_REPRISE:
+            if derniere is None:
+                raise ValidationError(
+                    "Aucune caisse clôturee et comptee ne precede celle-ci : ce "
+                    "fonds ne peut pas en etre repris."
+                )
+            # On ne reprend pas plus que ce qui a ete compte. Au-dela, c'est
+            # que l'argent vient d'ailleurs - et cela doit se dire.
+            if opening_amount > derniere.closing_amount:
+                raise ValidationError(
+                    f"La caisse precedente n'a ete comptee qu'a "
+                    f"{derniere.closing_amount:.0f} CDF : un fonds repris ne peut "
+                    "pas la depasser."
+                )
     except ValidationError as exc:
         messages.error(request, _validation_message(exc))
         return redirect("pos:cashier_dashboard")
@@ -427,6 +459,14 @@ def open_register(request):
             opened_by=request.user,
             opening_amount=opening_amount,
             exchange_rate=exchange_rate,
+            # Un fonds a zero ne vient de nulle part : on ne lui invente pas
+            # une provenance pour remplir la colonne.
+            provenance_fonds=(
+                provenance if opening_amount > 0 else CashRegister.PROVENANCE_INCONNUE
+            ),
+            caisse_source=(
+                derniere if provenance == CashRegister.PROVENANCE_REPRISE else None
+            ),
         )
         log_sensitive_action(
             request,

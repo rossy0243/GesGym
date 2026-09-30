@@ -327,7 +327,12 @@
                                     <td class="fs-12">{{ session.code }}</td>
                                     <td>{{ session.responsable }}</td>
                                     <td class="fs-12">{{ session.ouverte_a|date:"d/m H:i" }}</td>
-                                    <td class="text-end">{{ session.fonds_ouverture|montant }}</td>
+                                    <td class="text-end">
+                                        {{ session.fonds_ouverture|montant }}
+                                        {% if session.fonds_explique %}
+                                        <div class="fs-11 text-muted">{{ session.fonds_explique }}</div>
+                                        {% endif %}
+                                    </td>
                                     <td class="text-end {% if session.tresorerie_negative %}ton-urgent fw-semibold{% endif %}">{{ session.solde_theorique|montant }}</td>
                                     {% comment %} Vide tant que le tiroir n'a pas ete compte : un
                                        tiret se lit comme un zero compte. {% endcomment %}

@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 {% load l10n %}
+{% load formats %}
 {% now "Y-m-d" as today_iso %}
 
 {% block page_titre %}Paiements{% endblock %}
@@ -647,15 +648,59 @@
                         </div>
                     </div>
 
+                    {% if derniere_cloture %}
+                    <div class="alert alert-light border d-flex gap-2">
+                        <span class="material-icons">savings</span>
+                        <div class="small">
+                            La caisse précédente ({{ derniere_cloture.session_code }}) a été
+                            comptée à <strong>{{ derniere_cloture.closing_amount|montant }} CDF</strong>.
+                            Si cet argent est toujours dans le tiroir, il fait partie de votre
+                            fonds d'ouverture.
+                        </div>
+                    </div>
+                    {% endif %}
+
                     <div class="mb-3">
                         <label class="form-label">Fonds d'ouverture (CDF)</label>
                         <input type="number"
                                name="opening_amount"
+                               id="opening_amount"
                                class="form-control"
                                min="0"
                                step="0.01"
                                value="0"
                                required>
+                        <div class="form-text">
+                            Ce que le tiroir contient réellement maintenant, pas seulement ce
+                            que vous y ajoutez.
+                        </div>
+                    </div>
+
+                    {% comment %} Sans cette question, un fonds repris de la veille passait pour
+                       de l'argent neuf : la meme somme etait comptee deux fois d'une journee a
+                       l'autre, et un tiroir jamais vide affichait un excedent a chaque
+                       clôture. {% endcomment %}
+                    <div class="mb-3">
+                        <label class="form-label">D'où vient ce fonds ?</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="provenance_fonds"
+                                   id="provenance_reprise" value="reprise"
+                                   {% if derniere_cloture %}checked{% endif %}>
+                            <label class="form-check-label" for="provenance_reprise">
+                                Repris de la caisse précédente
+                                {% if derniere_cloture %}
+                                <span class="text-muted">(jusqu'à {{ derniere_cloture.closing_amount|montant }} CDF)</span>
+                                {% endif %}
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="provenance_fonds"
+                                   id="provenance_apport" value="apport"
+                                   {% if not derniere_cloture %}checked{% endif %}>
+                            <label class="form-check-label" for="provenance_apport">
+                                Apporté de l'extérieur
+                            </label>
+                        </div>
                     </div>
 
                     <div class="mb-3">

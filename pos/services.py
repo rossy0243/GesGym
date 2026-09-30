@@ -42,6 +42,22 @@ def get_open_register(gym, user=None):
     return register
 
 
+def derniere_cloture(gym):
+    """
+    La derniere caisse clôturee et comptee de la salle.
+
+    C'est elle qui detient l'argent de la veille : le fonds d'ouverture du
+    lendemain en sort, et ne peut pas la depasser.
+    """
+    return (
+        CashRegister.objects.filter(
+            gym=gym, is_closed=True, closing_amount__isnull=False
+        )
+        .order_by("-closed_at", "-id")
+        .first()
+    )
+
+
 def caisse_cible(gym, utilisateur):
     """
     La caisse dans laquelle cet argent va physiquement entrer.

@@ -54,6 +54,44 @@ class CashRegister(models.Model):
         default=0
     )
 
+    # D'ou vient le fonds d'ouverture.
+    #
+    # Une salle ouvre rarement avec de l'argent neuf : elle reprend celui de la
+    # veille. Le systeme, lui, traitait ce fonds comme une somme qui apparait.
+    # Deux consequences, toutes deux constatees en salle : additionner deux
+    # journees comptait deux fois le meme argent, et un tiroir qu'on n'avait pas
+    # vide affichait un excedent a chaque clôture, jusqu'a des millions cumules.
+    #
+    # La question posee a l'ouverture ne sert pas qu'a tracer : elle force a
+    # regarder ce que le tiroir contient vraiment avant de commencer la journee.
+    PROVENANCE_REPRISE = "reprise"
+    PROVENANCE_APPORT = "apport"
+    PROVENANCE_INCONNUE = "inconnue"
+
+    PROVENANCE_CHOICES = (
+        (PROVENANCE_REPRISE, "Repris de la caisse precedente"),
+        (PROVENANCE_APPORT, "Apporte de l'exterieur"),
+        # Les sessions d'avant la question. On ne devine pas leur provenance :
+        # une reponse inventee vaudrait moins que l'absence de reponse.
+        (PROVENANCE_INCONNUE, "Non precisee"),
+    )
+
+    provenance_fonds = models.CharField(
+        max_length=20,
+        choices=PROVENANCE_CHOICES,
+        default=PROVENANCE_INCONNUE,
+        verbose_name="Provenance du fonds d'ouverture",
+    )
+
+    caisse_source = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="fonds_repris_par",
+        verbose_name="Caisse dont le fonds est repris",
+    )
+
     exchange_rate = models.DecimalField(
         max_digits=10,
         decimal_places=2,
@@ -232,6 +270,34 @@ class CashRegister(models.Model):
                 raise ValidationError("Une caisse est deja ouverte pour cet utilisateur dans ce gym.")
         if self.opening_amount < 0:
             raise ValidationError("Le fonds d'ouverture ne peut pas etre negatif.")
+
+        if self.caisse_source_id:
+            if self.caisse_source_id == self.pk:
+                raise ValidationError(
+                    {"caisse_source": "Une caisse ne reprend pas son propre fonds."}
+                )
+            if self.caisse_source.gym_id != self.gym_id:
+                raise ValidationError(
+                    {"caisse_source": "Cette caisse appartient a une autre salle."}
+                )
+
+        # Un fonds repris vient forcement de quelque part : sans caisse
+        # d'origine, la reponse ne vaut pas mieux qu'une case cochee au hasard.
+        if self.provenance_fonds == self.PROVENANCE_REPRISE and not self.caisse_source_id:
+            raise ValidationError(
+                {"caisse_source": "Dites de quelle caisse ce fonds est repris."}
+            )
+
+    @property
+    def fonds_explique(self):
+        """Ce que le fonds d'ouverture raconte, en une ligne lisible."""
+        if not self.opening_amount:
+            return ""
+        if self.provenance_fonds == self.PROVENANCE_REPRISE and self.caisse_source:
+            return f"Repris de {self.caisse_source}"
+        if self.provenance_fonds == self.PROVENANCE_APPORT:
+            return "Apporte de l'exterieur"
+        return "Provenance non precisee"
 
     def __str__(self):
         return self.session_code or f"Register {self.id}"
